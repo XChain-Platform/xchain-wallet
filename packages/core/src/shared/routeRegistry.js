@@ -199,6 +199,28 @@ export const ROUTE_NAV_GROUPS = Object.freeze(Object.fromEntries(
     ]),
 ));
 
+const ROUTE_NAV_SECTION_OVERRIDES = {
+    addresses: 'addresses',
+    'view-private-key': 'addresses',
+    'address-preferences': 'addresses',
+    wizard: 'create-token',
+    issue: 'create-token',
+    'account-picker': 'accounts',
+    'account-rename': 'accounts',
+    'add-account': 'accounts',
+    'wallet-picker': 'wallets',
+    'wallet-details': 'wallets',
+    'wallet-rename': 'wallets',
+    'add-wallet': 'wallets',
+    'migrate-bip39': 'wallets',
+};
+
+export const ROUTE_NAV_SECTIONS = Object.freeze(Object.fromEntries(
+    Object.entries(GROUPED_ROUTES).flatMap(([defaultSection, routes]) => routes.map(
+        ([id]) => [id, ROUTE_NAV_SECTION_OVERRIDES[id] || defaultSection],
+    )),
+));
+
 export const HIDDEN_ROUTE_IDS = Object.freeze([]);
 
 export const ROUTE_REGISTRY = Object.freeze(Object.fromEntries(

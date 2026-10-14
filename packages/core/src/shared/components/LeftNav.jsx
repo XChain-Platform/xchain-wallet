@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
-import { ROUTE_NAV_GROUPS } from '../routeRegistry.js';
+import { ROUTE_NAV_GROUPS, ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
 import styles from './LeftNav.module.css';
 
 /**
@@ -34,19 +34,18 @@ import styles from './LeftNav.module.css';
  * rows to icons with their labels clipped but still in the accessibility
  * tree. See shared/styles/breakpoints.js for the tier definitions.
  *
- * `currentView` resolves through `LEFT_NAV_VIEW_GROUPS`, so drilldowns keep
- * their parent surface highlighted. A route that has no dedicated group
- * resolves to Home, matching the shell's Home fallback.
+ * `currentView` resolves through `ROUTE_NAV_SECTIONS`, so drilldowns keep
+ * their parent surface highlighted. Utility sections without a sidebar row
+ * leave the sidebar unselected instead of attributing the page to Home.
  */
 
 export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 
 export function activeLeftNavItem(currentView) {
-    return Object.entries(LEFT_NAV_VIEW_GROUPS)
-        .find(([, views]) => views.includes(currentView))?.[0] || 'home';
+    return ROUTE_NAV_SECTIONS[currentView] || 'home';
 }
 
-// Shared with BottomTabBar so both navs highlight the same destination.
+// Sheet rows use the same section match as the desktop sidebar.
 export function isNavItemActive(itemId, currentView) {
     return itemId === activeLeftNavItem(currentView);
 }

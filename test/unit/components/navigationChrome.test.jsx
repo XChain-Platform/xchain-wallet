@@ -16,10 +16,14 @@ import { AppHeader } from '../../../packages/core/src/shared/components/AppHeade
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
+    activeLeftNavItem,
     isNavItemActive,
     LeftNav,
-    LEFT_NAV_VIEW_GROUPS,
 } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import {
+    ROUTE_NAV_SECTIONS,
+    ROUTE_REGISTRY,
+} from '../../../packages/core/src/shared/routeRegistry.js';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 
@@ -83,47 +87,70 @@ const NAV_ITEMS = [
 ];
 
 describe('navigation route highlighting', () => {
-    it('marks exactly one owning bottom tab for every grouped route', () => {
-        const tabByGroup = {
+    it('uses the shared section assignment for every registered route', () => {
+        const bottomTabBySection = {
             home: 'Home',
             history: 'History',
             send: 'Send',
             scan: 'Scan',
-            receive: 'More',
-            markets: 'More',
-            'market-activity': 'More',
-            'dispensers-list': 'More',
-            'contracts-list': 'More',
-            messaging: 'More',
-            contacts: 'More',
-            lists: 'More',
-            obligations: 'More',
-            settings: 'More',
         };
-        const { rerender } = render(<BottomTabBar currentView="home" onSelect={() => {}} />);
-        const bottomNavigation = within(screen.getByRole('navigation', { name: 'Bottom navigation' }));
+        const sidebarLabelBySection = {
+            home: 'Home',
+            history: 'History',
+            send: 'Send',
+            receive: 'Receive',
+            scan: 'Scan',
+            markets: 'DEX',
+            'market-activity': 'Marketplace',
+            'dispensers-list': 'Dispensers',
+            'contracts-list': 'Contracts',
+            messaging: 'Messaging',
+            contacts: 'Contacts',
+            lists: 'Lists',
+            obligations: 'Payments due',
+            settings: 'Settings',
+        };
+        const { rerender } = render(
+            <>
+                <BottomTabBar currentView="home" onSelect={() => {}} />
+                <LeftNav
+                    currentView="home"
+                    onSelect={() => {}}
+                    onOpenSettings={() => {}}
+                    hasVmAddress
+                />
+            </>,
+        );
 
-        for (const [group, routes] of Object.entries(LEFT_NAV_VIEW_GROUPS)) {
-            for (const route of routes) {
-                rerender(<BottomTabBar currentView={route} onSelect={() => {}} />);
-                const activeTabs = bottomNavigation.getAllByRole('button')
-                    .filter((tab) => tab.getAttribute('aria-current') === 'page');
-                // Wallet and account management views open from More, so More owns them.
-                const expectedTab = [
-                    'wallet-picker',
-                    'account-picker',
-                    'wallet-details',
-                    'wallet-rename',
-                    'account-rename',
-                    'add-wallet',
-                    'add-account',
-                    'migrate-bip39',
-                ].includes(route)
-                    ? 'More'
-                    : (tabByGroup[group] || 'More');
+        for (const route of Object.keys(ROUTE_REGISTRY)) {
+            const section = ROUTE_NAV_SECTIONS[route];
+            expect(section, route).toBeTypeOf('string');
+            rerender(
+                <>
+                    <BottomTabBar currentView={route} onSelect={() => {}} />
+                    <LeftNav
+                        currentView={route}
+                        onSelect={() => {}}
+                        onOpenSettings={() => {}}
+                        hasVmAddress
+                    />
+                </>,
+            );
 
-                expect(activeTabs, route).toHaveLength(1);
-                expect(activeTabs[0], route).toHaveAccessibleName(expectedTab);
+            const bottomNavigation = within(screen.getByRole('navigation', { name: 'Bottom navigation' }));
+            const activeTabs = bottomNavigation.getAllByRole('button')
+                .filter((tab) => tab.getAttribute('aria-current') === 'page');
+            const expectedBottomTab = bottomTabBySection[section];
+            expect(activeTabs, route).toHaveLength(expectedBottomTab ? 1 : 0);
+            if (expectedBottomTab) expect(activeTabs[0]).toHaveAccessibleName(expectedBottomTab);
+
+            const sidebar = within(screen.getByRole('navigation', { name: 'Primary navigation' }));
+            const activeSidebarItems = sidebar.getAllByRole('button')
+                .filter((item) => item.getAttribute('aria-current') === 'page');
+            const expectedSidebarItem = sidebarLabelBySection[section];
+            expect(activeSidebarItems, route).toHaveLength(expectedSidebarItem ? 1 : 0);
+            if (expectedSidebarItem) {
+                expect(activeSidebarItems[0]).toHaveAccessibleName(expectedSidebarItem);
             }
         }
     });
@@ -138,10 +165,14 @@ describe('navigation route highlighting', () => {
         ['list-transfer', 'lists'],
         ['coinpay', 'obligations'],
         ['connected-sites', 'settings'],
-        ['wizard', 'home'],
-    ])('maps %s to one active parent, %s', (view, expected) => {
+        ['wizard', 'create-token'],
+        ['addresses', 'addresses'],
+        ['account-picker', 'accounts'],
+        ['wallet-picker', 'wallets'],
+    ])('maps %s to section %s', (view, expected) => {
+        expect(activeLeftNavItem(view)).toBe(expected);
         const active = NAV_ITEMS.filter((item) => isNavItemActive(item, view));
-        expect(active).toEqual([expected]);
+        expect(active).toEqual(NAV_ITEMS.includes(expected) ? [expected] : []);
     });
 
     it('marks the matching LeftNav row on drilldown routes', () => {
@@ -163,7 +194,7 @@ describe('navigation route highlighting', () => {
         expect(screen.queryByRole('button', { name: 'Marketplace' })).toBeNull();
     });
 
-    it('marks More and the matching row for sheet-only destinations', () => {
+    it('marks the matching row without treating More as the current page', () => {
         render(
             <BottomTabBar
                 currentView="contract-stake"
@@ -173,14 +204,14 @@ describe('navigation route highlighting', () => {
         );
         const more = screen.getByRole('button', { name: 'More' });
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
-        expect(more).toHaveAttribute('aria-current', 'page');
+        expect(more).not.toHaveAttribute('aria-current');
         fireEvent.click(more);
         expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('marks More for the account picker opened from Settings', () => {
+    it('does not attribute account management to a different nav item', () => {
         render(<BottomTabBar currentView="account-picker" onSelect={() => {}} />);
-        expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
@@ -190,11 +221,14 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
     });
 
-    it.each(['wallet-picker', 'contacts', 'markets', 'market'])('does not highlight Home on %s', (view) => {
-        render(<BottomTabBar currentView={view} onSelect={() => {}} />);
-        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
-        expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page');
-    });
+    it.each(['receive', 'addresses', 'contacts', 'wizard', 'account-picker', 'wallet-picker'])(
+        'does not highlight an unrelated bottom tab on %s',
+        (view) => {
+            render(<BottomTabBar currentView={view} onSelect={() => {}} />);
+            expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+            expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
+        },
+    );
 
     it('leaves every tab unselected for an unknown screen', () => {
         render(<BottomTabBar currentView="outside-wallet" onSelect={() => {}} />);
