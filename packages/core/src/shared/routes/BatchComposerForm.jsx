@@ -92,10 +92,13 @@ function blankRow() {
     return { id: newRowId(), action: '', paramsJson: '{\n  "VERSION": "0"\n}' };
 }
 
-/** Additional user-facing error text, or '' when the shown sentence already carries it. */
+/**
+ * The raw error text for the collapsed details disclosure, or '' when the
+ * shown sentence already carries it. The raw text never reaches the shown copy.
+ */
 function technicalDetails(err, shown) {
-    const detail = userFacingMessage(err, '');
-    return detail && !String(shown || '').includes(detail) ? detail : '';
+    const raw = String(err?.message || '').trim();
+    return raw && !String(shown || '').includes(raw) ? raw : '';
 }
 
 /** Parse one row's params; returns { params } or { error }. */
