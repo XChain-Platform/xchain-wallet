@@ -135,7 +135,7 @@ describe('approval Router', () => {
 });
 
 describe('approval messaging', () => {
-    it('rejects when the broker did not settle the requested approval', async () => {
+    it('reports an interrupted approval when the broker did not settle it', async () => {
         chrome.runtime.sendMessage.mockImplementation((_message, respond) => {
             respond({ ok: true, result: { resolved: false } });
         });
@@ -145,8 +145,29 @@ describe('approval messaging', () => {
 
         await expect(messaging.resolveApproval('expired-request', { approved: true }))
             .rejects.toMatchObject({
-                name: 'ApprovalNotFoundError',
-                message: 'Approval request is no longer pending.',
+                name: 'ApprovalInterruptedError',
+                message: 'This approval was interrupted. Return to the site and try again.',
+            });
+    });
+
+    it('normalizes a missing fetch after the background restarts', async () => {
+        chrome.runtime.sendMessage.mockImplementation((_message, respond) => {
+            respond({
+                ok: false,
+                error: {
+                    name: 'ApprovalNotFoundError',
+                    message: 'approval.fetch: unknown id "expired-request"',
+                },
+            });
+        });
+        const messaging = await vi.importActual(
+            '../../../packages/extension/src/approval/messaging.js',
+        );
+
+        await expect(messaging.fetchApproval('expired-request'))
+            .rejects.toMatchObject({
+                name: 'ApprovalInterruptedError',
+                message: 'This approval was interrupted. Return to the site and try again.',
             });
     });
 });

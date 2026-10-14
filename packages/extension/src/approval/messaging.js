@@ -12,7 +12,15 @@
 // `sendMessage` wrapper; each helper documents the host-side message
 // type it targets.
 
+import { i18n } from '@xchain-wallet/core';
 import { sendMessage } from '../shared/chromeMessaging.js';
+
+function normalizeInterruptedApproval(err) {
+    if (err?.name !== 'ApprovalNotFoundError') throw err;
+    const interrupted = new Error(i18n.t('extension.approval.interrupted'));
+    interrupted.name = 'ApprovalInterruptedError';
+    throw interrupted;
+}
 
 /**
  * List persisted wallets (safe-projected). The approval popup needs
@@ -26,14 +34,15 @@ export function listWallets() {
 
 /**
  * Fetch the parked approval request by id. Thrown errors carry
- * `name: 'ApprovalNotFoundError'` when the broker has no entry for
- * the id (already resolved, or window opened with a bogus param).
+ * `name: 'ApprovalInterruptedError'` when the broker has no entry for
+ * the id because its owning background session ended.
  *
  * @param {string} id
  * @returns {Promise<{ id: string, kind: string, payload: unknown }>}
  */
 export function fetchApproval(id) {
-    return /** @type {any} */ (sendMessage('approval.fetch', { id }));
+    return /** @type {any} */ (sendMessage('approval.fetch', { id })
+        .catch(normalizeInterruptedApproval));
 }
 
 /**
@@ -49,12 +58,10 @@ export function fetchApproval(id) {
 export function resolveApproval(id, result) {
     return sendMessage('approval.resolve', { id, result }).then((response) => {
         if (/** @type {any} */ (response)?.resolved !== true) {
-            const error = new Error('Approval request is no longer pending.');
-            error.name = 'ApprovalNotFoundError';
-            throw error;
+            normalizeInterruptedApproval({ name: 'ApprovalNotFoundError' });
         }
         return /** @type {{ resolved: boolean }} */ (response);
-    });
+    }).catch(normalizeInterruptedApproval);
 }
 
 /**
