@@ -235,3 +235,56 @@ export const ROUTE_REGISTRY = Object.freeze(Object.fromEntries(
         })],
     )),
 ));
+
+// Top-level destinations per navigation surface: the routes each surface
+// links to directly. LeftNav and BottomTabBar build their rows from these
+// lists, and PageHeader hides its Back control on exactly these routes while
+// that surface is on screen (the surface is already the way out). Any route
+// not listed, including every drilldown a new screen adds, keeps Back.
+// Rows a wallet cannot use (Send in signer mode, Contracts without a VM
+// address) stay listed: those routes are unreachable while the row is gone.
+export const SIDEBAR_PRIMARY_DESTINATIONS = Object.freeze([
+    'home',
+    'history',
+    'send',
+    'receive',
+    'scan',
+    'markets',
+    'market-activity',
+    'dispensers-list',
+    'contracts-list',
+    'messaging',
+]);
+
+export const SIDEBAR_SECONDARY_DESTINATIONS = Object.freeze([
+    'contacts',
+    'lists',
+    'obligations',
+]);
+
+export const SIDEBAR_FOOTER_DESTINATIONS = Object.freeze(['settings']);
+
+// The More tab opens a sheet rather than a route, so it has no entry here.
+export const TAB_BAR_DESTINATIONS = Object.freeze(['home', 'history', 'send', 'scan']);
+
+export const NAV_SURFACE_DESTINATIONS = Object.freeze({
+    sidebar: Object.freeze([
+        ...SIDEBAR_PRIMARY_DESTINATIONS,
+        ...SIDEBAR_SECONDARY_DESTINATIONS,
+        ...SIDEBAR_FOOTER_DESTINATIONS,
+    ]),
+    tabBar: TAB_BAR_DESTINATIONS,
+});
+
+/**
+ * Whether `routeId` is a destination the given navigation surface links to
+ * directly. Membership is by route id, not nav section: a drilldown such as
+ * `token-detail` shares Home's section but is not a sidebar destination.
+ *
+ * @param {string | null | undefined} routeId
+ * @param {'sidebar' | 'tabBar' | null | undefined} surface
+ */
+export function isNavSurfaceDestination(routeId, surface) {
+    if (!routeId || !surface) return false;
+    return NAV_SURFACE_DESTINATIONS[surface]?.includes(routeId) ?? false;
+}

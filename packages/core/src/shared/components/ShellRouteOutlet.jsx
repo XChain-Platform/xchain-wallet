@@ -6,6 +6,7 @@
 import { Suspense } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui/Skeleton.jsx';
 import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
+import { CurrentRouteContext } from './navSurface.js';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 
 export function ShellRouteOutlet({
@@ -15,13 +16,17 @@ export function ShellRouteOutlet({
     fallback = <Skeleton.List rows={5} />,
     children,
 }) {
+    // routeKey is the shell's routed view id; PageHeader compares it with
+    // the visible nav surface's destinations.
     return (
-        <ScrollRestoration routeKey={routeKey}>
-            <RouteErrorBoundary resetKey={resetKey} onHome={onHome}>
-                <Suspense fallback={fallback}>
-                    {children}
-                </Suspense>
-            </RouteErrorBoundary>
-        </ScrollRestoration>
+        <CurrentRouteContext.Provider value={routeKey ?? null}>
+            <ScrollRestoration routeKey={routeKey}>
+                <RouteErrorBoundary resetKey={resetKey} onHome={onHome}>
+                    <Suspense fallback={fallback}>
+                        {children}
+                    </Suspense>
+                </RouteErrorBoundary>
+            </ScrollRestoration>
+        </CurrentRouteContext.Provider>
     );
 }

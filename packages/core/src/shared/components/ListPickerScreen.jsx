@@ -166,7 +166,7 @@ export function ListPickerScreen({
         });
     }, [rows, query, descriptions]);
 
-    const header = <PageHeader onBack={onBack} title={title} />;
+    const header = <PageHeader nested onBack={onBack} title={title} />;
 
     if (loadError) {
         return (

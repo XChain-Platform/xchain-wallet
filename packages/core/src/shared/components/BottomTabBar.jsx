@@ -14,7 +14,7 @@ import {
     formatBadgeCount,
     isNavItemActive,
 } from './LeftNav.jsx';
-import { ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
+import { ROUTE_NAV_SECTIONS, TAB_BAR_DESTINATIONS } from '../routeRegistry.js';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -59,13 +59,18 @@ import PLATFORM_LINKS from '../platform-links.json';
  * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
  */
 
-const PRIMARY_TABS = [
-    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
+// Labels and icons for the thumb-row tabs. Which tabs exist, and in what
+// order, comes from TAB_BAR_DESTINATIONS, which PageHeader also reads to
+// decide where Back is redundant.
+const PRIMARY_TAB_ITEMS = {
+    home: { label: 'Home', Icon: Icon.HomeIcon },
+    history: { label: 'History', Icon: Icon.HistoryIcon },
     // `spendable` marks the two rows signer mode promises are gone.
-    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
-    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-];
+    send: { label: 'Send', Icon: Icon.SendIcon, spendable: true },
+    scan: { label: 'Scan', Icon: Icon.ScanIcon },
+};
+
+const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map((id) => ({ id, ...PRIMARY_TAB_ITEMS[id] }));
 
 const SHEET_PRIMARY = [
     { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },

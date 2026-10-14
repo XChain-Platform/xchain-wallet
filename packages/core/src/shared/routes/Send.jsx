@@ -2506,6 +2506,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setPassword(''); setStage('form'); }
                 : leaveGuard.guardedOnBack}

@@ -730,6 +730,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 variant={variant}
                 header={(
                     <PageHeader
+                        nested
                         onBack={() => setSelectedCounterparty(null)}
                         title={cpName || <AddressText address={selectedCounterparty} />}
                         titleIcon={<Icon.MessageIcon />}
