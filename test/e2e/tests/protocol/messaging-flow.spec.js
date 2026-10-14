@@ -128,10 +128,15 @@ for (const viewport of VIEWPORTS) {
             await expect(main.getByRole('button', { name: /^Delivery network: Dogecoin/ }))
                 .toBeVisible();
 
-            await expectSameLineHeights('compose address row', [
-                main.getByLabel('Address', { exact: true }),
-                main.getByRole('button', { name: 'Open address book' }),
-            ]);
+            // The address book opens from an icon button inside the field box,
+            // so it must sit within the field rather than match its height.
+            const addressBox = await main.getByLabel('Address', { exact: true }).boundingBox();
+            const bookBox = await main.getByRole('button', { name: 'Open address book' }).boundingBox();
+            expect(addressBox && bookBox, 'compose address row: controls have no rendered box').toBeTruthy();
+            expect(bookBox.y, 'compose address row: address book button rises above the field')
+                .toBeGreaterThanOrEqual(addressBox.y - 1);
+            expect(bookBox.y + bookBox.height, 'compose address row: address book button drops below the field')
+                .toBeLessThanOrEqual(addressBox.y + addressBox.height + 1);
             const feeAmount = main.getByRole('button', { name: 'Edit exact fee amount' });
             const feeRate = main.getByRole('button', { name: 'Edit fee rate (DOGE/kB)' });
             await expect(feeAmount).toHaveText(NORMAL_FEE);
@@ -156,8 +161,10 @@ for (const viewport of VIEWPORTS) {
                 `${viewport.name} review retained the compose screen scroll position`,
             ).toBeLessThanOrEqual(1);
 
+            // The address is middle-truncated on screen; its accessible name is the full value.
             await expect(review.getByText('To', { exact: true })
-                .locator('xpath=following-sibling::dd[1]')).toContainText(RECIPIENT);
+                .locator('xpath=following-sibling::dd[1]')
+                .getByLabel(RECIPIENT, { exact: true })).toBeVisible();
             await expect(review.getByText('Encryption', { exact: true })
                 .locator('xpath=following-sibling::dd[1]')).toHaveText('ECIES');
             await expect(review.getByText('Network fee', { exact: true })
