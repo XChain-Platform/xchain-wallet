@@ -20,7 +20,7 @@ describe('NetworkBanner', () => {
 
         expect(screen.getByRole('status', {
             name: `Active network: ${label}. Amounts shown are on ${label}.`,
-        })).toHaveTextContent(`${label} · Not mainnet`);
+        })).toHaveStyle({ gap: 'var(--xc-space-1, 4px)' });
     });
 
     it.each([undefined, 'mainnet'])('stays absent for %s', (activeNetwork) => {

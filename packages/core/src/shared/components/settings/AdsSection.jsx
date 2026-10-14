@@ -21,11 +21,11 @@
 // sentinel as if it were a real address.
 
 import { registry as registryLib } from '@xchain-wallet/core';
-import { InfoTip } from '@xchain-wallet/core/ui';
+import { InfoTip, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
-import { INPUT, ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -46,7 +46,7 @@ const FIELD_ROW = {
     gap: 'var(--xc-space-2)',
 };
 const SUBTLE = { color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' };
-const NUMERIC = { ...INPUT, width: 140, textAlign: 'right' };
+const NUMERIC = { width: 140, textAlign: 'right' };
 const ADDRESS_BOX = {
     fontFamily: 'var(--xc-font-mono, monospace)',
     fontSize: 'var(--xc-text-xs)',
@@ -57,6 +57,14 @@ const ADDRESS_BOX = {
     padding: 'var(--xc-space-1) var(--xc-space-2)',
     overflow: 'auto',
     wordBreak: 'break-all',
+};
+const PLACEHOLDER_ADDRESS_BOX = {
+    ...ADDRESS_BOX,
+    fontFamily: 'inherit',
+    fontStyle: 'italic',
+    color: 'var(--xc-text-muted)',
+    wordBreak: 'normal',
+    overflowWrap: 'break-word',
 };
 
 export function AdsSection() {
@@ -134,7 +142,7 @@ export function AdsSection() {
                                 Set aside per outgoing transaction (sats)
                                 {perTxIsDefault ? ' · default' : ' · custom'}
                             </span>
-                            <input
+                            <Input
                                 type="text"
                                 inputMode="decimal"
                                 defaultValue={resolved.perTxAmountSats}
@@ -176,7 +184,7 @@ export function AdsSection() {
                                         : `About ${transactionsToThreshold.toLocaleString()} outgoing ${transactionsToThreshold === 1 ? 'transaction' : 'transactions'} to reach the threshold, then sent with the next one.`}
                                 </div>
                             </div>
-                            <input
+                            <Input
                                 type="text"
                                 inputMode="decimal"
                                 defaultValue={resolved.triggerAmountSats}
@@ -203,7 +211,7 @@ export function AdsSection() {
                         <div>
                             <div style={ROW_HINT}>Donation address</div>
                             {isPlaceholder ? (
-                                <div style={{ ...ADDRESS_BOX, fontStyle: 'italic', color: 'var(--xc-text-muted)' }}>
+                                <div style={PLACEHOLDER_ADDRESS_BOX}>
                                     Not set yet. A donation address for {displayName} arrives in a future release; until then nothing is sent on this chain.
                                 </div>
                             ) : (

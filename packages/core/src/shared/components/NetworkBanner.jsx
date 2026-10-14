@@ -30,7 +30,7 @@ export function NetworkBanner({ activeNetwork }) {
             style={BANNER_STYLE}
         >
             <strong>{label}</strong>
-            <span aria-hidden="true"> · </span>
+            <span aria-hidden="true">·</span>
             <span>Not mainnet</span>
         </div>
     );
@@ -40,6 +40,7 @@ const BANNER_STYLE = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 'var(--xc-space-1, 4px)',
     minHeight: '24px',
     boxSizing: 'border-box',
     padding: '3px var(--xc-space-3, 12px)',
