@@ -28,6 +28,13 @@
     width: 100%;
 }
 
+/* Controls never shrink on their own, so two full-width ones in this row
+   would push the second past the window edge. Sharing the row equally keeps
+   both on screen at the 360px popup width. */
+.footer > button {
+    flex: 1 1 0;
+}
+
 .summary {
     min-width: 0;
     border: 0;

@@ -142,7 +142,7 @@ describe('desktop renderer accessibility', () => {
     it('scans the side navigation, persistent header, and loaded Home route', async () => {
         const { container } = render(<DesktopRendererHarness />);
 
-        await screen.findByText('BTC · Bitcoin');
+        await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' });
         screen.getByRole('navigation', { name: 'Primary navigation' });
         screen.getByRole('status', { name: 'Watch-only wallet' });
         screen.getByRole('heading', { name: 'Home' });
@@ -151,7 +151,7 @@ describe('desktop renderer accessibility', () => {
 
     it('scans Settings inside the desktop chrome', async () => {
         const { container } = render(<DesktopRendererHarness />);
-        await screen.findByText('BTC · Bitcoin');
+        await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' });
 
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 

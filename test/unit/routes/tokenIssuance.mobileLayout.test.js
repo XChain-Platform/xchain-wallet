@@ -141,3 +141,10 @@ describe('token issuance mobile layout', () => {
         expect(ruleBody(css, '.tickItemName')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 });
+
+describe('token wizard template cards', () => {
+    it('starts every card at the top, whatever its neighbour in the row holds', () => {
+        const css = readCss('packages/core/src/shared/routes/TokenWizard.module.css');
+        expect(ruleBody(css, '.templateGrid .templateCard')).toMatch(/align-items:\s*flex-start/);
+    });
+});
