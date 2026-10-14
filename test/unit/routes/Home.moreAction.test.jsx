@@ -133,7 +133,7 @@ describe('Home desktop actions', () => {
             expect(viewportWidth).toBeLessThan(1024);
         } else {
             expect(homeStyles).toMatch(
-                /@media \(min-width: 64rem\)[\s\S]*\.actionsFull\s*\{[^}]*grid-template-columns:\s*repeat\(8, minmax\(0, 1fr\)\)/,
+                /@media \(min-width: 1024px\)[\s\S]*\.actionsFull\s*\{[^}]*grid-template-columns:\s*repeat\(8, minmax\(0, 1fr\)\)/,
             );
             expect(viewportWidth).toBeGreaterThanOrEqual(1024);
         }
