@@ -1115,7 +1115,7 @@ const TEMPLATES = [
 
 function renderTemplateStage({ onPick }) {
     return (
-        <ListPage intro="Choose a template.">
+        <ListPage>
             {/* Native list markup preserves template-list semantics because the UI kit has no list primitive. */}
             <ul className={styles.templateGrid}>
                 {TEMPLATES.map((t) => (
@@ -1167,7 +1167,6 @@ function renderChainStage({
                 event.preventDefault();
                 if (fromAddress) onNext();
             }}
-            intro="Which chain should record this token's issuance?"
             actions={(
                 <Button
                     type="submit"
@@ -1263,7 +1262,6 @@ function renderDetailsStage({
             label="Token details"
             onSubmit={onSubmit}
             onChangeCapture={onEdit}
-            intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}

@@ -635,10 +635,6 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 ) : null}
             </dl>
 
-            <p className={styles.hint} style={{ marginTop: 0 }}>
-                You're selling the entire ownership of {tokenUpper}. Single sale, no partial fills.
-            </p>
-
             <div
                 className={receivePickerStyles.kindSegments}
                 role="tablist"

@@ -626,11 +626,6 @@ export function PublishFileForm({ walletId, onBack }) {
             <FormPage
                 label="Review publish"
                 onSubmit={handleSubmit}
-                intro={(
-                    <>
-                        Publish <strong>{fileMeta?.name}</strong> on-chain, readable by anyone.
-                    </>
-                )}
                 status={(isWatcherMode || hw) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
@@ -725,12 +720,6 @@ export function PublishFileForm({ walletId, onBack }) {
         <FormPage
             label="Publish file"
             onSubmit={handleReview}
-            intro={(
-                <>
-                    Store a file on the chain itself: publicly readable, or
-                    encrypted so only holders of your token can open it.
-                </>
-            )}
             status={mode === 'public' && formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}

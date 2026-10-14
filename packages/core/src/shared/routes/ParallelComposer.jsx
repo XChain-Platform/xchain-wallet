@@ -519,7 +519,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 goReview();
             }}
             sectioned
-            intro="Compose any number of independent actions on any combination of chains. Each row is submitted as its own independent action. Review the no-rollback warning before signing."
             status={composeError ? (
                 <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
             ) : null}
