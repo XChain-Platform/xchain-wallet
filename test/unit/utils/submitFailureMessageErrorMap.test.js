@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import {
+    submitFailureDetails,
+    submitFailureMessage,
+} from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import {
+    KNOWN_SDK_ERROR_CODES,
+    knownSdkErrorMessage,
+} from '../../../packages/core/src/sdk/sdkErrorMessages.js';
 import {
     isDeveloperMessage,
     userFacingMessage,
@@ -18,8 +25,8 @@ describe('submitFailureMessage SDK error map', () => {
     const unsafe = 'privateFunction: request failed for https://private.example/RBTC/api/feequote';
     const cases = [
         ['hub unavailable by code', codedError('Error', 'HUB_UNAVAILABLE', unsafe)],
-        ['hub error', codedError('SDKHubError', 'HUB_NOT_CONFIGURED', unsafe)],
-        ['SDK configuration', codedError('SDKConfigError', 'CONFIG_INVALID', unsafe)],
+        ['hub error', codedError('SDKHubError', 'HUB_UNAVAILABLE', unsafe)],
+        ['SDK configuration', codedError('SDKConfigError', 'HUB_NOT_CONFIGURED', unsafe)],
         ['validation', codedError('SDKValidationError', 'BATCH_CONSTRAINT',
             'betting.placeBetParams: amount must be a positive stake')],
         ['format', codedError('SDKFormatError', 'UNKNOWN_ACTION', unsafe)],
@@ -28,14 +35,13 @@ describe('submitFailureMessage SDK error map', () => {
         ['authorization', codedError('SDKAuthError', 'INVALID_WIF', unsafe)],
         ['messaging', codedError('SDKMessagingError', 'INVALID_MESSAGE', unsafe)],
         ['action', codedError('SDKActionError', 'ACTION_REJECTED', unsafe)],
-        ['shared signature', codedError('SDKMuSigError', 'SIGN_FAILED', unsafe)],
+        ['shared signature', codedError('SDKMuSigError', 'SIG_AGG_FAILED', unsafe)],
         ['protected file', codedError('SDKGatedFileError', 'INVALID_PAYLOAD', unsafe)],
         ['compression', codedError('SDKCompressionError', 'INPUT_TOO_LARGE', unsafe)],
-        ['policy', codedError('SDKPolicyError', 'POLICY_DENIED', unsafe)],
-        ['service payment', codedError('SDKX402Error', 'X402_PAYMENT_NOT_FOUND', unsafe)],
+        ['policy', codedError('SDKPolicyError', 'POLICY_INVALID', unsafe)],
+        ['service payment', codedError('SDKX402Error', 'X402_CONFIG', unsafe)],
         ['preflight', codedError('SDKPreflightError', 'PREFLIGHT_FAIL', unsafe)],
         ['generic rate limit', codedError('SDKRateLimitedError', 'RATE_LIMITED', unsafe)],
-        ['base SDK error', codedError('SDKError', 'SOMETHING_NEW', unsafe)],
         ['oracle fee', codedError('OracleFeeUnpayableError', undefined, unsafe)],
         ['non-finite amount', codedError('Error', 'NON_FINITE_AMOUNT', unsafe)],
         ['invalid satoshi amount', codedError('Error', 'INVALID_SATS_AMOUNT', unsafe)],
@@ -86,6 +92,49 @@ describe('submitFailureMessage SDK error map', () => {
         expect(message).not.toMatch(STACK_OR_URL);
         expect(message).not.toContain(err.name);
         if (err.code) expect(message).not.toContain(err.code);
+    });
+
+    it.each(KNOWN_SDK_ERROR_CODES)('maps known $name code $code to plain copy', ({ name, code, message: plain }) => {
+        const raw = 'privateFunction: request failed for https://private.example/api/value\n'
+            + '    at privateFunction (/private/source.js:1:2)';
+        const err = codedError(name, code, raw);
+        const message = submitFailureMessage(err);
+
+        expect(knownSdkErrorMessage(err)).toBe(plain);
+        expect(message).toMatch(/^[A-Z]/);
+        expect(message).not.toContain(code);
+        expect(message).not.toContain(name);
+        expect(message).not.toMatch(STACK_OR_URL);
+        expect(submitFailureDetails(err, message)).toBe('');
+    });
+
+    it.each([
+        ['SDKError', 'SOMETHING_NEW'],
+        ['SDKFormatError', 'FUTURE_FORMAT_CODE'],
+        ['SDKEncoderError', 'ENCODER_FUTURE_CODE'],
+        ['SDKValidationError', 'FUTURE_VALIDATION_CODE'],
+        ['Error', 'ENCODER_FUTURE_BOUNDARY_CODE'],
+    ])('keeps unknown %s code %s only in technical details', (name, code) => {
+        const raw = 'privateFunction: secret transport detail\n'
+            + '    at privateFunction (/private/source.js:1:2)';
+        const err = codedError(name, code, raw);
+        const message = submitFailureMessage(err);
+        const details = submitFailureDetails(err, message);
+
+        expect(message).toBe("Couldn't complete this. Something went wrong. Try again.");
+        expect(message).not.toContain(code);
+        expect(message).not.toContain('secret transport detail');
+        expect(message).not.toMatch(STACK_OR_URL);
+        expect(details).toBe(code);
+        expect(details).not.toContain('privateFunction');
+    });
+
+    it('keeps a known encoder code safe when only the code crosses the boundary', () => {
+        const err = codedError('Error', 'NO_UTXOS', 'no spendable UTXOs\n    at encoder (/private/source.js:1:2)');
+        const message = submitFailureMessage(err, { coinTicker: 'BTC' });
+
+        expect(message).not.toMatch(/utxo|private\/source/i);
+        expect(submitFailureDetails(err, message)).toBe('');
     });
 
     it.each([
