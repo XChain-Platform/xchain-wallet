@@ -81,6 +81,7 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useResponsivePlaceholder } from '../../ui/Input.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
+import { shareOrCopy, ShareOutcome } from '../share.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { transactionReceiptText } from '../utils/transactionReceipt.js';
 import {
@@ -2422,6 +2423,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     // user opts into these six public transaction facts, never addresses,
     // memos, contact data, wallet identifiers, or arbitrary raw fields.
     const receipt = transactionReceiptText(entry, { settings, balancesHidden });
+    moreOptions.push({
+        id: 'share-receipt',
+        label: 'Share receipt',
+        icon: <Icon.UploadIcon />,
+        onClick: async () => {
+            setMoreOpen(false);
+            const outcome = await shareOrCopy({
+                title: 'XChain transaction receipt',
+                text: receipt,
+            }, receipt);
+            if (outcome === ShareOutcome.COPIED) {
+                showToast({ message: 'Transaction receipt copied.' });
+            } else if (outcome === ShareOutcome.UNAVAILABLE) {
+                showToast({ message: 'Sharing is unavailable.' });
+            }
+        },
+    });
     moreOptions.push({
         id: 'copy-receipt',
         label: 'Copy receipt',
