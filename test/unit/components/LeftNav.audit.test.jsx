@@ -81,6 +81,18 @@ describe('LeftNav route state', () => {
 });
 
 describe('LeftNav rail interaction', () => {
+    it('does not repeat the wallet name already shown in the app header', () => {
+        render(
+            <LeftNav
+                {...baseProps}
+                walletName="Demo Wallet"
+                onOpenWalletPicker={vi.fn()}
+            />,
+        );
+
+        expect(screen.queryByText('Demo Wallet')).toBeNull();
+    });
+
     it('gives icon-only destinations, Settings, and Lock native tooltips', () => {
         render(<LeftNav {...baseProps} />);
 
