@@ -53,8 +53,10 @@
     display: contents !important;
 }
 
-.pasteAction button,
-.maxAction {
+/* The wrapper class lifts these above the kit Button's own position rule,
+   which would otherwise win whenever its stylesheet loads later. */
+.amountFieldWrap .pasteAction button,
+.amountFieldWrap .maxAction {
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
     top: calc(var(--xc-space-5) + var(--xc-space-1));
@@ -77,7 +79,7 @@
     inset-inline-end: var(--amount-action-width);
 }
 
-.maxAction {
+.amountFieldWrap .maxAction {
     inset-inline-end: 0;
     padding-inline: var(--xc-space-2);
 }
