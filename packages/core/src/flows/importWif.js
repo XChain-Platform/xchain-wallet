@@ -163,10 +163,13 @@ export async function importWif({
         : await deriveMasterKeyAsync(password, walletRecord.kdfParams);
     let encryptedWif;
     try {
+        let seedBytes;
         try {
-            await decrypt(masterKey, base64ToBytes(walletRecord.encryptedSeed));
+            seedBytes = await decrypt(masterKey, base64ToBytes(walletRecord.encryptedSeed));
         } catch {
             throw new WrongPasswordError();
+        } finally {
+            if (seedBytes) seedBytes.fill(0);
         }
         const wifBytes = new TextEncoder().encode(wif);
         try {
