@@ -1529,7 +1529,7 @@ export function AddressList({
                                             {d
                                                 ? <ChainBadge descriptor={d} size="sm" />
                                                 : <span>{row.chainId}</span>}
-                                            <AddressText address={row.address} truncate={false} />
+                                            <AddressText address={row.address} />
                                             {row.multisig ? (
                                                 <MultisigBadge
                                                     threshold={row.multisig.threshold}

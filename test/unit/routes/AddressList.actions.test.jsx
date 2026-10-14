@@ -62,6 +62,20 @@ function mount(messaging, props = {}) {
 afterEach(() => cleanup());
 
 describe('Address detail actions', () => {
+    it('middle-truncates card addresses while keeping the full value available on focus and copy', async () => {
+        mount(messagingWith());
+
+        const address = await screen.findByLabelText(ADDRESS);
+        expect(address).toHaveTextContent(`${ADDRESS.slice(0, 6)}…${ADDRESS.slice(-6)}`);
+
+        const setData = vi.fn();
+        fireEvent.copy(address, { clipboardData: { setData } });
+        expect(setData).toHaveBeenCalledWith('text/plain', ADDRESS);
+
+        fireEvent.focus(address);
+        expect(address).toHaveTextContent(ADDRESS);
+    });
+
     it('shows address fiat balances in the selected currency', async () => {
         mount(messagingWith({
             getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'regtest', fiatCurrency: 'EUR' }),
