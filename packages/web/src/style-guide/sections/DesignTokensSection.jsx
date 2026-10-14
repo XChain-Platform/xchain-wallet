@@ -48,6 +48,7 @@ export const TOKEN_GROUPS = [
             color('--xc-control-disabled-bg', '#F5F6F8', '#121824', 'Disabled control fill'),
             color('--xc-control-disabled-border', '#727D8E', '#718096', 'Disabled control border'),
             color('--xc-control-disabled-text', '#5F7086', '#94A3B8', 'Disabled control text'),
+            token('--xc-select-arrow', 'chevron image in --xc-text-muted', 'Arrow on every select, the Network picker chevron'),
         ],
     },
     {

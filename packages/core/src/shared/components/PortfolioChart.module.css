@@ -49,7 +49,8 @@
     position: relative;
     appearance: none;
     background: transparent;
-    border: none;
+    /* A visible boundary so an unselected range is recognisably a button. */
+    border: 1px solid var(--xc-control-border);
     padding: var(--xc-space-1) var(--xc-control-pad-x);
     /* The tap-min floor keeps the compact uppercase pill accessible. */
     display: inline-flex;
@@ -94,6 +95,7 @@
 
 .rangeActive {
     background: var(--xc-accent-primary);
+    border-color: var(--xc-accent-primary);
     color: var(--xc-on-accent);
 }
 
