@@ -14,9 +14,10 @@ import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const LIST_INDEX = '700001';
 const LIST_NAME = 'Road trip';
-const LIST_MEMBER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
-const SECOND_MEMBER = '1BoatSLRHtKNngkdXEeobR76b53LETtpyT';
-const TRANSFER_DESTINATION = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
+// The demo wallet runs on Bitcoin regtest, so list members are regtest addresses.
+const LIST_MEMBER = 'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080';
+const SECOND_MEMBER = 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f';
+const TRANSFER_DESTINATION = 'n1HvYayKZr8qW54uBoDgveVS7waeaUrBEy';
 const VIEWPORTS = [
     { width: 412, height: 869 },
     { width: 1280, height: 800 },
@@ -78,7 +79,7 @@ const sendMessage = async (type, request) => {
         return { 0: 'create', 1: 'edit', 2: 'share', 3: 'transfer', 4: 'create-meta', 5: 'rename' };
     }
     if (type === 'lists.forSource') {
-        if (request?.chainId !== 'bitcoin-mainnet') return [];
+        if (request?.chainId !== 'bitcoin-regtest') return []; // the demo wallet's Bitcoin chain
         if (!e2eListOwner) e2eListOwner = request.address;
         if (request.address !== e2eListOwner) return [];
         return { data: [{
@@ -123,7 +124,11 @@ async function mismatchedInlineControlHeights(page) {
             '[role="button"]',
             '[role="combobox"]',
         ].join(', ');
-        const controls = [...new Set(document.querySelectorAll(selector))]
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        // Scan the screen body only: the desktop sidebar's wallet switcher can sit
+        // level with a field in main without sharing its row.
+        const root = document.querySelector('main') || document;
+        const controls = [...new Set(Array.from(root.querySelectorAll(selector)).filter((el) => !el.closest('[aria-hidden="true"]')))]
             .filter((element) => {
                 const rect = element.getBoundingClientRect();
                 const style = getComputedStyle(element);
