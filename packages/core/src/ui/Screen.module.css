@@ -154,3 +154,9 @@
 .notices {
     min-width: 0;
 }
+
+/* The shell's fallback notices slot, for a route with no Screen, takes the
+   same page gutter as the body. */
+.noticesFallback {
+    padding-inline: var(--xc-page-gutter);
+}
