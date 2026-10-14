@@ -79,7 +79,7 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                     <span className={styles.close}>
                         <Button
                             variant="secondary"
-                            size="sm"
+                            size="md"
                             icon={<Icon.XIcon />}
                             onClick={onClose}
                             aria-label="Close"
