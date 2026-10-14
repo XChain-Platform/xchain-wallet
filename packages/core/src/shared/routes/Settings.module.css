@@ -10,6 +10,15 @@
     margin-bottom: 0;
 }
 
+.searchHighlightScope {
+    display: contents;
+}
+
+.page [data-settings-search-highlight='true'] {
+    outline: 2px solid var(--xc-accent-primary);
+    outline-offset: 2px;
+}
+
 /* Settings section headings remain in document flow while the page header
    stays docked above the scrolling content. */
 .sectionHeader {
