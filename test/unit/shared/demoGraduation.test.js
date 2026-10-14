@@ -214,7 +214,7 @@ describe('exitDemoWallet', () => {
 
     it('keeps a real wallet alongside the demo: no wipe, no intent, no reload', async () => {
         writeActiveWallet('demo-1');
-        const h = harness({ wallets: [{ id: 'real-1' }] });
+        const h = harness({ wallets: [{ id: 'real-1', name: 'Real Wallet' }] });
         const r = await exitDemoWallet({
             messaging: h.messaging,
             walletId: 'demo-1',
@@ -225,7 +225,7 @@ describe('exitDemoWallet', () => {
         expect(r).toEqual({ wiped: false, reloaded: false, remaining: 'occupied' });
         expect(h.calls.wiped).toBe(0);
         expect(h.calls.reloaded).toBe(0);
-        expect(readActiveWallet()).toBe(null);
+        expect(readActiveWallet()).toBe('real-1');
         expect(takePostDemoIntent()).toBe(null);
     });
 

@@ -21,7 +21,8 @@ const { wipeWalletStorage } = vi.hoisted(() => ({
     wipeWalletStorage: vi.fn(async () => {}),
 }));
 
-vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', () => ({
+vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', async (importOriginal) => ({
+    ...(await importOriginal()),
     wipeWalletStorage,
 }));
 
@@ -128,6 +129,10 @@ describe('ThisWalletSection removal completion', () => {
         writeBalanceCache(OTHER_WALLET.id, 'account-other', {
             balances: {}, activeByChain: {}, fetchedAt: 200,
         });
+        globalThis.localStorage.setItem(`xc:activeAccount:${ACTIVE_WALLET.id}`, 'account-active');
+        globalThis.localStorage.setItem(`xc:activeAccount:${OTHER_WALLET.id}`, 'account-other');
+        globalThis.localStorage.setItem(`xc:formdraft:send:${ACTIVE_WALLET.id}`, '{"amount":"1"}');
+        globalThis.localStorage.setItem(`xc:formdraft:send:${OTHER_WALLET.id}`, '{"amount":"2"}');
         const { messaging, reload } = mount([OTHER_WALLET]);
 
         await removeActiveWallet();
@@ -140,6 +145,10 @@ describe('ThisWalletSection removal completion', () => {
         expect(wipeWalletStorage).not.toHaveBeenCalled();
         expect(readBalanceCache(ACTIVE_WALLET.id, 'account-active')).toBeNull();
         expect(readBalanceCache(OTHER_WALLET.id, 'account-other')).not.toBeNull();
+        expect(globalThis.localStorage.getItem(`xc:activeAccount:${ACTIVE_WALLET.id}`)).toBeNull();
+        expect(globalThis.localStorage.getItem(`xc:formdraft:send:${ACTIVE_WALLET.id}`)).toBeNull();
+        expect(globalThis.localStorage.getItem(`xc:activeAccount:${OTHER_WALLET.id}`)).toBe('account-other');
+        expect(globalThis.localStorage.getItem(`xc:formdraft:send:${OTHER_WALLET.id}`)).toBe('{"amount":"2"}');
         writeBalanceCache(ACTIVE_WALLET.id, 'account-active', {
             balances: {}, activeByChain: {}, fetchedAt: 300,
         });

@@ -19,7 +19,10 @@
 // there it has to ask the main process through the preload bridge.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
+import {
+    clearRemovedWalletStorage,
+    wipeWalletStorage,
+} from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { WALLET_LOCAL_KEYS } from '../../../packages/extension/src/background/wipeExtensionStorage.js';
 import {
     delayForAttempts,
@@ -117,6 +120,74 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
         await wipeWalletStorage();
         expect(globalThis.localStorage.getItem(QUEUE_KEY)).toBe(null);
         expect(WALLET_LOCAL_KEYS).toContain(QUEUE_KEY);
+    });
+
+    it('clears every wallet-derived cache while preserving installation preferences', async () => {
+        const walletKeys = [
+            'xc:backupReminderFundedAt',
+            'xc:alertCenter:w1',
+            'xc:balanceCache:w1:a1',
+            'xc:balances:sort:w1',
+            'xc:historyCache:v1:w1:a1',
+            'xc:homeFilters:w1',
+            'xchain.governancePolls.seen',
+            'xchain.deadlines.seen',
+            'xchain.dispenserEscrow.seen',
+        ];
+        for (const key of walletKeys) globalThis.localStorage.setItem(key, 'wallet data');
+        globalThis.localStorage.setItem('xc:licenseAcceptedVersion', '1');
+        globalThis.localStorage.setItem('xchain.layoutMode', 'sidepanel');
+        stubIndexedDB();
+
+        await wipeWalletStorage();
+
+        expect(walletKeys.filter((key) => globalThis.localStorage.getItem(key) !== null)).toEqual([]);
+        expect(globalThis.localStorage.getItem('xc:licenseAcceptedVersion')).toBe('1');
+        expect(globalThis.localStorage.getItem('xchain.layoutMode')).toBe('sidepanel');
+        expect(WALLET_LOCAL_KEYS).toEqual(expect.arrayContaining([
+            'xchain.governancePolls.seen',
+            'xchain.deadlines.seen',
+            'xchain.dispenserEscrow.seen',
+        ]));
+    });
+
+    it('clears only one wallet\'s cache and preference records', () => {
+        const removed = 'wallet-removed';
+        const survivor = 'wallet-survivor';
+        const keysFor = (walletId) => [
+            `xc:activeAccount:${walletId}`,
+            `xc:alertCenter:${walletId}`,
+            `xc:balanceCache:${walletId}:account-1`,
+            `xc:balances:sort:${walletId}`,
+            `xc:chainFilter:history:${walletId}`,
+            `xc:contacts:sort:${walletId}`,
+            `xc:formdraft:send:${walletId}`,
+            `xc:historyCache:v1:${walletId}:account-1`,
+            `xc:historyGroupingMode:${walletId}`,
+            `xc:homeFilters:${walletId}`,
+            `xc:lastView:${walletId}`,
+            `xc:msgRead:${walletId}:account-1`,
+            `xc:msgUnread:${walletId}:account-1`,
+            `xc:msgRequestDeclined:${walletId}:account-1`,
+        ];
+        for (const key of [...keysFor(removed), ...keysFor(survivor)]) {
+            globalThis.localStorage.setItem(key, 'wallet data');
+        }
+        for (const key of ['xc:backupVerifiedAt', 'xc:backupReminderFundedAt', 'xc:backupReminderDismissedUntil']) {
+            globalThis.localStorage.setItem(key, JSON.stringify({ [removed]: 1, [survivor]: 2 }));
+        }
+        globalThis.localStorage.setItem('xc:activeWallet', JSON.stringify({ id: removed, name: 'Removed' }));
+        globalThis.localStorage.setItem('unrelated.preference', 'keep');
+
+        clearRemovedWalletStorage(removed);
+
+        expect(keysFor(removed).filter((key) => globalThis.localStorage.getItem(key) !== null)).toEqual([]);
+        expect(keysFor(survivor).every((key) => globalThis.localStorage.getItem(key) === 'wallet data')).toBe(true);
+        for (const key of ['xc:backupVerifiedAt', 'xc:backupReminderFundedAt', 'xc:backupReminderDismissedUntil']) {
+            expect(JSON.parse(globalThis.localStorage.getItem(key))).toEqual({ [survivor]: 2 });
+        }
+        expect(globalThis.localStorage.getItem('xc:activeWallet')).toBeNull();
+        expect(globalThis.localStorage.getItem('unrelated.preference')).toBe('keep');
     });
 
     // One ledger key per walletId, so it is swept by prefix; a freshly loaded

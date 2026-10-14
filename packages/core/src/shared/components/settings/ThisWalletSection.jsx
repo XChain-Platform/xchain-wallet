@@ -24,7 +24,7 @@ import { KeyQR } from '../KeyQR.jsx';
 import { useToast } from '../ToastHost.jsx';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
-import { clearBalanceCache } from '../../utils/balanceCache.js';
+import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
 import { Status } from './_settingsPrimitives.jsx';
 import styles from './ThisWalletSection.module.css';
@@ -111,15 +111,9 @@ export function ThisWalletSection({
         try {
             await messaging.removeWallet({ walletId: activeWallet.id });
             removalSucceeded = true;
-            // Cluster U FOLLOWUP 5: drop the resume-last-view memory
-            // for this wallet so a future wallet that happens to reuse
-            // the same id (vanishingly unlikely with cuids, but the
-            // hygiene cost is zero) doesn't inherit a stale route.
             clearLastView(activeWallet.id);
-            clearBalanceCache(activeWallet.id);
-            // sweep this wallet's messaging read marks/unread
-            // counts too, or they orphan in localStorage forever.
             sweepMsgMemoryForWallet(activeWallet.id);
+            clearRemovedWalletStorage(activeWallet.id);
             setConfirmingRemove(false);
             setRemoved(true);
             if (typeof onWalletRemoved === 'function') {
