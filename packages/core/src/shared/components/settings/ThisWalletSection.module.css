@@ -4,7 +4,6 @@
     gap: var(--xc-settings-row-gap);
 }
 
-.row,
 .panel,
 .keyPanel {
     padding: var(--xc-space-3);

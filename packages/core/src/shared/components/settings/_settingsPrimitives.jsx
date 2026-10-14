@@ -108,6 +108,49 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
     );
 }
 
+const ACTION_TITLE = {
+    ...ROW_VALUE,
+    margin: 0,
+    fontSize: 'inherit',
+    lineHeight: 1.3,
+    overflowWrap: 'anywhere',
+};
+const ACTION_HINT = { ...ROW_HINT, margin: 0, overflowWrap: 'anywhere' };
+// When the row wraps on a narrow screen the actions keep to the row end, the
+// same edge a switch or select sits on.
+const ACTION_SLOT = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    marginInlineStart: 'auto',
+    maxWidth: '100%',
+};
+
+/**
+ * A settings row whose control is one or more action buttons: the same
+ * bordered row, label and hint as a toggle or field row, with the actions at
+ * the row end. The label stays a heading so screen readers can jump between
+ * rows.
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {import('react').ReactNode} [props.hint]
+ * @param {'h2' | 'h3'} [props.headingLevel]
+ * @param {import('react').ReactNode} [props.children]   the row's actions
+ */
+export function SettingsActionRow({ label, hint, headingLevel: Heading = 'h2', children }) {
+    return (
+        <section style={ROW}>
+            <div style={ROW_COPY}>
+                <Heading style={ACTION_TITLE}>{label}</Heading>
+                {hint ? <p style={ACTION_HINT}>{hint}</p> : null}
+            </div>
+            {children ? <div style={ACTION_SLOT}>{children}</div> : null}
+        </section>
+    );
+}
+
 /**
  * Two-column row with a label, hint, and on-off control.
  *
