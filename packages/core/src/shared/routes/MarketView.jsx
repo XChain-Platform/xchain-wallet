@@ -187,8 +187,13 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             background: 'var(--xc-surface-raised)',
                             border: '1px solid var(--xc-border)',
                             borderRadius: '50%',
-                            width: 32,
-                            height: 32,
+                            // The button's own inline padding left no room
+                            // for the icon inside 32px, so it drew an empty
+                            // circle; square and unpadded, the icon shows.
+                            width: 36,
+                            minWidth: 36,
+                            height: 36,
+                            padding: 0,
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
