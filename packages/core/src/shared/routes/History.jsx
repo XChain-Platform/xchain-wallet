@@ -3008,7 +3008,7 @@ function PendingOutputLine({ text, destination }) {
         <span className={styles.copyableValue}>
             <span className={styles.copyableText}>
                 {before}
-                <AddressText address={destination} size="sm" />
+                <AddressText address={destination} size="md" />
                 {after}
             </span>
             <HistoryCopyButton
@@ -3251,7 +3251,7 @@ function CopyableValue({ display, fullValue, ariaLabel }) {
     return (
         <span className={styles.copyableValue}>
             <span className={styles.copyableText}>
-                {identifier ? <AddressText address={full} size="sm" /> : display}
+                {identifier ? <AddressText address={full} size="md" /> : display}
             </span>
             <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('history.copy.short')} />
         </span>
