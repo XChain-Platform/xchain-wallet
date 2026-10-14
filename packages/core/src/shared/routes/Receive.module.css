@@ -23,8 +23,11 @@
     outline-offset: calc(var(--xc-space-1) * 0.5);
 }
 
+/* The QR card spans the form like the address field below it; only the code
+   inside is capped, so card, address and actions share one left edge. */
 .qrBox {
     margin: 0;
+    max-width: none;
 }
 
 .receiveQrDisplay {
@@ -48,8 +51,9 @@
 
 .qrSurface {
     width: 100%;
-    max-width: 100%;
+    max-width: var(--xc-qr-frame-size);
     min-width: 0;
+    margin-inline: auto;
 }
 
 .qr {
@@ -76,9 +80,8 @@
 /* Keep the QR content column inside the route scroller's visible height while
    its card, address field, and actions continue to share the same edges. */
 @media (orientation: landscape) and (max-height: 480px) {
-    .receiveQrDisplay.receiveQrDisplay {
-        max-width: min(100%, calc(var(--xc-viewport-h, 100vh) - 9rem));
-        margin-inline: auto;
+    .qrSurface {
+        max-width: min(var(--xc-qr-frame-size), calc(var(--xc-viewport-h, 100vh) - 11rem));
     }
 }
 
@@ -126,18 +129,22 @@
     margin-bottom: var(--xc-space-3);
 }
 
+/* Four equal secondary buttons in two columns: one height, one-line labels,
+   both outer edges on the form's edges. */
 .qrActions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 0;
-    align-items: center;
-}
-
-.receiveQrDisplay > .qrActions {
-    justify-content: flex-start;
+    align-items: stretch;
 }
 
 .qrActions > * {
-    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     height: var(--xc-control-h-md);
+    min-height: var(--xc-control-h-md);
+    justify-content: center;
     white-space: nowrap;
 }
 
@@ -150,7 +157,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: var(--xc-tap-min);
+    min-height: var(--xc-control-h-md);
     cursor: pointer;
 }
 
