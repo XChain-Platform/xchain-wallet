@@ -43,8 +43,9 @@ export function truncateAddress(address) {
  * @param {boolean} [props.highlight]
  * @param {'sm' | 'md'} [props.size]
  * @param {string} [props.className]
+ * @param {boolean} [props.focusable]   false when a focusable control already owns the value, such as a read-only field's preview
  */
-export function AddressText({ address, truncate = true, highlight = false, size = 'md', className = '' }) {
+export function AddressText({ address, truncate = true, highlight = false, size = 'md', className = '', focusable = true }) {
     const [focused, setFocused] = useState(false);
     const cls = `${styles.addr} ${styles[size]} ${className}`.trim();
     if (typeof address !== 'string' || address.length === 0) {
@@ -73,10 +74,12 @@ export function AddressText({ address, truncate = true, highlight = false, size 
         title: address,
         'aria-label': address,
         dir: 'ltr',
-        tabIndex: 0,
+        // A preview drawn over a focusable input stays out of the tab order:
+        // the input is the one stop for that value.
+        tabIndex: focusable ? 0 : undefined,
         style: displayStyle,
-        onFocus: () => setFocused(true),
-        onBlur: () => setFocused(false),
+        onFocus: focusable ? () => setFocused(true) : undefined,
+        onBlur: focusable ? () => setFocused(false) : undefined,
         onCopy: (event) => {
             if (event.clipboardData) {
                 event.clipboardData.setData('text/plain', address);

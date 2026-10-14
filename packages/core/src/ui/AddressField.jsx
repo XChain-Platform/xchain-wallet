@@ -120,7 +120,7 @@ export const AddressField = forwardRef(function AddressField(
             />
             {showReadOnlyAddress ? (
                 <span className={styles.readOnlyValue} aria-hidden="true">
-                    <AddressText address={value} truncate={!wrapReadOnlyAddress} />
+                    <AddressText address={value} truncate={!wrapReadOnlyAddress} focusable={false} />
                 </span>
             ) : null}
             {IconComponent ? (
