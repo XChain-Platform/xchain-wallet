@@ -1351,6 +1351,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         {t('home.interruptedAction', { action: interruptedAction })}
                     </StatusMessage>
                 ) : null}
+                {/* The offline message already covers stale balances, so the
+                    shell notice steps aside rather than saying it twice. */}
+                {offline ? <HideReachabilityNotice /> : null}
                 {offline ? (
                     <StatusMessage variant="warning">
                         {balances
