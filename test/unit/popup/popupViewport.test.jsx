@@ -30,6 +30,7 @@ const css = Object.fromEntries(Object.entries(cssFiles).map(([name, file]) => [
     name,
     readFileSync(join(root, file), 'utf8'),
 ]));
+const popupApp = readFileSync(join(root, 'packages/extension/src/popup/App.jsx'), 'utf8');
 const originalViewport = { width: window.innerWidth, height: window.innerHeight };
 
 const settings = createDefaultSettings();
@@ -147,6 +148,24 @@ describe('extension popup main screens at 360x600', () => {
         // Onboarding actions live in FormPage now, which owns their shrinkable column.
         expect(css.onboarding).not.toMatch(/\.actionsPopup/);
         expect(css.home).toMatch(/\.quickAction\s*\{[\s\S]*?min-width:\s*0/);
+    });
+
+    it('keeps banners inside the 600px shell and document scrolling disabled', () => {
+        const appWrapper = popupApp.slice(
+            popupApp.indexOf('export function App()'),
+            popupApp.indexOf('function AppInner('),
+        );
+
+        expect(appWrapper).not.toContain('<ReachabilityBanner');
+        expect(popupApp).toMatch(
+            /notices=\{\([\s\S]*?<ReachabilityBanner\s*\/>[\s\S]*?\)\}/,
+        );
+        expect(css.popup).toMatch(
+            /html\.xchain-toolbar-popup\s*\{[^}]*height:\s*600px;[^}]*overflow:\s*hidden;/,
+        );
+        expect(css.popup).toMatch(
+            /body,\s*#xchain-popup-root\s*\{[^}]*height:\s*100%;[^}]*overflow:\s*hidden;/,
+        );
     });
 
     it('keeps 360px action labels whole without flex shrinking', () => {

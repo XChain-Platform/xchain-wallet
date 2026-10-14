@@ -47,8 +47,10 @@ const expectedIcons = Object.fromEntries(
 );
 assert.deepEqual(manifest.icons, expectedIcons);
 assert.deepEqual(manifest.action.default_icon, expectedIcons);
-assert.match(popupCss, /width:\s*min\(360px,\s*100vw\)/);
-assert.match(popupCss, /height:\s*min\(600px,\s*100vh\)/);
+assert.match(
+    popupCss,
+    /html\.xchain-toolbar-popup\s*\{[^}]*width:\s*360px;[^}]*height:\s*600px;[^}]*overflow:\s*hidden;/,
+);
 assert.match(popupCss, /@media \(min-width:\s*601px\)[^]*width:\s*100%/);
 
 console.log(

@@ -5,6 +5,7 @@ html.xchain-toolbar-popup {
     width: 360px;
     height: 600px;
     min-width: 0;
+    overflow: hidden;
     --xc-viewport-h: 600px;
 }
 
@@ -19,7 +20,7 @@ body,
     max-width: 100%;
     max-height: 100%;
     min-width: 0;
-    overflow-x: hidden;
+    overflow: hidden;
     min-height: 0;
 }
 
