@@ -45,6 +45,8 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
     formatWithThousands,
+    normalizeLocalizedDecimal,
+    tokenAmountPrecisionError,
 } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -65,6 +67,7 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import {
@@ -528,6 +531,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const giveTokenInfo = useTokenInfo({
+        chainId,
+        tick: ticker,
+        skip: !ticker.trim(),
+    });
+    const paymentTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick,
+        skip: payWith !== 'token' || !getTick.trim(),
+    });
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
@@ -842,11 +855,23 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setFormError('Per-fill give amount must be a positive number.');
             return;
         }
+        const givePrecisionError = tokenAmountPrecisionError(ga, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Per-fill give amount',
+        });
+        if (givePrecisionError) { setFormError(givePrecisionError); return; }
         const esc = escrow.trim();
         if (!isPositiveDecimal(esc)) {
             setFormError('Escrow amount must be a positive number.');
             return;
         }
+        const escrowPrecisionError = tokenAmountPrecisionError(esc, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Escrow amount',
+        });
+        if (escrowPrecisionError) { setFormError(escrowPrecisionError); return; }
         if (compareDecimalStrings(esc, ga) === -1) {
             setFormError('Escrow is smaller than a single fill; the dispenser would never dispense.');
             return;
@@ -861,6 +886,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!isPositiveDecimal(getTokenAmount)) {
                 setFormError('Enter a positive token amount buyers pay per fill.'); return;
             }
+            const paymentPrecisionError = tokenAmountPrecisionError(getTokenAmount, {
+                divisibility: paymentTokenInfo?.divisibility,
+                tick: getTick,
+                noun: 'Payment amount',
+            });
+            if (paymentPrecisionError) { setFormError(paymentPrecisionError); return; }
         } else {
             if (!oracle && !fa && !trig) {
                 setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
@@ -888,6 +919,15 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             }
             if (!oracle && trig && !isPositiveDecimal(trig)) {
                 setFormError('Trigger price must be a positive number.');
+                return;
+            }
+            const triggerPrecisionError = tokenAmountPrecisionError(trig, {
+                divisibility: descriptor?.nativeDecimals ?? 8,
+                tick: coinTicker,
+                noun: 'Trigger price',
+            });
+            if (!oracle && trig && triggerPrecisionError) {
+                setFormError(triggerPrecisionError);
                 return;
             }
             if (priceNotes.block) {
@@ -1650,7 +1690,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         hint="Amount of the payment token buyers send per fill."
                         inputMode="decimal"
                         value={getTokenAmount}
-                        onChange={(e) => setGetTokenAmount(e.target.value)}
+                        onChange={(e) => setGetTokenAmount(
+                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                        )}
                         autoComplete="off"
                     />
                 </>
@@ -1665,7 +1707,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     hint={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
                     inputMode="decimal"
                     value={triggerPrice}
-                    onChange={(e) => setTriggerPrice(e.target.value)}
+                    onChange={(e) => setTriggerPrice(
+                        normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                    )}
                     autoComplete="off"
                 />
             )}
@@ -1714,7 +1758,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         hint="Validator-priced fiat dispenser. Leave blank if using a user oracle."
                         inputMode="decimal"
                         value={fiatAmount}
-                        onChange={(e) => setFiatAmount(e.target.value)}
+                        onChange={(e) => setFiatAmount(
+                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                        )}
                         autoComplete="off"
                     />
                     <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
