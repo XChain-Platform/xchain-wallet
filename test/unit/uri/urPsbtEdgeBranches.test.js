@@ -53,7 +53,7 @@ describe('UR PSBT edge branches', () => {
         ['non-string bytewords', null, /must be a string/],
         ['empty bytewords', '', /empty bytewords/],
         ['checksum-only short input', 'ae', /too short to carry a checksum/],
-    ])('rejects %s', (_label, input, message) => {
+    ])('rejects bytewords: %s', (_label, input, message) => {
         expect(() => decodeBytewordsMinimal(input)).toThrow(message);
     });
 
@@ -64,7 +64,7 @@ describe('UR PSBT edge branches', () => {
         ['indefinite item', [0x5f], /unsupported additional-info/],
         ['wrong major type', [0x61, 0x61], /unsupported major type/],
         ['array instead of bytes', [0x80], /expected a byte string/],
-    ])('rejects %s', (_label, bytes, message) => {
+    ])('rejects CBOR: %s', (_label, bytes, message) => {
         expect(() => cborUnwrapBytes(Uint8Array.from(bytes))).toThrow(message);
     });
 
