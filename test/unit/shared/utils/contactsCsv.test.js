@@ -123,6 +123,11 @@ describe('contacts CSV', () => {
             .toThrow('Line 2: unexpected character after closing quote.');
     });
 
+    it('rejects unknown columns instead of silently discarding their values', () => {
+        expect(() => contactsFromCsv(`name,chain,address,nickname\nAlice,bitcoin,${BTC},Al\n`))
+            .toThrow('Line 1: unknown "nickname" column.');
+    });
+
     it('rejects malformed and wrong-coin addresses per row', () => {
         const csv = 'name,chain,address\n'
             + 'Typo,bitcoin,not-an-address\n'
