@@ -29,9 +29,9 @@ const ADDRESS = {
     signerId: 'signer-1',
 };
 
-function listRow({ type = '2', name } = {}) {
+function listRow({ type = '2', name, actionIndex = LIST_INDEX } = {}) {
     const row = {
-        action_index: LIST_INDEX,
+        action_index: actionIndex,
         block_index: 10,
         status: 'valid',
         type,
@@ -42,7 +42,7 @@ function listRow({ type = '2', name } = {}) {
     return row;
 }
 
-function mountAirdrop(row) {
+function mountAirdrop(row, overrides = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -71,6 +71,7 @@ function mountAirdrop(row) {
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         createList: vi.fn(),
         airdropAction: vi.fn(),
+        ...overrides,
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -91,7 +92,7 @@ async function chooseExistingList(row) {
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
     fireEvent.click(await screen.findByRole('button', {
-        name: new RegExp(`${row.type === '1' ? 'Token' : 'Address'} list #${LIST_INDEX}`),
+        name: new RegExp(`${row.type === '1' ? 'Token' : 'Address'} list #${row.action_index}`),
     }));
 }
 
@@ -128,5 +129,48 @@ describe('AirdropForm existing-list name', () => {
 
         expect(await screen.findByText('Safe\u2426evil (List #2700) (address list)')).toBeTruthy();
         expect(screen.queryByText('Safe\u202Eevil (List #2700) (address list)')).toBeNull();
+    });
+
+    it('review displays the exact built amount with its asset and Back keeps the form values', async () => {
+        await chooseExistingList(listRow({ name: 'Treasury wallets' }));
+        const amount = screen.getByLabelText(/^Per-recipient amount/);
+        fireEvent.change(amount, { target: { value: '5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+
+        expect(await screen.findByText('5 DROP')).toBeTruthy();
+        expect(screen.getByText('#2700')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        expect(await screen.findByLabelText(/^Per-recipient amount/)).toHaveValue('5');
+        expect(screen.getByText('Treasury wallets (List #2700) (address list)')).toBeTruthy();
+    });
+
+    it('refuses a malformed selected list id before review', async () => {
+        const row = listRow({ actionIndex: 'bad-id' });
+        await chooseExistingList(row);
+        fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'The selected list has an invalid action index. Choose the list again.',
+        );
+        expect(screen.getByRole('form', { name: 'Token airdrop' })).toBeTruthy();
+    });
+
+    it('turns an indexer list-load failure into plain copy without its request URL', async () => {
+        const error = Object.assign(
+            new Error('Explorer returned HTTP 502 for /BTC/api/lists/source/private-address'),
+            { name: 'SDKExplorerError' },
+        );
+        mountAirdrop(listRow(), { getListsForSource: vi.fn().mockRejectedValue(error) });
+        fireEvent.change(await screen.findByLabelText(/^Airdrop to/), {
+            target: { value: 'existing' },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load your lists.");
+        expect(alert.textContent).not.toContain('/BTC/api/');
+        expect(alert.textContent).not.toContain('Explorer returned');
     });
 });

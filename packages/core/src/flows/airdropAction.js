@@ -25,6 +25,8 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { compareDecimalStrings } from '../shared/utils/amountFormat.js';
+import { tickerReferenceError } from '../shared/utils/tickerGrammar.js';
 
 /**
  * @typedef {Object} AirdropActionOpts
@@ -56,15 +58,27 @@ export async function airdropAction(opts) {
     if (!opts.params || typeof opts.params !== 'object') {
         throw new Error('airdropAction: params is required');
     }
-    if (typeof opts.params.TICK !== 'string' || opts.params.TICK.length === 0) {
+    if (typeof opts.params.TICK !== 'string' || opts.params.TICK.trim().length === 0) {
         throw new Error('airdropAction: params.TICK is required');
     }
-    if (typeof opts.params.AMOUNT !== 'string' || opts.params.AMOUNT.length === 0) {
+    const tickError = tickerReferenceError(opts.params.TICK, { noun: 'Token ticker', allowRef: true });
+    if (tickError) throw new Error(`airdropAction: ${tickError}`);
+    if (typeof opts.params.AMOUNT !== 'string' || opts.params.AMOUNT.trim().length === 0) {
         throw new Error('airdropAction: params.AMOUNT is required');
     }
+    if (compareDecimalStrings(opts.params.AMOUNT, '0') !== 1) {
+        throw new Error('airdropAction: params.AMOUNT must be a positive decimal');
+    }
     if (typeof opts.params.LIST_ACTION_INDEX !== 'string'
-        || opts.params.LIST_ACTION_INDEX.length === 0) {
+        || opts.params.LIST_ACTION_INDEX.trim().length === 0) {
         throw new Error('airdropAction: params.LIST_ACTION_INDEX is required');
+    }
+    if (!/^[1-9]\d*$/.test(opts.params.LIST_ACTION_INDEX)) {
+        throw new Error('airdropAction: params.LIST_ACTION_INDEX must be a positive integer');
+    }
+    if (opts.params.MEMO !== undefined
+        && (typeof opts.params.MEMO !== 'string' || /[|;]/.test(opts.params.MEMO))) {
+        throw new Error('airdropAction: params.MEMO cannot contain | or ; characters');
     }
     const source = normalizeSource(opts.from, 'airdropAction');
 
