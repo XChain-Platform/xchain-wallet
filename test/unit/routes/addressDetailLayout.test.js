@@ -28,3 +28,13 @@ describe('View address label editor', () => {
         expect(rule('.labelRow > :last-child > span')).toMatch(/white-space:\s*nowrap/);
     });
 });
+
+describe('View address copy row', () => {
+    it('keeps a gap between the address and its Copy button', () => {
+        const row = rule('.detailAddr');
+        expect(row).toMatch(/display:\s*flex/);
+        expect(row).toMatch(/flex-wrap:\s*wrap/);
+        expect(row).toMatch(/gap:\s*var\(--xc-space-2\)/);
+        expect(rule('.detailAddr > :first-child')).toMatch(/min-width:\s*0/);
+    });
+});

@@ -323,11 +323,22 @@
     font-weight: 500;
 }
 
+/* The address and its Copy button share a wrapping row with a gap, so on a
+   wide screen the button sits beside the address instead of touching its
+   last character, and on a phone it drops below the wrapped address. */
 .detailAddr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     word-break: break-all;
+}
+
+.detailAddr > :first-child {
+    min-width: 0;
 }
 
 /* About-section tab strip on the address detail view. */
