@@ -873,12 +873,19 @@ function decodeSleep(p, chainSuffix) {
 /* CALLBACK decoder: force-redeem a token per its callback terms. */
 function decodeCallback(p, chainSuffix) {
     const tick = str(p.TICK);
+    const memo = str(p.MEMO);
     return {
         summary: `Trigger callback redemption of ${tick || '?'}${chainSuffix}`,
-        details: [{ label: 'Token', value: tick }],
+        details: [
+            { label: 'Token', value: tick },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
         warnings: [
             'Callback redeems ALL holders\' tokens at the configured callback terms. This cannot be undone.',
             ...(!tick ? ['Token ticker is empty.'] : []),
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
         ],
     };
 }

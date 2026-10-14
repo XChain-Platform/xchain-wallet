@@ -66,6 +66,17 @@ describe('callbackAction', () => {
         await expect(callbackAction(callbackOpts({ params: { VERSION: '0' } }))).rejects.toThrow(/TICK/);
         expect(submitAction).not.toHaveBeenCalled();
     });
+
+    it.each([
+        [{ VERSION: '0', TICK: ' BAD' }, /cannot start or end with spaces/],
+        [{ VERSION: '0', TICK: 'BAD|TICK' }, /can only use/],
+        [{ VERSION: '1', TICK: 'JDOG' }, /VERSION must be "0"/],
+        [{ VERSION: '0', TICK: 'JDOG', MEMO: 'bad;memo' }, /Memo cannot contain/],
+        [{ VERSION: '0', TICK: 'JDOG', MEMO: 'é'.repeat(126) }, /252 bytes/],
+    ])('refuses invalid wire fields before submit %#', async (params, message) => {
+        await expect(callbackAction(callbackOpts({ params }))).rejects.toThrow(message);
+        expect(submitAction).not.toHaveBeenCalled();
+    });
 });
 
 describe('mulFloorDecimal (mirrors indexer bcmulfloor)', () => {
