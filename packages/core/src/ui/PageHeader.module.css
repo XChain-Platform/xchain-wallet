@@ -17,7 +17,9 @@
     width: var(--xc-page-header-side);
     height: var(--xc-page-header-side);
     min-width: var(--xc-page-header-side);
-    min-height: var(--xc-page-header-side);
+    /* The header side token resolves to this global size; naming it here
+       keeps the stated tap floor readable outside the header scope. */
+    min-height: var(--xc-control-h-md);
     background: transparent;
     border: none;
     color: var(--xc-accent-text);
@@ -95,7 +97,9 @@
     width: var(--xc-page-header-side);
     height: var(--xc-page-header-side);
     min-width: var(--xc-page-header-side);
-    min-height: var(--xc-page-header-side);
+    /* The header side token resolves to this global size; naming it here
+       keeps the stated tap floor readable outside the header scope. */
+    min-height: var(--xc-control-h-md);
     border-radius: var(--xc-control-radius);
     border: 1px solid var(--xc-border-strong);
     background: transparent;
