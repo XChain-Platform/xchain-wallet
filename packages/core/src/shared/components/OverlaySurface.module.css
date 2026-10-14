@@ -1,4 +1,6 @@
 .overlay {
+    /* safe-area-backdrop: the scrim paints edge to edge; the dialogOverlay and
+       sheetOverlay variants inset the surface from the device safe areas. */
     position: fixed;
     box-sizing: border-box;
     inset: 0;
