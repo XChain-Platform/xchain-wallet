@@ -107,7 +107,9 @@ for (const viewport of VIEWPORTS) {
             await expect(pickerRow).toHaveCount(1);
             await pickerRow.click();
 
-            await expect(page.getByLabel('To', { exact: true })).toHaveValue(CONTACT_ADDRESS);
+            // A picked contact joins the field label, so the name reads "To <contact>".
+            await expect(page.getByRole('combobox', { name: `To ${EDITED_NAME}`, exact: true }))
+                .toHaveValue(CONTACT_ADDRESS);
             await expect(bitcoinAsset).toBeVisible();
             await expect(page.getByText(EDITED_NAME, { exact: true })).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} populated Send form`);
