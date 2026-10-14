@@ -70,6 +70,7 @@ import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
+import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import { ROW_HINT, STACK, SettingsActionRow, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 import { t } from '../../../i18n/index.js';
@@ -84,9 +85,11 @@ function isWrongPasswordError(err) {
     return name === 'AeadAuthError' || name === 'InvalidPasswordError';
 }
 
+const INCORRECT_PASSWORD = 'Incorrect password.';
+
 /** Plain copy for a password-gated backup step that failed. */
 function passwordStepFailure(err, fallback) {
-    return isWrongPasswordError(err) ? 'Incorrect password.' : userFacingMessage(err, fallback);
+    return isWrongPasswordError(err) ? INCORRECT_PASSWORD : userFacingMessage(err, fallback);
 }
 
 /**
@@ -645,29 +648,38 @@ function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
  */
 function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     const [pw, setPw] = useState('');
+    const submit = (event) => {
+        event.preventDefault();
+        if (busy || pw.length === 0) return;
+        onSubmit(pw);
+    };
     return (
-        <FormSection title={label} description={hint} className={styles.formSection}>
-            <Input
-                type="password"
-                placeholder={t('send.gated.passwordLabel')}
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                autoFocus
-                autoComplete="current-password"
-                aria-label={t('send.gated.passwordLabel')}
-            />
-            {error ? <Status text={error} tone="error" /> : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit(pw)}
-                    disabled={busy || pw.length === 0}
-                >
-                    {busy ? t('settings.backup.revealing') : t('settings.backup.reveal')}
-                </Button>
-            </div>
-        </FormSection>
+        <form onSubmit={submit} noValidate>
+            <FormSection title={label} description={hint} className={styles.formSection}>
+                <Input
+                    type="password"
+                    revealable
+                    label={t('send.gated.passwordLabel')}
+                    value={pw}
+                    onChange={(e) => setPw(e.target.value)}
+                    autoFocus
+                    autoComplete="current-password"
+                    aria-label={t('send.gated.passwordLabel')}
+                    error={error === INCORRECT_PASSWORD ? error : undefined}
+                />
+                {error && error !== INCORRECT_PASSWORD ? <Status text={error} tone="error" /> : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    <Button
+                        type="submit"
+                        size="sm"
+                        disabled={busy || pw.length === 0}
+                    >
+                        {busy ? t('settings.backup.revealing') : t('settings.backup.reveal')}
+                    </Button>
+                </div>
+            </FormSection>
+        </form>
     );
 }
 
@@ -813,82 +825,91 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
         && gapLimitNumber >= 1
         && gapLimitNumber <= 100;
     const canSubmit = mn.trim().length > 0 && gapLimitValid && !busy;
+    const submit = (event) => {
+        event.preventDefault();
+        if (!canSubmit) return;
+        onSubmit({
+            mnemonic: mn.trim(),
+            format,
+            bip39Passphrase: format === 'bip39' ? passphrase : '',
+            gapLimit: gapLimitNumber,
+        });
+    };
 
     return (
-        <FormSection
-            title={t('settings.backup.testBackup')}
-            description={t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
-            className={styles.formSection}
-        >
-            <Textarea
-                value={mn}
-                onChange={(e) => setMn(e.target.value)}
-                placeholder={t('settings.backup.recoveryPhraseWordsSeparatedBy')}
-                rows={3}
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                aria-label={t('settings.backup.recoveryPhraseToTest')}
-                className={styles.mnemonicInput}
-            />
-            <div className={styles.fieldRow}>
-                <Select
-                    label={t('settings.backup.format')}
-                        value={format}
-                        onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
-                        aria-label={t('settings.backup.phraseFormat')}
-                >
-                        {/* Native options are the required children of the style guide Select. */}
-                        <option value="bip39">{t('settings.backup.standardBip39')}</option>
-                        <option value="counterwallet-legacy">{t('settings.backup.counterwalletLegacy')}</option>
-                </Select>
-                <Input
-                        label={t('settings.backup.addressesToCheck')}
-                        type="number"
-                        inputMode="numeric"
-                        enterKeyHint="go"
-                        autoComplete="off"
-                        min={1}
-                        max={100}
-                        step={1}
-                        value={gapLimit}
-                        onChange={(e) => setGapLimit(e.target.value)}
-                        onWheel={blurNumberInputOnWheel}
-                        aria-label={t('settings.backup.addressesToCheck2')}
-                        className={styles.gapLimitInput}
-                    />
-            </div>
-            {format === 'bip39' ? (
-                <Input
-                    type="password"
-                    placeholder={t('settings.backup.bip39PassphraseOptional')}
-                    value={passphrase}
-                    onChange={(e) => setPassphrase(e.target.value)}
+        <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
+            <FormSection
+                title={t('settings.backup.testBackup')}
+                description={t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
+                className={styles.formSection}
+            >
+                <Textarea
+                    value={mn}
+                    onChange={(e) => setMn(e.target.value)}
+                    placeholder={t('settings.backup.recoveryPhraseWordsSeparatedBy')}
+                    rows={3}
                     autoComplete="off"
-                    aria-label={t('importWallet.passphrase.label')}
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label={t('settings.backup.recoveryPhraseToTest')}
+                    className={styles.mnemonicInput}
                 />
-            ) : null}
-            {!gapLimitValid ? (
-                <Status text={t('settings.backup.addressesToCheckMustBe')} tone="error" />
-            ) : null}
-            {error ? <Status text={error} tone="error" /> : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit({
-                        mnemonic: mn.trim(),
-                        format,
-                        bip39Passphrase: format === 'bip39' ? passphrase : '',
-                        gapLimit: gapLimitNumber,
-                    })}
-                    disabled={!canSubmit}
-                >
-                    {busy ? t('settings.backup.testing') : t('settings.backup.runTest')}
-                </Button>
-            </div>
-        </FormSection>
+                <div className={styles.fieldRow}>
+                    <Select
+                        label={t('settings.backup.format')}
+                            value={format}
+                            onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
+                            aria-label={t('settings.backup.phraseFormat')}
+                    >
+                            {/* Native options are the required children of the style guide Select. */}
+                            <option value="bip39">{t('settings.backup.standardBip39')}</option>
+                            <option value="counterwallet-legacy">{t('settings.backup.counterwalletLegacy')}</option>
+                    </Select>
+                    <Input
+                            label={t('settings.backup.addressesToCheck')}
+                            type="number"
+                            inputMode="numeric"
+                            enterKeyHint="go"
+                            autoComplete="off"
+                            min={1}
+                            max={100}
+                            step={1}
+                            value={gapLimit}
+                            onChange={(e) => setGapLimit(e.target.value)}
+                            onWheel={blurNumberInputOnWheel}
+                            aria-label={t('settings.backup.addressesToCheck2')}
+                            className={styles.gapLimitInput}
+                        />
+                </div>
+                {format === 'bip39' ? (
+                    <Input
+                        type="password"
+                        revealable
+                        label={t('importWallet.passphrase.label')}
+                        optional
+                        value={passphrase}
+                        onChange={(e) => setPassphrase(e.target.value)}
+                        autoComplete="off"
+                        aria-label={t('importWallet.passphrase.label')}
+                    />
+                ) : null}
+                {!gapLimitValid ? (
+                    <Status text={t('settings.backup.addressesToCheckMustBe')} tone="error" />
+                ) : null}
+                {error ? <Status text={error} tone="error" /> : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!canSubmit}
+                    >
+                        {busy ? t('settings.backup.testing') : t('settings.backup.runTest')}
+                    </Button>
+                </div>
+            </FormSection>
+        </form>
     );
 }
 
@@ -998,62 +1019,68 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
     const passwordStrongEnough = pw1.length >= flowsLib.MIN_BACKUP_PASSWORD_LENGTH;
     const mismatch = pw2.length > 0 && pw1 !== pw2;
     const canSubmit = passwordStrongEnough && pw2.length > 0 && pw1 === pw2 && !busy;
+    const submit = (event) => {
+        event.preventDefault();
+        if (!canSubmit) return;
+        onSubmit(pw1);
+    };
     return (
-        <FormSection
-            title={t('settings.backup.exportEncryptedBackup')}
-            description={hint}
-            className={styles.formSection}
-        >
-            <Input
-                label={label}
-                type="password"
-                placeholder={t('settings.backup.backupPassword')}
-                value={pw1}
-                onChange={(e) => setPw1(e.target.value)}
-                autoFocus
-                autoComplete="new-password"
-                aria-label={t('settings.backup.backupPassword')}
-                disabled={busy}
-            />
-            <Input
-                type="password"
-                placeholder={t('importWallet.confirmPassword')}
-                value={pw2}
-                onChange={(e) => setPw2(e.target.value)}
-                autoComplete="new-password"
-                aria-label={t('settings.backup.confirmBackupPassword')}
-                disabled={busy}
-            />
-            {pw1.length > 0 && !passwordStrongEnough ? (
-                <Status
-                    text={t('settings.backup.backupPasswordMustBeAt', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH })}
-                    tone="error"
+        <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
+            <FormSection
+                title={t('settings.backup.exportEncryptedBackup')}
+                description={hint}
+                className={styles.formSection}
+            >
+                <Input
+                    label={label}
+                    type="password"
+                    revealable
+                    placeholder={t('settings.backup.backupPassword')}
+                    value={pw1}
+                    onChange={(e) => setPw1(e.target.value)}
+                    autoFocus
+                    autoComplete="new-password"
+                    aria-label={t('settings.backup.backupPassword')}
+                    disabled={busy}
+                    error={pw1.length > 0 && !passwordStrongEnough
+                        ? t('settings.backup.backupPasswordMustBeAt', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH })
+                        : undefined}
+                    errorKey={pw1}
                 />
-            ) : null}
-            {mismatch ? (
-                <Status text={t('settings.backup.backupPasswordsDoNotMatch')} tone="error" />
-            ) : null}
-            {error ? <Status text={error} tone="error" /> : null}
-            {operationTime?.showElapsed ? (
-                <Status text={t('settings.backup.encryptingForSeconds', { elapsedSeconds: operationTime.elapsedSeconds })} />
-            ) : null}
-            {operationTime?.timedOut ? (
-                <Status
-                    text={t('settings.backup.encryptionIsTakingLongerThan')}
-                    tone="error"
+                <Input
+                    type="password"
+                    revealable
+                    label={t('settings.backup.confirmBackupPassword')}
+                    value={pw2}
+                    onChange={(e) => setPw2(e.target.value)}
+                    autoComplete="new-password"
+                    aria-label={t('settings.backup.confirmBackupPassword')}
+                    disabled={busy}
+                    error={mismatch ? t('settings.backup.backupPasswordsDoNotMatch') : undefined}
+                    errorKey={pw2}
                 />
-            ) : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit(pw1)}
-                    disabled={!canSubmit}
-                >
-                    {busy ? t('settings.backup.exporting') : t('history.export.confirm')}
-                </Button>
-            </div>
-        </FormSection>
+                {error ? <Status text={error} tone="error" /> : null}
+                {operationTime?.showElapsed ? (
+                    <Status text={t('settings.backup.encryptingForSeconds', { elapsedSeconds: operationTime.elapsedSeconds })} />
+                ) : null}
+                {operationTime?.timedOut ? (
+                    <Status
+                        text={t('settings.backup.encryptionIsTakingLongerThan')}
+                        tone="error"
+                    />
+                ) : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
+                    <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!canSubmit}
+                    >
+                        {busy ? t('settings.backup.exporting') : t('history.export.confirm')}
+                    </Button>
+                </div>
+            </FormSection>
+        </form>
     );
 }
 
@@ -1228,6 +1255,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             )}
             <Input
                 type="password"
+                revealable
                 placeholder={t('send.gated.passwordLabel')}
                 value={password}
                 onChange={(e) => onPasswordChange(e.target.value)}
@@ -1365,6 +1393,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             )}
             <Input
                 type="password"
+                revealable
                 placeholder={t('send.gated.passwordLabel')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

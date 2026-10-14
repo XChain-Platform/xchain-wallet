@@ -123,3 +123,23 @@ describe('Locked password failure feedback', () => {
         expect(bodyText).not.toMatch(/ip address/i);
     });
 });
+
+describe('Locked lockout countdown', () => {
+    it('says the wait once, in the banner, and keeps the button label', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-13T12:00:00Z'));
+        recordLockoutFailure();
+        recordLockoutFailure();
+
+        mount();
+        await act(async () => {
+            submitPassword();
+        });
+
+        expect(screen.getByRole('status')).toHaveTextContent(/wait 5 seconds before trying again/i);
+        expect(screen.getAllByText(/5 seconds/)).toHaveLength(1);
+        const unlock = screen.getByRole('button', { name: 'Unlock Wallet' });
+        expect(unlock).toBeDisabled();
+        expect(unlock).not.toHaveTextContent(/second|locked/i);
+    });
+});

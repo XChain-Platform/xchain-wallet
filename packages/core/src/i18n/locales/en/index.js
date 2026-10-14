@@ -1777,7 +1777,6 @@ export const en = {
     'locked.tooManyIncorrectPasswordsOn': 'Too many incorrect passwords on this device. Wait',
     'locked.beforeTryingAgainChangingNetworks': "before trying again. Changing networks won't skip the wait.",
     'locked.unlockingYourWalletSecurelyThis': 'Unlocking your wallet securely. This may take a moment.',
-    'locked.locked': 'Locked ({formatCountdownValue})',
     'locked.unlockWallet2': 'Unlock Wallet',
     'locked.useBiometrics': 'Use biometrics',
     'locked.thisIsADemoWallet':
@@ -1800,8 +1799,6 @@ export const en = {
     'locked.form': 'form.',
     'locked.eraseVaultAndRestore': 'Erase vault and restore',
     'locked.walletUsername': 'Wallet username',
-    'locked.hidePassword': 'Hide password',
-    'locked.showPassword': 'Show password',
     'locked.usesAPassphrase': 'uses a passphrase.',
     'locked.enterItOnceToFinish':
         "Enter it once to finish setting up this device. It will be stored on this device, protected by your wallet password, so you aren't asked again.",
@@ -2503,6 +2500,10 @@ export const en = {
     'ui.copyButton.copyValue': 'Copy value',
     'ui.infoTip.moreInfo': 'More info',
     'ui.input.capsLockIsOn': 'Caps Lock is on',
+    'ui.input.showPassword': 'Show password',
+    'ui.input.hidePassword': 'Hide password',
+    'ui.input.showPassphrase': 'Show passphrase',
+    'ui.input.hidePassphrase': 'Hide passphrase',
     'ui.multisigBadge.of': '-of-',
     'ui.pageHeader.backToPreviousScreen': 'Back to previous screen',
     'ui.verifiedBadge.details': '{label} details',

@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 // Direct module imports, not the flows barrel: the barrel keeps every flow
 // module in the startup bundle, and this screen is part of first paint.
@@ -83,7 +83,6 @@ export function Locked({ onUnlocked }) {
     const variant = screenVariantFor(shell);
 
     const [password, setPassword] = useState('');
-    const [passwordVisible, setPasswordVisible] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     // §15.6 step 2. The unlock reply, not this screen, decides whether a
     // passphrase is ever asked for: the vault is sealed until the password
@@ -552,6 +551,8 @@ export function Locked({ onUnlocked }) {
             ) : null}
             actions={(
                 <div className={styles.unlockActions}>
+                    {/* During a lockout the banner says how long to wait and the
+                        button only goes disabled, so the countdown is said once. */}
                     <Button
                         type="submit"
                         variant="primary"
@@ -559,7 +560,7 @@ export function Locked({ onUnlocked }) {
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
                     >
-                        {isLockedOut ? t('locked.locked', { formatCountdownValue: formatCountdown(remainingMs) }) : t('locked.unlockWallet2')}
+                        {t('locked.unlockWallet2')}
                     </Button>
                     {biometricAvailable ? (
                         <Button
@@ -701,33 +702,21 @@ export function Locked({ onUnlocked }) {
                 aria-label={t('locked.walletUsername')}
                 hidden
             />
-            <div className={styles.passwordField}>
-                <Input
-                    ref={inputRef}
-                    className={styles.passwordInput}
-                    type={passwordVisible ? 'text' : 'password'}
-                    name="password"
-                    label={t('common.password')}
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (error) setError(null);
-                    }}
-                    autoComplete="current-password"
-                    disabled={busy || isLockedOut}
-                    error={error || undefined}
-                />
-                <button
-                    type="button"
-                    className={styles.passwordToggle}
-                    onClick={() => setPasswordVisible((visible) => !visible)}
-                    aria-label={passwordVisible ? t('locked.hidePassword') : t('locked.showPassword')}
-                    aria-pressed={passwordVisible}
-                    title={passwordVisible ? t('locked.hidePassword') : t('locked.showPassword')}
-                >
-                    {passwordVisible ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                </button>
-            </div>
+            <Input
+                ref={inputRef}
+                type="password"
+                revealable
+                name="password"
+                label={t('common.password')}
+                value={password}
+                onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(null);
+                }}
+                autoComplete="current-password"
+                disabled={busy || isLockedOut}
+                error={error || undefined}
+            />
         </FormPage>
     );
 
@@ -767,6 +756,7 @@ export function Locked({ onUnlocked }) {
                 id="locked-capture-passphrase"
                 ref={captureRef}
                 type="password"
+                revealable
                 label={t('locked.passphrase')}
                 value={captureValue}
                 onChange={(e) => {
@@ -784,7 +774,7 @@ export function Locked({ onUnlocked }) {
 
     return (
         <Screen variant={variant}>
-            {body}
+            <div className={styles.centre}>{body}</div>
         </Screen>
     );
 }

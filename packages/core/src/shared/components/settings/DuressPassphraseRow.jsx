@@ -133,6 +133,7 @@ export function DuressPassphraseRow() {
                 </div>
                 <Input
                     type="password"
+                    revealable
                     enterKeyHint="next"
                     value={currentPassword}
                     onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
@@ -142,6 +143,7 @@ export function DuressPassphraseRow() {
                 />
                 <Input
                     type="password"
+                    revealable
                     enterKeyHint="next"
                     value={pass}
                     onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
@@ -151,6 +153,7 @@ export function DuressPassphraseRow() {
                 />
                 <Input
                     type="password"
+                    revealable
                     enterKeyHint="done"
                     value={confirm}
                     onChange={(e) => { setConfirm(e.target.value); if (error) setError(null); }}

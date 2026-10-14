@@ -39,7 +39,7 @@ assert.match(
 
 // Password prompt with confirm + mismatch detection
 assert.match(src, /Backup password/, 'password prompt label present');
-assert.match(src, /Confirm password/, 'confirm-password input present');
+assert.match(src, /Confirm backup password/, 'confirm-password input present');
 assert.match(src, /mismatch =/, 'mismatch detection present');
 
 // Download trigger uses Blob + temporary anchor
