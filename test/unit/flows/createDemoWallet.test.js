@@ -102,4 +102,22 @@ describe('createDemoWallet', () => {
         expect(chainRegistry.has).toHaveBeenCalledWith('litecoin-regtest');
         expect(chainRegistry.has).not.toHaveBeenCalledWith('bitcoin-regtest');
     });
+
+    it('closes and clears the in-memory vault when creation fails', async () => {
+        const collaborators = makeCollaborators();
+        collaborators.sdkRegistry.get.mockReturnValue({
+            wallet: {
+                deriveAddress: () => { throw new Error('derivation failed'); },
+            },
+        });
+        const close = vi.spyOn(Vault.prototype, 'close');
+
+        await expect(createDemoWallet(collaborators)).rejects.toThrow('derivation failed');
+
+        expect(close).toHaveBeenCalledOnce();
+        const failedVault = close.mock.instances[0];
+        expect(failedVault._masterKey).toBe(null);
+        expect(failedVault._doc).toBe(null);
+        close.mockRestore();
+    });
 });

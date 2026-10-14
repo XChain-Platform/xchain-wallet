@@ -207,6 +207,22 @@ describe('bridge.signMessage: localhost auto-sign reuses the cached password', (
         await host.handle({ type: 'bridge.signMessage', request: { origin: ORIGIN, chainId: CHAIN, address: FROM, message: 'b' } });
         expect(approvals._calls.signMessage, 'expired cache re-prompts').toBe(2);
     });
+
+    it('does not cache a password when signing fails', async () => {
+        const cache = createSignPasswordCache();
+        const vault = makeVault({ autoSignLocalhostMs: AUTO_SIGN_LOCALHOST_5M });
+        const approvals = countingApprovals('bad-password');
+        const host = buildHost(vault, approvals, { signPasswordCache: cache });
+        signMessageFlow.mockRejectedValueOnce(new Error('bad password'));
+
+        const request = { origin: ORIGIN, chainId: CHAIN, address: FROM, message: 'hello' };
+        const failed = await host.handle({ type: 'bridge.signMessage', request });
+        expect(failed.ok).toBe(false);
+        expect(cache.size).toBe(0);
+
+        await host.handle({ type: 'bridge.signMessage', request });
+        expect(approvals._calls.signMessage, 'the failed credential must be prompted again').toBe(2);
+    });
 });
 
 describe('bridge.signAction: localhost auto-sign reuses the cached password', () => {
@@ -263,5 +279,59 @@ describe('bridge.signAction: localhost auto-sign reuses the cached password', ()
         // The action reused the message-approval password; no action prompt.
         expect(approvals._calls.signAction, 'action auto-signed from message-seeded cache').toBe(0);
         expect(sendToken.mock.calls[0][0].password).toBe('pw3');
+    });
+
+    it('leaves permission and password state unchanged when the action fails', async () => {
+        const cache = createSignPasswordCache();
+        const vault = makeVault({ autoSignLocalhostMs: AUTO_SIGN_LOCALHOST_5M });
+        const approvals = countingApprovals('bad-password');
+        approvals.signAction = async () => {
+            approvals._calls.signAction += 1;
+            return { approved: true, password: 'bad-password', walletId: 'wallet-2', savePermanent: true };
+        };
+        const host = buildHost(vault, approvals, { signPasswordCache: cache });
+        sendToken.mockRejectedValueOnce(new Error('bad password'));
+        const request = {
+            origin: ORIGIN,
+            chainId: CHAIN,
+            action: 'SEND',
+            params: { from: FROM, to: 'bcrt1qto', amount: '1' },
+        };
+
+        const failed = await host.handle({ type: 'bridge.signAction', request });
+        expect(failed.ok).toBe(false);
+        expect(cache.size).toBe(0);
+        const [siteAfterFailure] = await vault.connectedSites.findBy('origin', ORIGIN);
+        expect(siteAfterFailure.permissions.canSignAction.SEND).toBe('ask');
+
+        await host.handle({ type: 'bridge.signAction', request });
+        expect(approvals._calls.signAction, 'the failed credential must be prompted again').toBe(2);
+    });
+});
+
+describe('bridge signing wallet ownership', () => {
+    it('uses the source address wallet instead of the approval window default', async () => {
+        const vault = makeVault({ autoSignLocalhostMs: 0 });
+        const approvals = countingApprovals('pw');
+        approvals.signMessage = async () => ({ approved: true, password: 'pw', walletId: 'wallet-2' });
+        approvals.signAction = async () => ({ approved: true, password: 'pw', walletId: 'wallet-2' });
+        const host = buildHost(vault, approvals);
+
+        await host.handle({
+            type: 'bridge.signMessage',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM, message: 'hello' },
+        });
+        await host.handle({
+            type: 'bridge.signAction',
+            request: {
+                origin: ORIGIN,
+                chainId: CHAIN,
+                action: 'SEND',
+                params: { from: FROM, to: 'bcrt1qto', amount: '1' },
+            },
+        });
+
+        expect(signMessageFlow.mock.calls[0][0].walletId).toBe('wallet-1');
+        expect(sendToken.mock.calls[0][0].walletId).toBe('wallet-1');
     });
 });

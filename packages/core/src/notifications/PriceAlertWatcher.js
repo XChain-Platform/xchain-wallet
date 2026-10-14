@@ -133,7 +133,11 @@ export class PriceAlertWatcher {
                 this._log.error('PriceAlertWatcher: listArmedAlerts failed', e);
                 return;
             }
-            armed = armed.filter((a) => a && a.status === 'armed' && !this._fired.has(a.id));
+            armed = armed.filter((a) => a && a.status === 'armed');
+            for (const alert of armed) {
+                if (this._fired.has(alert.id)) await this._persistTriggered(alert.id);
+            }
+            armed = armed.filter((a) => !this._fired.has(a.id));
             if (armed.length === 0) return;
 
             // Group by fiat currency (one oracle call per currency; almost
@@ -218,8 +222,12 @@ export class PriceAlertWatcher {
                 return;
             }
         }
+        await this._persistTriggered(alert.id);
+    }
+
+    async _persistTriggered(alertId) {
         try {
-            await this._markTriggered(alert.id);
+            await this._markTriggered(alertId);
         } catch (e) {
             this._log.warn('PriceAlertWatcher: markTriggered failed', e);
         }

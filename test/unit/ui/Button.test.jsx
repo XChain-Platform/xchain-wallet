@@ -294,4 +294,14 @@ describe('<Button>', () => {
             consoleError.mockRestore();
         }
     });
+
+    it('centres an icon-only button icon with no label span or gap beside it', () => {
+        render(<Button icon={<SendIcon />} aria-label="Lock wallet" />);
+        const button = screen.getByRole('button', { name: 'Lock wallet' });
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+
+        expect(button.children).toHaveLength(1);
+        expect(button.querySelector(`.${styles.label}`)).toBeNull();
+        expect(css).toMatch(/\.iconOnly\s*\{[^}]*gap:\s*0[^}]*justify-content:\s*center/s);
+    });
 });

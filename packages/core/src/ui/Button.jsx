@@ -106,7 +106,9 @@ export function Button({
             {/* Busy keeps the icon and label in layout (hidden) so the button never resizes; the spinner overlays the centre. */}
             {loading ? <Spinner size={size} className={styles.busySpinner} /> : null}
             {resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
-            <span className={styles.label}>{children}</span>
+            {/* An icon-only button renders no label span: an empty flex item
+                plus the icon gap would pull the icon off centre. */}
+            {iconOnly ? null : <span className={styles.label}>{children}</span>}
         </button>
     );
 }

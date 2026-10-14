@@ -82,15 +82,6 @@
     margin-bottom: var(--xc-space-2);
 }
 
-.sectionTitle {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
 .count {
     color: var(--xc-text);
     font-weight: 700;

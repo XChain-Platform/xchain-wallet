@@ -254,7 +254,7 @@ describe('AppHeader action row', () => {
         expect(rightRule).toMatch(/flex-wrap:\s*nowrap/);
         const phoneRule = /@media \(max-width: (\d+)px\)\s*\{([\s\S]*)\}\s*$/.exec(appHeaderCss);
         expect(phoneRule).not.toBeNull();
-        expect(Number(phoneRule[1])).toBe(479);
+        expect(Number(phoneRule[1])).toBe(480);
         expect(phoneRule[2]).toMatch(/\.bar\.phoneCondensed\s*\{[^}]*flex-wrap:\s*nowrap/s);
         expect(phoneRule[2]).toMatch(/\.right\s*\{[^}]*flex:\s*0 0 auto/s);
         expect(phoneRule[2]).toMatch(/\.phoneCondensed \.phoneHidden\s*\{[^}]*display:\s*none/s);
@@ -275,7 +275,8 @@ describe('AppHeader action row', () => {
         expect(screen.getByRole('button', { name: 'Open menu' })).toBeTruthy();
         expect(screen.getByText('Wallet: Main')).toBeTruthy();
         expect([360, 412].every((width) => width <= Number(phoneRule[1]))).toBe(true);
-        expect(480).toBeGreaterThan(Number(phoneRule[1]));
+        // The condensed row ends at the documented 480px phone scale point.
+        expect(481).toBeGreaterThan(Number(phoneRule[1]));
         window.innerWidth = originalWidth;
     });
 

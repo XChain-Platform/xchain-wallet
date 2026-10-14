@@ -15,6 +15,9 @@ import { IdentityAvatar } from './WalletIdentity.jsx';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+// Rendered pixel width per avatar context, mirroring --xc-avatar-size-* in
+// tokens.css, so the srcset picks the smallest candidate that stays sharp.
+const AVATAR_PIXELS = Object.freeze({ header: 28, list: 40, hero: 88 });
 
 /**
  * Chain-aware ticker icon. For a native ticker (BTC/LTC/DOGE) renders
@@ -64,6 +67,10 @@ export function TickerIcon({ chainId, tick, size, context }) {
         display: 'block',
     };
     const nativeIconUrl = descriptor ? brandingLib.chainIconLargeUrl(descriptor.id) : null;
+    const nativeIconSmallUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
+    const nativeIconSrcSet = nativeIconUrl && nativeIconSmallUrl && nativeIconUrl !== nativeIconSmallUrl
+        ? `${nativeIconSmallUrl} 144w, ${nativeIconUrl} 500w`
+        : undefined;
     const chainPipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
     const showNativeIcon = isNative && nativeIconUrl && failedImageUrl !== nativeIconUrl;
     return (
@@ -75,14 +82,19 @@ export function TickerIcon({ chainId, tick, size, context }) {
                 tone={tickerColor(tickUpper)}
                 variant="asset"
                 src={showNativeIcon ? nativeIconUrl : null}
+                srcSet={showNativeIcon ? nativeIconSrcSet : undefined}
+                imagePixels={AVATAR_PIXELS[avatarContext]}
             />
             {!isNative && chainPipUrl && failedImageUrl !== chainPipUrl ? (
                 <img
                     src={chainPipUrl}
+                    width={pipSize}
+                    height={pipSize}
                     alt=""
                     aria-hidden="true"
                     title={descriptor?.displayName}
                     style={pipStyle}
+                    decoding="async"
                     onError={() => setFailedImageUrl(chainPipUrl)}
                 />
             ) : null}

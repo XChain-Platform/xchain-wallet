@@ -107,22 +107,26 @@ function toCommonScale(a, b) {
  * Base units already auto-paid under a consent record.
  *
  * @param {import('../schemas/autopayOrder.js').AutopayOrder} consent
- * @returns {bigint}
+ * @returns {bigint | null} null when the payment ledger is malformed
  */
 export function paidBase(consent) {
+    if (!Array.isArray(consent?.payments)) return null;
     let sum = 0n;
-    for (const p of consent.payments ?? []) {
-        if (typeof p?.coinAmountBase === 'string' && /^\d+$/.test(p.coinAmountBase)) {
-            sum += BigInt(p.coinAmountBase);
+    for (const p of consent.payments) {
+        if (typeof p?.orderMatchActionIndex !== 'string' || p.orderMatchActionIndex.length === 0 ||
+            typeof p?.coinAmountBase !== 'string' || !/^\d+$/.test(p.coinAmountBase) ||
+            !/[1-9]/.test(p.coinAmountBase)) {
+            return null;
         }
+        sum += BigInt(p.coinAmountBase);
     }
     return sum;
 }
 
 /**
  * Remaining GIVE-side budget in base units (total minus payments).
- * Null when the stored total does not parse (a record that fails its
- * own schema shape must never authorize a payment).
+ * Null when the stored total or payment ledger does not parse (a
+ * record that fails its own schema shape must never authorize a payment).
  *
  * @param {import('../schemas/autopayOrder.js').AutopayOrder} consent
  * @returns {bigint | null}
@@ -130,7 +134,9 @@ export function paidBase(consent) {
 export function remainingGiveBase(consent) {
     const total = obligationBaseUnits(consent.giveCoinAmount);
     if (total === null) return null;
-    const left = total - paidBase(consent);
+    const paid = paidBase(consent);
+    if (paid === null) return null;
+    const left = total - paid;
     return left > 0n ? left : 0n;
 }
 
@@ -223,7 +229,10 @@ export function evaluateObligation({
 
     const matchIndex = String(obligation.action_index ?? obligation.actionIndex ?? '');
     if (!matchIndex) return { action: 'notify-manual', reason: 'no-match-index' };
-    const paidAlready = (consent.payments ?? []).some(
+    if (!Array.isArray(consent.payments)) {
+        return { action: 'notify-manual', reason: 'terms-unparseable' };
+    }
+    const paidAlready = consent.payments.some(
         (p) => String(p.orderMatchActionIndex) === matchIndex,
     );
     if (paidAlready) return { action: 'skip', reason: 'already-paid' };
@@ -305,7 +314,10 @@ export function evaluateObligation({
     // Cumulative cap (cap 3): never push total payments past the
     // order's GIVE-side total.
     const remaining = remainingGiveBase(consent);
-    if (remaining === null || coinFillBase > remaining) {
+    if (remaining === null) {
+        return { action: 'notify-manual', reason: 'terms-unparseable' };
+    }
+    if (coinFillBase > remaining) {
         return { action: 'notify-manual', reason: 'exceeds-give-budget' };
     }
 

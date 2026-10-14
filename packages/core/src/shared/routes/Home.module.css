@@ -1,29 +1,3 @@
-
-
-
-.menuBtn {
-    appearance: none;
-    background: transparent;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-    width: var(--xc-control-h-md);
-    height: var(--xc-control-h-md);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-.menuBtn:hover {
-    background: var(--xc-bg-muted);
-}
-
-.menuBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: calc(var(--xc-space-1) / 2);
-}
-
 .error {
     font-size: var(--xc-text-sm);
     color: var(--xc-danger-fg);

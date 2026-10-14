@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -352,6 +352,13 @@ function TokenDetailContent({
                     fallbackClassName={styles.headerIconFallback}
                     fallbackText={tick}
                 />
+            ) : metadataLoading ? (
+                <Skeleton
+                    shape="avatar"
+                    width={28}
+                    height={28}
+                    ariaLabel="Loading token artwork"
+                />
             ) : null}
         />
     );
@@ -441,14 +448,23 @@ function TokenDetailContent({
                     and the hide-balance eye. Big number = primary,
                     small number underneath = secondary. */}
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
-                    {headerIconUrl ? (
+                    {headerIconUrl || metadataLoading ? (
                         <div className={styles.balanceHeroIconWrap}>
-                            <AssetArtwork
-                                src={headerIconUrl}
-                                className={styles.balanceHeroIcon}
-                                fallbackClassName={styles.balanceHeroIconFallback}
-                                fallbackText={tick}
-                            />
+                            {headerIconUrl ? (
+                                <AssetArtwork
+                                    src={headerIconUrl}
+                                    className={styles.balanceHeroIcon}
+                                    fallbackClassName={styles.balanceHeroIconFallback}
+                                    fallbackText={tick}
+                                />
+                            ) : (
+                                <Skeleton
+                                    shape="card"
+                                    width="100%"
+                                    height="100%"
+                                    ariaLabel="Loading token artwork"
+                                />
+                            )}
                             {!isNative && chainId ? (
                                 <img
                                     src={branding.chainIconSmallUrl(chainId)}
@@ -517,16 +533,22 @@ function TokenDetailContent({
                     registry's current roster (owner-attested on-chain;
                     Project_Registry.md). Display policy is "just show
                     it" (every attesting project is listed). */}
-                {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                    <p className={styles.officialBanner} role="status">
-                        This token is an official token in the{' '}
-                        {assetInfo.projects.map((p, i) => (
-                            <span key={p} className={styles.officialBannerProject}>
-                                {i > 0 ? ', ' : ''}{p}
-                            </span>
-                        ))}
-                        {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
-                    </p>
+                {!isNative ? (
+                    <div className={styles.officialBannerSlot}>
+                        {metadataLoading ? (
+                            <Skeleton height={38} ariaLabel="Loading token verification" />
+                        ) : Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
+                            <p className={styles.officialBanner} role="status">
+                                This token is an official token in the{' '}
+                                {assetInfo.projects.map((p, i) => (
+                                    <span key={p} className={styles.officialBannerProject}>
+                                        {i > 0 ? ', ' : ''}{p}
+                                    </span>
+                                ))}
+                                {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
+                            </p>
+                        ) : null}
+                    </div>
                 ) : null}
 
                 {/* Market section: stats strip + sparkline. Sits above
@@ -552,28 +574,41 @@ function TokenDetailContent({
                                 fiatRate={fiatRate}
                                 fiatRateSource={fiatRateSource}
                                 fiatCurrency={fiatCurrency}
+                                loading={metadataLoading}
                             />
                         </RouteErrorBoundary>
                     </div>
                 ) : null}
 
-                {!isNative && supplyHistory.length >= 2 ? (
-                    <div className={styles.infoCard}>
+                {!isNative && supplyHistory.available ? (
+                    <div className={`${styles.infoCard} ${styles.supplyCard}`}>
                         <RouteErrorBoundary
                             variant="compact"
                             resetKey={`${chainId}:${tick}:supply`}
                         >
-                            <SupplyChart points={supplyHistory} divisibility={divisibility} tick={tick} />
+                            {supplyHistory.loading ? (
+                                <Skeleton height={94} ariaLabel="Loading supply history" />
+                            ) : supplyHistory.points.length >= 2 ? (
+                                <SupplyChart points={supplyHistory.points} divisibility={divisibility} tick={tick} />
+                            ) : (
+                                <EmptyState
+                                    title="No supply history yet"
+                                    body="Indexed issuance and destruction activity builds this history."
+                                    titleAs="p"
+                                />
+                            )}
                         </RouteErrorBoundary>
                     </div>
                 ) : null}
 
-                {isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null ? (
+                {isNative ? (
                     <NativePriceAlertEntry
                         walletId={walletId}
                         chainId={chainId}
-                        currentPrice={nativePrice.entry.priceFiat}
+                        currentPrice={nativePrice.entry?.priceFiat ?? null}
                         fiatCurrency={fiatCurrency}
+                        loading={nativePrice.loading || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error)}
+                        disabled={nativePrice.disabled}
                     />
                 ) : null}
 
@@ -633,24 +668,14 @@ function TokenDetailContent({
                     get a single Details tab; tokens add About / Media /
                     Unlock so the per-asset content surfaces in tab form
                     rather than stacking. */}
-                <div className={styles.tabs} role="tablist" aria-label="Token detail view">
-                            {tabs.map((t) => (
-                                // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                                <button
-                                    key={t.id}
-                                    id={`${tabsId}-tab-${t.id}`}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={activeTab === t.id ? 'true' : 'false'}
-                                    aria-controls={`${tabsId}-panel`}
-                                    tabIndex={activeTab === t.id ? 0 : -1}
-                                    className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
-                                    onClick={() => setActiveTab(t.id)}
-                                >
-                                    {t.label}
-                                </button>
-                            ))}
-                        </div>
+                <Tabs
+                    id={tabsId}
+                    items={tabs}
+                    value={activeTab}
+                    onChange={setActiveTab}
+                    panelId={`${tabsId}-panel`}
+                    aria-label="Token detail view"
+                />
 
                         <div
                             id={`${tabsId}-panel`}
@@ -734,27 +759,22 @@ function TokenDetailContent({
 }
 
 /**
- * §46: context-first "Set price alert" entry on the native-coin detail
- * page. Collapsed to a single button; expands to the shared PriceAlertForm
- * pinned to this coin and prefilled with the live price. Renders nothing
- * when the shell doesn't expose the price-alert routes.
- *
- * @param {object} props
- * @param {string} props.walletId
- * @param {string} props.chainId
- * @param {number} props.currentPrice
- * @param {string} props.fiatCurrency
- */
-/**
  * Supply-over-time points for an issued token. The lookup is optional on the
- * messaging surface; a missing method, a failure or an empty answer yields
- * no points and the chart stays hidden.
+ * messaging surface; a missing method hides the section, while a failure or
+ * empty answer resolves the reserved chart space to an empty state.
  */
 function useSupplyHistory({ messaging, chainId, tick, skip }) {
+    const available = !skip && typeof messaging?.getSupplyHistory === 'function';
     const [points, setPoints] = useState([]);
+    const [loading, setLoading] = useState(available);
     useEffect(() => {
-        if (skip || typeof messaging?.getSupplyHistory !== 'function') return undefined;
+        if (!available) {
+            setPoints([]);
+            setLoading(false);
+            return undefined;
+        }
         let cancelled = false;
+        setLoading(true);
         callAsync(() => messaging.getSupplyHistory({ chainId, tick }))
             .then((resp) => {
                 if (cancelled) return;
@@ -764,10 +784,11 @@ function useSupplyHistory({ messaging, chainId, tick, skip }) {
                     .filter((p) => Number.isFinite(p.supply));
                 setPoints(clean);
             })
-            .catch(() => { if (!cancelled) setPoints([]); });
+            .catch(() => { if (!cancelled) setPoints([]); })
+            .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick, skip]);
-    return points;
+    }, [messaging, chainId, tick, available]);
+    return { points, loading, available };
 }
 
 function SupplyChart({ points, divisibility, tick }) {
@@ -801,12 +822,42 @@ function SupplyChart({ points, divisibility, tick }) {
     );
 }
 
-function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }) {
+/**
+ * §46: context-first "Set price alert" entry on the native-coin detail
+ * page. Collapsed to a single button; expands to the shared PriceAlertForm
+ * pinned to this coin and prefilled with the live price. Renders nothing
+ * when the shell doesn't expose the price-alert routes.
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {string} props.chainId
+ * @param {number | null} props.currentPrice
+ * @param {string} props.fiatCurrency
+ * @param {boolean} props.loading
+ * @param {boolean} props.disabled
+ */
+function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, loading, disabled }) {
     const { supported, addAlert } = usePriceAlerts(walletId);
     const [open, setOpen] = useState(false);
     const [done, setDone] = useState(false);
 
     if (!supported || !walletId) return null;
+
+    if (loading) {
+        return (
+            <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
+                <Skeleton height={28} ariaLabel="Loading price alert action" />
+            </div>
+        );
+    }
+
+    if (disabled || currentPrice == null) {
+        return (
+            <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
+                <p className={styles.muted}>Price alerts need current market data.</p>
+            </div>
+        );
+    }
 
     const onCreate = async (input) => {
         await addAlert(input);
@@ -842,7 +893,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
 // this message instead of a synthesized walk.
 const NO_PRICE_HISTORY = 'No price history yet';
 
-function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency }) {
+function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading }) {
     const tabsId = useId();
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
@@ -865,11 +916,13 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     let pct24h = 'N/A';
     let sparkline = null;
     let hint = null;
+    const nativeLoading = nativePrice.loading
+        || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error);
 
     if (isNative) {
         if (nativePrice.disabled) {
             hint = 'Price data is disabled. Enable “Native coin price data” in Settings → Privacy to populate this section.';
-        } else if (nativePrice.loading && !nativePrice.entry) {
+        } else if (nativeLoading) {
             hint = 'Loading market data…';
         } else if (nativePrice.entry) {
             const e = nativePrice.entry;
@@ -913,44 +966,48 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 </section>
                 {/* Range tabs show only when some range can carry a line: a real
                     series exists, or the wallet is a demo wallet. */}
-                {sparkline || (showSparkline && !hint) ? (
-                    <>
-                        <div
-                            id={`${tabsId}-panel`}
-                            role="tabpanel"
-                            aria-labelledby={`${tabsId}-tab-${rangeId}`}
-                        >
-                            {sparkline ? (
-                                <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                                    <Sparkline series={sparkline} height={40} />
-                                </div>
-                            ) : (
-                                <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                            )}
-                        </div>
-                        <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                            {CHART_RANGES.map((r) => (
-                                // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                                <button
-                                    key={r.id}
-                                    id={`${tabsId}-tab-${r.id}`}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={r.id === rangeId ? 'true' : 'false'}
-                                    aria-controls={`${tabsId}-panel`}
-                                    tabIndex={r.id === rangeId ? 0 : -1}
-                                    className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
-                                    onClick={() => setRangeId(r.id)}
-                                >
-                                    {r.label}
-                                </button>
-                            ))}
-                        </div>
-                    </>
-                ) : !hint ? (
-                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                ) : null}
-                {hint ? <p className={styles.muted}>{hint}</p> : null}
+                <div className={styles.marketHistorySlot}>
+                    {nativeLoading ? (
+                        <Skeleton height={64} ariaLabel="Loading price history" />
+                    ) : sparkline || (showSparkline && !hint) ? (
+                        <>
+                            <div
+                                id={`${tabsId}-panel`}
+                                role="tabpanel"
+                                aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                            >
+                                {sparkline ? (
+                                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                                        <Sparkline series={sparkline} height={40} />
+                                    </div>
+                                ) : (
+                                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                                )}
+                            </div>
+                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                                {CHART_RANGES.map((r) => (
+                                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                                    <button
+                                        key={r.id}
+                                        id={`${tabsId}-tab-${r.id}`}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                        aria-controls={`${tabsId}-panel`}
+                                        tabIndex={r.id === rangeId ? 0 : -1}
+                                        className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                        onClick={() => setRangeId(r.id)}
+                                    >
+                                        {r.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    ) : !hint ? (
+                        <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                    ) : null}
+                    {hint && !nativeLoading ? <p className={styles.muted}>{hint}</p> : null}
+                </div>
             </>
         );
     }
@@ -1011,40 +1068,44 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 <StatCell label="Market cap" value={marketCapCell} />
                 <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
             </section>
-            {sparkline ? (
-                <div
-                    id={`${tabsId}-panel`}
-                    role="tabpanel"
-                    aria-labelledby={`${tabsId}-tab-${rangeId}`}
-                >
-                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                        <Sparkline series={sparkline} height={40} />
+            <div className={styles.marketHistorySlot}>
+                {loading ? (
+                    <Skeleton height={64} ariaLabel="Loading price history" />
+                ) : sparkline ? (
+                    <div
+                        id={`${tabsId}-panel`}
+                        role="tabpanel"
+                        aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                    >
+                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                            <Sparkline series={sparkline} height={40} />
+                        </div>
                     </div>
-                </div>
-            ) : !hint ? (
-                <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-            ) : null}
-            {sparkline && isDemo ? (
-                <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                    {CHART_RANGES.map((r) => (
-                        // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                        <button
-                            key={r.id}
-                            id={`${tabsId}-tab-${r.id}`}
-                            type="button"
-                            role="tab"
-                            aria-selected={r.id === rangeId ? 'true' : 'false'}
-                            aria-controls={`${tabsId}-panel`}
-                            tabIndex={r.id === rangeId ? 0 : -1}
-                            className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
-                            onClick={() => setRangeId(r.id)}
-                        >
-                            {r.label}
-                        </button>
-                    ))}
-                </div>
-            ) : null}
-            {hint ? <p className={styles.muted}>{hint}</p> : null}
+                ) : !hint ? (
+                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                ) : null}
+                {sparkline && isDemo ? (
+                    <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                        {CHART_RANGES.map((r) => (
+                            // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                            <button
+                                key={r.id}
+                                id={`${tabsId}-tab-${r.id}`}
+                                type="button"
+                                role="tab"
+                                aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                aria-controls={`${tabsId}-panel`}
+                                tabIndex={r.id === rangeId ? 0 : -1}
+                                className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                onClick={() => setRangeId(r.id)}
+                            >
+                                {r.label}
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
+                {hint && !loading ? <p className={styles.muted}>{hint}</p> : null}
+            </div>
         </>
     );
 }
@@ -1160,8 +1221,9 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
     if (isNative) {
         return (
             <EmptyState
-                title="Native coin. Token-information documents are an XChain-issued-token concept."
+                title="Native coin"
                 titleAs="p"
+                body="Token-information documents apply only to XChain-issued tokens."
             />
         );
     }
@@ -1305,7 +1367,7 @@ function MediaPanel({ isNative, assetInfo, loading }) {
 
     if (isNative) {
         return (
-            <EmptyState title="Native coins don't carry attached media." titleAs="p" />
+            <EmptyState title="No attached media" titleAs="p" body="Native coins don't carry attached media." />
         );
     }
     if (loading) {

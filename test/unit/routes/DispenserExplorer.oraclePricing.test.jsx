@@ -175,7 +175,15 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
             'packages/core/src/shared/routes/DispenserDetail.module.css',
         ), 'not all and (min-width: 400px)');
         expect(ruleBody(detailNarrow, '.buyFillsRow')).toMatch(/flex-direction:\s*column/);
-        expect(ruleBody(detailNarrow, '.dispenseRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+        // Dispense rows are ListRows: the amount wraps inside the shrinkable
+        // content column and the time column wraps on a phone instead of
+        // pushing the row wider than the screen.
+        const detail = readCss('packages/core/src/shared/routes/DispenserDetail.module.css');
+        expect(ruleBody(detail, '.dispenseAmount')).toMatch(/min-width:\s*0;[\s\S]*overflow-wrap:\s*anywhere/);
+        expect(ruleBody(detailNarrow, '.dispenseWhen')).toMatch(/white-space:\s*normal/);
+        const listRow = readCss('packages/core/src/ui/ListRow.module.css');
+        expect(ruleBody(listRow, '.content')).toMatch(/min-width:\s*0/);
+        expect(ruleBody(listRow, '.trailing')).toMatch(/min-width:\s*0;[\s\S]*max-width:\s*50%/);
 
         const explorer = readCss('packages/core/src/shared/routes/DispenserExplorer.module.css');
         expect(ruleBody(explorer, '.resultRow')).toMatch(/flex-direction:\s*column/);

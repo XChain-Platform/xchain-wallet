@@ -357,6 +357,10 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$XC_REGTEST_SSH_KEY" > ~/.ssh/regtest_key
           chmod 600 ~/.ssh/regtest_key
+          # The regtest fixtures run their own `ssh <host> docker exec ...` calls without -i,
+          # so name the key in the ssh config for every host this job reaches.
+          printf 'Host *\n  IdentityFile ~/.ssh/regtest_key\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
           ssh -N -f -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -i ~/.ssh/regtest_key \
             -L 18080:localhost:18080 -L 10000:localhost:10000 \
             -L 3023:localhost:3023 -L 3025:localhost:3025 \

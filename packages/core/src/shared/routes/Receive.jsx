@@ -304,9 +304,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 } else {
                     setNoAddresses(true);
                 }
-            } catch (err) {
+            } catch {
                 if (!cancelled) {
-                    setLoadError(err?.message || "Couldn't load addresses. Try again.");
+                    setLoadError("Couldn't load addresses. Check your connection and try again.");
                 }
             }
         })();
@@ -333,9 +333,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     const nextDescriptor = chainRegistry.get(activeChainId);
                     setAddressType(newest?.addressType || nextDescriptor?.defaultAddressType || '');
                 }
-            } catch (err) {
+            } catch {
                 if (!cancelled) {
-                    setLoadError(err?.message || 'Could not load the receive address. Try again.');
+                    setLoadError('Could not load the receive address. Check your connection and try again.');
                 }
             }
         })();
@@ -421,7 +421,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (err?.name === 'HardwareAddressMismatchError') {
                 setHwVerify({ status: 'mismatch', message: '' });
             } else {
-                setHwVerify({ status: 'error', message: err?.message || 'Could not verify the address. Try again.' });
+                setHwVerify({
+                    status: 'error',
+                    message: 'Could not verify the address on your hardware wallet. Reconnect it and try again.',
+                });
             }
         }
     }, [address, activeChainId, walletId, messaging, receiveContextKey]);
@@ -703,9 +706,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     [chainId]: [...withoutDuplicate, generated],
                 };
             });
-        } catch (err) {
+        } catch {
             if (generateRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
-            setGenerateError(err?.message || 'Could not create a new receive address. Try again.');
+            setGenerateError('Could not create a new receive address. Check your connection and try again.');
         } finally {
             if (generateRequestRef.current === request) {
                 generateBusyRef.current = false;
@@ -851,16 +854,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             : { message: 'Could not share or copy the payment link.', variant: 'error' });
     }, [qrDataUrl, qrUri, reqTick, nativeTicker, descriptor?.displayName, reqAmount, qrFileName, showToast]);
 
-    // Single-tap request copy uses the exact payload rendered in the QR so a
-    // pasted request cannot disagree with the amount or network a payer scans.
+    // Single-tap address copy uses the exact value shown without URI parameters
+    // or display formatting. The adjacent Copy payment link control owns the QR
+    // payload.
     const copyAddress = useCallback(async () => {
-        if (!qrUri) return;
-        const { ok } = await copyText(qrUri);
+        if (!address?.address) return;
+        const { ok } = await copyText(address.address);
         showToast({
-            message: ok ? 'Payment link copied to clipboard.' : 'Could not copy the payment link. Clipboard access is unavailable.',
+            message: ok ? 'Address copied to clipboard.' : 'Could not copy the address. Clipboard access is unavailable.',
             variant: ok ? 'default' : 'error',
         });
-    }, [qrUri, showToast]);
+    }, [address?.address, showToast]);
     const onAddressKeyDown = useCallback((event) => {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
@@ -1051,16 +1055,18 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     </div>
                     <AddressField
                         size="md"
+                        // The visible label is the accessible name; the hint says a tap
+                        // copies the address. A name about a payment link went stale when
+                        // the tap stopped copying one.
                         label={address.label || 'Address'}
-                        aria-label="Copy payment link for receive address"
                         icon="addresses"
                         value={address.address}
                         readOnly
                         onChange={() => {}}
                         onClick={copyAddress}
                         onKeyDown={onAddressKeyDown}
-                        title="Tap to copy payment link"
-                        hint="Tap the address to copy its payment link."
+                        title="Tap to copy address"
+                        hint="Tap the address to copy it."
                         style={{ cursor: 'text', userSelect: 'text' }}
                         wrapReadOnlyAddress
                         onIconClick={() => setAddressPickerOpen(true)}

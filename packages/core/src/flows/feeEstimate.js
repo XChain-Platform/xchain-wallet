@@ -150,7 +150,8 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
             speed,
         };
     }
-    const tier = table.tiers[speed] ?? table.tiers[DEFAULT_SPEED];
+    const resolvedSpeed = Object.hasOwn(table.tiers, speed) ? speed : DEFAULT_SPEED;
+    const tier = table.tiers[resolvedSpeed];
     const unit = resolveFeeUnit(desc);
     const sats = computeSats(table, tier.rate);
     return {
@@ -165,7 +166,7 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
         // mode echoes this value back through the input verbatim.
         rateValue: perByteRateToDisplay(unit, tier.rate),
         vsize: table.txSize,
-        speed,
+        speed: resolvedSpeed,
         etaMinutes: tier.etaMinutes,
     };
 }
@@ -214,16 +215,20 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
     const scaledRate = decimalToBaseUnits(rate, 8);
     if (scaledRate === null) return null;
+    const numericRate = Number(rate);
+    if (!Number.isFinite(numericRate)) return null;
     const desc = chainRegistry.get(chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
     const unit = resolveFeeUnit(desc);
-    const ratePerByte = displayRateToPerByte(unit, Number(rate));
+    const ratePerByte = displayRateToPerByte(unit, numericRate);
     const divisor = isPerKbUnit(unit) ? 1000n : 100000000n;
     const numerator = scaledRate * BigInt(table.txSize);
-    const sats = Number((numerator + divisor - 1n) / divisor);
+    const exactFee = (numerator + divisor - 1n) / divisor;
+    if (exactFee > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    const sats = Number(exactFee);
     return {
         sats,
         coinAmount: satsToCoinDecimal(sats),
@@ -374,7 +379,13 @@ export async function fetchNativeSendFeeTiers({
                 }),
             ]);
             if (sdk && typeof sdk === 'object') {
-                const unit = typeof sdk.unit === 'string' ? sdk.unit : resolveFeeUnit(desc);
+                const unit = resolveFeeUnit(desc);
+                // The descriptor owns the chain's fee unit. A different unit
+                // identifies a stale or cross-chain response, so none of its
+                // rates can safely be applied to this request.
+                if (sdk.unit !== undefined && sdk.unit !== unit) {
+                    return estimateNativeSendFeeTiers({ chainId, chainRegistry });
+                }
                 return {
                     low: shapeSdkTier({ table, sdk: sdk.low, unit, fallback: table.tiers.low, speed: 'low' }),
                     normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal' }),
@@ -382,7 +393,7 @@ export async function fetchNativeSendFeeTiers({
                     unit,
                     minimumRate: perByteRateToDisplay(
                         unit,
-                        Number.isFinite(sdk.minimumRate) && sdk.minimumRate > 0
+                        usableRate(table, sdk.minimumRate)
                             ? sdk.minimumRate
                             : table.minimumRate,
                     ),
@@ -399,7 +410,7 @@ export async function fetchNativeSendFeeTiers({
 }
 
 function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
-    const live = sdk && typeof sdk === 'object' && Number.isFinite(sdk.rate) && sdk.rate > 0;
+    const live = sdk && typeof sdk === 'object' && usableRate(table, sdk.rate);
     const ratePerByte = live ? sdk.rate : fallback.rate;
     const sats = computeSats(table, ratePerByte);
     return {
@@ -414,6 +425,12 @@ function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
         speed,
         etaMinutes: live && Number.isFinite(sdk.etaMinutes) ? sdk.etaMinutes : fallback.etaMinutes,
     };
+}
+
+function usableRate(table, rate) {
+    return Number.isFinite(rate)
+        && rate > 0
+        && Number.isSafeInteger(Math.ceil(rate * table.txSize));
 }
 
 function computeSats(table, ratePerByte) {

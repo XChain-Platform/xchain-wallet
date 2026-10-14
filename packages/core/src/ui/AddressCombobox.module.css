@@ -29,6 +29,7 @@
 
 .iconButton {
     position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
     inset-inline-end: 4px;
     top: calc(20px + var(--xc-space-1));
     width: var(--address-control-height);

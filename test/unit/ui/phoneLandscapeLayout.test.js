@@ -27,10 +27,9 @@ const carousel = read('packages/core/src/shared/routes/OnboardingCarousel.module
 describe('phone landscape layout', () => {
     it('reduces persistent shell chrome without removing navigation targets', () => {
         expect(appHeader).toContain(landscapeQuery);
-        expect(appHeader).toMatch(/\.bar\s*\{[\s\S]*?padding-inline: var\(--xc-page-gutter\);/);
-        expect(appHeader).toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.bar\s*\{[\s\S]*?padding-block: var\(--xc-space-1\);/,
-        );
+        // Persistent chrome keeps its own inset; only Screen.body applies the page gutter.
+        expect(appHeader).not.toContain('var(--xc-page-gutter)');
+        expect(appHeader).toMatch(/\.bar\s*\{[\s\S]*?padding: var\(--xc-space-1\) var\(--xc-space-2\);/);
         expect(bottomBar).toContain(landscapeQuery);
         expect(bottomBar).toMatch(/\.bar\s*\{\s*min-height: 2\.75rem;/);
         expect(bottomBar).toMatch(/\.tab\s*\{[\s\S]*?min-height: var\(--xc-tap-min\);/);
@@ -38,9 +37,10 @@ describe('phone landscape layout', () => {
         expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.header,[\s\S]*?padding: var\(--xc-space-1\) var\(--xc-space-3\);/);
     });
 
-    it('aligns headers and recovery containers to the responsive page gutter', () => {
+    it('keeps core chrome on its own inset and the popup recovery panel on the page gutter', () => {
         expect(pageHeader).not.toMatch(/margin-inline-(?:start|end):\s*calc/);
-        expect(routeError).toMatch(/padding: var\(--xc-page-top\) var\(--xc-page-gutter\);/);
+        expect(routeError).not.toContain('var(--xc-page-gutter)');
+        expect(routeError).toMatch(/\.recovery\s*\{[^}]*padding: var\(--xc-space-4\);/);
         expect(popup).toMatch(/\.popup-background-connection\s*\{[\s\S]*?padding: var\(--xc-page-top\) var\(--xc-page-gutter\);/);
         expect(backgroundConnection).not.toMatch(/<Screen\b/);
     });

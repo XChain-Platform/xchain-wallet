@@ -95,6 +95,7 @@ export function useConfirmAction() {
     // Once Approve is pressed the PSBT may be signed or broadcast, so the
     // encoder reservation must stay held whatever happens to this component.
     const approvalBeganRef = useRef(false);
+    const approveInFlightRef = useRef(false);
     const releaseUnlessApproving = useCallback((built) => {
         if (approvalBeganRef.current) return;
         const sendRelease = optsRef.current?.releaseEncoderInputs;
@@ -343,10 +344,14 @@ export function useConfirmAction() {
 
     // Approve handler the modal wires to the primary button. Disables
     // synchronously (the caller sets a local disabled flag in the same tick).
+    // A second call while one is still running is dropped here as well, so a
+    // surface whose button guard misses a double tap still signs once.
     const approve = useCallback(async (credentials) => {
         const args = optsRef.current;
         const built = composedRef.current;
         if (!args || !built) return;
+        if (approveInFlightRef.current) return;
+        approveInFlightRef.current = true;
         const settleUnmountedInterruption = (err = new UserRejectedError()) => {
             if (mountedRef.current) return;
             approvalBeganRef.current = false;
@@ -557,6 +562,7 @@ export function useConfirmAction() {
             return undefined;
         }
         } finally {
+            approveInFlightRef.current = false;
             releaseAutoLock();
         }
     }, [

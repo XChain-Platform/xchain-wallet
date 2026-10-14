@@ -44,6 +44,8 @@ import styles from './FormPage.module.css';
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef]
  * @param {boolean} [props.stackedActions]              stack equal-width actions instead of sharing a row
  * @param {boolean} [props.sectioned]                   children are divider-separated FormSections
+ * @param {boolean} [props.fill]                        the form fills the screen height so a scrolling panel can take the free space and the actions sit at the bottom
+ * @param {boolean} [props.fullWidth]                   wide screens use the whole content width with no card, for reading pages such as the license terms
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
  * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form
@@ -65,6 +67,8 @@ export const FormPage = forwardRef(function FormPage(
         titleRef,
         stackedActions = false,
         sectioned = false,
+        fill = false,
+        fullWidth = false,
         label,
         noValidate = true,
         as: Root = 'form',
@@ -77,6 +81,8 @@ export const FormPage = forwardRef(function FormPage(
     const classNames = [
         styles.form,
         sectioned ? styles.sectioned : null,
+        fill ? styles.fill : null,
+        fullWidth ? styles.fullWidth : null,
         className,
     ].filter(Boolean).join(' ');
     const semanticProps = Root === 'form'

@@ -97,6 +97,21 @@ export class SignerPool {
     constructor() {
         /** @type {Map<string, import('./SoftwareSigner.js').SoftwareSigner>} */
         this._signers = new Map();
+        this._session = 0;
+        this._nextMutation = 1;
+        /** @type {Map<string, number>} */
+        this._walletMutations = new Map();
+    }
+
+    _beginMutation(walletId) {
+        const mutation = this._nextMutation++;
+        this._walletMutations.set(walletId, mutation);
+        return { session: this._session, mutation };
+    }
+
+    _isCurrent(walletId, token) {
+        return token.session === this._session
+            && token.mutation === this._walletMutations.get(walletId);
     }
 
     /**
@@ -130,8 +145,11 @@ export class SignerPool {
             pooled: [], skipped: [], passphraseMatched: [], passphraseMismatch: [], passphraseMismatchNames: [],
             passphraseCaptureNeeded: [], passphraseCaptureNames: [],
         };
+        const session = this._session;
         const wallets = await vault.wallets.list();
+        if (this._session !== session) return summary;
         for (const w of wallets) {
+            const token = this._beginMutation(w.id);
             // A stored passphrase (§15.6) makes the password the only secret this
             // needs, so the wallets left out here are the legacy records that
             // hold none yet. A passphrase supplied by the caller still pools one:
@@ -163,11 +181,17 @@ export class SignerPool {
                     sdkRegistry,
                 });
             } catch {
+                if (token.session !== this._session) break;
                 // Bad password for this wallet, or other unlock
                 // failure; skip it. The op-level fallback (password
                 // prompt) will surface the real error if the user
                 // tries to use that wallet.
                 summary.skipped.push(w.id);
+                continue;
+            }
+            if (!this._isCurrent(w.id, token)) {
+                try { signer.lock(); } catch { /* best-effort */ }
+                if (token.session !== this._session) break;
                 continue;
             }
             // Only a TYPED passphrase is worth verifying. The ownership check
@@ -177,6 +201,11 @@ export class SignerPool {
             // wallet on a spurious miss.
             if (awaitingCapture) {
                 const owns = await seedOwnsStoredAddresses(vault, w, signer);
+                if (!this._isCurrent(w.id, token)) {
+                    try { signer.lock(); } catch { /* best-effort */ }
+                    if (token.session !== this._session) break;
+                    continue;
+                }
                 if (owns === false) {
                     try { signer.lock(); } catch { /* best-effort */ }
                     summary.passphraseMismatch.push(w.id);
@@ -224,6 +253,7 @@ export class SignerPool {
         if (typeof bip39Passphrase !== 'string' || bip39Passphrase.length === 0) {
             throw new Error('SignerPool.captureOne: bip39Passphrase is required');
         }
+        const token = this._beginMutation(wallet.id);
         const signer = await unlockWalletRecord({
             wallet,
             password,
@@ -233,7 +263,13 @@ export class SignerPool {
         });
         let record;
         try {
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
             const owns = await seedOwnsStoredAddresses(vault, wallet, signer);
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
             if (owns !== true) throw new PassphraseMismatchError([wallet.name]);
             // The signer owns this key and zeroes it at lock(); never clear it here.
             const encryptedPassphrase = await encryptWalletPassphrase({
@@ -241,7 +277,13 @@ export class SignerPool {
                 passphrase: bip39Passphrase,
             });
             record = { ...wallet, encryptedPassphrase };
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
             await vault.wallets.put(record);
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
         } catch (e) {
             // Nothing half-done leaves this method: a failed capture leaves no
             // pooled signer and no live master key, whatever the reason.
@@ -269,6 +311,7 @@ export class SignerPool {
      * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
      */
     async unlockOne({ wallet, password, bip39Passphrase = '', chainRegistry, sdkRegistry }) {
+        const token = this._beginMutation(wallet.id);
         const signer = await unlockWalletRecord({
             wallet,
             password,
@@ -276,6 +319,10 @@ export class SignerPool {
             chainRegistry,
             sdkRegistry,
         });
+        if (!this._isCurrent(wallet.id, token)) {
+            try { signer.lock(); } catch { /* best-effort */ }
+            throw new Error('SignerPool.unlockOne: signer unlock was cancelled');
+        }
         const existing = this._signers.get(wallet.id);
         if (existing) {
             try { existing.lock(); } catch { /* best-effort */ }
@@ -303,6 +350,7 @@ export class SignerPool {
      * @param {string} walletId
      */
     evict(walletId) {
+        this._walletMutations.set(walletId, this._nextMutation++);
         const signer = this._signers.get(walletId);
         if (!signer) return;
         try { signer.lock(); } catch { /* best-effort */ }
@@ -315,6 +363,8 @@ export class SignerPool {
      * session.
      */
     lockAll() {
+        this._session += 1;
+        this._walletMutations.clear();
         for (const signer of this._signers.values()) {
             try { signer.lock(); } catch { /* best-effort */ }
         }

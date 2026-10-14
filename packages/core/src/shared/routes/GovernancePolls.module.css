@@ -19,15 +19,6 @@
     cursor: pointer;
 }
 
-.pollHeader {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
 .pollTitle {
     min-width: 0;
     overflow-wrap: anywhere;

@@ -110,12 +110,16 @@ export function useActionForm({
     useEffect(() => {
         let cancelled = false;
         Promise.all([
-            messaging.getAddressesByChain(walletId),
+            Promise.resolve().then(() => messaging.getAddressesByChain(walletId)),
             typeof messaging.getActiveAddresses === 'function'
-                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                ? Promise.resolve()
+                    .then(() => messaging.getActiveAddresses(walletId))
+                    .catch(() => ({}))
                 : Promise.resolve({}),
             typeof messaging.getSettings === 'function'
-                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                ? Promise.resolve()
+                    .then(() => messaging.getSettings())
+                    .catch(() => null)
                 : Promise.resolve(null),
         ])
             .then(([byChain, active, settings]) => {

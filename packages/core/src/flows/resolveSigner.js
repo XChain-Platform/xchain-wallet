@@ -102,6 +102,33 @@ export async function resolveSigner({ vault, address }) {
                 { addressId: address.id, signerId: address.signerId, source, signerKind: signerRecord.kind },
             );
         }
+        if (address.accountId === null) {
+            throw new SignerResolutionError(
+                `resolveSigner: hardware address "${address.id}" has no accountId`,
+                { addressId: address.id, signerId: address.signerId },
+            );
+        }
+        if (typeof address.accountId === 'string' && address.accountId) {
+            const account = await vault.accounts.get(address.accountId);
+            if (!account) {
+                throw new SignerResolutionError(
+                    `resolveSigner: no Account for id "${address.accountId}"`,
+                    { addressId: address.id, accountId: address.accountId, signerId: address.signerId },
+                );
+            }
+            if (signerRecord.walletId !== account.walletId) {
+                throw new SignerResolutionError(
+                    `resolveSigner: signer belongs to a different wallet than address "${address.id}"`,
+                    {
+                        addressId: address.id,
+                        accountId: address.accountId,
+                        signerId: address.signerId,
+                        addressWalletId: account.walletId,
+                        signerWalletId: signerRecord.walletId,
+                    },
+                );
+            }
+        }
         return { kind: signerRecord.kind, address, signerRecord };
     }
     throw new SignerResolutionError(

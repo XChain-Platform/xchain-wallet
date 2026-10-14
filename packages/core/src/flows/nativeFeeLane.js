@@ -66,10 +66,10 @@ const CHUNK_LANE = Object.freeze(['P2SH', 'P2WSH']);
  */
 export function nativeFeeOutputOf(quote) {
     if (!quote) return null;
-    const value = Number(quote.requiredFeeSats);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    if (typeof quote.feeDestination !== 'string' || !quote.feeDestination) return null;
-    return { address: quote.feeDestination, value };
+    const value = safePositiveSats(quote.requiredFeeSats);
+    if (value === null) return null;
+    if (typeof quote.feeDestination !== 'string' || !quote.feeDestination.trim()) return null;
+    return { address: quote.feeDestination.trim(), value };
 }
 
 /**
@@ -102,8 +102,29 @@ export function withoutCustomOutput(encoderOpts, output) {
     // Exact satoshi match, not Number() equality: this builds the EXPECTED-OUTPUT
     // set the §5.3.2 tamper check consumes, so a >2^53 collapse here removes the wrong output
     // and reopens the same one-koinu hole from the other side.
-    const kept = outs.filter((o) => !(o
-        && o.address === output.address
-        && sameSats(o.value, output.value)));
+    let removed = false;
+    const kept = outs.filter((o) => {
+        const matches = !removed
+            && o
+            && o.address === output.address
+            && sameSats(o.value, output.value);
+        if (matches) removed = true;
+        return !matches;
+    });
     return { ...encoderOpts, customOutputs: kept };
+}
+
+function safePositiveSats(value) {
+    let sats;
+    if (typeof value === 'bigint') {
+        sats = value;
+    } else if (typeof value === 'number') {
+        if (!Number.isSafeInteger(value)) return null;
+        sats = BigInt(value);
+    } else if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+        sats = BigInt(value.trim());
+    } else {
+        return null;
+    }
+    return sats > 0n && sats <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(sats) : null;
 }

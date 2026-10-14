@@ -104,7 +104,7 @@ test.describe('Settings: wallet mode', () => {
                 await page.reload();
                 const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
                 await unlock.waitFor({ state: 'visible', timeout: 60_000 });
-                await page.getByLabel('Password').fill(PASSWORD);
+                await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
                 await unlock.click();
                 await expect(page.getByRole('button', { name: 'Sign a transaction' }),
                     'the wallet did not come back unlocked into the signer surface')

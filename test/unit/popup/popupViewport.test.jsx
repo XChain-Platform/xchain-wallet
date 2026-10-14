@@ -59,6 +59,8 @@ function renderPopup(node) {
 
 function expectCompleteButtonLabel(name) {
     const button = screen.getByRole('button', { name, exact: true });
+    // The kit Button nests the icon in its own span, so read the label span
+    // that is the button's own last child.
     const label = button.querySelector(':scope > span:last-child');
     expect(button).toBeVisible();
     expect(label).not.toBeNull();

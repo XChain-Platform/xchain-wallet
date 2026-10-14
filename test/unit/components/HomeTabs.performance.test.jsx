@@ -29,16 +29,24 @@ const mocks = vi.hoisted(() => {
         chainIds,
         emptyObject: {},
         historyByChain,
+        heroRenders: vi.fn(),
+        chartRenders: vi.fn(),
         synthesizeDemoHistory: vi.fn((chainId) => historyByChain[chainId] || []),
         useCollectibleKeys: vi.fn(() => new Set()),
     };
 });
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
-    TotalBalanceHero: () => null,
+    TotalBalanceHero: () => {
+        mocks.heroRenders();
+        return null;
+    },
 }));
 vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () => ({
-    PortfolioChart: () => null,
+    PortfolioChart: () => {
+        mocks.chartRenders();
+        return null;
+    },
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging: mocks.emptyObject, shell: 'web' }),
@@ -126,6 +134,8 @@ beforeEach(() => {
     localStorage.clear();
     mocks.synthesizeDemoHistory.mockClear();
     mocks.useCollectibleKeys.mockClear();
+    mocks.heroRenders.mockClear();
+    mocks.chartRenders.mockClear();
 });
 
 afterEach(() => {
@@ -194,5 +204,16 @@ describe('Home large-wallet performance', () => {
 
         expect(initialRowReads).toBeGreaterThanOrEqual(300);
         expect(rowReads).toBe(initialRowReads);
+    });
+
+    it('does not rerender the unchanged hero and chart when switching asset tabs', () => {
+        mountLargeHome(() => {});
+        const heroRenders = mocks.heroRenders.mock.calls.length;
+        const chartRenders = mocks.chartRenders.mock.calls.length;
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+
+        expect(mocks.heroRenders).toHaveBeenCalledTimes(heroRenders);
+        expect(mocks.chartRenders).toHaveBeenCalledTimes(chartRenders);
     });
 });

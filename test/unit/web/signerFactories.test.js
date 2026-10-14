@@ -12,7 +12,12 @@ const ledger = vi.hoisted(() => ({
 vi.mock('../../../packages/extension/src/signers/ledgerFactory.js', () => ledger);
 
 import * as extensionLedger from '../../../packages/extension/src/signers/ledgerFactory.js';
+import * as backgroundSignerBridge from '../../../packages/extension/src/background/signerBridge.js';
 import * as webLedger from '../../../packages/web/src/signers/ledgerFactory.js';
+import {
+    registerSigner,
+    unregisterSigner,
+} from '../../../packages/web/src/signerBridge.js';
 import {
     getTrezorConnect,
     pairTrezorSigner,
@@ -24,12 +29,28 @@ const hostedScript = 'https://connect.trezor.io/9/trezor-connect.js';
 beforeEach(() => {
     resetTrezorConnect();
     delete window.TrezorConnect;
+    unregisterSigner('signer-1');
+    unregisterSigner('signer-2');
+    backgroundSignerBridge.clearAll();
 });
 
 afterAll(() => {
     document.querySelector(`script[src="${hostedScript}"]`)?.remove();
     delete window.TrezorConnect;
+    unregisterSigner('signer-1');
+    unregisterSigner('signer-2');
+    backgroundSignerBridge.clearAll();
 });
+
+function fakeSigner() {
+    return {
+        getStatus: vi.fn(async () => ({ connected: true })),
+        getAddresses: vi.fn(async () => ['bc1qaddress']),
+        getPublicKey: vi.fn(async () => 'public-key'),
+        signPsbt: vi.fn(async () => ({ signedPsbtHex: 'abcd' })),
+        signMessage: vi.fn(async () => ({ signature: 'signature' })),
+    };
+}
 
 describe('web Ledger factory', () => {
     it('uses the shared WebHID implementation from the extension shell', () => {
@@ -58,6 +79,33 @@ describe('web Trezor factory', () => {
         resetTrezorConnect();
         await getTrezorConnect(loader);
         expect(loader).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries after Connect initialization fails', async () => {
+        const failed = { init: vi.fn(async () => { throw new Error('init failed'); }) };
+        const connected = { init: vi.fn(async () => {}) };
+        const loader = vi.fn()
+            .mockResolvedValueOnce(failed)
+            .mockResolvedValueOnce(connected);
+
+        await expect(getTrezorConnect(loader)).rejects.toThrow('init failed');
+        await expect(getTrezorConnect(loader)).resolves.toBe(connected);
+        expect(loader).toHaveBeenCalledTimes(2);
+    });
+
+    it('removes a failed hosted script so a later attempt can reload it', async () => {
+        const firstAttempt = getTrezorConnect();
+        const failedScript = document.querySelector(`script[src="${hostedScript}"]`);
+        failedScript.dispatchEvent(new Event('error'));
+
+        await expect(firstAttempt).rejects.toThrow('failed to load Trezor Connect');
+        expect(failedScript.isConnected).toBe(false);
+
+        const secondAttempt = getTrezorConnect();
+        const retryScript = document.querySelector(`script[src="${hostedScript}"]`);
+        expect(retryScript).not.toBe(failedScript);
+        retryScript.dispatchEvent(new Event('error'));
+        await expect(secondAttempt).rejects.toThrow('failed to load Trezor Connect');
     });
 
     it('binds the initialized browser client to the shared pairing flow', async () => {
@@ -99,5 +147,45 @@ describe('web Trezor factory', () => {
 
         await expect(pending).resolves.toBe(connect);
         expect(connect.init).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('web signer transport binding', () => {
+    it('rejects a payload that names a different registered signer', async () => {
+        const signer1 = fakeSigner();
+        const signer2 = fakeSigner();
+        registerSigner('signer-1', signer1);
+        registerSigner('signer-2', signer2);
+        const signer1Transport = backgroundSignerBridge.getTransport('signer-1');
+
+        await expect(signer1Transport({
+            op: 'signPsbt',
+            payload: { signerId: 'signer-2', chainId: 'bitcoin-mainnet' },
+        })).rejects.toThrow('does not match registered id "signer-1"');
+        expect(signer1.signPsbt).not.toHaveBeenCalled();
+        expect(signer2.signPsbt).not.toHaveBeenCalled();
+    });
+
+    it('requires the complete bridge signer method surface', () => {
+        const signer = fakeSigner();
+        delete signer.signMessage;
+
+        expect(() => registerSigner('signer-1', signer)).toThrow('must implement Signer');
+        expect(backgroundSignerBridge.getTransport('signer-1')).toBeNull();
+    });
+
+    it('rejects a retained transport after its signer registration is replaced', async () => {
+        const firstSigner = fakeSigner();
+        const replacementSigner = fakeSigner();
+        registerSigner('signer-1', firstSigner);
+        const staleTransport = backgroundSignerBridge.getTransport('signer-1');
+        registerSigner('signer-1', replacementSigner);
+
+        await expect(staleTransport({
+            op: 'status',
+            payload: { signerId: 'signer-1' },
+        })).rejects.toMatchObject({ name: 'SignerNotRegisteredError' });
+        expect(firstSigner.getStatus).not.toHaveBeenCalled();
+        expect(replacementSigner.getStatus).not.toHaveBeenCalled();
     });
 });

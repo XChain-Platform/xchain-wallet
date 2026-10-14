@@ -93,6 +93,8 @@
     width: var(--xc-button-height);
     min-width: var(--xc-button-height);
     padding-inline: 0;
+    gap: 0;
+    justify-content: center;
 }
 
 .block {
@@ -103,11 +105,12 @@
     .sm::before {
         content: '';
         position: absolute;
-        top: 50%;
-        left: 50%;
+        /* Offsetting by half the shortfall centres the hit target in both
+           writing directions without a direction-dependent translate. */
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
         width: max(100%, var(--xc-control-hit-min, 24px));
         height: max(100%, var(--xc-control-hit-min, 24px));
-        transform: translate(-50%, -50%);
     }
 }
 

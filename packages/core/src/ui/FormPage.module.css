@@ -137,6 +137,21 @@
     gap: var(--xc-section-gap);
 }
 
+/* Fill: the form takes the whole scroll area of the Screen body, and its
+   body becomes a flexible column, so a panel marked to grow (for example
+   the license terms) takes the free height and the last row sits at the
+   bottom of the screen instead of floating above empty space. */
+.fill {
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+.fill > .body {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
 .sectionBody {
     display: flex;
     flex-direction: column;
@@ -159,6 +174,18 @@
     /* A reusable form fragment shares the parent form's card instead of
        drawing a second card or narrowing the content again. */
     form .form {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    /* Full width: a reading page (license terms) uses the whole content
+       area instead of the 560px card, so long text needs less scrolling. */
+    .form.fullWidth {
         max-width: none;
         margin: 0;
         padding: 0;

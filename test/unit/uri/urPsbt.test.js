@@ -65,6 +65,11 @@ describe('ur/bytewords (minimal)', () => {
         expect(() => decodeBytewordsMinimal('abc')).toThrow(UrError);
         expect(() => decodeBytewordsMinimal('zz')).toThrow(UrError); // "zz" is not a minimal code
     });
+
+    it('rejects trailing CBOR data instead of ignoring it', () => {
+        expect(() => cborUnwrapBytes(Uint8Array.from([0x41, 0xaa, 0x00])))
+            .toThrow(/trailing data/);
+    });
 });
 
 describe('ur/decodeUrPsbt (gold vectors)', () => {
@@ -116,6 +121,25 @@ describe('ur/UrPsbtDecoder (progressive, completion parity)', () => {
         const dec = new UrPsbtDecoder();
         expect(dec.receive(v.parts[0])).toBe(true);
         expect(dec.receive(v.parts[0])).toBe(false);
+    });
+
+    it('can continue after rejecting a frame of the wrong UR type', () => {
+        const v = vectors.find((x) => x.kind === 'single');
+        const dec = new UrPsbtDecoder();
+        const wrongType = v.parts[0].replace('ur:crypto-psbt/', 'ur:bytes/');
+
+        expect(() => dec.receive(wrongType)).toThrow(/expected UR type/);
+        expect(dec.receive(v.parts[0])).toBe(true);
+        expect(dec.psbtHex).toBe(v.expectedHex);
+    });
+
+    it('rejects malformed CBOR before reporting completion', () => {
+        const v = vectors.find((x) => x.kind === 'multi-ordered');
+        const malformedSingle = v.parts[0].replace(/\/\d+-\d+\//, '/');
+        const dec = new UrPsbtDecoder();
+
+        expect(() => dec.receive(malformedSingle)).toThrow(/expected a byte string/);
+        expect(dec.complete).toBe(false);
     });
 });
 

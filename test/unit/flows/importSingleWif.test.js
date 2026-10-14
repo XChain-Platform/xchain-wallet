@@ -48,7 +48,12 @@ function setup(overrides = {}) {
     const deriveAddress = vi.fn(() => 'mderived');
     return {
         args: {
-            vault: { wallets: { put: walletPut }, addresses: { put: addressPut } },
+            // The import checks for an id collision before writing and rolls
+            // back a half-written pair, so the fake answers get and delete too.
+            vault: {
+                wallets: { get: vi.fn(async () => null), put: walletPut, delete: vi.fn(async () => true) },
+                addresses: { get: vi.fn(async () => null), put: addressPut, delete: vi.fn(async () => true) },
+            },
             password: 'correct horse',
             chainRegistry: { get: vi.fn((id) => (id === DESCRIPTOR.id ? DESCRIPTOR : null)) },
             sdkRegistry: { get: vi.fn(() => ({ wallet: { importWIF, deriveAddress } })) },

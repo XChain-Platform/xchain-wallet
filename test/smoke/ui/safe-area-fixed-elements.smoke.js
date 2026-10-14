@@ -23,14 +23,16 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const sourceRoot = join(wsRoot, 'packages');
 const sourceExtensions = new Set(['.css', '.js', '.jsx', '.ts', '.tsx']);
+const BUILD_OUTPUT_DIRS = new Set(['dist', 'www']);
 const positionedBlock = /([^{}]+)\{([^{}]*\bposition\s*:\s*(?:fixed|sticky|['"]fixed['"]|['"]sticky['"])\s*[,;][^{}]*)\}/g;
 
 function sourceFiles(dir) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         const path = join(dir, entry.name);
-        // Build output is minified with the marker comments stripped; the
-        // source blocks it came from are what this audit judges.
-        if (entry.isDirectory()) return entry.name === 'dist' ? [] : sourceFiles(path);
+        // Build output (each package's dist, the mobile www staging copy) is
+        // minified with the marker comments stripped; the source blocks it
+        // came from are what this audit judges.
+        if (entry.isDirectory()) return BUILD_OUTPUT_DIRS.has(entry.name) ? [] : sourceFiles(path);
         return sourceExtensions.has(extname(entry.name)) ? [path] : [];
     });
 }

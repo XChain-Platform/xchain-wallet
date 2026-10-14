@@ -48,11 +48,11 @@ export function AddressText({ address, truncate = true, highlight = false, size 
     const [focused, setFocused] = useState(false);
     const cls = `${styles.addr} ${styles[size]} ${className}`.trim();
     if (typeof address !== 'string' || address.length === 0) {
-        return <span className={cls}>…</span>;
+        return <span className={cls} dir="ltr">…</span>;
     }
     if (address.length <= 14) {
         return (
-            <span className={cls} title={address} aria-label={address}>
+            <span className={cls} title={address} aria-label={address} dir="ltr">
                 {address}
             </span>
         );
@@ -72,6 +72,7 @@ export function AddressText({ address, truncate = true, highlight = false, size 
         className: cls,
         title: address,
         'aria-label': address,
+        dir: 'ltr',
         tabIndex: 0,
         style: displayStyle,
         onFocus: () => setFocused(true),

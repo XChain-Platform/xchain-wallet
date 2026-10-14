@@ -54,7 +54,11 @@ const carouselCss = readFileSync(
 
 describe('onboarding and Home layout guards', () => {
     it('contains long balance values inside narrow rows', () => {
+        // Balances render as ListRow trailing content, so the row's trailing
+        // slot caps the amount column and the amounts block may shrink inside it.
         expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;/s);
+        const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
+        expect(listRowCss).toMatch(/\.trailing\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*50%;/s);
         // The label yields space first. Values that still exceed the row show
         // an ellipsis and expose the complete string through their title.
         expect(balanceCss).toMatch(/\.amountFit\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
@@ -77,6 +81,10 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingCss).not.toMatch(/\.licenseGate\s*\{[^}]*max-width:/s);
         expect(carouselCss).not.toMatch(/\.stack\s*\{[^}]*padding:/s);
         expect(onboardingSource).toContain('label="License agreement"');
+        expect(onboardingSource).toMatch(/label="License agreement"\s+fill\s+fullWidth\b/);
+        // The terms panel fills the free height; it never caps itself at a fraction of the screen.
+        expect(onboardingCss).not.toMatch(/\.licenseScroll\s*\{[^}]*max-height:/s);
+        expect(onboardingCss).toMatch(/\.licenseScroll\s*\{[^}]*flex:\s*1 1 auto/s);
         expect(onboardingSource).toContain('label="Wallet setup"');
         expect(onboardingSource).toContain('title="License agreement"');
         expect(onboardingSource).toContain('title={branding.PRODUCT_NAME}');

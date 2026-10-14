@@ -148,7 +148,7 @@ test.describe('responsive: one interface at every width', () => {
                 await page.getByRole('main').evaluate((main) => { main.scrollTop = 0; });
 
                 const walletName = page.getByRole('heading', { level: 1 });
-                const password = page.getByLabel('Password');
+                const password = page.getByLabel('Password', { exact: true });
                 const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
                 const forgot = page.getByRole('button', { name: 'Forgot password?' });
 

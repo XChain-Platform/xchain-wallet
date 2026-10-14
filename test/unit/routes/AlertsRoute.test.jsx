@@ -86,7 +86,7 @@ describe('AlertsRoute empty state', () => {
         mount(props);
 
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
-        expect(screen.getByText("You're all caught up.")).toBeTruthy();
+        expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
         expect(screen.queryByRole('list')).toBeNull();
     });
 
@@ -198,7 +198,9 @@ describe('AlertsRoute alert list', () => {
         expect(screen.getByRole('button', { name: 'Clear alerts' })).toHaveFocus();
         await user.keyboard('{Enter}');
 
-        const clearedState = screen.getByLabelText("No alerts. You're all caught up.");
+        const clearedState = screen.getByLabelText(
+            'No alerts. Wallet activity, security, and price changes appear here.',
+        );
         await waitFor(() => expect(clearedState).toHaveFocus());
         expect(screen.queryByRole('list')).toBeNull();
     });
@@ -255,7 +257,7 @@ describe('AlertsRoute alert list', () => {
 
         expect(screen.queryByRole('list')).toBeNull();
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
-        expect(screen.getByText("You're all caught up.")).toBeTruthy();
+        expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
         expect(screen.queryByText(/unread$/)).toBeNull();
 
         first.unmount();

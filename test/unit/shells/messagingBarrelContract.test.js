@@ -101,13 +101,63 @@ const ARG = Object.freeze({
     offset: 0,
 });
 
+const SOURCE = Object.freeze({
+    address: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
+    publicKey: `02${'ab'.repeat(32)}`,
+    derivationPath: "m/84'/0'/0'/0/0",
+});
+const DESTINATION = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+
+// Fixed valid requests pin the message name and full payload independently of
+// shell parity, so the same accidental edit in every barrel still fails.
+const ACTION_SEND_CASES = [
+    ['composeForConfirm', 'action.composeForConfirm', {
+        walletId: 'w-1',
+        chainId: 'bitcoin-mainnet',
+        from: SOURCE,
+        actionData: { action: 'SEND', params: { TICK: 'PEPE', AMOUNT: '1', DESTINATION } },
+        encoderOpts: { rbf: true },
+    }],
+    ['sendToken', 'action.send', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet',
+        from: SOURCE, to: DESTINATION, tick: 'PEPE', amount: '1', memo: 'hello',
+    }],
+    ['dispenserAction', 'action.dispenser', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: {
+            VERSION: '0', GIVE_TICK: 'PEPE', GIVE_AMOUNT: '10',
+            GIVE_ESCROW: '100', GET_TICK: 'XCHAIN', GET_AMOUNT: '2',
+        },
+    }],
+    ['orderAction', 'action.order', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: {
+            VERSION: '0', GIVE_TICK: 'XCHAIN', GIVE_AMOUNT: '2',
+            GET_TICK: 'PEPE', GET_AMOUNT: '10',
+        },
+    }],
+    ['issueToken', 'action.issue', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: { VERSION: '0', TICK: 'PEPE', MAX_SUPPLY: '1000000', TRANSFER: DESTINATION },
+    }],
+    ['dividendAction', 'action.dividend', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: { VERSION: '0', TICK: 'PEPE', DIVIDEND_TICK: 'XCHAIN', AMOUNT: '0.1' },
+    }],
+    ['sweepToken', 'action.sweep', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        to: DESTINATION, balances: true, ownerships: true,
+        orders: false, swaps: false, dispensers: false,
+    }],
+];
+
 /**
  * Call one helper with the fixture in three positions and report the single
  * `sendMessage` envelope it produced, or how it declined to produce one.
  * The web barrel loads its host bridge lazily, so a helper reaches the
  * transport only after its returned promise settles; wait for that first.
  */
-async function dispatch(shell, fnName) {
+async function dispatch(shell, fnName, args = [ARG, ARG, ARG]) {
     shell.send.mockReset();
     shell.send.mockReturnValue(Promise.resolve({ ok: true }));
     for (const local of Object.values(webLocals)) {
@@ -116,7 +166,7 @@ async function dispatch(shell, fnName) {
     }
     let threw = null;
     try {
-        const out = shell.mod[fnName](ARG, ARG, ARG);
+        const out = shell.mod[fnName](...args);
         // Swallow the settled sentinel; an unhandled rejection here would
         // fail an unrelated test file, not this one.
         if (out && typeof out.then === 'function') await out.then(() => {}, () => {});
@@ -231,4 +281,17 @@ describe('messaging barrels: the shells agree on the wire', () => {
         expect(Object.keys(byShell || {}).sort()).toEqual(['desktop', 'extension popup', 'web']);
         for (const [type] of Object.values(byShell)) expect(type).toBe('wallet.passphrase.capture');
     });
+});
+
+describe('messaging barrels: action send arguments stay fixed', () => {
+    for (const shell of SHELLS) {
+        it(`${shell.name} records the expected compose and submit arguments`, async () => {
+            for (const [fnName, expectedType, request] of ACTION_SEND_CASES) {
+                const expectedRequest = JSON.parse(JSON.stringify(request));
+                const result = await dispatch(shell, fnName, [request]);
+                expect(result.threw, fnName).toBeNull();
+                expect(result.calls, fnName).toEqual([[expectedType, expectedRequest]]);
+            }
+        });
+    }
 });

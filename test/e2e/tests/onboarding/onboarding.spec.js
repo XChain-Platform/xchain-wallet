@@ -95,7 +95,7 @@ test.describe('onboarding', () => {
         await lockWallet(page);
         // Wrong password
 
-        await page.getByLabel('Password').fill('WRONG');
+        await page.getByLabel('Password', { exact: true }).fill('WRONG');
         await page.getByRole('button', { name: 'Unlock' }).click();
 
         await expect(page.getByRole('alert')).toHaveText(/incorrect password/i);

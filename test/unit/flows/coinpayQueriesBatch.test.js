@@ -222,6 +222,22 @@ describe('an explorer without the route is fallen back on and remembered', () =>
         expect(sdk.getCoinpayObligationsBatch).toHaveBeenCalledTimes(1);
         expect(sdk.getCoinpayObligations).toHaveBeenCalledTimes(3);
     });
+
+    it('rejects every caller when the fallback reader throws synchronously', async () => {
+        const unsupported = new Error('batch route unavailable');
+        unsupported.code = 'EXPLORER_BATCH_UNSUPPORTED';
+        const readFailure = new Error('SDK is not initialized');
+        const sdk = makeSdk({
+            batchImpl: async () => { throw unsupported; },
+            perAddressImpl: () => { throw readFailure; },
+        });
+        const registry = registryOf({ 'bitcoin-regtest': sdk });
+        const pending = ['A0', 'A1'].map((a) => call(registry, 'bitcoin-regtest', a).catch((e) => e));
+
+        await closeWindow();
+
+        await expect(Promise.all(pending)).resolves.toEqual([readFailure, readFailure]);
+    });
 });
 
 describe('a rate-limited batch rejects its callers instead of re-firing per address', () => {

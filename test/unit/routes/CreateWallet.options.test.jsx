@@ -214,8 +214,10 @@ describe('MnemonicGrid narrow layout', () => {
         expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*flex-wrap:\s*wrap;/s);
         expect(importCss).toMatch(/\.mnemonicHeader\s*>\s*\*\s*\{[^}]*min-width:\s*0;/s);
         expect(importCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
-        expect(importCss).toMatch(/\.laneSwitcher\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
-        expect(importCss).toMatch(/\.laneTab\s*\{[^}]*min-width:\s*0;/s);
+        // The import lane switcher is the kit Tabs bar: it fills the row and
+        // scrolls its tabs instead of letting them push the screen wider.
+        const tabsCss = readFileSync(resolve(process.cwd(), 'packages/core/src/ui/Tabs.module.css'), 'utf8');
+        expect(tabsCss).toMatch(/\.tabs\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow-x:\s*auto;/s);
         expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
     });
 });

@@ -67,6 +67,13 @@ let memoryFallback = null;
 // for. WebView storage is not a safe home for that on a native shell (SSC-7).
 /** @type {{ load: () => Promise<unknown>, save: (r: any) => Promise<void>, clear: () => Promise<void> } | null} */
 let persistentStore = null;
+let persistenceGeneration = 0;
+
+function persistBestEffort(operation) {
+    try {
+        void Promise.resolve(operation()).catch(() => {});
+    } catch (_err) { /* the synchronous cache remains authoritative */ }
+}
 
 export class DuressNotConfiguredError extends Error {
     constructor() {
@@ -91,7 +98,14 @@ function getStorage() {
 function coerceRecord(parsed) {
     const p = /** @type {any} */ (parsed);
     if (!p || typeof p.salt !== 'string' || typeof p.hash !== 'string') return null;
-    return p;
+    try {
+        if (base64ToBytes(p.salt).length !== 16 || base64ToBytes(p.hash).length !== 32) {
+            return null;
+        }
+        return p;
+    } catch (_err) {
+        return null;
+    }
 }
 
 /**
@@ -105,10 +119,23 @@ function coerceRecord(parsed) {
  * @returns {Promise<void>}
  */
 export async function configureDuressPersistence(store) {
+    if (store != null && (
+        typeof store.load !== 'function'
+        || typeof store.save !== 'function'
+        || typeof store.clear !== 'function'
+    )) {
+        throw new TypeError('configureDuressPersistence: store must implement load, save, and clear');
+    }
+    const generation = ++persistenceGeneration;
     persistentStore = store || null;
+    memoryFallback = null;
     if (!persistentStore) return;
+    const configuredStore = persistentStore;
     try {
-        applyExternalDuressRecord(await persistentStore.load());
+        const loaded = await configuredStore.load();
+        if (generation === persistenceGeneration && persistentStore === configuredStore) {
+            applyExternalDuressRecord(loaded);
+        }
     } catch (_err) {
         // Leave the cache empty. Failing closed here is not an option: there
         // is nothing to fail closed TO, and a wallet that refuses to unlock
@@ -122,11 +149,13 @@ export async function configureDuressPersistence(store) {
  * @param {unknown} raw
  */
 export function applyExternalDuressRecord(raw) {
+    persistenceGeneration += 1;
     memoryFallback = coerceRecord(raw);
 }
 
 /** Test seam: forget any injected persistence. */
 export function __resetDuressPersistenceForTests() {
+    persistenceGeneration += 1;
     persistentStore = null;
     memoryFallback = null;
 }
@@ -138,15 +167,7 @@ function readRecord() {
     try {
         const raw = store.getItem(STORAGE_KEY);
         if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (
-            !parsed
-            || typeof parsed.salt !== 'string'
-            || typeof parsed.hash !== 'string'
-        ) {
-            return null;
-        }
-        return parsed;
+        return coerceRecord(JSON.parse(raw));
     } catch (_err) {
         return null;
     }
@@ -154,11 +175,10 @@ function readRecord() {
 
 function writeRecord(record) {
     if (persistentStore) {
+        persistenceGeneration += 1;
         memoryFallback = record ? { ...record } : null;
-        try {
-            if (record === null) void persistentStore.clear();
-            else void persistentStore.save({ ...record });
-        } catch (_err) { /* best-effort; the cache holds it this session */ }
+        const store = persistentStore;
+        persistBestEffort(() => (record === null ? store.clear() : store.save({ ...record })));
         return;
     }
     const store = getStorage();

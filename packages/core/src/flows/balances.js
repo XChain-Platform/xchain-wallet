@@ -405,11 +405,21 @@ export async function addressMempool({ sdkRegistry, chainId, address, opts }) {
 export async function indexerWatermark({ sdkRegistry, chainId }) {
     if (!sdkRegistry) throw new Error('indexerWatermark: sdkRegistry is required');
     if (!chainId) throw new Error('indexerWatermark: chainId is required');
-    const sdk = sdkRegistry.get(chainId);
+    let sdk;
+    try {
+        sdk = sdkRegistry.get(chainId);
+    } catch {
+        return { chainId, watermark: null };
+    }
     if (!sdk || typeof sdk.getStatus !== 'function') {
         return { chainId, watermark: null };
     }
-    const status = await sdk.getStatus();
+    let status;
+    try {
+        status = await sdk.getStatus();
+    } catch {
+        return { chainId, watermark: null };
+    }
     const lastBlock = status && typeof status === 'object' ? status.last_block : null;
     if (!lastBlock || typeof lastBlock !== 'object') {
         return { chainId, watermark: null };

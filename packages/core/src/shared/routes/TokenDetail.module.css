@@ -55,6 +55,8 @@
     align-items: center;
     gap: var(--xc-space-2);
     box-shadow: var(--xc-shadow-sm);
+    min-height: 104px;
+    box-sizing: border-box;
 }
 
 .balanceHeroMain {
@@ -94,7 +96,7 @@
 .balanceHeroSwap,
 .balanceHeroEye {
     appearance: none;
-    background: rgba(255, 255, 255, 0.15);
+    background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
     border: none;
     color: var(--xc-on-accent);
     width: 28px;
@@ -107,7 +109,7 @@
 }
 
 .balanceHeroSwap:hover:not(:disabled),
-.balanceHeroEye:hover { background: rgba(255, 255, 255, 0.25); }
+.balanceHeroEye:hover { background: color-mix(in srgb, var(--xc-on-accent) 25%, transparent); }
 
 .balanceHeroSwap:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -145,7 +147,7 @@
     width: var(--xc-avatar-size-hero);
     height: var(--xc-avatar-size-hero);
     border-radius: var(--xc-avatar-shape);
-    background: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--xc-on-accent) 20%, transparent);
     color: var(--xc-on-accent);
     font-size: var(--xc-avatar-initials-hero);
     font-weight: 800;
@@ -200,12 +202,12 @@
 
 /* Unit code (BTC / USD / JPY / …) suffix next to the primary big
    amount. Half the size of the 32px amount so the digits stay the
-   primary visual anchor; slightly lower opacity to push the eye to
-   the number. Matches the Home total-balance hero treatment. */
+   primary visual anchor while the shared on-accent color keeps the
+   suffix readable. Matches the Home total-balance hero treatment. */
 .balanceHeroAmountCode {
     font-size: 16px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--xc-on-accent);
     margin-inline-start: 6px;
     letter-spacing: 0;
     white-space: nowrap;
@@ -218,7 +220,7 @@
 .balanceHeroNoteCode {
     font-size: 0.85em;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--xc-on-accent);
     margin-inline-start: var(--xc-space-1);
     white-space: nowrap;
     vertical-align: baseline;
@@ -226,7 +228,7 @@
 
 .balanceHeroHidden {
     letter-spacing: 0.15em;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--xc-on-accent);
 }
 
 .balanceHeroNote {
@@ -387,7 +389,10 @@
 .priceAlertCard {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--xc-space-2);
+    min-height: 54px;
+    box-sizing: border-box;
 }
 
 .priceAlertCard > button {
@@ -410,6 +415,22 @@
        quick-action buttons immediately below - same accent cue tying
        the chart card into the page's blue-highlighted controls. */
     border-color: var(--xc-accent-primary);
+}
+
+.marketHistorySlot {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 72px;
+}
+
+.officialBannerSlot {
+    min-height: 38px;
+}
+
+.supplyCard {
+    min-height: 118px;
+    box-sizing: border-box;
 }
 
 /* Adjacent metaBlocks inside an infoCard get a divider + vertical
@@ -946,8 +967,8 @@
 .officialBanner {
     margin: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
-    background: color-mix(in srgb, var(--xc-success, #14b86c) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-success, #14b86c) 40%, transparent);
+    background: var(--xc-success-bg);
+    border: 1px solid var(--xc-success);
     color: var(--xc-text);
     border-radius: var(--xc-radius-md);
     font-size: var(--xc-text-sm);

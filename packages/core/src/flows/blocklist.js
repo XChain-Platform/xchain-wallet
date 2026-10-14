@@ -136,7 +136,7 @@ export function isOriginBlocked(blocklist, origin) {
 }
 
 async function readSettings(vault) {
-    try { return await vault.settings.get(); } catch { return null; }
+    return vault.settings.get();
 }
 
 async function writeSettings(vault, next) {
@@ -264,24 +264,16 @@ export async function addBlockedOrigin({ vault, origin }) {
         list.push(normalized);
         nextSettings = { ...nextSettings, blockedOrigins: list };
     }
-    const evictedSiteIds = [];
+    let sites;
     if (parseWildcardPattern(normalized)) {
         // Wildcard: fall back to listing all sites + matching them
         // since findBy('origin', ...) only handles exact matches.
         const all = await vault.connectedSites.list();
-        for (const site of all) {
-            if (matchesWildcard(site.origin, normalized)) {
-                await vault.connectedSites.delete(site.id);
-                evictedSiteIds.push(site.id);
-            }
-        }
+        sites = all.filter((site) => matchesWildcard(site.origin, normalized));
     } else {
-        const sites = await vault.connectedSites.findBy('origin', normalized);
-        for (const site of sites) {
-            await vault.connectedSites.delete(site.id);
-            evictedSiteIds.push(site.id);
-        }
+        sites = await vault.connectedSites.findBy('origin', normalized);
     }
+    const evictedSiteIds = [];
     if (!already) {
         // Cluster S FOLLOWUP 4: only audit a real state change. Idempotent
         // re-adds don't pollute the log.
@@ -290,10 +282,16 @@ export async function addBlockedOrigin({ vault, origin }) {
             ...withAudit(nextSettings, {
                 action: 'add',
                 entry: normalized,
-                evictedSiteIds,
+                evictedSiteIds: sites.map((site) => site.id),
             }),
         };
+        // The block becomes durable before approved-site records are removed.
+        // A failed settings write therefore leaves every approval untouched.
         await writeSettings(vault, nextSettings);
+    }
+    for (const site of sites) {
+        await vault.connectedSites.delete(site.id);
+        evictedSiteIds.push(site.id);
     }
     return { blocked: normalized, alreadyBlocked: already, evictedSiteIds };
 }

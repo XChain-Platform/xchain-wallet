@@ -86,5 +86,22 @@ describe('<Tabs>', () => {
         expect(css).toMatch(/\.tabs::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
         expect(css).toMatch(/\.tab:focus-visible\s*\{[^}]*var\(--xc-control-focus-ring\)/s);
         expect(css).toMatch(/\.tab\[aria-selected='true'\]\s*\{[^}]*var\(--xc-control-selected\)/s);
+        // A short tab row shrinks and wraps its labels before it ever scrolls.
+        expect(css).toMatch(/\.tab\s*\{[^}]*flex:\s*0 1 auto;[^}]*white-space:\s*normal;/s);
+        expect(css).not.toMatch(/\.tab\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    });
+
+    it('can disable every tab while an owning flow is busy', () => {
+        render(
+            <Tabs
+                items={items}
+                value="coins"
+                onChange={() => {}}
+                disabled
+                aria-label="Busy tabs"
+            />,
+        );
+
+        expect(screen.getAllByRole('tab').every((tab) => tab.disabled)).toBe(true);
     });
 });

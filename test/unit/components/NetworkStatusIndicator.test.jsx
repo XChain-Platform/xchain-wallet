@@ -3,10 +3,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const reachability = vi.hoisted(() => ({
@@ -20,9 +20,27 @@ vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
 import { NetworkStatusIndicator } from '../../../packages/core/src/shared/components/NetworkStatusIndicator.jsx';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { VIEWPORT_CLAMP_MARGIN } from '../../../packages/core/src/shared/hooks/useViewportClamp.js';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+
+let nativeBack;
+let capacitorApp;
+
+beforeEach(() => {
+    resetBackStackForTests();
+    capacitorApp = {
+        addListener: vi.fn((_event, listener) => {
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn(),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
+});
 
 afterEach(() => {
     cleanup();
+    resetBackStackForTests();
+    delete globalThis.Capacitor;
     vi.restoreAllMocks();
     reachability.value = { overall: 'normal', perChain: [] };
 });
@@ -177,6 +195,19 @@ describe('NetworkStatusIndicator', () => {
             view.unmount();
             trigger = { left: 310, right: 348, bottom: 52 };
         }
+    });
+
+    it('closes the dialog on Android Back instead of minimizing the app', () => {
+        render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
+        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        fireEvent.click(trigger);
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
     it('is wired into every unlocked shell header', () => {

@@ -22,6 +22,7 @@ import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
 import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ScanRoute } from './ScanRoute.jsx';
 import {
     compareContactsByName,
@@ -290,7 +291,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             }
             await loadContacts();
         } catch (err) {
-            setLoadError(err?.message || 'Merge failed.');
+            setLoadError(userFacingMessage(err, 'Could not merge these contacts. Try again.'));
         } finally {
             setMerging(false);
         }
@@ -469,7 +470,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             await loadContacts();
             setMode(active ? 'detail' : 'list');
         } catch (err) {
-            setSubmitError(err?.message || 'Save failed.');
+            setSubmitError(userFacingMessage(err, 'Could not save this contact. Try again.'));
         } finally {
             setSubmitting(false);
         }
@@ -504,13 +505,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             await messaging.saveContact({ record: snapshot, expectedUpdatedAt: null });
                             await loadContacts();
                         } catch (err) {
-                            setLoadError(err?.message || 'Restore failed.');
+                            setLoadError(userFacingMessage(err, 'Could not restore this contact. Try again.'));
                         }
                     },
                 });
             }
         } catch (err) {
-            setLoadError(err?.message || 'Delete failed.');
+            setLoadError(userFacingMessage(err, 'Could not delete this contact. Try again.'));
         } finally {
             setDeleting(null);
         }
@@ -530,7 +531,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             });
             await loadContacts();
         } catch (err) {
-            setLoadError(err?.message || 'Delete failed.');
+            setLoadError(userFacingMessage(err, 'Could not delete this address. Try again.'));
         } finally {
             setDeleting(null);
         }
@@ -572,7 +573,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setAddAddrOpen(false);
             setAddAddrValue('');
         } catch (err) {
-            setAddAddrError(err?.message || 'Save failed.');
+            setAddAddrError(userFacingMessage(err, 'Could not save this address. Try again.'));
         } finally {
             setAddAddrSaving(false);
         }
@@ -998,6 +999,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <EmptyState
                     title="No contacts yet"
                     body="Saved contacts label addresses across the inbox and history."
+                    actionLabel="Create first contact"
+                    onAction={() => { setActiveId(null); startEdit(null); }}
+                    actionIcon={<Icon.PlusIcon />}
                 />
             ) : filteredContacts.length === 0 ? (
                 <EmptyState

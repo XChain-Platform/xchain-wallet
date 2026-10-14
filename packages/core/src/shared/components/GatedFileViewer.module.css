@@ -19,6 +19,11 @@
     /* Viewer width has no matching token and bounds long file content. */
     max-width: 520px;
     max-height: 85vh;
+    max-height: min(
+        85vh,
+        calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4))
+    );
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: var(--xc-surface);
@@ -60,6 +65,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-bg-muted);

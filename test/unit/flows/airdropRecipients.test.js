@@ -39,6 +39,7 @@ const REGTEST_LEGACY = 'mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn';
 const MAINNET_BECH32 = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
 const MAINNET_LEGACY = '1FWDonkMbC6hL64JiysuggHnUAw2CKWszs';
 const LITECOIN_BECH32 = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
+const LITECOIN_REGTEST_BECH32 = 'rltc1qmr46t4ca5wh35k6mczdzrkepqw2d8ne92hnush';
 const GARBAGE = 'notanaddress';
 
 const BTC_REGTEST = { coin: 'bitcoin', network: 'regtest' };
@@ -102,6 +103,7 @@ describe('classifyRecipients - network-aware validation', () => {
         const out = classifyRecipients([typo], BTC_MAINNET);
         expect(out.valid).toEqual([]);
         expect(out.invalid).toEqual([typo]);
+        expect(out.wrongNetwork).toEqual([]);
     });
 
     it('keeps the loose form-only check when no chain is known', () => {
@@ -139,6 +141,16 @@ describe('classifyRecipients - network-aware validation', () => {
             MAINNET_BECH32.toUpperCase(),
         ], BTC_MAINNET);
         expect(out.valid).toEqual([MAINNET_BECH32]);
+        expect(out.duplicates).toBe(1);
+    });
+
+    it('counts Litecoin regtest case variants as duplicates', () => {
+        const out = classifyRecipients([
+            LITECOIN_REGTEST_BECH32,
+            LITECOIN_REGTEST_BECH32.toUpperCase(),
+        ], { coin: 'litecoin', network: 'regtest' });
+
+        expect(out.valid).toEqual([LITECOIN_REGTEST_BECH32]);
         expect(out.duplicates).toBe(1);
     });
 });
@@ -179,6 +191,16 @@ describe('reconcileStoredList - post-index count check', () => {
         expect(reconcileStoredList([REGTEST_BECH32], [upper]).ok).toBe(true);
         expect(reconcileStoredList([REGTEST_BECH32], [REGTEST_LEGACY]).missing)
             .toEqual([REGTEST_BECH32]);
+    });
+
+    it('does not case-fold base58 addresses', () => {
+        const changedCase = `${MAINNET_LEGACY.slice(0, 2)}w${MAINNET_LEGACY.slice(3)}`;
+        expect(changedCase.toLowerCase()).toBe(MAINNET_LEGACY.toLowerCase());
+
+        const out = reconcileStoredList([MAINNET_LEGACY], [changedCase]);
+
+        expect(out.ok).toBe(false);
+        expect(out.missing).toEqual([MAINNET_LEGACY]);
     });
 
     it('treats a missing or unreadable stored list as everything dropped', () => {

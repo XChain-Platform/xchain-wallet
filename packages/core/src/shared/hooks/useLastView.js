@@ -112,7 +112,7 @@ export function useLastView({
         setRouteHistoryManaged(true);
         const onPop = (event) => {
             const snapshot = event.state?.xcRoute;
-            if (!snapshot || snapshot.walletId !== walletId || typeof snapshot.view !== 'string') return;
+            if (!snapshot || snapshot.walletId !== walletId || !RESUMABLE_SET.has(snapshot.view)) return;
             const params = normalizeRouteParams(snapshot.view, snapshot.params);
             if (PARAM_VIEWS.has(snapshot.view) && !params) return;
             const next = { view: snapshot.view, params };

@@ -45,6 +45,7 @@
 
 .iconButton {
     position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
     inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
     display: inline-flex;
@@ -68,6 +69,7 @@
 
 .readOnlyValue {
     position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
     inset-inline-start: var(--address-control-padding-x);
     inset-inline-end: calc(var(--address-control-height) + var(--xc-space-2));
     top: calc(20px + var(--xc-space-1));

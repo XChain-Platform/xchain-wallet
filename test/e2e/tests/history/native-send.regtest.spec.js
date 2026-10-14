@@ -211,7 +211,7 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
             await unlock.or(page.getByRole('navigation', { name: 'Primary navigation' })).first()
                 .waitFor({ state: 'visible', timeout: 150_000 });
             if (await unlock.count() > 0) {
-                await page.getByLabel('Password').fill(PASSWORD);
+                await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
                 await unlock.click();
                 await expect(page.getByRole('navigation', { name: 'Primary navigation' }))
                     .toBeVisible({ timeout: 150_000 });

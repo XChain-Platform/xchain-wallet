@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createContext, useContext, useLayoutEffect, useRef } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './Screen.module.css';
 
 const MAIN_ID = 'xc-main';
@@ -23,8 +23,12 @@ const ScrollRestorationContext = createContext(null);
  */
 export function ScrollRestoration({ routeKey, children }) {
     const positionsRef = useRef(new Map());
+    const value = useMemo(
+        () => ({ routeKey, positions: positionsRef.current }),
+        [routeKey],
+    );
     return (
-        <ScrollRestorationContext.Provider value={{ routeKey, positions: positionsRef.current }}>
+        <ScrollRestorationContext.Provider value={value}>
             {children}
         </ScrollRestorationContext.Provider>
     );

@@ -89,6 +89,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
+    const keepKeyboardDismissedRef = useRef(false);
     const phraseGeneratedRef = useRef(false);
     const creationInFlightRef = useRef(false);
 
@@ -98,14 +99,21 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     useEffect(() => {
         const id = setTimeout(() => {
-            if (stage === 'password') passwordRef.current?.focus();
+            if (keepKeyboardDismissedRef.current) {
+                keepKeyboardDismissedRef.current = false;
+                const heading = stageFormRef.current?.querySelector('h1');
+                if (heading instanceof HTMLElement) {
+                    heading.tabIndex = -1;
+                    heading.focus();
+                }
+            } else if (stage === 'password') passwordRef.current?.focus();
             else if (stage === 'verify') firstQuizInputRef.current?.focus();
             else headingRef.current?.focus();
         }, 0);
         return () => clearTimeout(id);
     }, [stage]);
 
-    useBackHandler(handleBack, stage === 'persisting');
+    useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice');
 
     function clearEntrySecrets() {
         setPassword('');
@@ -141,6 +149,14 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         }
         clearEntrySecrets();
         onBack();
+    }
+
+    function handleNativeBack() {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        // Returning from the phrase to the password form must not reopen the
+        // software keyboard that the edge gesture just dismissed.
+        keepKeyboardDismissedRef.current = stage === 'mnemonic';
+        handleBack();
     }
 
     function handlePasswordSubmit(event) {
@@ -277,7 +293,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         <PageHeader
             onBack={stage === 'verify' ? undefined : handleBack}
             backLabel={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
-            backDisabled={stage === 'persisting'}
+            backDisabled={stage === 'persisting' || stage === 'ads-notice'}
             title={headerTitle}
             titleRef={headingRef}
         />

@@ -52,6 +52,8 @@ export function IdentityAvatar({
     tone,
     variant = 'identity',
     src = null,
+    srcSet,
+    imagePixels,
     className = '',
 }) {
     const [failedSrc, setFailedSrc] = useState(null);
@@ -95,8 +97,13 @@ export function IdentityAvatar({
             {showImage ? (
                 <img
                     src={src}
+                    srcSet={srcSet}
+                    sizes={srcSet && imagePixels ? `${imagePixels}px` : undefined}
+                    width={imagePixels}
+                    height={imagePixels}
                     alt=""
                     aria-hidden="true"
+                    decoding="async"
                     onError={() => setFailedSrc(src)}
                     style={{
                         position: 'absolute',

@@ -281,7 +281,7 @@ describe('Receive QR copy and share toasts', () => {
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 }),
             ));
-            const address = await screen.findByRole('textbox', { name: 'Copy payment link for receive address' });
+            const address = await screen.findByRole('textbox', { name: 'Daily deposits' });
             expect(address.readOnly).toBe(true);
             expect(address.style.userSelect).toBe('text');
         } finally {
@@ -299,7 +299,7 @@ describe('Receive QR copy and share toasts', () => {
         expect(qrPixelSizeFor(0, 3)).toBe(512);
     });
 
-    it('copies the same BIP21 payment request that the QR encodes', async () => {
+    it('copies the exact visible address without payment-request formatting', async () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
@@ -308,7 +308,7 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', {
-            name: 'Copy payment link for receive address',
+            name: 'Daily deposits',
         })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeTruthy();
         const amount = await screen.findByRole('textbox', { name: /^Amount/ });
@@ -325,14 +325,15 @@ describe('Receive QR copy and share toasts', () => {
         );
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
 
-        await waitFor(() => expect(writeText).toHaveBeenCalledWith(paymentRequest));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(ADDRESS.address));
+        expect(writeText).not.toHaveBeenCalledWith(paymentRequest);
         expect(showToast).toHaveBeenCalledWith({
-            message: 'Payment link copied to clipboard.',
+            message: 'Address copied to clipboard.',
             variant: 'default',
         });
     });
 
-    it('converts fiat to coin precision and updates both QR and copied request', async () => {
+    it('converts fiat to coin precision without changing the copied address', async () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
@@ -353,10 +354,11 @@ describe('Receive QR copy and share toasts', () => {
         )[0];
 
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
-        await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(paymentRequest));
+        await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(ADDRESS.address));
+        expect(writeText).not.toHaveBeenCalledWith(paymentRequest);
     });
 
-    it('clears the amount from the QR and copied request', async () => {
+    it('clears the amount from the QR without changing the copied address', async () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
@@ -371,9 +373,7 @@ describe('Receive QR copy and share toasts', () => {
         )).toBe(true));
         fireEvent.change(amount, { target: { value: '' } });
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
-        await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(
-            `bitcoin:${ADDRESS.address}`,
-        ));
+        await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(ADDRESS.address));
         await waitFor(() => expect(qrToDataURL).toHaveBeenLastCalledWith(
             `bitcoin:${ADDRESS.address}`,
             expect.any(Object),
@@ -631,7 +631,7 @@ describe('Receive address handling', () => {
         expect(screen.getByRole('button', { name: 'Verify on your Ledger' })).toBeInTheDocument();
     });
 
-    it('switches supported address types, generates that type, shows its label, and copies its request', async () => {
+    it('switches supported address types, generates that type, shows its label, and copies its address', async () => {
         const legacy = {
             id: 'a2',
             address: 'mlegacyexample',
@@ -675,7 +675,7 @@ describe('Receive address handling', () => {
 
         fireEvent.click(generatedField);
         await waitFor(() => expect(writeText).toHaveBeenCalled());
-        expect(writeText.mock.calls.at(-1)[0]).toBe(`bitcoin:${generated.address}`);
+        expect(writeText.mock.calls.at(-1)[0]).toBe(generated.address);
         expect(qrToDataURL.mock.calls.at(-1)[0]).toBe(`bitcoin:${generated.address}`);
     });
 
@@ -718,7 +718,7 @@ describe('Receive address handling', () => {
         expect(screen.queryByRole('img', { name: /QR code for/ })).toBeNull();
         expect(screen.getByText('Rendering QR…')).toBeInTheDocument();
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
-        await waitFor(() => expect(writeText.mock.calls.at(-1)[0]).toContain('amount=2'));
+        await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(ADDRESS.address));
 
         resolveQr[1]('data:image/png;base64,Y3VycmVudA==');
         const currentQr = await screen.findByRole('img', { name: /QR code for/ });

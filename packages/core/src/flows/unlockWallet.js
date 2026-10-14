@@ -178,6 +178,9 @@ export async function unlockWallet({
     }
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
+    if (wallet.id !== walletId) {
+        throw new Error('unlockWallet: loaded wallet record does not match walletId');
+    }
     return unlockWalletRecord({
         wallet,
         password,

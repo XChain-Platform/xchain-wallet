@@ -149,7 +149,12 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     // can't be bypassed via the unlocked-vault Add-Wallet shortcut.
     const [licenseAcceptedAt, setLicenseAcceptedAt] = useState(() => readAcceptedAt());
     const [licenseAcceptedVersion, setLicenseAcceptedVersion] = useState(() => readAcceptedVersion());
-    const [scrolledToEnd, setScrolledToEnd] = useState(false);
+    // Two ways to have seen every term: the user scrolled to the end (kept
+    // for good), or the whole text fits in the panel right now (live: it
+    // turns back off if fonts load or the panel shrinks and text overflows).
+    const [scrolledByUser, setScrolledToEnd] = useState(false);
+    const [termsFit, setTermsFit] = useState(false);
+    const scrolledToEnd = scrolledByUser || termsFit;
     const [licenseAck, setLicenseAck] = useState(false);
     // §25.2 / FOLLOWUP 3: the first-time explainer carousel shows once,
     // only on the fresh-install path (never the unlocked-vault Add-Wallet
@@ -165,19 +170,40 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         // Recheck after layout changes as well as on first paint. Font loading,
         // window resizing, and shell chrome can turn an overflowing panel into
         // one whose full contents are already visible without firing `scroll`.
+        // Only a styled, scrollable panel can prove the terms fit: before the
+        // stylesheet applies the panel is unconstrained, so every line
+        // "fits" and the gate would unlock without the terms being shown.
         const checkVisible = () => {
-            if (el.scrollHeight <= el.clientHeight + 4) setScrolledToEnd(true);
+            const overflowY = globalThis.getComputedStyle?.(el)?.overflowY;
+            const scrollable = overflowY === 'auto' || overflowY === 'scroll';
+            setTermsFit(scrollable && el.clientHeight > 0 && el.scrollHeight <= el.clientHeight + 4);
         };
         checkVisible();
+
+        // Web fonts can arrive after first paint and make the text taller
+        // without resizing the panel, so recheck when they finish loading.
+        let cancelled = false;
+        globalThis.document?.fonts?.ready?.then?.(() => {
+            if (!cancelled) checkVisible();
+        });
 
         if (typeof ResizeObserver === 'function') {
             const observer = new ResizeObserver(checkVisible);
             observer.observe(el);
-            return () => observer.disconnect();
+            // The text block's own height changes (font swap, wrapping)
+            // without the panel resizing, so watch the content too.
+            for (const child of el.children) observer.observe(child);
+            return () => {
+                cancelled = true;
+                observer.disconnect();
+            };
         }
 
         globalThis.addEventListener?.('resize', checkVisible);
-        return () => globalThis.removeEventListener?.('resize', checkVisible);
+        return () => {
+            cancelled = true;
+            globalThis.removeEventListener?.('resize', checkVisible);
+        };
     }, [licenseSatisfied]);
 
     function handleLicenseScroll(event) {
@@ -356,6 +382,8 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             <Screen variant={variant} header={null}>
                 <FormPage
                     label="License agreement"
+                    fill
+                    fullWidth
                     title="License agreement"
                     visual={(
                         <img

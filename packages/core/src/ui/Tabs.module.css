@@ -4,7 +4,7 @@
     align-items: stretch;
     width: 100%;
     min-width: 0;
-    height: var(--xc-control-h-md);
+    min-height: var(--xc-control-h-md);
     overflow-x: auto;
     overflow-y: hidden;
     border-bottom: 1px solid var(--xc-control-border);
@@ -22,12 +22,14 @@
     appearance: none;
     box-sizing: border-box;
     display: inline-flex;
-    flex: 0 0 auto;
+    /* Tabs keep their natural width but may shrink to their longest word and
+       wrap their labels at spaces, so a short row of tabs fits a 320px phone
+       without a nested scroller; a row that still cannot fit scrolls. */
+    flex: 0 1 auto;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-2);
-    height: 100%;
-    min-height: var(--xc-tap-min);
+    min-height: var(--xc-control-h-md);
     padding: 0 var(--xc-space-3);
     border: 0;
     border-bottom: 2px solid transparent;
@@ -36,7 +38,8 @@
     font: inherit;
     font-size: var(--xc-text-sm);
     font-weight: 600;
-    white-space: nowrap;
+    white-space: normal;
+    text-align: center;
     cursor: pointer;
     transition: background var(--xc-transition), color var(--xc-transition), border-color var(--xc-transition);
 }

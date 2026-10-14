@@ -181,6 +181,7 @@ export async function deriveChangeAddress({
 
     const account = await vault.accounts.get(sourceRecord.accountId);
     if (!account) return null;
+    if (account.walletId !== walletId) return null;
 
     // Keep the change output on the SAME script type as the spender. A
     // p2wpkh spend whose change lands in p2pkh is a louder chain-analysis

@@ -119,4 +119,15 @@ describe('resolveSdkFactory', () => {
         await expect(resolveSdkFactory({ venue: 'dev-mock' }))
             .rejects.toThrow(/devMockFactory is required/);
     });
+
+    it('rejects an unknown venue instead of serving fake data', async () => {
+        const importSdk = vi.fn(async () => ({ XChainSDK: FakeXChainSDK }));
+
+        await expect(resolveSdkFactory({
+            devMockFactory: devMock,
+            venue: 'raed',
+            importSdk,
+        })).rejects.toThrow('unknown SDK venue "raed"');
+        expect(importSdk).not.toHaveBeenCalled();
+    });
 });

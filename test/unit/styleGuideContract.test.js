@@ -35,9 +35,14 @@ describe('STYLE_GUIDE component contracts', () => {
             ));
             expect(guide).toContain(`\`--xc-control-h-${size}\``);
         }
-        expect(guide).toContain('`sm` | `--xc-control-h-sm`, 32px');
-        expect(guide).toContain('`md` | `--xc-control-h-md`, 40px');
-        expect(guide).toContain('`lg` | `--xc-control-h-lg`, 48px');
+        expect(guide).toContain('`sm` | `--xc-control-h-sm`, 28px (36px on touch)');
+        expect(guide).toContain('`md` | `--xc-control-h-md`, 36px (44px on touch)');
+        expect(guide).toContain('`lg` | `--xc-control-h-lg`, 44px (48px on touch)');
+        // Every badge geometry token in tokens.css has a row in the guide.
+        const tokens = read('packages/core/src/ui/tokens.css');
+        const badgeTokens = [...new Set(tokens.match(/--xc-badge-(?!multisig)[a-z-]+(?=:)/g))];
+        expect(badgeTokens.length).toBeGreaterThan(0);
+        for (const token of badgeTokens) expect(guide).toContain(`| \`${token}\` |`);
         expect(section).toMatch(/import \{ Button, Icon, Input \}/);
         expect(section).toMatch(/\['sm', 'md', 'lg'\]\.map/);
         expect(section).toMatch(/<Input[\s\S]*?size=\{size\}[\s\S]*?<Button[\s\S]*?size=\{size\}/);
@@ -99,14 +104,17 @@ describe('STYLE_GUIDE component contracts', () => {
         const css = read('packages/core/src/ui/Input.module.css');
         const tokens = read('packages/core/src/ui/tokens.css');
         expect(source).toContain("size = 'md'");
-        for (const [size, height] of [['sm', '32px'], ['md', '40px'], ['lg', '48px']]) {
+        // Heights come from the shared control-size tokens, so the CSS names the
+        // token per size and tokens.css owns the pixel values.
+        expect(css).toMatch(/\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height\)/s);
+        for (const [size, height] of [['sm', '28px'], ['md', '36px'], ['lg', '44px']]) {
             expect(css).toMatch(new RegExp(
                 `\\.${size}\\s*\\{[^}]*--xc-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
                 's',
             ));
             expect(tokens).toContain(`--xc-control-h-${size}: ${height};`);
         }
-        expect(guide).toContain('Its `size` prop is `sm` (32px), `md` (40px, default), or `lg` (48px');
+        expect(guide).toContain('Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px');
         expect(guide).toContain('<Input label="Amount" size="lg" />');
         expect(guide).not.toContain("fontSize: 'var(--xc-text-lg)'");
     });

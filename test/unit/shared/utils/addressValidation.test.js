@@ -241,6 +241,19 @@ describe('detectAddressChain', () => {
         expect(detectAddressChain('tb1qnotreallyvalid')).toBeNull();
     });
 
+    it('rejects a checksummed legacy payload with the wrong length', () => {
+        const longPayload = base58check(sha256).encode(new Uint8Array([
+            0x00,
+            ...new Uint8Array(21).fill(7),
+        ]));
+
+        expect(detectAddressChain(longPayload)).toBeNull();
+    });
+
+    it('rejects a checksummed legacy address with an unknown version byte', () => {
+        expect(detectAddressChain(legacy(0x42))).toBeNull();
+    });
+
     it('rejects mixed-case bech32 instead of repairing it before checksum validation', () => {
         const mixedCase = `${REAL_BCRT.slice(0, 6).toUpperCase()}${REAL_BCRT.slice(6)}`;
         expect(detectAddressChain(mixedCase)).toBeNull();

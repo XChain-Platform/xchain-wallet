@@ -14,6 +14,33 @@ import {
     isAutoLockHeld,
 } from './autoLockGuard.js';
 
+const CLOCK_DRIFT_TOLERANCE_MS = 5 * 60 * 1000;
+
+function monotonicNow() {
+    return typeof globalThis.performance?.now === 'function'
+        ? globalThis.performance.now()
+        : Date.now();
+}
+
+/**
+ * Measure an in-process idle interval without trusting a large wall-clock jump.
+ * Small differences preserve elapsed time across ordinary timer throttling,
+ * while a clock correction falls back to the monotonic clock.
+ */
+export function clockSafeElapsed(
+    wallStartedAt,
+    monotonicStartedAt,
+    wallNow = Date.now(),
+    monotonicCurrent = monotonicNow(),
+) {
+    const wallElapsed = Math.max(0, wallNow - wallStartedAt);
+    const monotonicElapsed = Math.max(0, monotonicCurrent - monotonicStartedAt);
+    if (Math.abs(wallElapsed - monotonicElapsed) > CLOCK_DRIFT_TOLERANCE_MS) {
+        return monotonicElapsed;
+    }
+    return Math.max(wallElapsed, monotonicElapsed);
+}
+
 /**
  * Foreground auto-lock timer (§26).
  *
@@ -62,7 +89,7 @@ export function useAutoLock(
         onDeferred,
     } = {},
 ) {
-    const lastActivity = useRef(Date.now());
+    const lastActivity = useRef({ wall: Date.now(), monotonic: monotonicNow() });
     const onLockRef = useRef(onLock);
     const onDeferredRef = useRef(onDeferred);
     const checkNowRef = useRef(() => false);
@@ -70,7 +97,7 @@ export function useAutoLock(
     onDeferredRef.current = onDeferred;
 
     useEffect(() => {
-        if (enabled) lastActivity.current = Date.now();
+        if (enabled) lastActivity.current = { wall: Date.now(), monotonic: monotonicNow() };
     }, [enabled]);
 
     useEffect(() => {
@@ -80,7 +107,7 @@ export function useAutoLock(
         }
         let deferred = false;
         const bump = () => {
-            lastActivity.current = Date.now();
+            lastActivity.current = { wall: Date.now(), monotonic: monotonicNow() };
             deferred = false;
         };
         const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
@@ -90,13 +117,20 @@ export function useAutoLock(
         let cancelled = false;
         let handle;
         function schedule() {
-            const elapsed = Date.now() - lastActivity.current;
+            const elapsed = clockSafeElapsed(
+                lastActivity.current.wall,
+                lastActivity.current.monotonic,
+            );
             const remaining = Math.max(0, idleMs - elapsed);
             handle = window.setTimeout(tick, Math.min(tickMs, remaining));
         }
         function tick() {
             if (cancelled) return false;
-            if (Date.now() - lastActivity.current >= idleMs) {
+            const elapsed = clockSafeElapsed(
+                lastActivity.current.wall,
+                lastActivity.current.monotonic,
+            );
+            if (elapsed >= idleMs) {
                 if (isAutoLockHeld()) {
                     if (!deferred) onDeferredRef.current?.();
                     deferred = true;
@@ -109,7 +143,7 @@ export function useAutoLock(
                 // session unlocked with no timer for the rest of its life.
                 // The successful case tears the hook down anyway: the shell
                 // flips to `locked` and passes `enabled: false`.
-                lastActivity.current = Date.now();
+                lastActivity.current = { wall: Date.now(), monotonic: monotonicNow() };
                 deferred = false;
                 schedule();
                 return true;

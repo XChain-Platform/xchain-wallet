@@ -526,7 +526,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 <EmptyState
                     title={SIGNED_NOT_BROADCAST_TITLE}
                     titleAs="h3"
-                    body="Your order is signed but couldn't reach the network just now. It's waiting in the queued-transactions banner and only goes out when you broadcast it from there; the wallet reminds you when the network is back. Don't place it again."
+                    body="It waits in the queued-transactions banner until you broadcast it from there, and the wallet reminds you when the network is back, so don't place it again."
                 />
             );
         }

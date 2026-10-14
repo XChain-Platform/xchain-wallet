@@ -69,7 +69,7 @@ test.describe('keyboard shortcut residuals', () => {
         await expect(unlockButton(page)).toBeVisible();
     });
 
-    test('History: / focuses search, e stays inert on an empty history (§34.2)', async ({ page }) => {
+    test('History: / and e stay inert on an empty history (§34.2)', async ({ page }) => {
         await createWallet(page);
         await page.keyboard.press('g');
         await page.keyboard.press('h');
@@ -77,18 +77,17 @@ test.describe('keyboard shortcut residuals', () => {
             .toHaveAttribute('aria-current', 'page');
         // History is a deferred route: the nav marks it current before the
         // screen (and its shortcut listener) has mounted, so wait for it.
-        await expect(page.getByRole('searchbox', { name: 'Search history' })).toBeVisible();
+        await expect(page.getByRole('list', { name: 'History' })).toBeAttached();
 
+        // A new wallet has no history rows, so the filters and the Export
+        // button are not rendered and neither shortcut has a target. History
+        // with rows is covered by test/unit/routes/History.filters.test.jsx and
+        // History.export.test.jsx, and the key bindings by
+        // test/unit/keyboard/useScreenShortcuts.test.jsx.
+        await expect(page.getByRole('searchbox', { name: 'Search history' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Export…' })).toHaveCount(0);
         await page.keyboard.press('/');
-        await expect(page.getByRole('searchbox', { name: 'Search history' })).toBeFocused();
-        // '/' inside the (now focused) input must NOT re-trigger; blur first.
-        await page.keyboard.press('Escape');
-        await page.getByRole('searchbox', { name: 'Search history' }).blur();
-
-        // A new wallet has no history rows, so the Export button is disabled
-        // and its shortcut must not reach the same action. The opening path
-        // with rows is covered in test/unit/routes/History.export.test.jsx.
-        await expect(page.getByRole('button', { name: 'Export…' })).toBeDisabled();
+        await expect(page.getByRole('searchbox', { name: 'Search history' })).toHaveCount(0);
         await page.keyboard.press('e');
         await expect(page.getByRole('dialog', { name: 'Export history' })).toHaveCount(0);
     });

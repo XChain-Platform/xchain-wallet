@@ -22,6 +22,10 @@ const balanceListCss = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/components/BalanceList.module.css',
 ), 'utf8');
+const tokenPickerSource = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/TokenPicker.jsx',
+), 'utf8');
 const balances = {
     'bitcoin-mainnet': [{
         address: 'bc1qpicker',
@@ -89,7 +93,9 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(tokens).toHaveAttribute('aria-selected', 'false');
         expect(tokens).toHaveAttribute('tabindex', '-1');
 
-        fireEvent.click(tokens);
+        all.focus();
+        fireEvent.keyDown(all, { key: 'ArrowLeft' });
+        expect(tokens).toHaveFocus();
         expect(all).toHaveAttribute('aria-selected', 'false');
         expect(all).toHaveAttribute('tabindex', '-1');
         expect(tokens).toHaveAttribute('aria-selected', 'true');
@@ -238,6 +244,16 @@ describe('TokenPicker asset visibility and filtering', () => {
 });
 
 describe('TokenPicker keyboard and return behavior', () => {
+    // The asset-kind tabs are the kit Tabs, so the tab stop is declared once
+    // in Tabs.jsx and the route renders no tab buttons of its own.
+    it('declares one tab stop for each asset-kind tab', () => {
+        const tabsSource = readFileSync(join(process.cwd(), 'packages/core/src/ui/Tabs.jsx'), 'utf8');
+        expect(tokenPickerSource).toMatch(/<Tabs\b/);
+        expect(tokenPickerSource).not.toMatch(/role="tab"/);
+        const kindTab = tabsSource.match(/<button[\s\S]*?role="tab"[\s\S]*?>/)?.[0] || '';
+        expect(kindTab.match(/\btabIndex=/g)).toHaveLength(1);
+    });
+
     it('applies the current search before Enter chooses a chain', async () => {
         const onSelect = vi.fn();
         mount({ onSelect });

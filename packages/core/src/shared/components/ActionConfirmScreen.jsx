@@ -184,7 +184,7 @@ export function ActionConfirmScreen({
     const composed = confirmAction.composed;
     const exactSats = composed?.networkFeeSats;
     const descriptor = composed?.chainId ? chainRegistry.get(composed.chainId) : null;
-    const ticker = coinTicker || nativeTickerFor(composed?.chainId);
+    const ticker = coinTicker || nativeTickerFor(composed?.chainId || chainId);
     // An envelope's total covers its commit and its reveal, and says so.
     const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
     const exactCoinAmount = Number.isFinite(exactSats)
@@ -202,13 +202,14 @@ export function ActionConfirmScreen({
         ? `No change output was created. Any remainder below ${formatNativeBaseUnits(dustChangeLimit, descriptor)} ${ticker}`
             + ' is included in the network fee shown above.'
         : null;
+    const unavailableFeeText = ticker ? `Network fee estimate unavailable (${ticker}).` : null;
     const displayedFee = dustChangeText ? (
         <>
             {exactFeeText}
             <br />
             <span data-testid="confirm-dust-change">{dustChangeText}</span>
         </>
-    ) : (exactFeeText || feeText);
+    ) : (exactFeeText || feeText || unavailableFeeText);
 
     // (c): still the host's decode of the composed bytes, with the
     // outcome INDEX annotated by the market's own label for it. The index

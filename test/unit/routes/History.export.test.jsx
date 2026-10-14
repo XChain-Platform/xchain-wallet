@@ -163,9 +163,8 @@ describe('History export button', () => {
             expect(ruleBody(phone, '.exportControls')).toMatch(
                 /flex-direction:\s*column[\s\S]*align-items:\s*stretch/,
             );
-            expect(ruleBody(phone, '.exportTrigger')).toMatch(
-                /width:\s*100%[\s\S]*box-sizing:\s*border-box/,
-            );
+            // The export trigger is a kit Button; the stretched column above
+            // gives it the full row width on a phone.
             expect(ruleBody(phone, '.body')).toMatch(
                 /padding-bottom:\s*calc\(3\.5rem \+ env\(safe-area-inset-bottom, 0px\)\)/,
             );

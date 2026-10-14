@@ -405,6 +405,9 @@ export async function finalizeMultisigSigningSession({
     broadcast = false,
 }) {
     if (!vault) throw new Error('finalizeMultisigSigningSession: vault is required');
+    if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('finalizeMultisigSigningSession: sessionId is required');
+    }
     const session = ensureSession(await vault.multisigSigningSessions.get(sessionId), sessionId);
 
     if (broadcast) {

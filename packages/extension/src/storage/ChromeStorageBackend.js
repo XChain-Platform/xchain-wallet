@@ -21,7 +21,7 @@
 
 import { storage as coreStorage, crypto as coreCrypto } from '@xchain-wallet/core';
 
-const { StorageBackend } = coreStorage;
+const { StorageBackend, VaultCorruptError } = coreStorage;
 const { bytesToBase64, base64ToBytes } = coreCrypto;
 
 export const DEFAULT_STORAGE_KEY = 'xchain-wallet:vault';
@@ -62,11 +62,26 @@ export class ChromeStorageBackend extends StorageBackend {
         const encoded = result?.[this._key];
         if (encoded == null) return null;
         if (typeof encoded !== 'string') {
-            throw new Error(
+            throw new VaultCorruptError(
                 `ChromeStorageBackend.load: unexpected value type "${typeof encoded}" at key "${this._key}"`,
             );
         }
-        return base64ToBytes(encoded);
+        if (encoded.length === 0) {
+            throw new VaultCorruptError(
+                `ChromeStorageBackend.load: empty vault at key "${this._key}"`,
+            );
+        }
+        try {
+            const blob = base64ToBytes(encoded);
+            if (bytesToBase64(blob) !== encoded) {
+                throw new Error('non-canonical base64');
+            }
+            return blob;
+        } catch (err) {
+            throw new VaultCorruptError(
+                `ChromeStorageBackend.load: invalid base64 at key "${this._key}": ${err?.message || err}`,
+            );
+        }
     }
 
     /** @param {Uint8Array} blob */
@@ -74,6 +89,11 @@ export class ChromeStorageBackend extends StorageBackend {
         if (!(blob instanceof Uint8Array)) {
             throw new Error(
                 'ChromeStorageBackend.save: blob must be a Uint8Array',
+            );
+        }
+        if (blob.length === 0) {
+            throw new Error(
+                'ChromeStorageBackend.save: refusing to persist an empty blob',
             );
         }
         await this._storage.set({ [this._key]: bytesToBase64(blob) });

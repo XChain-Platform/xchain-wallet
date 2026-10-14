@@ -114,7 +114,7 @@ test.describe('adding a second wallet', () => {
         const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
         await unlock.or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: KDF_STEP_MS });
         if (await unlock.count() > 0) {
-            await page.getByLabel('Password').fill(PASSWORD);
+            await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
             await unlock.click();
             await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
         }

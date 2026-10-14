@@ -25,6 +25,7 @@ import styles from './ListRow.module.css';
  * @param {string} [props.href]
  * @param {(event: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
  * @param {'button' | 'submit' | 'reset'} [props.type]
+ * @param {string} [props.tooltip]   native title attribute; `title` is the row heading
  * @param {string} [props.className]
  */
 export function ListRow({
@@ -36,6 +37,7 @@ export function ListRow({
     href,
     onClick,
     type = 'button',
+    tooltip,
     className,
     ...rest
 }) {
@@ -55,6 +57,7 @@ export function ListRow({
                 className,
             ].filter(Boolean).join(' ')}
             {...componentProps}
+            title={tooltip}
             {...rest}
         >
             {leading ? <span className={styles.leading}>{leading}</span> : null}

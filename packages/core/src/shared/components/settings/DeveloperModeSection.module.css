@@ -44,6 +44,7 @@
 
 .compactSelect {
     width: auto;
+    min-height: var(--xc-tap-min);
     cursor: pointer;
 }
 

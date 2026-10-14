@@ -46,34 +46,6 @@
     color: var(--xc-text);
 }
 
-.escapeLink {
-    align-self: center;
-    max-width: 100%;
-    background: none;
-    border: none;
-    padding: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    text-decoration: underline;
-    /* The underline needs a sub-grid offset to remain visually distinct. */
-    text-underline-offset: 3px;
-    font-family: inherit;
-    line-height: 1.4;
-    white-space: normal;
-}
-
-.escapeLink:hover {
-    color: var(--xc-text);
-}
-
-.escapeLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
-    /* The focus outline stays close to the compact text link. */
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
-}
-
 .wipeConfirm {
     display: flex;
     flex-direction: column;

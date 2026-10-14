@@ -677,7 +677,7 @@ function CustomChainsRow({ developerMode }) {
         >
             {loadError ? <Status text={loadError} tone="error" /> : null}
             {!loading && chains.length === 0 && !loadError ? (
-                <EmptyState title="No custom chains yet." titleAs="h3" />
+                <EmptyState title="No custom chains yet" titleAs="h3" body="Chains you add here appear in this list." />
             ) : null}
             {chains.length > 0 ? (
                 <>

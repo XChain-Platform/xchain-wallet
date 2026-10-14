@@ -384,9 +384,20 @@ describe('Onboarding: license gate', () => {
         );
     }
 
-    async function withElementDimensions({ scrollHeight, clientHeight }, run) {
+    async function withElementDimensions({ scrollHeight, clientHeight, styled = true }, run) {
         const scrollDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
         const clientDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+        // jsdom applies no CSS modules, so the terms panel reports the scroll
+        // styling its stylesheet gives it in a browser (or none, to model
+        // the moment before the stylesheet applies).
+        const realGetComputedStyle = window.getComputedStyle;
+        const styleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+            const style = realGetComputedStyle.call(window, el, pseudo);
+            if (el?.getAttribute?.('aria-label') !== 'License terms') return style;
+            return new Proxy(style, {
+                get: (target, key) => (key === 'overflowY' ? (styled ? 'auto' : 'visible') : Reflect.get(target, key)),
+            });
+        });
         Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
             configurable: true,
             get: () => typeof scrollHeight === 'function' ? scrollHeight() : scrollHeight,
@@ -398,12 +409,22 @@ describe('Onboarding: license gate', () => {
         try {
             return await run();
         } finally {
+            styleSpy.mockRestore();
             if (scrollDescriptor) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollDescriptor);
             else delete HTMLElement.prototype.scrollHeight;
             if (clientDescriptor) Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientDescriptor);
             else delete HTMLElement.prototype.clientHeight;
         }
     }
+
+    it('keeps acknowledgement locked while the terms panel is not yet styled to scroll', async () => {
+        await withElementDimensions({ scrollHeight: 180, clientHeight: 240, styled: false }, async () => {
+            mountLicenseGate();
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            expect(screen.getByRole('checkbox')).toBeDisabled();
+            expect(screen.getByText('Scroll to the end to review all terms.')).toBeInTheDocument();
+        });
+    });
 
     it('enables acknowledgement when all terms fit without scrolling', async () => {
         await withElementDimensions({ scrollHeight: 180, clientHeight: 240 }, async () => {

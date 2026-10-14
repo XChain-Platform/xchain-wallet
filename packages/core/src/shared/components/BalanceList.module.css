@@ -11,6 +11,7 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
+    padding: var(--xc-list-row-padding);
     border-top: 1px solid var(--xc-border);
     width: 100%;
 }
@@ -19,6 +20,12 @@
     flex: 1 1 auto;
     min-width: 0;
     min-height: var(--xc-control-h-lg);
+}
+
+/* The outer row carries the shared list-row inset, so the ListRow inside it
+   drops its own padding instead of doubling the inset. */
+.row > .rowContent {
+    padding: 0;
 }
 
 .row:first-of-type {
@@ -189,7 +196,7 @@
 .hiddenToggle {
     border: 0;
     background: transparent;
-    padding: var(--xc-space-3);
+    padding: var(--xc-list-row-padding);
     border-top: 1px dashed var(--xc-border);
     text-align: center;
     font-size: var(--xc-text-xs);

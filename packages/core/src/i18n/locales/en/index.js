@@ -71,7 +71,7 @@ export const en = {
     'adsNotice.continue': 'Continue',
     'alerts.title': 'Alerts',
     'alerts.close': 'Close alerts',
-    'alerts.empty': "No alerts. You're all caught up.",
+    'alerts.empty': 'No alerts. Wallet activity, security, and price changes appear here.',
     'backupReminder.backupNow': 'Back up now',
     'backupReminder.remindTomorrow': 'Remind me tomorrow',
 
@@ -117,7 +117,9 @@ export const en = {
 
     // --- alerts --------------------------------------------------
     'alerts.empty.title': 'No alerts',
-    'alerts.empty.body': "You're all caught up.",
+    'alerts.empty.body': 'Wallet activity, security, and price changes appear here.',
+    'alerts.empty.action': 'Manage notifications',
+    'alerts.notificationsTitle': 'Notifications',
     'alerts.unreadCount': '{count} unread',
     'alerts.markAllRead': 'Mark all read',
     'alerts.clear': 'Clear alerts',
@@ -372,8 +374,9 @@ export const en = {
     'gatedPublish.pack.add': 'Add to pack',
     'gatedPublish.pack.unlockTogether': '(files in this pack unlock together)',
     'gatedPublish.pack.loading': 'Loading reusable packs…',
+    'gatedPublish.pack.emptyTitle': 'No reusable packs yet',
     'gatedPublish.pack.empty':
-        'No reusable packs in this wallet yet. Files published under one pack share a single key and unlock together.',
+        'Files published under one pack share a single key and unlock together.',
     'gatedPublish.ackForever':
         "I understand the encrypted file is published on-chain forever and the gate can't be removed later.",
 
@@ -552,7 +555,8 @@ export const en = {
     'send.advanced.coinControlUnavailable': "Coin control is unavailable while spendable inputs can't be loaded.",
     'send.advanced.loadingInputs': 'Loading spendable inputs…',
     'send.advanced.inputs': 'Inputs',
-    'send.advanced.noInputs': 'No spendable inputs found.',
+    'send.advanced.noInputsTitle': 'No spendable inputs',
+    'send.advanced.noInputs': 'Inputs this wallet can spend appear here.',
     'send.advanced.changeAddress': 'Change address',
     'send.advanced.automaticChange': 'Automatic: {address}',
     'send.advanced.changeHint': 'Any leftover native coin returns here.',
@@ -755,6 +759,7 @@ export const en = {
     'history.empty.noActivityTitle': 'No activity yet',
     'history.empty.noActivityBody':
         'Activity appears here after you send or receive on a selected chain.',
+    'history.empty.startReceiving': 'Start receiving',
     'history.filters.label': 'History filters',
     'history.filters.toggle': 'Filters ({count})',
     'history.filters.searchPlaceholder': 'Search action, address, token, txid, memo…',
@@ -800,6 +805,7 @@ export const en = {
     'history.detail.loadingPeer': 'Loading the linked transaction…',
     'history.detail.peerError': "Couldn't load peer: {error}",
     'history.detail.copyPeerRawJson': 'Copy peer raw JSON',
+    'history.detail.peerUnavailableTitle': 'Peer chain unavailable',
     'history.detail.peerUnavailable':
         'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
     'history.detail.openNewWindow': 'Open in new window',

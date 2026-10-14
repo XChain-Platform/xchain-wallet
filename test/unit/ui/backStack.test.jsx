@@ -140,11 +140,11 @@ describe('back stack', () => {
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
-    it('dispatches native Back to the newest overlay before the route', async () => {
+    it('dispatches native Back to an overlay even when a route registers later', async () => {
         const route = vi.fn();
         const overlay = vi.fn();
-        const offRoute = registerBackHandler(route, 'route');
         const offOverlay = registerBackHandler(overlay, 'overlay');
+        const offRoute = registerBackHandler(route, 'route');
 
         nativeBack({ canGoBack: true });
 

@@ -489,7 +489,7 @@ export async function lockWallet(page) {
 
 /** Unlocks from the locked screen. */
 export async function unlockWallet(page, password = DEFAULT_PASSWORD) {
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Password', { exact: true }).fill(password);
     await unlockButton(page).click();
     // Argon2id again: unlocking derives the master key. Same budget.
     await expect(lockButton(page)).toBeVisible({ timeout: KDF_STEP_MS });

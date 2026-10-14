@@ -32,6 +32,13 @@ describe('<ListRow>', () => {
         expect(onClick).toHaveBeenCalledOnce();
     });
 
+    it('puts a tooltip on the row element without replacing its heading', () => {
+        render(<ListRow title="Market" tooltip="Needs a network connection" onClick={() => {}} disabled />);
+        const row = screen.getByRole('button', { name: 'Market' });
+        expect(row).toHaveAttribute('title', 'Needs a network connection');
+        expect(row).toBeDisabled();
+    });
+
     it('renders an href row as a native link', () => {
         render(<ListRow href="/activity/1" title="Activity" />);
 

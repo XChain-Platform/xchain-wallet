@@ -70,7 +70,23 @@ import { listEditValue } from './list_removal_description.js';
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @returns {DecodedAction}
  */
-export function decodeAction({ action, params, chainId, chainRegistry }) {
+export function decodeAction(opts = {}) {
+    try {
+        if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return malformedAction();
+        const { action, params, chainId, chainRegistry } = opts;
+        if (typeof action !== 'string' || action.trim() === '') {
+            return malformedAction();
+        }
+        if (params !== undefined && (!params || typeof params !== 'object' || Array.isArray(params))) {
+            return malformedAction();
+        }
+        return decodeActionData({ action, params, chainId, chainRegistry });
+    } catch {
+        return malformedAction();
+    }
+}
+
+function decodeActionData({ action, params, chainId, chainRegistry }) {
     const p = params || {};
     const descriptor = chainRegistry && chainId ? chainRegistry.get(chainId) : null;
     const chainName = descriptor?.displayName ?? chainId ?? '';
@@ -93,7 +109,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
                 ...(memo && /[|;]/.test(memo)
                     ? ['Memo contains | or ;: the protocol will reject this transaction.']
                     : []),
-                ...(!amount || Number(amount) <= 0
+                ...(!isPositiveDecimal(amount)
                     ? ['Amount is not positive.']
                     : []),
                 ...(!dest ? ['Destination is empty.'] : []),
@@ -147,7 +163,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
             ],
             warnings: [
                 ...(!tick ? ['Token ticker is empty.'] : []),
-                ...(!amount || Number(amount) <= 0
+                ...(!isPositiveDecimal(amount)
                     ? ['Amount is not positive.']
                     : []),
                 ...(memo && /[|;]/.test(memo)
@@ -179,7 +195,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
                 warnings: [
                     'Destroying is irreversible. The tokens cannot be recovered.',
                     ...(!tick ? ['Token ticker is empty.'] : []),
-                    ...(!amount || Number(amount) <= 0
+                    ...(!isPositiveDecimal(amount)
                         ? ['Amount is not positive.']
                         : []),
                     ...(memo && /[|;]/.test(memo)
@@ -220,7 +236,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
             warnings: [
                 'Destroying is irreversible. The tokens cannot be recovered.',
                 ...(legs.some((l) => !l.tick) ? ['One or more token tickers are empty.'] : []),
-                ...(legs.some((l) => !l.amount || Number(l.amount) <= 0)
+                ...(legs.some((l) => !isPositiveDecimal(l.amount))
                     ? ['One or more amounts are not positive.']
                     : []),
                 ...(anyMemo && /[|;]/.test(anyMemo)
@@ -451,9 +467,9 @@ function decodeOrderSwap(action, p, chainSuffix) {
             ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
-            ...(!giveOwnership && (!giveAmount || Number(giveAmount) <= 0)
+            ...(!giveOwnership && !isPositiveDecimal(giveAmount)
                 ? ['Give amount is not positive.'] : []),
-            ...(!getOwnership && (!getAmount || Number(getAmount) <= 0)
+            ...(!getOwnership && !isPositiveDecimal(getAmount)
                 ? ['Get amount is not positive.'] : []),
             ...memoWarnings,
         ],
@@ -483,7 +499,7 @@ function decodeStake(p, chainSuffix) {
             { label: 'Signing public key', value: pubkey },
         ],
         warnings: [
-            ...(!amount || Number(amount) <= 0 ? ['Stake amount is not positive.'] : []),
+            ...(!isPositiveDecimal(amount) ? ['Stake amount is not positive.'] : []),
             ...(!pubkey ? ['Signing public key is empty.'] : []),
             'Staked funds are locked until unstake plus the cooldown period.',
         ],
@@ -684,7 +700,7 @@ function decodeContractFunds(action, p, chainSuffix) {
         ],
         warnings: [
             ...(!idx ? ['Contract action index is empty.'] : []),
-            ...(!qty || Number(qty) <= 0 ? ['Amount is not positive.'] : []),
+            ...(!isPositiveDecimal(qty) ? ['Amount is not positive.'] : []),
             ...(action === 'WITHDRAW' ? ['Only the contract deployer can withdraw contract credit.'] : []),
         ],
     };
@@ -932,7 +948,7 @@ function decodeBet(p, chainSuffix) {
             warnings: [
                 'Bets are final. There is no cancel and no way to change your outcome once this is signed.',
                 'This is a parimutuel market, so your share is not fixed now: later bets change what a win pays.',
-                ...(!amount || Number(amount) <= 0 ? ['Stake is not positive.'] : []),
+                ...(!isPositiveDecimal(amount) ? ['Stake is not positive.'] : []),
                 ...memoWarn,
             ],
         };
@@ -1136,7 +1152,7 @@ function decodeAirdrop(p, chainSuffix) {
             ],
             warnings: [
                 ...(!tick ? ['Token ticker is empty.'] : []),
-                ...(!amount || Number(amount) <= 0
+                ...(!isPositiveDecimal(amount)
                     ? ['Per-recipient amount is not positive.']
                     : []),
                 ...(!listIdx ? ['List action index is empty.'] : []),
@@ -1178,7 +1194,7 @@ function decodeAirdrop(p, chainSuffix) {
 
     const warnings = [
         ...(drops.some((d) => !d.tick) ? ['One or more token tickers are empty.'] : []),
-        ...(drops.some((d) => !d.amount || Number(d.amount) <= 0)
+        ...(drops.some((d) => !isPositiveDecimal(d.amount))
             ? ['One or more per-recipient amounts are not positive.']
             : []),
         ...(drops.some((d) => !d.list) ? ['One or more list action indexes are empty.'] : []),
@@ -1212,7 +1228,7 @@ function decodeDividend(p, chainSuffix) {
         warnings: [
             ...(!tick ? ['Holder ticker is empty.'] : []),
             ...(!dividendTick ? ['Dividend ticker is empty.'] : []),
-            ...(!amount || Number(amount) <= 0
+            ...(!isPositiveDecimal(amount)
                 ? ['Per-unit amount is not positive.']
                 : []),
             ...(memo && /[|;]/.test(memo)
@@ -1344,10 +1360,10 @@ function decodeDispenser(p, chainSuffix) {
 
     const warnings = [
         ...(!giveTick ? ['Give-token ticker is empty.'] : []),
-        ...(!giveAmount || Number(giveAmount) <= 0
+        ...(!isPositiveDecimal(giveAmount)
             ? ['Per-fill amount is not positive.']
             : []),
-        ...(!giveEscrow || Number(giveEscrow) <= 0
+        ...(!isPositiveDecimal(giveEscrow)
             ? ['Escrow amount is not positive.']
             : []),
         ...(giveAmount && giveEscrow && compareDecimalStrings(giveEscrow, giveAmount) === -1
@@ -1431,8 +1447,8 @@ function decodePrice(p, chainSuffix) {
             'Dispensers that name this address as their oracle will sell at this price once it takes effect.',
             ...(!tick ? ['Token ticker is empty.'] : []),
             ...(!fiat ? ['Currency is empty.'] : []),
-            ...(!value || Number(value) <= 0 ? ['Price is not a positive number.'] : []),
-            ...(fee && Number(fee) > 1
+            ...(!isPositiveDecimal(value) ? ['Price is not a positive number.'] : []),
+            ...(fee && compareDecimalStrings(fee, '1') === 1
                 ? ['Oracle usage fee is above 1 (100%): the protocol will reject this transaction.']
                 : []),
             ...(memo && /[|;]/.test(memo)
@@ -1756,11 +1772,21 @@ function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
     }
 
     const decodedChildren = withoutFundedExecuteWarnings(commands, commands.map((cmd) => {
-        if (!cmd || typeof cmd !== 'object') {
+        if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)
+            || typeof cmd.action !== 'string' || cmd.action.trim() === ''
+            || (cmd.params !== undefined
+                && (!cmd.params || typeof cmd.params !== 'object' || Array.isArray(cmd.params)))) {
             return {
                 summary: 'Unknown command',
                 details: [],
                 warnings: ['A batch command is malformed.'],
+            };
+        }
+        if (cmd.action === 'BATCH') {
+            return {
+                summary: 'Nested batch command',
+                details: [],
+                warnings: ['Nested batch commands are malformed and cannot be decoded.'],
             };
         }
         return decodeAction({
@@ -1854,6 +1880,20 @@ function genericFallback(action, p, chainSuffix) {
             `No plain-English summary is available for "${verb}" yet. Review the parameters carefully before approving.`,
         ],
     };
+}
+
+function malformedAction() {
+    return {
+        summary: 'Action data could not be decoded',
+        details: [],
+        warnings: [
+            'The action data is malformed. Review the raw transaction carefully before approving.',
+        ],
+    };
+}
+
+function isPositiveDecimal(value) {
+    return compareDecimalStrings(str(value), '0') === 1;
 }
 
 function str(v) {

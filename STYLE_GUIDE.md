@@ -159,15 +159,15 @@ Buttons and field primitives share one visual height scale. Pass the component's
 
 | size | token and height | use it when | do | do not |
 |---|---|---|---|---|
-| `sm` | `--xc-control-h-sm`, 32px | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
-| `md` | `--xc-control-h-md`, 40px | the control is a normal button, field, select, tab, or segmented choice; this is the default | omit `size` on a routine `<Input label="Memo" />` | invent a nearby 36px route-local height |
-| `lg` | `--xc-control-h-lg`, 48px | the control is the main entry or prominent action in a focused flow | use `size="lg"` for Send's To and Amount fields | make every field large or mix `lg` and `md` in one aligned field stack |
+| `sm` | `--xc-control-h-sm`, 28px (36px on touch) | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
+| `md` | `--xc-control-h-md`, 36px (44px on touch) | the control is a normal button, field, select, tab, or segmented choice; this is the default | omit `size` on a routine `<Input label="Memo" />` | invent a nearby route-local height such as 40px |
+| `lg` | `--xc-control-h-lg`, 44px (48px on touch) | the control is the main entry or prominent action in a focused flow | use `size="lg"` for Send's To and Amount fields | make every field large or mix `lg` and `md` in one aligned field stack |
 
-The painted `sm` control can have a larger transparent pointer target on coarse-pointer devices. Do not increase its visible height to manufacture a touch target.
+On coarse-pointer or no-hover devices the tokens step up to 36/44/48px, so touch controls meet the 44px target at the default size. The painted `sm` control can also have a larger transparent pointer target there. Do not increase its visible height to manufacture a touch target.
 
 ## Inputs
 
-Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (32px), `md` (40px, default), or `lg` (48px with a weightier label). `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same size contract.
+Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px with a weightier label), stepping up to 36/44/48px on touch. `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same size contract.
 
 **Primary entry inputs** (the To / Amount fields on Send) use `size="lg"`:
 
@@ -351,21 +351,20 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-form-gap` | `var(--xc-space-4)` | gap between form fields |
 | `--xc-label-gap` | `var(--xc-space-1)` | gap from a field label to its control |
 | `--xc-help-gap` | `var(--xc-space-1)` | gap from a control to help or error text |
-| `--xc-section-gap` | `var(--xc-space-6)` | gap between form sections |
+| `--xc-section-gap` | `var(--xc-space-4)` | gap between form sections and list page blocks |
+| `--xc-section-header-gap` | `var(--xc-space-2)` | gap from a section header to its content |
+| `--xc-list-row-padding` | `var(--xc-space-3)` | inset inside a list row |
 | `--xc-page-gutter` | 12px compact, 16px rail, 24px full | the sole inline page inset, applied by `Screen.body` |
 | `--xc-page-top` | 12px compact, 16px rail/full, 8px short landscape | the sole page-content top inset, applied by `Screen.body` |
-| `--xc-control-h-sm` | 32px | compact secondary controls |
-| `--xc-control-h-md` | 40px | default controls |
-| `--xc-control-h-lg` | 48px | hero fields and prominent controls |
 | `--xc-text-xs` | 0.6875rem | metadata, hint text |
 | `--xc-text-sm` | 0.8125rem | labels, secondary body text |
 | `--xc-text-md` | 0.875rem | default body text and button labels |
 | `--xc-text-lg` | 1rem | large-input text, section titles, page title |
 | `--xc-text-xl` | 1.25rem | asset hero name, panel headings |
 | `--xc-text-2xl` | 1.5rem | hero figures and prominent asset tickers |
-| `--xc-control-h-sm` | 32px | compact control visual height |
-| `--xc-control-h-md` | 40px | default control visual height |
-| `--xc-control-h-lg` | 48px | hero control visual height |
+| `--xc-control-h-sm` | 28px mouse, 36px touch | compact control visual height |
+| `--xc-control-h-md` | 36px mouse, 44px touch | default control visual height |
+| `--xc-control-h-lg` | 44px mouse, 48px touch | hero control visual height |
 | `--xc-control-font` | `var(--xc-text-md)` | shared control text |
 | `--xc-control-pad-x` | `var(--xc-space-3)` | shared control inline padding |
 
@@ -383,6 +382,17 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-radius-lg` | 12px |
 | `--xc-radius-pill` | 9999px |
 | `--xc-control-radius` | `var(--xc-radius-md)` |
+| `--xc-badge-height-sm` | 24px |
+| `--xc-badge-height-md` | 32px |
+| `--xc-badge-radius` | `var(--xc-radius-pill)` |
+| `--xc-badge-font-size-sm` | `var(--xc-text-xs)` |
+| `--xc-badge-font-size-md` | `var(--xc-text-sm)` |
+| `--xc-badge-font-weight` | 700 |
+| `--xc-badge-icon-size-sm` | `var(--xc-icon-sm)` |
+| `--xc-badge-icon-size-md` | `var(--xc-icon-xl)` |
+| `--xc-badge-gap` | `var(--xc-space-1)` |
+| `--xc-badge-padding-inline-sm` | `var(--xc-space-2)` |
+| `--xc-badge-padding-inline-md` | `var(--xc-space-3)` |
 | `--xc-shadow-sm` | 0 1px 2px rgba(15, 23, 42, 0.06) |
 | `--xc-shadow-md` | 0 4px 12px rgba(15, 23, 42, 0.08) |
 | `--xc-z-base` | 1 |
