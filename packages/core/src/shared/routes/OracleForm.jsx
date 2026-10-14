@@ -417,13 +417,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             title={stage === 'review' || stage === 'submitting' ? 'Review price publish' : 'My oracle'}
         />
     );
-    // The review keeps its own scroll position, so it opens at its top
-    // instead of inheriting how far the form was scrolled.
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
         <Screen
             variant={variant}
             header={header}
-            scrollKey={stage === 'review' || stage === 'submitting' ? 'review' : 'form'}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
         >
             {children}
         </Screen>

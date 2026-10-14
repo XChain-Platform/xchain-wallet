@@ -594,13 +594,13 @@ export function SweepForm({
                 : (migrateLane ? 'Sweep to new wallet' : 'Sweep address')}
         />
     );
-    // The review keeps its own scroll position, so it opens at its top
-    // instead of inheriting how far the form was scrolled.
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children, footer = null) => (
         <Screen
             variant={variant}
             header={header}
-            scrollKey={stage === 'review' || stage === 'submitting' ? 'review' : 'form'}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
         >
             {children}
             {footer}
