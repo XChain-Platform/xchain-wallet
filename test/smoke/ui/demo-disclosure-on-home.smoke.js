@@ -23,6 +23,7 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 const homeSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
 const webSrc = read('packages', 'web', 'src', 'App.jsx');
 const popupSrc = read('packages', 'extension', 'src', 'popup', 'App.jsx');
+const enLocaleSrc = read('packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js');
 const autoWipeSrc = read('packages', 'core', 'src', 'shared', 'hooks', 'useDemoAutoWipe.js');
 
 for (const [label, src] of [['Home', homeSrc], ['web', webSrc], ['extension', popupSrc]]) {
@@ -30,12 +31,14 @@ for (const [label, src] of [['Home', homeSrc], ['web', webSrc], ['extension', po
     assert.doesNotMatch(src, /components\/DemoBanner\.jsx/, `${label} does not import DemoBanner`);
 }
 
+assert.match(homeSrc, /t\('home\.demoSendBlocked'\)/, 'Home carries the short blocked-send note');
 assert.match(
-    homeSrc,
-    /Demo wallets cannot send\. Create a real wallet to send\./,
-    'Home carries the short blocked-send note',
+    enLocaleSrc,
+    /'home\.demoSendBlocked': "Demo wallets can't send\. Create a real wallet to send\."/,
+    'the blocked-send note says why and what to do',
 );
-assert.match(homeSrc, /Exit demo & wipe/, 'the blocked-send note carries the exit action');
+assert.match(homeSrc, /t\('walletDetails\.exitDemo'\)/, 'the blocked-send note carries the exit action');
+assert.match(enLocaleSrc, /'walletDetails\.exitDemo': 'Exit demo & wipe'/, 'the exit action is named for what it does');
 
 for (const [label, src] of [['web', webSrc], ['extension', popupSrc]]) {
     assert.match(src, /useDemoAutoWipe\(activeWalletId, refresh\)/, `${label} enforces demo expiry`);
