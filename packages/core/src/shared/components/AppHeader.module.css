@@ -70,7 +70,9 @@
     inset-inline-end: 0;
     z-index: 20;
     width: min(280px, calc(100vw - (2 * var(--xc-space-2))));
-    max-height: min(70vh, 520px);
+    /* Sized by the viewport alone: a fixed pixel cap cut the last visible row
+       through its label on tall phones that had room for every row. */
+    max-height: 70vh;
     overflow-y: auto;
     padding: var(--xc-space-1);
     border: 1px solid var(--xc-border-strong);
