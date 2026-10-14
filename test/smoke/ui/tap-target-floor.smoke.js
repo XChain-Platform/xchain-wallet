@@ -57,12 +57,12 @@ assert.ok(/WCAG 2\.2 AA 2\.5\.8/.test(tokens),
 // Each entry is a control the live width walk caught below the floor.
 // Asserting on the token (not on a pixel number) is deliberate: a future
 // change to the floor should move one line in tokens.css and take every
-// one of these with it.
+// one of these with it. The unit swap left this list when it became a kit
+// Button, whose control heights sit above the floor.
 const CONSUMERS = [
     ['ui/InfoTip.module.css', 'the contextual help dot (was 16x16)'],
     ['ui/FeeSelector.module.css', 'the fee slider, its tier stops and the editable readouts (were 16/13/17px)'],
     ['shared/components/PortfolioChart.module.css', 'the chart range chips (were 20px tall)'],
-    ['shared/components/AmountField.module.css', 'the coin/fiat unit swap (was 14px tall)'],
     ['shared/routes/Send.module.css', 'the Advanced disclosure (was 21px tall)'],
     ['shared/commandPalette/CommandPalette.module.css', 'the palette search field (was 19px tall)'],
     ['shared/routes/MarketsList.jsx', 'the watchlist star (was 18x18)'],
