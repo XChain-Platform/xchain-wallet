@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Chip, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
+import { ChevronIcon } from '../../ui/ChainPicker.icons.jsx';
 import styles from './NetworkFilter.module.css';
 
 /**
@@ -152,7 +153,7 @@ export function NetworkFilter({
         <div ref={triggerRef} className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             <Chip
                 pressed={value !== 'all'}
-                className={styles.trigger}
+                className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
                 onClick={() => {
                     if (open) closeFilter();
                     else openFilter(entries.length > 6 ? 'search' : 'selected');
@@ -179,7 +180,7 @@ export function NetworkFilter({
                     <span className={styles.triggerLabel}>{triggerLabel}</span>
                 </span>
                 <span className={styles.triggerCaret} aria-hidden="true">
-                    {open ? '▴' : '▾'}
+                    <ChevronIcon open={open} />
                 </span>
             </Chip>
             {open ? (

@@ -30,14 +30,11 @@
    separated by a hairline divider and highlighted on hover. Each row shows
    the contact name on the first line and the address on the second. */
 .abList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 

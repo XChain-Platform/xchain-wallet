@@ -20,14 +20,11 @@
    name for a token, and a chevron. Receive's selector is icon-only now, so
    Markets owns this card. */
 .assetCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     margin-block-end: var(--xc-space-3);
     color: var(--xc-text);
     text-align: start;
@@ -63,10 +60,8 @@
 
 /* The market list sits in the same card chrome as the selector. */
 .marketsCard {
+    composes: flush from '../../ui/Card.module.css';
     margin-block-end: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 

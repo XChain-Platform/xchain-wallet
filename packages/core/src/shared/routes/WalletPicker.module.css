@@ -1,13 +1,10 @@
 /* WalletDetails read-only metadata list. */
 .detailList {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: 0;
     margin: 0;
-    padding: 0;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .detailRow {

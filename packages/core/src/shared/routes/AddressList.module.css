@@ -153,14 +153,11 @@
 /* One card wrapping all addresses, mirroring the contacts list / Home
    balances list: rows separated by a hairline divider, highlighted on hover. */
 .addrList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .addrList li + li {
@@ -300,10 +297,7 @@
 
 /* Address detail view. */
 .detailCard {
-    padding: var(--xc-space-4);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
+    composes: card from '../../ui/Card.module.css';
 }
 
 .detailCardSpaced {
