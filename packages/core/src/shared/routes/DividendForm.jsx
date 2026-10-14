@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -241,6 +241,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
+    const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
     // Native-coin protocol fee (DIVIDEND is quotable); the
@@ -1051,7 +1052,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 </Button>
             )}
         >
-            {lockedToken && chainId ? <LockedTokenContext chainId={chainId} tick={tick} label="Holder-of token" /> : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={tick} label="Holder-of token" />
+            ) : (
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            )}
 
             {fromAddress ? (
                 <AddressField

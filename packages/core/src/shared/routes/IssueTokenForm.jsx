@@ -16,6 +16,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
     Icon,
     StatusMessage,
@@ -297,6 +298,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
+    const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const tickerLookupSupported = Object.prototype.hasOwnProperty.call(messaging, 'getTokenInfo')
         && typeof messaging.getTokenInfo === 'function';
 
@@ -944,6 +946,8 @@ export function IssueTokenForm({ walletId, onBack }) {
             )}
         >
             {draftBanner}
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+
             {fromAddress ? (
                 <AddressField
                     label={t('send.fields.from')}

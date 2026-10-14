@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -330,6 +330,11 @@ export function DeployContractForm({ walletId, onBack }) {
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+
+    const deployChainsWithAddresses = useMemo(() => {
+        if (!addressesByChain) return [];
+        return deployChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0);
+    }, [deployChainIds, addressesByChain]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -1181,6 +1186,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 </Button>
             )}
         >
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+
             {fromAddress ? (
                 <AddressField
                     label="From"

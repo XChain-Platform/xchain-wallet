@@ -37,7 +37,7 @@ function readDismissed(key) {
 /**
  * @param {object} props
  * @param {'action'|'psbt'|'message'} [props.variant]   which confirmation surface this is
- * @param {string} [props.chainLabel]                   e.g. "Bitcoin"; named in the action copy
+ * @param {import('react').ReactNode} [props.chainLabel] text such as "Bitcoin" is named in the action copy; an icon element is not
  * @param {string} [props.title]
  * @param {import('react').ReactNode} [props.children]  overrides the built-in copy
  */
@@ -50,7 +50,8 @@ export function LearnNote({ variant = 'action', chainLabel, title = 'Good to kno
 
     if (!enabled || dismissedKey === key || readDismissed(key)) return null;
 
-    const network = chainLabel ? `the ${chainLabel} network` : 'the network';
+    // Callers may pass an icon element as the chain label; only text joins the sentence.
+    const network = typeof chainLabel === 'string' && chainLabel ? `the ${chainLabel} network` : 'the network';
     let body = children;
     if (!body) {
         if (variant === 'message') {

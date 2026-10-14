@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -88,6 +88,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         setChainId,
         fromAddress,
         setFromAddressId,
+        chainsWithAddresses,
         descriptor,
         signerReady,
         isWatcherMode,
@@ -651,7 +652,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 </p>
             </div>
 
-            {lockedToken && chainId ? <LockedTokenContext chainId={chainId} tick={ticker} /> : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={ticker} />
+            ) : (
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            )}
 
             {fromAddress ? (
                 <AddressField

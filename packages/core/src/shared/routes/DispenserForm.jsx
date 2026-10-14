@@ -16,6 +16,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
     Icon,
     StatusMessage,
@@ -543,6 +544,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+
+    const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
     // The dispenser address for mode 'existing'. Any wallet address qualifies,
     // not only ones set aside with role='dispenser': the protocol does not
@@ -1494,7 +1497,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             )}
         >
             {draftBanner}
-            {lockedToken && chainId ? <LockedTokenContext chainId={chainId} tick={ticker} /> : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={ticker} />
+            ) : (
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            )}
 
             {fromAddress ? (
                 <>

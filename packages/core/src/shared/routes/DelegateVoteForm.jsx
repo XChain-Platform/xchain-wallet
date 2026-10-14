@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -65,7 +65,7 @@ export function DelegateVoteForm(props) {
 }
 
 function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chainId: initialChainId, presetTick, onBack }) {
-    // Keep the launching context's chain; network switching belongs in Settings.
+    // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
@@ -506,6 +506,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 </Button>
             )}
         >
+            <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             <div className={styles.actions} style={{ gap: '0.5rem' }}>
                 <Button type="button" variant={isClear ? 'ghost' : 'primary'} onClick={() => { setMode('delegate'); setFormError(null); }}>Delegate</Button>
                 <Button type="button" variant={isClear ? 'primary' : 'ghost'} onClick={() => { setMode('clear'); setFormError(null); }}>Clear</Button>
