@@ -58,8 +58,6 @@ export function NetworkFilter({
     }, []);
     useBackHandler(open ? () => closeFilter(true) : undefined);
 
-    useBackHandler(open ? () => closeFilter(true) : undefined);
-
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {

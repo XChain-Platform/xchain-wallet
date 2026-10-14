@@ -135,12 +135,14 @@ function TokenDetailContent({
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
     const isDemo = isDemoWallet(walletId);
-    // A mainnet holding shows its value before settings load; the demo wallet
-    // prices its synthetic test holdings.
+    // The price section shows outside test networks, including before
+    // settings load; the demo wallet prices its synthetic test holdings.
     const fiatSupported = isDemo || (settings
         ? settings.activeNetwork !== 'testnet' && settings.activeNetwork !== 'regtest'
         : Boolean(settingsError) || descriptor?.networkKind === 'mainnet');
-    const displayFiatRate = fiatSupported ? fiatRate : null;
+    // A fiat value itself needs a mainnet holding, whatever the settings say.
+    const fiatAllowed = isDemo || descriptor?.networkKind === 'mainnet';
+    const displayFiatRate = fiatSupported && fiatAllowed ? fiatRate : null;
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
@@ -178,7 +180,7 @@ function TokenDetailContent({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const queriedNativePrice = useNativePrice(isNative && fiatSupported && !isDemo ? chainId : null, {
+    const queriedNativePrice = useNativePrice(isNative && fiatSupported && fiatAllowed && !isDemo ? chainId : null, {
         includeSparkline: true,
         fiatCurrency,
     });
@@ -619,7 +621,7 @@ function TokenDetailContent({
                         currentPrice={nativePriceValue}
                         fiatCurrency={fiatCurrency}
                         loading={nativePrice.loading || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error)}
-                        disabled={!fiatSupported || nativePrice.disabled}
+                        disabled={!fiatAllowed || nativePrice.disabled}
                     />
                 ) : null}
 
@@ -2440,7 +2442,11 @@ function HoldersPanel({
                             <ListRow
                                 title={(
                                     <span className={styles.holdersAddrWrap}>
-                                        <AddressText address={address === '-' ? 'unknown' : address} className={styles.holdersAddr} />
+                                        {address === '-' ? (
+                                            <span className={styles.holdersAddr}>-</span>
+                                        ) : (
+                                            <AddressText address={address} className={styles.holdersAddr} />
+                                        )}
                                         {address !== '-' ? (
                                             <CopyButton
                                                 value={address}

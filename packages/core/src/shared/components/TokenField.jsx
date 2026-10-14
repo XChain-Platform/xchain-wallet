@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useId } from 'react';
+import { registry as registryLib } from '../../index.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
 import styles from './TokenField.module.css';
@@ -61,8 +62,11 @@ export function TokenField({
 
     // Accessible name carries the field label + current selection (or the
     // empty-state text), since the visual chip isn't a native form control.
+    // The chain shows only as the icon overlay, so the name says which chain
+    // the token is on (without the network kind): every chain lists XCHAIN.
+    const chainName = hasValue ? registryLib.defaultRegistry().get(chainId)?.displayName : null;
     const selectionText = hasValue
-        ? tick
+        ? `${tick}${chainName ? ` on ${chainName}` : ''}`
         : placeholder;
     const accessibleName = label ? `${label}: ${selectionText}` : selectionText;
 
