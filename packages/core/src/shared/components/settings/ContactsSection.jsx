@@ -24,9 +24,17 @@ import { useMessaging } from '../../useMessaging.js';
 import { useDropZone } from '../../hooks/useDropZone.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { contactsFromCsv, contactsToCsv } from '../../utils/contactsCsv.js';
+import { detectAddressCoin, isValidAddressAnyNetwork } from '../../utils/addressValidation.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ROW, ROW_HINT, ROW_VALUE, STACK, Status } from './_settingsPrimitives.jsx';
+
+const MAX_CONTACT_IMPORT_BYTES = 2 * 1024 * 1024;
+const CONTACT_FIELDS = new Set([
+    'schemaVersion', 'id', 'name', 'notes', 'entries', 'avatarSeed', 'createdAt', 'updatedAt',
+]);
+const ENTRY_FIELDS = new Set(['chain', 'address', 'label']);
+const SUPPORTED_CHAINS = new Set(['bitcoin', 'litecoin', 'dogecoin']);
 
 export function ContactsSection() {
     const { messaging } = useMessaging();
@@ -62,6 +70,16 @@ export function ContactsSection() {
         return () => { reloadRequestRef.current += 1; };
     }, [reload]);
 
+    const reportImportFailure = (message, subject = 'Import file') => {
+        setError(null);
+        setImportResult({
+            imported: 0,
+            duplicates: 0,
+            failures: [{ subject, message }],
+        });
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
     const onExport = async () => {
         try {
             const list = await messaging.listContacts();
@@ -81,10 +99,14 @@ export function ContactsSection() {
         }
     };
 
-    const importFromText = async (text, fileName = '') => {
+    const importFromText = async (text, fileName = '', fileSize) => {
         setImportResult(null);
         setError(null);
         try {
+            const bytes = Number.isFinite(fileSize) ? fileSize : new Blob([text]).size;
+            if (bytes > MAX_CONTACT_IMPORT_BYTES) {
+                throw new Error(importSizeMessage(bytes));
+            }
             const leading = text.replace(/^\uFEFF/, '').trimStart()[0];
             const csv = fileName.toLowerCase().endsWith('.csv')
                 || (!fileName.toLowerCase().endsWith('.json') && leading !== '[' && leading !== '{');
@@ -101,7 +123,10 @@ export function ContactsSection() {
                 if (!Array.isArray(parsed)) {
                     throw new Error('Expected a JSON array of contact records.');
                 }
-                rows = parsed.map((record, index) => ({ record, line: index + 1 }));
+                const audited = auditJsonContacts(parsed);
+                rows = audited.records;
+                failures = audited.failures;
+                duplicates = audited.duplicates;
             }
             const confirmed = await confirmDialog.confirm({
                 title: 'Import contacts?',
@@ -116,11 +141,13 @@ export function ContactsSection() {
                     await messaging.saveContact({ record });
                     imported += 1;
                 } catch (err) {
+                    const message = err instanceof Error
+                        ? err.message
+                        : (String(err || '') || 'The wallet returned no explanation.');
+                    if (isDuplicateFailure(message)) duplicates += 1;
                     failures.push({
                         subject: record?.name || record?.id || `Line ${line}`,
-                        message: `${csv ? `Line ${line}: ` : ''}${err instanceof Error
-                            ? err.message
-                            : (String(err || '') || 'The wallet returned no explanation.')}`,
+                        message: `${csv ? `Line ${line}: ` : ''}${message}`,
                     });
                     // eslint-disable-next-line no-console
                     console.warn('contacts.import: skipping invalid record:', err);
@@ -129,7 +156,10 @@ export function ContactsSection() {
             setImportResult({ imported, failures, duplicates });
             await reload();
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            reportImportFailure(
+                err instanceof Error ? err.message : String(err),
+                fileName || 'Import file',
+            );
         } finally {
             // Reset the input so re-importing the same file fires onChange again.
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -139,18 +169,30 @@ export function ContactsSection() {
     const onImportFile = async (file) => {
         if (!file) return;
         try {
+            if (Number.isFinite(file.size) && file.size > MAX_CONTACT_IMPORT_BYTES) {
+                reportImportFailure(importSizeMessage(file.size), file.name || 'Import file');
+                return;
+            }
             const text = await file.text();
-            await importFromText(text, file.name || '');
+            await importFromText(text, file.name || '', file.size);
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            reportImportFailure(
+                err instanceof Error ? err.message : String(err),
+                file.name || 'Import file',
+            );
         }
     };
 
     const importDrop = useDropZone({
         accept: ['.json', '.csv', 'application/json', 'text/csv'],
+        maxBytes: MAX_CONTACT_IMPORT_BYTES,
         readAs: 'text',
-        onError: setError,
-        onFile: ({ file, content }) => importFromText(typeof content === 'string' ? content : '', file.name),
+        onError: (message) => reportImportFailure(message),
+        onFile: ({ file, content }) => importFromText(
+            typeof content === 'string' ? content : '',
+            file.name,
+            file.size,
+        ),
     });
 
     return (
@@ -209,7 +251,7 @@ export function ContactsSection() {
             {importResult ? (
                 <>
                     <Status
-                        text={`Imported ${importResult.imported} contact${importResult.imported === 1 ? '' : 's'}${importResult.failures.length > 0 ? `; ${importResult.failures.length} skipped` : ''}${importResult.duplicates > 0 ? `; ${importResult.duplicates} duplicate row${importResult.duplicates === 1 ? '' : 's'} removed` : ''}.`}
+                        text={`Imported ${importResult.imported} contact${importResult.imported === 1 ? '' : 's'}${importResult.failures.length > 0 ? `; ${importResult.failures.length} skipped` : ''}${importResult.duplicates > 0 ? `; ${importResult.duplicates} duplicate${importResult.duplicates === 1 ? '' : 's'}` : ''}.`}
                     />
                     <DiagnosticDetails
                         summary={`Skipped contacts (${importResult.failures.length})`}
@@ -227,6 +269,95 @@ export function ContactsSection() {
             ) : null}
         </div>
     );
+}
+
+function auditJsonContacts(parsed) {
+    const records = [];
+    const failures = [];
+    const ids = new Map();
+    const names = new Map();
+    const addresses = new Map();
+    let duplicates = 0;
+
+    parsed.forEach((record, index) => {
+        const line = index + 1;
+        const subject = record?.name || record?.id || `Contact ${line}`;
+        const problem = jsonRecordProblem(record);
+        if (problem) {
+            failures.push({ subject, message: `Contact ${line}: ${problem}` });
+            return;
+        }
+
+        const id = typeof record?.id === 'string' ? record.id.trim() : '';
+        const name = typeof record?.name === 'string' ? record.name.trim().toLowerCase() : '';
+        const duplicate = (id && ids.get(id)) || (name && names.get(name));
+        const entries = Array.isArray(record?.entries) ? record.entries : [];
+        const duplicateAddress = entries
+            .map(entryKey)
+            .map((key) => addresses.get(key))
+            .find(Boolean);
+        if (duplicate || duplicateAddress) {
+            const owner = duplicate || duplicateAddress;
+            failures.push({
+                subject,
+                message: `Contact ${line}: duplicates ${owner.subject} (contact ${owner.line}).`,
+            });
+            duplicates += 1;
+            return;
+        }
+
+        const owner = { line, subject };
+        if (id) ids.set(id, owner);
+        if (name) names.set(name, owner);
+        entries.forEach((entry) => addresses.set(entryKey(entry), owner));
+        records.push({ record, line });
+    });
+
+    return { records, failures, duplicates };
+}
+
+function jsonRecordProblem(record) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) return 'must be an object.';
+    const unknown = Object.keys(record).find((field) => !CONTACT_FIELDS.has(field));
+    if (unknown) return `unknown field "${unknown}".`;
+    if (!Array.isArray(record.entries)) return null;
+
+    const seen = new Set();
+    for (const entry of record.entries) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+        const unknownEntry = Object.keys(entry).find((field) => !ENTRY_FIELDS.has(field));
+        if (unknownEntry) return `unknown address field "${unknownEntry}".`;
+        const chain = String(entry.chain || '').trim().toLowerCase();
+        const address = String(entry.address || '').trim();
+        if (!SUPPORTED_CHAINS.has(chain)) {
+            return `address chain must be bitcoin, litecoin, or dogecoin, not "${chain || 'empty'}".`;
+        }
+        if (!isValidAddressAnyNetwork(address)) return `"${address}" is not a valid supported address.`;
+        const addressCoin = detectAddressCoin(address);
+        if (addressCoin && addressCoin !== chain) {
+            return `address belongs to ${addressCoin}, not ${chain}.`;
+        }
+        const key = entryKey(entry);
+        if (seen.has(key)) return `address appears more than once: ${address}.`;
+        seen.add(key);
+    }
+    return null;
+}
+
+function entryKey(entry) {
+    const chain = String(entry?.chain || '').trim().toLowerCase();
+    const address = String(entry?.address || '').trim();
+    const lower = address.toLowerCase();
+    const normalized = /^(bc|tb|bcrt|ltc|tltc|rltc)1/.test(lower) ? lower : address;
+    return `${chain}|${normalized}`;
+}
+
+function isDuplicateFailure(message) {
+    return /already exists|already saved|appears more than once/i.test(message);
+}
+
+function importSizeMessage(bytes) {
+    return `File is too large (${Math.ceil(bytes / 1024)} KB; max ${MAX_CONTACT_IMPORT_BYTES / 1024} KB).`;
 }
 
 function triggerDownload(prefix, content, extension, type) {
