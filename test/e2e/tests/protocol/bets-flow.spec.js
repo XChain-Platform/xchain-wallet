@@ -6,7 +6,6 @@
 import {
     dismissIntroCarousel,
     expect,
-    gotoSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -23,6 +22,20 @@ const VIEWPORTS = [
     { name: 'phone', width: 412, height: 869 },
     { name: 'desktop', width: 1280, height: 800 },
 ];
+
+// Betting is not a nav destination; it opens from the command palette.
+async function gotoPalette(page, title) {
+    await page.keyboard.press('ControlOrMeta+k');
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const combobox = dialog.getByRole('combobox').first();
+    await expect(combobox).toBeEditable({ timeout: 15_000 });
+    await combobox.fill(title);
+    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
+    await expect(row, `no palette command matching "${title}"`).toBeVisible();
+    await row.click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+}
 
 async function settle(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -137,14 +150,15 @@ async function installBetFixture(page) {
 
 async function expectSharedControlHeights(page, label) {
     const rows = await page.getByRole('main').evaluate((main) => {
-        const controls = [...main.querySelectorAll([
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        const controls = [...Array.from(main.querySelectorAll([
             'button',
             'input:not([type="hidden"])',
             'select',
             'textarea',
             '[role="button"]',
             '[role="radio"]',
-        ].join(','))]
+        ].join(','))).filter((el) => !el.closest('[aria-hidden="true"]'))]
             .filter((element, index, all) => (
                 !all.some((ancestor, ancestorIndex) => (
                     ancestorIndex !== index && ancestor.contains(element)
@@ -158,13 +172,21 @@ async function expectSharedControlHeights(page, label) {
                         || element.textContent?.trim().slice(0, 40)
                         || element.tagName.toLowerCase(),
                     top: box.top,
+                    left: box.left,
+                    right: box.right,
+                    bottom: box.bottom,
                     center: box.top + (box.height / 2),
                     height: box.height,
                     visible: box.width > 0 && box.height > 0
                         && style.visibility !== 'hidden' && style.display !== 'none',
                 };
             })
-            .filter((control) => control.visible);
+            .filter((control) => control.visible)
+            // A button drawn inside a field box (the address picker) is part of
+            // that field, not a second control on its line.
+            .filter((control, _, all) => !all.some((field) => field !== control
+                && field.left <= control.left && field.right >= control.right
+                && field.top <= control.top && field.bottom >= control.bottom));
 
         const grouped = [];
         for (const control of controls) {
@@ -191,7 +213,8 @@ async function expectSharedControlHeights(page, label) {
 
 async function expectScreenLayout(page, label) {
     await settle(page);
-    await expect(page.getByRole('main').getByRole('heading').first(), `${label}: no heading`)
+    // The screen title is the page header's h1, which sits above main.
+    await expect(page.getByRole('heading', { level: 1 }).first(), `${label}: no heading`)
         .toBeVisible();
 
     const offenders = await overflowingElements(page);
@@ -232,7 +255,7 @@ for (const viewport of VIEWPORTS) {
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
         await installBetFixture(page);
 
-        await gotoSection(page, 'Betting');
+        await gotoPalette(page, 'Betting');
         await expect(page.getByRole('button', { name: new RegExp(`^#${FEED_INDEX}\\b`) }))
             .toBeVisible();
         await expectScreenLayout(page, `${viewport.name} bet feeds`);
