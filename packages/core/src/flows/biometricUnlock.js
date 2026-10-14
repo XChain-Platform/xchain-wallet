@@ -478,9 +478,38 @@ export function unlockWithBiometric() {
     return activeProvider().unlock();
 }
 
-/** Discard the enrollment. Called on disable AND on password change. */
+/**
+ * Discard the enrollment. Called by the disable button and, through
+ * `retireBiometricAfterPasswordChange`, by every password change.
+ */
 export function clearBiometricCredential() {
     return activeProvider().clear();
+}
+
+/**
+ * Called once a password change has committed. An enrolment wraps the unlock
+ * password as it was on the day of enrolment, so after the change it releases
+ * a password the vault no longer opens under: biometric unlock fails with
+ * "Incorrect password" and the old password sits wrapped on the device for as
+ * long as the enrolment does. Clearing it is the only safe move, because
+ * re-enrolling needs a fresh biometric prompt the person did not ask for.
+ *
+ * `vaultRekeyed: false` means only a wallet with its own separate password
+ * changed and the unlock password the enrolment wraps is untouched, so the
+ * enrolment stays. Anything else, an absent flag included, clears.
+ *
+ * @param {{ vaultRekeyed?: boolean } | null | undefined} changeResult   what wallet.changePassword returned
+ * @returns {Promise<boolean>} true when an enrolment was cleared
+ * @throws {Error} when an enrolment existed and could not be cleared
+ */
+export async function retireBiometricAfterPasswordChange(changeResult) {
+    if (changeResult?.vaultRekeyed === false) return false;
+    if (!isBiometricRegistered()) return false;
+    await clearBiometricCredential();
+    if (isBiometricRegistered()) {
+        throw new Error('biometricUnlock: the enrolment is still present after clearing');
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------
