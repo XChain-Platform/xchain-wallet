@@ -57,14 +57,25 @@ const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase bef
  * @returns {string[]}
  */
 export function parsePaste(text) {
+    return parsePasteEntries(text).map(({ value }) => value);
+}
+
+/**
+ * Parse pasted recipients while retaining each candidate's physical line.
+ * Comma-separated candidates on one row share that row's line number.
+ *
+ * @param {string} text
+ * @returns {Array<{ value: string, line: number }>}
+ */
+export function parsePasteEntries(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
-    // Split on any newline or comma. Keeps the split lightweight; we
-    // don't try to be a full CSV parser here.
-    const parts = text.split(/[\r\n,]+/g);
     const out = [];
-    for (const raw of parts) {
-        const trimmed = stripWrappingQuotes(raw.trim());
-        if (trimmed.length > 0) out.push(trimmed);
+    const lines = text.split(/\r\n|\r|\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+        for (const raw of lines[index].split(/,+/g)) {
+            const value = stripWrappingQuotes(raw.trim());
+            if (value.length > 0) out.push({ value, line: index + 1 });
+        }
     }
     return out;
 }
@@ -77,6 +88,17 @@ export function parsePaste(text) {
  * @returns {string[]}
  */
 export function parseCsv(text) {
+    return parseCsvEntries(text).map(({ value }) => value);
+}
+
+/**
+ * Parse first-column CSV recipients while retaining the physical line where
+ * each RFC 4180 record starts.
+ *
+ * @param {string} text
+ * @returns {Array<{ value: string, line: number }>}
+ */
+export function parseCsvEntries(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
     const rows = parseCsvRecords(text);
     const out = [];
@@ -87,7 +109,7 @@ export function parseCsv(text) {
     const start = firstContent + (firstCol === 'address' ? 1 : 0);
     for (let i = start; i < rows.length; i += 1) {
         const first = rows[i].cells[0].trim().replace(/^\uFEFF/, '');
-        if (first.length > 0) out.push(first);
+        if (first.length > 0) out.push({ value: first, line: rows[i].line });
     }
     return out;
 }
@@ -166,6 +188,12 @@ export function isRecipientForChain(addr, chain) {
  * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }}
  */
 export function classifyRecipients(candidates, chain) {
+    const classifier = createRecipientClassifier(chain, false);
+    for (const raw of candidates) classifier.add(raw);
+    return classifier.result();
+}
+
+function createRecipientClassifier(chain, includeLines) {
     /** @type {string[]} */
     const valid = [];
     /** @type {string[]} */
@@ -174,30 +202,83 @@ export function classifyRecipients(candidates, chain) {
     const wrongNetwork = [];
     const params = chainParams(chain);
     const seen = new Set();
+    const invalidLines = [];
+    const wrongNetworkLines = [];
     let duplicates = 0;
-    for (const raw of candidates) {
+    const add = (raw, line) => {
         const candidate = String(raw ?? '').trim();
-        if (!candidate) continue;
+        if (!candidate) return;
         // Bech32 is case-insensitive when the whole address uses one case.
         const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/i.test(candidate)
             && (candidate === candidate.toLowerCase() || candidate === candidate.toUpperCase());
         const duplicateKey = bech32 ? candidate.toLowerCase() : candidate;
         if (seen.has(duplicateKey)) {
             duplicates += 1;
-            continue;
+            return;
         }
         seen.add(duplicateKey);
         if (isRecipientForChain(candidate, chain)) {
             valid.push(candidate);
-            continue;
+            return;
         }
         invalid.push(candidate);
+        if (includeLines) invalidLines.push({ address: candidate, line });
         // Only meaningful once a chain is known: it is the difference
         // between "this is not an address" and "this is an address for
         // somewhere else".
-        if (params && isValidAddressAnyNetwork(candidate)) wrongNetwork.push(candidate);
+        if (params && isValidAddressAnyNetwork(candidate)) {
+            wrongNetwork.push(candidate);
+            if (includeLines) wrongNetworkLines.push({ address: candidate, line });
+        }
+    };
+    const result = () => includeLines
+        ? { valid, invalid, duplicates, wrongNetwork, invalidLines, wrongNetworkLines }
+        : { valid, invalid, duplicates, wrongNetwork };
+    return { add, result };
+}
+
+/**
+ * Classify parsed entries and retain source locations for rejected rows.
+ * The canonical string arrays match `classifyRecipients`, so publishing and
+ * pricing use the same first-occurrence-wins duplicate rule as plain paste.
+ *
+ * @param {Array<{ value: string, line: number }>} entries
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
+ *   invalidLines: Array<{ address: string, line: number }>,
+ *   wrongNetworkLines: Array<{ address: string, line: number }> }}
+ */
+export function classifyRecipientEntries(entries, chain) {
+    const classifier = createRecipientClassifier(chain, true);
+    for (const entry of entries) classifier.add(entry?.value, entry?.line);
+    return classifier.result();
+}
+
+/**
+ * Classify a large parsed list in bounded chunks so input and paint tasks can
+ * run between batches. A cancelled classification returns null.
+ *
+ * @param {Array<{ value: string, line: number }>} entries
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @param {{ chunkSize?: number, yieldTask?: () => Promise<void>, shouldCancel?: () => boolean }} [options]
+ * @returns {Promise<ReturnType<typeof classifyRecipientEntries> | null>}
+ */
+export async function classifyRecipientEntriesAsync(entries, chain, options = {}) {
+    const rawChunkSize = Number(options.chunkSize);
+    const chunkSize = Number.isInteger(rawChunkSize) && rawChunkSize > 0 ? rawChunkSize : 250;
+    const yieldTask = options.yieldTask || (() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const shouldCancel = options.shouldCancel || (() => false);
+    const classifier = createRecipientClassifier(chain, true);
+
+    for (let index = 0; index < entries.length; index += 1) {
+        if (index > 0 && index % chunkSize === 0) {
+            await yieldTask();
+            if (shouldCancel()) return null;
+        }
+        const entry = entries[index];
+        classifier.add(entry?.value, entry?.line);
     }
-    return { valid, invalid, duplicates, wrongNetwork };
+    return classifier.result();
 }
 
 /**

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -64,6 +64,12 @@ import { currentListItems } from '../../flows/listMembership.js';
 import { MEMO_HINT } from '../utils/memoLimit.js';
 import { listLabel } from '../utils/listLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import {
+    classifyRecipientEntries,
+    classifyRecipientEntriesAsync,
+    parseCsvEntries,
+    parsePasteEntries,
+} from '../../airdrop/parseRecipients.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -174,9 +180,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     // 'paste' mode: paste/upload addresses -> new ADDRESS list (TYPE=2).
     const [pasteText, setPasteText] = useState('');
-    const [recipients, setRecipients] = useState(
-        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }} */
-        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
+    const [committedRecipients, setCommittedRecipients] = useState(
+        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[], invalidLines?: Array<{ address: string, line: number }> }} */
+        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [], invalidLines: [] }),
+    );
+    const [importedRecipientEntries, setImportedRecipientEntries] = useState(
+        /** @type {{ text: string, entries: Array<{ value: string, line: number }> } | null} */ (null),
     );
     const [showInvalid, setShowInvalid] = useState(false);
 
@@ -303,7 +312,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setTicksText(rec.recipients.join('\n'));
                 } else {
                     setSourceMode('paste');
-                    setRecipients({
+                    setCommittedRecipients({
                         valid: [...rec.recipients], invalid: [], duplicates: 0, wrongNetwork: [],
                     });
                 }
@@ -349,19 +358,66 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // the parser is what makes a mainnet address pasted into a regtest wallet
     // count as skipped instead of valid; without it the form only checked
     // length + charset and the chain silently dropped the address after the
-    // user had already paid for it. Split out as a plain object so the parse
-    // effect can depend on the two fields rather than the descriptor identity.
+    // user had already paid for it. Split out as a plain object so recipient
+    // classification depends on the two fields rather than descriptor identity.
     const recipientCoin = descriptor?.coin || null;
     const recipientNetwork = descriptor?.networkKind || null;
 
-    useEffect(() => {
-        if (stage !== 'compose') return;
-        const parts = airdropLib.parsePaste(pasteText);
-        setRecipients(airdropLib.classifyRecipients(
-            parts,
+    // Deferred parsing keeps textarea updates at input priority for large lists.
+    // Submit stays disabled until the deferred snapshot catches up.
+    const deferredPasteText = useDeferredValue(pasteText);
+    const deferredRecipientsPending = deferredPasteText !== pasteText;
+    const recipientEntries = useMemo(
+        () => (importedRecipientEntries?.text === deferredPasteText
+            ? importedRecipientEntries.entries
+            : parsePasteEntries(deferredPasteText)),
+        [deferredPasteText, importedRecipientEntries],
+    );
+    const immediateRecipients = useMemo(
+        () => (recipientEntries.length <= 1_000 ? classifyRecipientEntries(
+            recipientEntries,
             { coin: recipientCoin, network: recipientNetwork },
-        ));
-    }, [pasteText, stage, recipientCoin, recipientNetwork]);
+        ) : null),
+        [recipientEntries, recipientCoin, recipientNetwork],
+    );
+    const [largeRecipientResult, setLargeRecipientResult] = useState(
+        /** @type {{ entries: Array<{ value: string, line: number }> | null, coin: string | null, network: string | null, recipients: any }} */
+        ({ entries: null, coin: null, network: null, recipients: null }),
+    );
+    useEffect(() => {
+        if (immediateRecipients) {
+            setLargeRecipientResult((current) => (current.entries === null ? current : {
+                entries: null,
+                coin: null,
+                network: null,
+                recipients: null,
+            }));
+            return undefined;
+        }
+        if (stage !== 'compose' || sourceMode !== 'paste') return undefined;
+        let cancelled = false;
+        classifyRecipientEntriesAsync(
+            recipientEntries,
+            { coin: recipientCoin, network: recipientNetwork },
+            { shouldCancel: () => cancelled },
+        ).then((next) => {
+            if (!cancelled && next) setLargeRecipientResult({
+                entries: recipientEntries,
+                coin: recipientCoin,
+                network: recipientNetwork,
+                recipients: next,
+            });
+        });
+        return () => { cancelled = true; };
+    }, [recipientEntries, immediateRecipients, recipientCoin, recipientNetwork, stage, sourceMode]);
+    const largeRecipientsReady = largeRecipientResult.entries === recipientEntries
+        && largeRecipientResult.coin === recipientCoin
+        && largeRecipientResult.network === recipientNetwork;
+    const parsedRecipients = immediateRecipients
+        || (largeRecipientsReady ? largeRecipientResult.recipients : committedRecipients);
+    const recipientClassificationPending = !immediateRecipients && !largeRecipientsReady;
+    const recipientsPending = deferredRecipientsPending || recipientClassificationPending;
+    const recipients = stage === 'compose' ? parsedRecipients : committedRecipients;
 
     // Parse holder tickers with the same chain grammar as every token-list form.
     const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
@@ -742,17 +798,23 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return multiplyDecimal(feeEstimate.coinAmount, sourceMode === 'existing' ? '1' : '2');
     }, [feeEstimate, sourceMode]);
 
+    const applyImportedRecipients = useCallback((text) => {
+        const entries = parseCsvEntries(text);
+        const normalized = entries.map(({ value }) => value).join('\n');
+        setImportedRecipientEntries({ text: normalized, entries });
+        setPasteText(normalized);
+    }, []);
+
     const handleFile = useCallback((event) => {
         const file = event.target?.files?.[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
             const text = typeof reader.result === 'string' ? reader.result : '';
-            const parts = airdropLib.parseCsv(text);
-            setPasteText(parts.join('\n'));
+            applyImportedRecipients(text);
         };
         reader.readAsText(file);
-    }, []);
+    }, [applyImportedRecipients]);
 
     // Recipient CSV and TXT files can be dropped onto the textarea while
     // the file Input remains the primary affordance.
@@ -762,8 +824,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         onError: (msg) => setFormError(msg),
         onFile: ({ content }) => {
             const text = typeof content === 'string' ? content : '';
-            const parts = airdropLib.parseCsv(text);
-            setPasteText(parts.join('\n'));
+            applyImportedRecipients(text);
         },
     });
 
@@ -848,10 +909,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 setFormError('Add at least one token.');
                 return;
             }
+        } else if (recipientsPending) {
+            setFormError('Still checking the recipient list. Try again in a moment.');
+            return;
         } else if (recipients.valid.length === 0) {
             setFormError('Add at least one valid recipient address.');
             return;
         }
+        if (sourceMode === 'paste') setCommittedRecipients(recipients);
         setFormError(null);
         setStage('review-list');
     }
@@ -1720,7 +1785,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="submit" variant="primary">
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={sourceMode === 'paste' && recipientsPending}
+                >
                     {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
                 </Button>
             )}
@@ -1833,7 +1902,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <Textarea
                             label="Recipients"
                             value={pasteText}
-                            onChange={(e) => setPasteText(e.target.value)}
+                            onChange={(e) => {
+                                setImportedRecipientEntries(null);
+                                setPasteText(e.target.value);
+                            }}
                             placeholder={recipientsDrop.isDragOver
                                 ? 'Drop the CSV / TXT file here'
                                 : 'Paste addresses, one per line or comma-separated.'}
@@ -1881,8 +1953,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             </Button>
                             {showInvalid ? (
                                 <ul>
-                                    {recipients.invalid.map((a, i) => (
-                                        <li key={i}><code>{a}</code></li>
+                                    {(recipients.invalidLines || recipients.invalid.map((address, index) => ({
+                                        address,
+                                        line: index + 1,
+                                    }))).map(({ address, line }) => (
+                                        <li key={`${line}:${address}`}>
+                                            Line {line}: <code>{address}</code>
+                                        </li>
                                     ))}
                                 </ul>
                             ) : null}
