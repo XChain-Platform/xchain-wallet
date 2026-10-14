@@ -21,7 +21,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, test } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 import { createCrawl } from './crawl.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -90,6 +90,8 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
             await crawl.enterDemo();
             let screens = await crawl.discover();
             if (ONLY) screens = screens.filter((s) => ONLY.test(s.label));
+            // Check harness coverage, not findings: the run must have at least one screen to crawl.
+            expect(screens.length, 'harness coverage: no screen to crawl (discovery found none, or CRAWL_ONLY matched none)').toBeGreaterThan(0);
             const mine = screens.filter((_, i) => i % SHARDS === shard);
             try {
                 for (const screen of mine) {

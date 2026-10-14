@@ -42,7 +42,7 @@ import { installSdkNetworkPolicy, sharedExplorerLimiter } from './explorerRateLi
  * @property {(txHex: string, encoder?: unknown) => Promise<{ txid: string }>} wallet.broadcastTx
  * @property {Object} auth
  * @property {(message: string, wif: string, opts?: { segwitNative?: boolean, segwitRedeemScript?: boolean }) => string} auth.signMessage
- * @property {(address: string, message: string, signature: string, network?: string) => boolean} auth.verifyMessage
+ * @property {(address: string, message: string, signature: string, network?: string) => { valid: boolean, error: string|null }} auth.verifyMessage
  * @property {(address: string, opts?: { message?: string }) => string} auth.generateChallenge
  * @property {() => Promise<void>} [init]
  * @property {() => void} [close]

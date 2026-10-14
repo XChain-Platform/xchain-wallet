@@ -202,6 +202,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
 
     const header = (
         <PageHeader
+            nested
             onBack={busy ? undefined : onClose}
             title="Add addresses"
             titleIcon={<Icon.PlusIcon />}

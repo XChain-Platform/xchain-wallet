@@ -1810,9 +1810,11 @@ export function createBackgroundHost(deps) {
     // here so the service worker can lock the wallet after the popup closes,
     // when the foreground timer no longer runs. Sender-gated to the trusted
     // extension UI by the transport (not a `bridge.*` type).
+    // Forward the foreground `activity` flag: an activity report restarts the
+    // idle window and can never re-arm a disarmed record.
     host.register('session.autolock', async (req) => {
         await applyAutoLockSignal(
-            { armed: req?.armed === true, idleMs: req?.idleMs },
+            { armed: req?.armed === true, idleMs: req?.idleMs, activity: req?.activity === true },
             Date.now(),
         );
         return { ok: true };
@@ -3123,7 +3125,9 @@ export function createBackgroundHost(deps) {
         }
         let valid = false;
         try {
-            valid = Boolean(sdk.auth.verifyMessage(address, message, signature));
+            // Read the SDK's { valid, error } answer by its field; the demo stubs answer a bare boolean
+            const verdict = sdk.auth.verifyMessage(address, message, signature);
+            valid = typeof verdict === 'boolean' ? verdict : verdict?.valid === true;
         } catch (_err) {
             valid = false;
         }
@@ -3448,12 +3452,17 @@ export function createBackgroundHost(deps) {
         try {
             broadcast = await sdk.encoder.broadcastTx(signed.txHex);
         } catch (err) {
-            await vault.pendingTxs.put({
-                ...pending,
-                status: 'failed',
-                error: err?.message ? String(err.message) : String(err),
-            });
-            throw err;
+            // An already-on-network answer means these exact bytes reached a node, so the
+            // replacement is live and the original evicted: settle it as delivered, as every broadcast lane does.
+            if (!flows.isAlreadyOnNetworkRejection(err)) {
+                await vault.pendingTxs.put({
+                    ...pending,
+                    status: 'failed',
+                    error: err?.message ? String(err.message) : String(err),
+                });
+                throw err;
+            }
+            broadcast = signed.txid;
         }
         const replacementTxHash = typeof broadcast === 'string'
             ? broadcast

@@ -18,6 +18,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
@@ -197,7 +198,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const browserOnline = useOnlineStatus();
-    const { overall: reachabilityOverall } = useReachability({});
+    const {
+        overall: reachabilityOverall,
+        refresh: recheckReachability,
+    } = useReachability({});
     // Treat a corroborated service outage as offline even when the device
     // still has a live Wi-Fi or Ethernet interface.
     const offline = !browserOnline || reachabilityOverall === 'offline';
@@ -921,6 +925,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         () => runNetworkAction('Refreshing balances', refreshPortfolio),
         [runNetworkAction, refreshPortfolio],
     );
+    // Try again from the "Balances could not be checked" state.
+    const recheckBalances = useCallback(() => {
+        recheckReachability();
+        refreshPortfolioOnline();
+    }, [recheckReachability, refreshPortfolioOnline]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -1341,6 +1350,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         {t('home.interruptedAction', { action: interruptedAction })}
                     </StatusMessage>
                 ) : null}
+                {/* The offline message already covers stale balances, so the
+                    shell notice steps aside rather than saying it twice. */}
+                {offline ? <HideReachabilityNotice /> : null}
                 {offline ? (
                     <StatusMessage variant="warning">
                         {balances
@@ -1348,6 +1360,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             : t('home.offline.empty')}
                     </StatusMessage>
                 ) : null}
+                {/* Home's own balance error already says the balances could not
+                    be loaded, with Retry, so the shell notice steps aside. */}
+                {balanceStatusText ? <HideReachabilityNotice /> : null}
                 {balanceStatusText ? (
                     <StatusMessage
                         variant="error"
@@ -1482,6 +1497,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         hideSmallBalances={hideSmallBalances}
                         onRefresh={refreshPortfolioOnline}
                         refreshing={portfolioRefreshing}
+                        // Offline already has its own message above; a degraded
+                        // check words the empty tabs instead.
+                        balancesUnchecked={!offline && reachabilityOverall === 'degraded'}
+                        onRecheckBalances={recheckBalances}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.

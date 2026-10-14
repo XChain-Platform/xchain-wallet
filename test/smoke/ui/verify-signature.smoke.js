@@ -81,7 +81,7 @@ assert.match(
 );
 assert.match(
     hostSrc,
-    /try \{[\s\S]*?valid = Boolean\(sdk\.auth\.verifyMessage[\s\S]*?\)/,
+    /try \{[\s\S]*?sdk\.auth\.verifyMessage\(address, message, signature\)[\s\S]*?\.valid === true[\s\S]*?catch/,
     'wraps SDK call so malformed signatures return valid=false',
 );
 

@@ -46,7 +46,9 @@ import {
 import { parseCsvRecords } from '../shared/utils/csv.js';
 
 const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
-const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase before testing.
+// Bech32 shape per BIP173: a human-readable part, the last `1` as separator, then at
+// least six data characters from the Bech32 charset. Tested against the lowercased value.
+const BECH32_SHAPE = /^[0-9a-z]+1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}$/;
 
 /**
  * Split a paste-box string into raw candidate strings. Handles line-
@@ -130,8 +132,10 @@ export function isPlausibleAddress(addr) {
     const isBech32Len = len === 42 || (len >= 14 && len <= 74 && s.includes('1'));
     if (!isP2pkhLen && !isBech32Len) return false;
     // Bech32 addresses are all-lowercase (or all-uppercase; wallets
-    // emit lowercase). Try lowercase match first.
-    if (BECH32_ALPHABET.test(s.toLowerCase())) return true;
+    // emit lowercase). Mixed case is never Bech32 (BIP173), and a string
+    // without the HRP-separator-data shape falls through to the Base58 check.
+    const lower = s.toLowerCase();
+    if ((s === lower || s === s.toUpperCase()) && BECH32_SHAPE.test(lower)) return true;
     if (BASE58_ALPHABET.test(s)) return true;
     return false;
 }

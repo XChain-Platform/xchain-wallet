@@ -1042,8 +1042,9 @@ assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not
 // APK is a genuine second build, because the `default` profile
 // compiles different code in and so there is no bundle to derive it from.
 // What stops that eroding the rule above is that it is OPT-IN: an unset
-// XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was, and its
-// lane is NOT-SHIPPED, so no release demands the file either.
+// XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was. Its lane is
+// SHIPPED since v0.341.3, so a release scoped to it needs the file, while a
+// store-only `--lane android` release does not.
 assert.match(ceremony, /if \[ -n "\$\{XCHAIN_BUILD_ANDROID_FULL:-\}" \]/,
     'the full-feature APK leg exists and is opt-in, leaving the store lane untouched');
 

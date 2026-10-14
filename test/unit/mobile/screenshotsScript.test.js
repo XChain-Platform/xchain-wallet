@@ -48,7 +48,7 @@ describe('screenshots.sh', () => {
         expect(readFileSync(fixture.log, 'utf8')).toBe('');
     });
 
-    it.skip('reports available devices when absent (bug: pipefail exits before the missing-simulator diagnostic)', () => {
+    it('reports available devices when the simulator is absent', () => {
         const fixture = makeFixture({ profile: 'store' });
         const result = run(fixture, ['iPhone Missing']);
 
