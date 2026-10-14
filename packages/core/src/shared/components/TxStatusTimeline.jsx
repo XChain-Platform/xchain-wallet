@@ -42,10 +42,10 @@ const MEMPOOL_STAGE_COPY = {
         sub: 'No node has reported holding this transaction. It may not have reached the network',
     },
     dropped: {
-        label: 'Dropped or replaced?',
+        label: 'Failed',
         done: false,
         warn: true,
-        sub: 'A node was holding this transaction and no longer is, and no block has included it',
+        sub: 'The network stopped reporting this transaction and it did not confirm',
     },
     replaced: {
         label: 'Replaced',

@@ -56,6 +56,7 @@ import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
     compareMergedEntries,
     mempoolRowToEntry,
+    mergeMonotonicChainHeights,
     mergePendingEntries,
     pendingDisplayState,
     pendingTxToEntry,
@@ -1155,7 +1156,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             for (const { cid, watermark } of results) {
                 if (Number.isFinite(watermark) && watermark > 0) next[cid] = watermark;
             }
-            setIndexerWatermarkByChainId(next);
+            setIndexerWatermarkByChainId((previous) => (
+                mergeMonotonicChainHeights(previous, next)
+            ));
         });
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, walletId, browserOnline, refreshTick]);

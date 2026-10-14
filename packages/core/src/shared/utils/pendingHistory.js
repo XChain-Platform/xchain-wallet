@@ -539,6 +539,27 @@ export function pendingDisplayState(entry, nowMs, windows) {
 }
 
 /**
+ * Merge newly observed per-chain heights without lowering a height already
+ * shown to the user. An indexer replica can briefly answer from an older
+ * snapshot, but that lag is not evidence that confirmations disappeared.
+ * Missing and invalid readings leave the last reliable height in place.
+ *
+ * @param {Record<string, number>} previous
+ * @param {Record<string, number>} observed
+ * @returns {Record<string, number>}
+ */
+export function mergeMonotonicChainHeights(previous, observed) {
+    const next = { ...(previous || {}) };
+    for (const [chainId, value] of Object.entries(observed || {})) {
+        const height = Number(value);
+        if (!Number.isFinite(height) || height <= 0) continue;
+        const prior = Number(next[chainId]);
+        next[chainId] = Number.isFinite(prior) && prior > height ? prior : height;
+    }
+    return next;
+}
+
+/**
  * Sort order for a merged list (I-22): pending first, then every entry
  * newest first by its own clock.
  *
