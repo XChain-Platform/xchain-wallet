@@ -106,7 +106,9 @@ test('desktop network round trip leaves Receive usable', async () => {
         await expectNoCredentialError(page, runtimeErrors);
 
         await gotoSection(page, 'Receive');
-        const address = page.getByLabel('Address', { exact: true });
+        // The read-only receive field is named by the address's own label
+        // ("BTC Address #1" in the demo wallet), not a fixed "Address".
+        const address = page.getByRole('textbox', { name: /address/i }).and(page.locator('input[readonly]'));
         const unlockPrompt = page.getByRole('button', { name: 'Unlock Wallet' });
         await expect(address.or(unlockPrompt).first()).toBeVisible({ timeout: 30_000 });
         if (await address.isVisible()) await expect(address).not.toHaveValue('');
