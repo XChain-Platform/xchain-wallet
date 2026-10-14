@@ -51,7 +51,7 @@ describe('AddAccountForm navigation', () => {
         );
 
         expect(screen.queryByText('A new set of derived addresses under the same recovery phrase.')).toBeNull();
-        expect(screen.getByText(/Names a separate set of addresses derived from this wallet's recovery phrase/))
+        expect(screen.getByText(/Names a separate set of addresses in this wallet/))
             .toBeInTheDocument();
     });
 
