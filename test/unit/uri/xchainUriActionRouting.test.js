@@ -6,28 +6,9 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// §3.6 finding 2: an unrecognized action segment silently becomes a
-// send. `parseXchainUri` treats any coin-code action outside the receive /
-// execute sets as `kind: 'send'`, preserving the literal in `intent.action`
-// (xchainUri.js §"Actions that map to..."). `xchain:BTC/drainwallet?...`
-// and `xchain:BTC/approve?...` both route to the Send compose form.
-//
-// This is deliberate, documented forward-compatibility (a typo'd or
-// future action segment still opens a form instead of dead-ending the
-// link), and it is safe today for one reason only: every shell routes on
-// `intent.kind`, never on `intent.action`. Grepping every consumer
-// (extension/web/desktop App.jsx, ScanRoute, Send, xchainUri.js itself)
-// found no such route - `intent.action` is read in exactly two places,
-// both inside xchainUri.js: a doc comment, and `buildXchainUri`, which
-// reads it to pick which path segment to WRITE into an outgoing link the
-// wallet generates, not to route an incoming one.
-//
-// That makes "nothing routes on action" a fact about the tree today, not
-// a property of the parser, so it can only be locked by watching the
-// tree: the day a screen adds `if (intent.action === 'drainwallet')` (or
-// reads `.action` off anything built from a parsed URI intent under any
-// other name), a typo'd or attacker-chosen action segment becomes
-// reachable there, and this test is what says so.
+// The parser preserves unknown action segments as send-shaped intents for
+// generic URI tooling. The external-link router is the sole consumer allowed
+// to inspect that segment, and it admits only send, receive, and execute.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -37,10 +18,10 @@ import { dirname, join, relative } from 'node:path';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PACKAGES = join(HERE, '..', '..', '..', 'packages');
 
-// The one file allowed to read `intent.action`: it defines the field, and
-// its own `buildXchainUri` reads it back to serialize an outgoing link,
-// which is not a routing decision.
+// The parser defines and serializes the field. The external-link router reads
+// it only to reject actions outside its fixed form allowlist.
 const PARSER_FILE = join(PACKAGES, 'core', 'src', 'uri', 'xchainUri.js');
+const EXTERNAL_ROUTER_FILE = join(PACKAGES, 'desktop', 'renderer', 'deepLinkRoute.js');
 
 const SKIP_DIR = new Set(['node_modules', 'dist', 'coverage', '.git']);
 
@@ -91,7 +72,7 @@ function sourceFiles() {
     return out;
 }
 
-describe('§3.6 invariant: shells route a parsed URI intent on `kind`, never on `action`', () => {
+describe('§3.6 invariant: only the external-link boundary gates `intent.action`', () => {
     const files = sourceFiles();
 
     it('finds source files to sweep (guards against an empty walk)', () => {
@@ -103,20 +84,18 @@ describe('§3.6 invariant: shells route a parsed URI intent on `kind`, never on 
         expect(INTENT_ACTION_RE.test(src)).toBe(true);
     });
 
-    it('no other file reads `intent.action`', () => {
+    it('no screen or other consumer reads `intent.action`', () => {
         const offenders = [];
         for (const file of files) {
-            if (file === PARSER_FILE) continue;
+            if (file === PARSER_FILE || file === EXTERNAL_ROUTER_FILE) continue;
             const src = readFileSync(file, 'utf8');
             if (INTENT_ACTION_RE.test(src)) offenders.push(relative(PACKAGES, file));
         }
         expect(
             offenders,
             `${offenders.join(', ')} reads intent.action. A parsed URI intent must only ever be routed `
-            + 'on `kind` (send/receive/execute/unknown); `action` preserves the literal path segment for '
-            + 'forward compatibility and carries no gate on its value (xchain:BTC/drainwallet routes to '
-            + '"send" today only because nothing reads .action). If this file needs the action segment, '
-            + 'route on `kind` and treat `action` as display-only text, never as a value a screen branches on.',
+            + 'through deepLinkRoute, whose fixed allowlist rejects unknown external actions. Screens route '
+            + 'on `kind` and treat `action` as display-only text.',
         ).toEqual([]);
     });
 });
