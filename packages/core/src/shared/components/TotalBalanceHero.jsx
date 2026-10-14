@@ -25,6 +25,7 @@ import {
 } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
+import { t } from '../../i18n/index.js';
 
 const COMPACT_ACTIONS_QUERY = '(max-width: 479px)';
 
@@ -294,14 +295,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         <section className={styles.hero} aria-labelledby={labelId}>
             <div className={styles.row}>
                 <span id={labelId} className={styles.label}>
-                    Active address balance
+                    {t('components.totalBalanceHero.activeAddressBalance')}
                     {filterLabel ? (
                         <span className={styles.scope}>· {filterLabel}</span>
                     ) : null}
                 </span>
                 <div
                     className={`${styles.amount} ${balanceIsMessage ? styles.amountMessage : ''}`}
-                    aria-label={hidden ? 'Balance hidden' : balanceSpeech}
+                    aria-label={hidden ? t('components.totalBalanceHero.balanceHidden') : balanceSpeech}
                 >
                     {hidden ? (
                         <span className={styles.hidden}>•••••</span>
@@ -321,10 +322,10 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             type="button"
                             className={styles.eye}
                             onClick={() => setActionsOpen((open) => !open)}
-                            aria-label="Balance actions"
+                            aria-label={t('components.totalBalanceHero.balanceActions')}
                             aria-haspopup="menu"
                             aria-expanded={actionsOpen ? 'true' : 'false'}
-                            title="Balance actions"
+                            title={t('components.totalBalanceHero.balanceActions')}
                             icon={<Icon.MoreIcon />}
                         >
                             {null}
@@ -334,7 +335,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                 ref={actionsMenuRef}
                                 className={styles.actionMenu}
                                 role="menu"
-                                aria-label="Balance actions"
+                                aria-label={t('components.totalBalanceHero.balanceActions')}
                                 onKeyDown={(event) => {
                                     if (!event.target.closest?.('[role="menuitem"], [role="menuitemcheckbox"]')) return;
                                     const items = enabledMenuItems(actionsMenuRef.current);
@@ -380,7 +381,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                     type="button"
                                     className={styles.eye}
                                     onClick={handler}
-                                    aria-label="Open settings"
+                                    aria-label={t('components.totalBalanceHero.openSettings')}
                                     title={title}
                                     icon={<ActionIcon />}
                                 >
@@ -407,7 +408,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                 )}
             </div>
             {showMeta ? (
-                <div className={styles.meta} aria-label="Balance summary">
+                <div className={styles.meta} aria-label={t('components.totalBalanceHero.balanceSummary')}>
                     <span className={styles.metaLeft}>
                         {hasChange && !testCoinsOnly ? (
                             <span
@@ -416,11 +417,11 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                         : changeDisplay.direction === 'negative' ? styles.changeNegative
                                         : styles.changeNeutral
                                 }
-                                aria-label={`24-hour change. ${changeDisplay.label}; ${formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}`}
+                                aria-label={t('components.totalBalanceHero.24HourChange', { label: changeDisplay.label, formatFiatAmountForSpeechValue: formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale) })}
                             >
                                 {changeDisplay.direction === 'positive' ? '▲' : changeDisplay.direction === 'negative' ? '▼' : '-'}{' '}
                                 {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}{' '}
-                                ({changeDisplay.text}) · 24h
+                                ({changeDisplay.text}{t('components.totalBalanceHero.24h')}
                             </span>
                         ) : null}
                         {hasUnpriced && !testCoinsOnly ? (

@@ -17,6 +17,7 @@ import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
 import { copyText, CopyFailure } from '../shared/clipboard.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Copies `value` to the system clipboard and briefly shows a confirmation
@@ -35,7 +36,7 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
  * @param {boolean} [props.sensitive]     seed words, private keys: never to a synced or unmarked clipboard (SSC-4)
  * @param {() => void} [props.onCopied]   fires after a successful copy
  */
-export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
+export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
     const [copiedText, setCopiedText] = useState('');

@@ -14,6 +14,7 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { isNativeShell } from '../nativeShell.js';
 import PLATFORM_LINKS from '../platform-links.json';
 import styles from './AppHeader.module.css';
+import { t } from '../../i18n/index.js';
 
 function actionableItems(menu) {
     return Array.from(menu?.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])') || []);
@@ -117,12 +118,12 @@ export function HeaderActionMenu({
         ? cloneElement(settingsControl, { onNavigate: close })
         : settingsControl;
     const rows = [
-        { id: 'search', label: 'Search', Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
-        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, handler: onScan },
-        { id: 'manage-addresses', label: 'Manage addresses', Icon: Icon.AddressIcon, handler: onManageAddresses },
-        { id: 'view-address', label: 'View address', Icon: Icon.EyeIcon, handler: onViewAddress },
-        { id: 'pop-out', label: 'Open in new window', Icon: Icon.ExternalLinkIcon, handler: popOut },
-        { id: 'more', label: 'More wallet actions', Icon: Icon.MoreIcon, handler: onMore },
+        { id: 'search', label: t('shell.headerMenu.search'), Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
+        { id: 'scan', label: t('nav.scan'), Icon: Icon.ScanIcon, handler: onScan },
+        { id: 'manage-addresses', label: t('shell.headerMenu.manageAddresses'), Icon: Icon.AddressIcon, handler: onManageAddresses },
+        { id: 'view-address', label: t('shell.headerMenu.viewAddress'), Icon: Icon.EyeIcon, handler: onViewAddress },
+        { id: 'pop-out', label: t('shell.headerMenu.openInNewWindow'), Icon: Icon.ExternalLinkIcon, handler: popOut },
+        { id: 'more', label: t('shell.headerMenu.moreWalletActions'), Icon: Icon.MoreIcon, handler: onMore },
     ].filter((row) => typeof row.handler === 'function');
     // A menu holding only Search repeats the rail's Search button; the layout
     // hides this trigger whenever a visible rail already offers it.
@@ -149,10 +150,10 @@ export function HeaderActionMenu({
                         initialFocusRef.current = event.key === 'ArrowUp' ? 'last' : 'first';
                         setOpen(true);
                     }}
-                    aria-label="Open menu"
+                    aria-label={t('components.headerActionMenu.openMenu')}
                     aria-haspopup="menu"
                     aria-expanded={open ? 'true' : 'false'}
-                    title="Open menu"
+                    title={t('components.headerActionMenu.openMenu')}
                     data-header-control
                 />
             </span>
@@ -161,7 +162,7 @@ export function HeaderActionMenu({
                     ref={menuRef}
                     className={styles.actionMenu}
                     role="menu"
-                    aria-label="Header actions"
+                    aria-label={t('components.headerActionMenu.headerActions')}
                     onKeyDown={(event) => {
                         if (!event.target.closest?.('[role="menuitem"]')) return;
                         // Tab leaves the menu, so it closes without trapping focus.

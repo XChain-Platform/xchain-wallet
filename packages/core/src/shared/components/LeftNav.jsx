@@ -15,6 +15,7 @@ import { useLayoutTier } from '../styles/useLayoutTier.js';
 import { ROUTE_NAV_GROUPS, ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
 import { NoticesRouteContext } from './noticesRoute.js';
 import styles from './LeftNav.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
@@ -82,42 +83,42 @@ export function LeftNav({
 }) {
     const activeItem = activeLeftNavItem(currentView);
     const primary = [
-        { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-        { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
+        { id: 'home', label: t('nav.home'), Icon: Icon.HomeIcon },
+        { id: 'history', label: t('nav.history'), Icon: Icon.HistoryIcon },
         // Signer mode's own hint promises "Send / receive screens
         // are hidden; this wallet does not broadcast". Absent, not disabled,
         // for the reason the DEX row below is absent: a greyed Send row still
         // reads as a capability the device has, and the whole value of the
         // mode is that an air-gapped user can believe the removal.
         ...(isSignerMode ? [] : [
-            { id: 'send', label: 'Send', Icon: Icon.SendIcon },
-            { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon },
+            { id: 'send', label: t('nav.send'), Icon: Icon.SendIcon },
+            { id: 'receive', label: t('nav.receive'), Icon: Icon.ReceiveIcon },
         ]),
-        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
+        { id: 'scan', label: t('nav.scan'), Icon: Icon.ScanIcon },
         // Absent, not greyed, when the build has no DEX surface: the store
         // build compiles those routes out, so the destination does
         // not exist, and a visibly disabled exchange tab asks an app reviewer
         // the same question a working one does.
         ...(hasDexSurface
             ? [
-                { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon },
-                { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon },
+                { id: 'markets', label: t('nav.dex'), Icon: Icon.MarketIcon },
+                { id: 'market-activity', label: t('nav.marketplace'), Icon: Icon.LineChartIcon },
             ]
             : []),
-        { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
+        { id: 'dispensers-list', label: t('nav.dispensers'), Icon: Icon.DollarIcon },
         // Gate Contracts on a VM address, matching Home and the command
         // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
         ...(hasVmAddress
-            ? [{ id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon }]
+            ? [{ id: 'contracts-list', label: t('nav.contracts'), Icon: Icon.ContractIcon }]
             : []),
-        { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
+        { id: 'messaging', label: t('nav.messaging'), Icon: Icon.MessageIcon },
     ];
 
     const secondary = [
-        { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-        { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+        { id: 'contacts', label: t('nav.contacts'), Icon: Icon.UsersIcon },
+        { id: 'lists', label: t('nav.lists'), Icon: Icon.TokenListIcon },
         // PC-15: COINPAY obligations queue; badge = payable pending count.
-        { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
+        { id: 'obligations', label: t('nav.paymentsDue'), Icon: Icon.ClockIcon },
     ];
 
     const handleKeyDown = (event) => {
@@ -146,10 +147,10 @@ export function LeftNav({
     return (
         <nav
             className={styles.nav}
-            aria-label="Primary navigation"
+            aria-label={t('components.leftNav.primaryNavigation')}
             onKeyDown={handleKeyDown}
         >
-            <div className={styles.brand}>XChain Wallet</div>
+            <div className={styles.brand}>{t('components.leftNav.xchainWallet')}</div>
             {onCommandPalette ? (
                 <div className={styles.search}>
                     <Button
@@ -157,11 +158,11 @@ export function LeftNav({
                         block
                         icon={<Icon.SearchIcon />}
                         onClick={onCommandPalette}
-                        aria-label="Open command palette"
+                        aria-label={t('components.leftNav.openCommandPalette')}
                         aria-keyshortcuts="Meta+K Control+K"
-                        title="Search (Cmd/Ctrl+K)"
+                        title={t('components.leftNav.searchCmdCtrlK')}
                     >
-                        <span className={styles.label}>Search</span>
+                        <span className={styles.label}>{t('routes.addressList.search')}</span>
                     </Button>
                 </div>
             ) : null}
@@ -184,7 +185,7 @@ export function LeftNav({
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
                                 {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={`${badges[item.id]} unread`}>
+                                    <span className={styles.badge} aria-label={t('components.leftNav.unread', { value: badges[item.id] })}>
                                         {formatBadgeCount(badges[item.id])}
                                     </span>
                                 ) : null}
@@ -212,7 +213,7 @@ export function LeftNav({
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
                                 {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={`${badges[item.id]} pending`}>
+                                    <span className={styles.badge} aria-label={t('components.leftNav.pending', { value: badges[item.id] })}>
                                         {formatBadgeCount(badges[item.id])}
                                     </span>
                                 ) : null}
@@ -228,13 +229,13 @@ export function LeftNav({
                         type="button"
                         className={`${styles.item} ${activeItem === 'settings' ? styles.itemActive : ''}`}
                         aria-current={activeItem === 'settings' ? 'page' : undefined}
-                        title="Settings"
+                        title={t('components.leftNav.settings')}
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">
                             <Icon.GearIcon />
                         </span>
-                        <span className={styles.label}>Settings</span>
+                        <span className={styles.label}>{t('components.leftNav.settings')}</span>
                     </button>
                 ) : null}
                 {onLock ? (
@@ -243,10 +244,10 @@ export function LeftNav({
                             variant="secondary"
                             block
                             icon={<Icon.LockIcon />}
-                            title="Lock"
+                            title={t('components.leftNav.lock')}
                             onClick={onLock}
                         >
-                            <span className={styles.label}>Lock</span>
+                            <span className={styles.label}>{t('components.leftNav.lock')}</span>
                         </Button>
                     </div>
                 ) : null}
@@ -354,7 +355,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             data-xc-rail={sidebar ? 'shown' : undefined}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
-            <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
+            <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>{t('components.leftNav.skipToMainContent')}</a>
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}

@@ -31,6 +31,7 @@
 //     runtime, on the shell with the least test coverage.
 
 import { lazy } from 'react';
+import { t } from '../../../core/src/i18n/index.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -109,8 +110,8 @@ export function renderDexRoute(unlockedView, ctx) {
             <ReceivePicker
                 walletId={activeWalletId}
                 accountId={activeAccountId || undefined}
-                title="Select coin or token"
-                backLabel="Back to markets"
+                title={t('shell.dex.selectCoinOrToken')}
+                backLabel={t('shell.dex.backToMarkets')}
                 hideOwnFilter
                 onBack={() => setUnlockedView('markets')}
                 onSelect={(sel) => {

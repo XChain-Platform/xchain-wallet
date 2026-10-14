@@ -25,6 +25,7 @@
  *
  */
 import { InfoTip } from './InfoTip.jsx';
+import { t } from '../i18n/index.js';
 
 /**
  * @param {object} props
@@ -73,7 +74,7 @@ export function VerifiedBadge({ status, reason, size = 'sm', details = true }) {
                 <span aria-hidden="true">{spec.glyph}</span>
                 <span>{spec.label}</span>
             </span>
-            {details ? <InfoTip aria={`${spec.label} details`} label={title} /> : null}
+            {details ? <InfoTip aria={t('ui.verifiedBadge.details', { label: spec.label })} label={title} /> : null}
         </span>
     );
 }

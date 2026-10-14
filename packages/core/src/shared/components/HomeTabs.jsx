@@ -428,11 +428,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     );
 
     const tabs = [
-        { id: 'coins',    label: 'Coins'    },
-        { id: 'tokens',   label: 'Tokens'   },
-        { id: 'nfts',     label: 'NFTs'     },
-        { id: 'defi',     label: 'DeFi'     },
-        { id: 'activity', label: 'Activity' },
+        { id: 'coins',    label: t('home.tabs.coins')    },
+        { id: 'tokens',   label: t('home.tabs.tokens')   },
+        { id: 'nfts',     label: t('home.tabs.nfts')     },
+        { id: 'defi',     label: t('home.tabs.defi')     },
+        { id: 'activity', label: t('home.tabs.activity') },
     ];
 
     return (

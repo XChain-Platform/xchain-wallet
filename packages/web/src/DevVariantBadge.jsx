@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { setActiveVariant, clearVariantOverride, THRESHOLD_PX } from './devVariant.js';
 import styles from './DevVariantBadge.module.css';
+import { t } from '../../core/src/i18n/index.js';
 
 const POS_KEY = 'xc.devVariantBadge.pos';
 
@@ -130,7 +131,7 @@ export function DevVariantBadge({ state }) {
             className={styles.badge}
             style={styleOverride}
             role="status"
-            aria-label={`Dev variant: ${variant}`}
+            aria-label={t('shell.devVariantBadge.devVariant', { variant })}
         >
             <span
                 className={styles.grip}
@@ -138,14 +139,14 @@ export function DevVariantBadge({ state }) {
                 onPointerMove={onGripMove}
                 onPointerUp={onGripUp}
                 onPointerCancel={onGripUp}
-                title="Drag to move"
+                title={t('shell.devVariantBadge.dragToMove')}
                 aria-hidden="true"
             >
                 ⠿
             </span>
-            <span className={styles.label}>variant</span>
+            <span className={styles.label}>{t('shell.devVariantBadge.variant')}</span>
             <span className={`${styles.value} ${styles[variant]}`}>{variant}</span>
-            <span className={styles.dims} title={`Threshold: ${THRESHOLD_PX}px`}>
+            <span className={styles.dims} title={t('shell.devVariantBadge.thresholdPx', { THRESHOLD_PX })}>
                 {sourceLabel}
             </span>
             <select
@@ -156,14 +157,14 @@ export function DevVariantBadge({ state }) {
                     if (v === '__auto') clearVariantOverride();
                     else setActiveVariant(v);
                 }}
-                title="Pick variant"
-                aria-label="Pick variant"
+                title={t('shell.devVariantBadge.pickVariant')}
+                aria-label={t('shell.devVariantBadge.pickVariant')}
             >
-                <option value="__auto">auto · by viewport</option>
-                <option value="small">small · mobile</option>
-                <option value="full">full · desktop</option>
-                <option value="sidebar">sidebar · chrome panel</option>
-                <option value="extension">extension · chrome popup</option>
+                <option value="__auto">{t('shell.devVariantBadge.autoByViewport')}</option>
+                <option value="small">{t('shell.devVariantBadge.smallMobile')}</option>
+                <option value="full">{t('shell.devVariantBadge.fullDesktop')}</option>
+                <option value="sidebar">{t('shell.devVariantBadge.sidebarChromePanel')}</option>
+                <option value="extension">{t('shell.devVariantBadge.extensionChromePopup')}</option>
             </select>
         </div>
     );

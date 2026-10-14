@@ -33,6 +33,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
 import { HwFirmwareBanner } from './HwFirmwareBanner.jsx';
 import styles from './HwSignBlock.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -121,7 +122,7 @@ export function HwSignBlock({
                             onClick={refresh}
                             className={styles.refresh}
                         >
-                            Retry
+                            {t('components.listPickerScreen.retry')}
                         </button>
                     ) : null}
                 </div>

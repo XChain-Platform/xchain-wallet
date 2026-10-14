@@ -12,6 +12,7 @@ import { useBackHandler } from './backStack.js';
 import { Button } from './Button.jsx';
 import { BackIcon } from './icons/index.jsx';
 import styles from './PageHeader.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * Shared secondary-toolbar header used by every routed screen.
@@ -43,7 +44,7 @@ import styles from './PageHeader.module.css';
  */
 export function PageHeader({
     onBack,
-    backLabel = 'Back to previous screen',
+    backLabel = t('ui.pageHeader.backToPreviousScreen'),
     backDisabled = false,
     title,
     titleId,

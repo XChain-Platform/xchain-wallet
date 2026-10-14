@@ -14,6 +14,7 @@ import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
 import { contactEntryChain } from '../utils/contactChain.js';
 import { compareContactsByName } from '../utils/contactMerge.js';
 import styles from './ContactsPickerScreen.module.css';
+import { t } from '../../i18n/index.js';
 
 export { styles as contactsPickerStyles };
 
@@ -64,7 +65,7 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            title="Contacts"
+            title={t('components.contactsPickerScreen.contacts')}
             titleIcon={<Icon.UsersIcon />}
         />
     );
@@ -75,8 +76,8 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
             <Screen variant={variant} header={header}>
                 <ListPage>
                     <EmptyState
-                        title="No contacts yet"
-                        body="Saved contacts with addresses appear here."
+                        title={t('components.contactsPickerScreen.noContactsYet')}
+                        body={t('components.contactsPickerScreen.savedContactsWithAddressesAppear')}
                         titleAs="p"
                         role={null}
                     />
@@ -95,21 +96,21 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                         enterKeyHint="search"
                         autoCapitalize="off"
                         className={styles.abSearch}
-                        placeholder="Search"
+                        placeholder={t('routes.addressList.search')}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         autoComplete="off"
                         autoCorrect="off"
                         spellCheck={false}
-                        aria-label="Search contacts"
+                        aria-label={t('components.contactsPickerScreen.searchContacts')}
                     />
                     <NetworkFilterDropdown value={network} onChange={setNetwork} />
                 </>
             )}>
                 {rows.length === 0 ? (
                     <EmptyState
-                        title="No matching addresses"
-                        body="Try a different search or network filter."
+                        title={t('routes.addressList.noMatchingAddresses')}
+                        body={t('routes.addressList.tryADifferentSearchOr')}
                         titleAs="p"
                         role={null}
                     />

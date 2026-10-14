@@ -10,6 +10,7 @@
 
 import { OWNER_WITHDRAW_WARNING } from '../routes/contractResponseShape.js';
 import styles from './OwnerWithdrawWarning.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * The owner-withdraw warning (OWNER_WITHDRAW_OPT_IN): shown on a contract's
@@ -25,9 +26,9 @@ export function OwnerWithdrawWarning({ ownerWithdraw }) {
     if (ownerWithdraw !== true) return null;
     return (
         <div role="note" className={styles.warningBanner} data-testid="owner-withdraw-warning">
-            <strong className={styles.headline}>Deployer can withdraw</strong>
+            <strong className={styles.headline}>{t('components.ownerWithdrawWarning.deployerCanWithdraw')}</strong>
             <p className={styles.detail}>
-                {OWNER_WITHDRAW_WARNING} Only send tokens here if you trust the deployer.
+                {OWNER_WITHDRAW_WARNING} {t('components.ownerWithdrawWarning.onlySendTokensHereIf')}
             </p>
         </div>
     );

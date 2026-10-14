@@ -176,64 +176,64 @@ function PermissionRow({ permission, setPermission }) {
 const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'txConfirmations',
-        label: 'Transaction confirmations',
-        hint: 'Notify on the first confirmation of a sent transaction.',
+        get label() { return t('settings.notifications.transactionConfirmations'); },
+        get hint() { return t('settings.notifications.notifyOnTheFirstConfirmation'); },
     },
     {
         key: 'incomingReceipts',
-        label: 'Incoming receipts',
-        hint: 'Notify when a watched address receives a transaction.',
+        get label() { return t('settings.notifications.incomingReceipts'); },
+        get hint() { return t('settings.notifications.notifyWhenAWatchedAddress'); },
     },
     {
         key: 'incomingPending',
-        label: 'Incoming pending payments',
-        hint: 'Notify as soon as a payment to a watched address is seen by the network, before it confirms.',
+        get label() { return t('settings.notifications.incomingPendingPayments'); },
+        get hint() { return t('settings.notifications.notifyAsSoonAsA'); },
         // Same v2-tolerant default as governancePolls: the watcher treats an
         // absent flag as ON, so a pre-flag settings record renders ON here too.
         defaultOn: true,
     },
     {
         key: 'messages',
-        label: 'Incoming messages',
-        hint: 'Notify when a watched address receives a message.',
+        get label() { return t('settings.notifications.incomingMessages'); },
+        get hint() { return t('settings.notifications.notifyWhenAWatchedAddress2'); },
     },
     {
         key: 'governancePolls',
-        label: 'Governance polls',
-        hint: 'Notify when a new poll opens for a token you hold. Binding polls (their result triggers a contract) are flagged.',
+        get label() { return t('settings.notifications.governancePolls'); },
+        get hint() { return t('settings.notifications.notifyWhenANewPoll'); },
         // The watcher treats an absent flag as ON (v2-tolerant default), so a
         // pre-flag settings record must render the toggle as ON too.
         defaultOn: true,
     },
     {
         key: 'deadlines',
-        label: 'Deadlines',
-        hint: 'Notify before one of your orders, swaps or dispensers expires, or a poll you created or voted in closes.',
+        get label() { return t('settings.notifications.deadlines'); },
+        get hint() { return t('settings.notifications.notifyBeforeOneOfYour'); },
         // Same v2-tolerant default as governancePolls: the watcher treats an
         // absent flag as ON, so a pre-flag settings record renders ON here too.
         defaultOn: true,
     },
     {
         key: 'dispenserEscrow',
-        label: 'Dispenser running low',
-        hint: 'Notify when a dispenser you run is nearly out of stock, so you can top it up before it turns buyers away.',
+        get label() { return t('settings.notifications.dispenserRunningLow'); },
+        get hint() { return t('settings.notifications.notifyWhenADispenserYou'); },
         // v2-tolerant default, like the sibling watcher flags.
         defaultOn: true,
     },
     {
         key: 'dispenserFills',
-        label: 'Dispenser fills',
-        hint: 'Notify when a dispenser you authored is hit.',
+        get label() { return t('settings.notifications.dispenserFills'); },
+        get hint() { return t('settings.notifications.notifyWhenADispenserYou2'); },
     },
     {
         key: 'orderFills',
-        label: 'Order fills',
-        hint: 'Notify when a DEX order you placed is matched.',
+        get label() { return t('settings.notifications.orderFills'); },
+        get hint() { return t('settings.notifications.notifyWhenADexOrder'); },
     },
     {
         key: 'priceAlerts',
-        label: 'Price alerts',
-        hint: 'Notify when a coin hits a price level you set.',
+        get label() { return t('settings.notifications.priceAlerts'); },
+        get hint() { return t('settings.notifications.notifyWhenACoinHits'); },
     },
 ]);
 

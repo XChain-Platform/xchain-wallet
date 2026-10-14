@@ -105,7 +105,7 @@ export function AppHeader({
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
-                <WalletIdentity wallet={activeWallet} namePrefix="Wallet: " />
+                <WalletIdentity wallet={activeWallet} namePrefix={t('shell.header.walletPrefix')} />
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>

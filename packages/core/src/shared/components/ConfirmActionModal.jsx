@@ -43,6 +43,7 @@ import { WalletIdentity } from './WalletIdentity.jsx';
 import { MessagingContext } from '../MessagingContext.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
+import { t } from '../../i18n/index.js';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 const chainRegistry = defaultRegistry();
@@ -396,7 +397,7 @@ export function ConfirmActionModal({
         <PageHeader
             onBack={handleReject}
             backDisabled={exitsLocked}
-            title="Confirm"
+            title={t('common.confirm')}
             titleRef={titleRef}
         />
     );
@@ -409,7 +410,7 @@ export function ConfirmActionModal({
                 disabled={exitsLocked}
                 data-testid="confirm-reject"
             >
-                Reject
+                {t('components.confirmActionModal.reject')}
             </Button>
             <Button
                 variant="success"
@@ -437,7 +438,7 @@ export function ConfirmActionModal({
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
-                aria-label={`Confirm ${headlineText || 'action'}`}
+                aria-label={t('components.confirmActionModal.confirm', { value: headlineText || 'action' })}
             >
                 <div className={styles.header}>
                     <span className={styles.actionLabel}>{actionHeaderLabel}</span>
@@ -445,10 +446,10 @@ export function ConfirmActionModal({
                 </div>
 
                 <div className={styles.body}>
-                    <WalletIdentity wallet={resolvedSigningWallet} label="Signing with" />
+                    <WalletIdentity wallet={resolvedSigningWallet} label={t('components.confirmActionModal.signingWith')} />
                     <OriginIdentity
                         origin={requestOrigin}
-                        label="Requesting site"
+                        label={t('components.confirmActionModal.requestingSite')}
                         testId="confirm-request-origin"
                     />
 
@@ -464,8 +465,8 @@ export function ConfirmActionModal({
                     {/* §5.5 message variant: the full text, verbatim and
                         never truncated - it is the whole thing being signed. */}
                     {variant === 'message' && messageText !== undefined ? (
-                        <section className={styles.messageBox} aria-label="Message to sign">
-                            <p className={styles.messageLabel}>Message to sign</p>
+                        <section className={styles.messageBox} aria-label={t('components.confirmActionModal.messageToSign')}>
+                            <p className={styles.messageLabel}>{t('components.confirmActionModal.messageToSign')}</p>
                             <pre className={styles.messageText} data-testid="confirm-message-text">
                                 {messageText}
                             </pre>
@@ -488,7 +489,7 @@ export function ConfirmActionModal({
                     {(variant === 'action' || variant === 'message') && sourceAddress ? (
                         <dl className={styles.sourceRow} data-testid="confirm-source">
                             <dt className={styles.sourceLabel}>
-                                {variant === 'message' ? 'Signing address' : 'From'}
+                                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('components.placeOrderPanel.from')}
                             </dt>
                             <dd className={styles.sourceValue}>
                                 {sourceName ? (
@@ -515,7 +516,7 @@ export function ConfirmActionModal({
 
                     {envelopeLines ? (
                         <div className={styles.fee} data-testid="confirm-envelope-transactions">
-                            <div>Two transactions, both signed now and broadcast in order:</div>
+                            <div>{t('components.confirmActionModal.twoTransactionsBothSignedNow')}</div>
                             {envelopeLines.map((line) => (
                                 <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
                             ))}
@@ -533,15 +534,15 @@ export function ConfirmActionModal({
 
                     {nativeProtocolFeeAmount ? (
                         <div className={styles.fee} data-testid="confirm-native-protocol-fee">
-                            Protocol fee: {nativeProtocolFeeAmount} {nativeTicker}
+                            {t('components.confirmActionModal.protocolFee')} {nativeProtocolFeeAmount} {nativeTicker}
                             {nativeProtocolFeeFiat ? ` (${nativeProtocolFeeFiat})` : ''}
-                            {' (sent on-chain and not refunded if the action is rejected)'}
+                            {t('components.confirmActionModal.sentOnChainAndNot')}
                         </div>
                     ) : null}
 
                     {protocolFeeUnavailable ? (
                         <div className={styles.fee} data-testid="confirm-protocol-fee-unavailable">
-                            Protocol fee estimate unavailable.
+                            {t('components.confirmActionModal.protocolFeeEstimateUnavailable')}
                         </div>
                     ) : null}
 
@@ -602,29 +603,28 @@ export function ConfirmActionModal({
                         on that variant. */}
                     {variant !== 'message' && hardwareSigner ? (
                         <p className={styles.hwNote}>
-                            A hardware device verifies native outputs and destinations only; the action
-                            data is obfuscated on-chain, so this screen is where you verify the action intent.
+                            {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
                         </p>
                     ) : null}
 
                     {phase === 'rechecking' ? (
-                        <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
+                        <p className={styles.recheck} data-testid="confirm-rechecking">{t('components.confirmActionModal.reChecking')}</p>
                     ) : null}
                     {signingTime.showElapsed ? (
                         <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
-                            Signing for {signingTime.elapsedSeconds} seconds. Check your hardware wallet screen if one is connected.
+                            {t('components.confirmActionModal.signingFor')} {signingTime.elapsedSeconds} {t('components.confirmActionModal.secondsCheckYourHardwareWallet')}
                         </p>
                     ) : null}
                     {signingTime.timedOut ? (
                         <div className={styles.error} role="alert" data-testid="confirm-signing-timeout">
-                            Signing is taking longer than expected. Keep this screen open and check the device or wallet service. Before trying again, check History and the queued-transactions banner so you do not submit the same transaction twice.
+                            {t('components.confirmActionModal.signingIsTakingLongerThan')}
                         </div>
                     ) : null}
                     {/* The queue holds the signed transaction until the user
                         broadcasts it from the queued-transactions banner. */}
                     {phase === 'signed-not-broadcast' ? (
                         <p className={styles.queued} data-testid="confirm-queued">
-                            Signed - not broadcast yet.
+                            {t('components.confirmActionModal.signedNotBroadcastYet')}
                         </p>
                     ) : null}
                 </div>

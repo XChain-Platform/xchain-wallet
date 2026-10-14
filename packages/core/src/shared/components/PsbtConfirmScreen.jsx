@@ -29,6 +29,7 @@ import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { PsbtIntentPanel } from './PsbtIntentPanel.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { isUnreadableActionReason } from './psbtDecodeReasons.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * The §5.5 fail-closed rule, as a pure predicate so it can be unit-tested
@@ -106,7 +107,7 @@ export function PsbtConfirmScreen({
         <ConfirmActionModal
             variant="psbt"
             screenVariant={screenVariant}
-            headline="Sign transaction"
+            headline={t('components.psbtConfirmScreen.signTransaction')}
             phase={confirmAction.phase}
             composed={confirmAction.composed}
             report={confirmAction.report}
@@ -139,14 +140,14 @@ export function PsbtConfirmScreen({
                 // a claim the wallet cannot honour while a freeze is on.
                 <SigningReadyNote>
                     <p className={hintClassName}>
-                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                        <span aria-hidden="true">🔓</span> {t('components.messageConfirmScreen.walletUnlockedNoPasswordNeeded')}
                     </p>
                 </SigningReadyNote>
             ) : (
                 <Input
                     type="password"
-                    label="Password"
-                    hint="Required to sign."
+                    label={t('common.password')}
+                    hint={t('components.messageConfirmScreen.requiredToSign')}
                     value={password}
                     onChange={(e) => onPasswordChange(e.target.value)}
                     autoComplete="current-password"

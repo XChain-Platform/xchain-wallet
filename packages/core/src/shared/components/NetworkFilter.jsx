@@ -13,6 +13,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Chip, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './NetworkFilter.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * Single-select network filter that scales to N chains. Replaces the
@@ -199,29 +200,29 @@ export function NetworkFilter({
                                 autoCorrect="off"
                                 spellCheck={false}
                                 className={styles.search}
-                                placeholder="Search networks…"
-                                aria-label="Search networks"
+                                placeholder={t('components.networkFilter.searchNetworks')}
+                                aria-label={t('components.networkFilter.searchNetworks2')}
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                             />
                         </div>
                     ) : null}
-                    <ul id={listboxId} className={styles.list} role="listbox" aria-label="Networks">
+                    <ul id={listboxId} className={styles.list} role="listbox" aria-label={t('components.networkFilter.networks')}>
                         <li role="presentation">
                             <button
                                 type="button"
                                 role="option"
                                 tabIndex={-1}
-                                aria-label="All networks"
+                                aria-label={t('components.networkFilter.allNetworks')}
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
                                 onClick={() => { onChange('all'); closeFilter(true); }}
-                                title="All networks"
+                                title={t('components.networkFilter.allNetworks')}
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
                                     <Icon.FilterIcon />
                                 </span>
-                                <span className={styles.itemLabel}>All networks</span>
+                                <span className={styles.itemLabel}>{t('components.networkFilter.allNetworks')}</span>
                                 <span className={styles.itemTicker}>{entries.length}</span>
                             </button>
                         </li>
@@ -254,7 +255,7 @@ export function NetworkFilter({
                                 role="option"
                                 aria-disabled="true"
                             >
-                                No matching networks.
+                                {t('components.networkFilter.noMatchingNetworks')}
                             </li>
                         ) : null}
                     </ul>

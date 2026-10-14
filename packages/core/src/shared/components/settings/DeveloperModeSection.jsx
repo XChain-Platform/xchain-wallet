@@ -81,11 +81,12 @@ const chainRegistry = registryLib.defaultRegistry();
 // Cluster Q FOLLOWUP 3: labels for the localhost auto-sign timeout options.
 // Values come from the schema so the UI can never offer a timeout the
 // validator would reject.
-const AUTO_SIGN_LABELS = {
+// Built per call so a locale switch applies.
+const autoSignLabels = () => ({
     [schemas.settings.AUTO_SIGN_LOCALHOST_OFF]: t('settings.developer.offAlwaysPrompt'),
     [schemas.settings.AUTO_SIGN_LOCALHOST_5M]: t('settings.developer.5Minutes'),
     [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: t('settings.developer.1Hour'),
-};
+});
 
 export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateToMint, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings();
@@ -206,7 +207,7 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
             >
                 {/* Native option elements provide the choices exposed by the style guide Select. */}
                 {schemas.settings.AUTO_SIGN_LOCALHOST_OPTIONS.map((ms) => (
-                    <option key={ms} value={ms}>{AUTO_SIGN_LABELS[ms]}</option>
+                    <option key={ms} value={ms}>{autoSignLabels()[ms]}</option>
                 ))}
             </Select>
         </SettingsFieldRow>

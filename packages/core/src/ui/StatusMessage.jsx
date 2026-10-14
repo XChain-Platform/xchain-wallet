@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import styles from './StatusMessage.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * §53.3 / G169: shared info / warning / error / success row that every form can
@@ -61,7 +62,7 @@ export function StatusMessage({ variant = 'status', id, children, className, det
                 <span>{children}</span>
                 {details ? (
                     <details className={styles.details}>
-                        <summary>Technical details</summary>
+                        <summary>{t('components.psbtIntentPanel.technicalDetails')}</summary>
                         <code>{details}</code>
                     </details>
                 ) : null}

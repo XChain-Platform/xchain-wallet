@@ -30,6 +30,7 @@ import { currentListItems, currentListMemberCount } from '../../flows/listMember
 import { listLabel } from '../utils/listLabel.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -74,7 +75,7 @@ function extractListRows(resp) {
  * @param {() => void} props.onBack
  */
 export function ListPickerScreen({
-    variant, messaging, chainId, addresses, filterType, includeUnions = false, title = 'Choose a list', onSelect, onBack,
+    variant, messaging, chainId, addresses, filterType, includeUnions = false, title = t('components.listPickerScreen.chooseAList'), onSelect, onBack,
 }) {
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -174,14 +175,14 @@ export function ListPickerScreen({
                 <ListPage>
                     <StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage>
                     <Button variant="secondary" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
-                        Retry
+                        {t('components.listPickerScreen.retry')}
                     </Button>
                 </ListPage>
             </Screen>
         );
     }
     if (!rows) {
-        return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>Loading lists…</div></ListPage></Screen>;
+        return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>{t('components.listPickerScreen.loadingLists')}</div></ListPage></Screen>;
     }
     if (rows.length === 0) {
         return (
@@ -189,11 +190,11 @@ export function ListPickerScreen({
                 <ListPage>
                     <EmptyState
                         title={filterType === '2'
-                            ? 'No address lists yet'
-                            : 'No published lists yet'}
+                            ? t('components.listPickerScreen.noAddressListsYet')
+                            : t('components.listPickerScreen.noPublishedListsYet')}
                         body={filterType === '2'
-                            ? 'Address lists published from this chain appear here.'
-                            : 'Lists published from this chain appear here.'}
+                            ? t('components.listPickerScreen.addressListsPublishedFromThis')
+                            : t('components.listPickerScreen.listsPublishedFromThisChain')}
                         titleAs="p"
                         role={null}
                     />
@@ -211,19 +212,19 @@ export function ListPickerScreen({
                     autoCapitalize="off"
                     role="textbox"
                     className={styles.abSearch}
-                    placeholder="Search"
+                    placeholder={t('routes.addressList.search')}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    aria-label="Search lists"
+                    aria-label={t('components.listPickerScreen.searchLists')}
                 />
             )}>
                 {visibleRows.length === 0 ? (
                     <EmptyState
-                        title="No matching lists"
-                        body="Try a different search."
+                        title={t('components.listPickerScreen.noMatchingLists')}
+                        body={t('components.listPickerScreen.tryADifferentSearch')}
                         titleAs="p"
                         role={null}
                     />

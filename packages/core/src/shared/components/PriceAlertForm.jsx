@@ -23,6 +23,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, Input, Select } from '../../ui/index.js';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { t } from '../../i18n/index.js';
 
 const HINT = {
     color: 'var(--xc-text-muted)',
@@ -128,7 +129,7 @@ export function PriceAlertForm({
                     <span style={{ fontWeight: 500 }}>{coinLabelForChain(lockedChainId)}</span>
                 ) : (
                     <Select
-                        aria-label="Coin"
+                        aria-label={t('routes.addressList.coin')}
                         value={chainId}
                         onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
                     >
@@ -139,13 +140,13 @@ export function PriceAlertForm({
                     </Select>
                 )}
                 <Select
-                    aria-label="Direction"
+                    aria-label={t('components.priceAlertForm.direction')}
                     value={direction}
                     onChange={(e) => updateInput(setDirection, e.target.value, direction)}
                 >
                     {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="above">rises above</option>
-                    <option value="below">falls below</option>
+                    <option value="above">{t('components.priceAlertForm.risesAbove')}</option>
+                    <option value="below">{t('components.priceAlertForm.fallsBelow')}</option>
                 </Select>
                 <span aria-hidden="true">{symbol}</span>
                 <Input
@@ -153,8 +154,8 @@ export function PriceAlertForm({
                     type="text"
                     inputMode="decimal"
                     enterKeyHint="go"
-                    aria-label="Target price"
-                    placeholder="Price"
+                    aria-label={t('components.priceAlertForm.targetPrice')}
+                    placeholder={t('components.placeOrderPanel.price')}
                     value={targetStr}
                     aria-invalid={invalidTarget}
                     aria-describedby={disabledReason ? disabledReasonId : undefined}
@@ -175,7 +176,7 @@ export function PriceAlertForm({
                     size="md"
                     variant="primary"
                 >
-                    {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
+                    {busy ? t('components.priceAlertForm.saving') : editing ? t('components.priceAlertForm.saveChanges') : t('components.priceAlertForm.addAlert')}
                 </Button>
                 {onCancel ? (
                     <Button
@@ -184,7 +185,7 @@ export function PriceAlertForm({
                         size="md"
                         variant="secondary"
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                 ) : null}
             </div>
@@ -199,8 +200,7 @@ export function PriceAlertForm({
             ) : null}
             {alreadyMet ? (
                 <span style={HINT}>
-                    {coinLabelForChain(chainId)} is already {direction === 'above' ? 'above' : 'below'} that price.
-                    This alert will fire on the next check.
+                    {coinLabelForChain(chainId)} {t('components.priceAlertForm.isAlready')} {direction === 'above' ? t('components.priceAlertForm.above') : t('components.priceAlertForm.below')} {t('components.priceAlertForm.thatPriceThisAlertWill')}
                 </span>
             ) : null}
             {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger-fg)' }}>{err}</span> : null}

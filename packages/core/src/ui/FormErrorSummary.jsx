@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef } from 'react';
+import { t } from '../i18n/index.js';
 
 /**
  * Focusable validation summary. Every field-specific error is a link so the
@@ -44,7 +45,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
             ref={summaryRef}
             role="alert"
             tabIndex={-1}
-            aria-label="Form errors"
+            aria-label={t('ui.formErrorSummary.formErrors')}
             style={{
                 padding: 'var(--xc-space-3)',
                 border: '1px solid var(--xc-danger-fg)',
@@ -53,7 +54,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
             }}
         >
             <p style={{ margin: 0, fontWeight: 600 }}>
-                {errors.length === 1 ? 'Fix this field:' : `Fix these ${errors.length} fields:`}
+                {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
             </p>
             <ul style={{ margin: 'var(--xc-help-gap) 0 0', paddingInlineStart: 'var(--xc-space-5)' }}>
                 {errors.map((error, index) => (

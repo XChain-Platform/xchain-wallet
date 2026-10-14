@@ -32,6 +32,7 @@ import { useReachability } from '../hooks/useReachability.js';
 import { useToast } from './ToastHost.jsx';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import styles from './QueuedBroadcastBanner.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -255,7 +256,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                 id={titleId}
                 className={styles.title}
             >
-                Waiting to send ({queue.length})
+                {t('components.queuedBroadcastBanner.waitingToSend')}{queue.length})
             </div>
             <ul className={styles.list}>
                 {queue.map((entry) => (
@@ -265,7 +266,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                             <span className={styles.meta}>
                                 {chainBadge(entry.chainId)}
                                 {chainRegistry.get(entry.chainId) ? ' · ' : ''}
-                                signed {ageString(entry.signedAt)}
+                                {t('components.queuedBroadcastBanner.signed')} {ageString(entry.signedAt)}
                             </span>
                             {/* A resumed claim is a send the wallet had already handed to
                                 the network when it was interrupted, so it may have landed.
@@ -275,8 +276,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 the action on this path that can spend twice. */}
                             {entry.resumedClaim ? (
                                 <span className={styles.meta}>
-                                    Sending was interrupted, so this may already have been
-                                    sent. Sending it again is safe and cannot pay twice.
+                                    {t('components.queuedBroadcastBanner.sendingWasInterruptedSoThis')}
                                 </span>
                             ) : null}
                         </div>
@@ -288,12 +288,12 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 disabled={busyId !== null}
                                 data-queued-send
                                 aria-label={busyId === entry.id && busyKind === 'send'
-                                    ? `Sending: ${entry.summary}`
-                                    : `Send now: ${entry.summary}`}
+                                    ? t('components.queuedBroadcastBanner.sending', { summary: entry.summary })
+                                    : t('components.queuedBroadcastBanner.sendNow', { summary: entry.summary })}
                             >
                                 {busyId === entry.id
-                                    ? 'Sending…'
-                                    : (entry.resumedClaim ? 'Try sending again' : 'Send now')}
+                                    ? t('components.queuedBroadcastBanner.sending2')
+                                    : (entry.resumedClaim ? t('components.queuedBroadcastBanner.trySendingAgain') : t('components.queuedBroadcastBanner.sendNow2'))}
                             </button>
                             <button
                                 type="button"
@@ -301,10 +301,10 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 onClick={() => discard(entry.id)}
                                 disabled={busyId !== null}
                                 aria-label={busyId === entry.id && busyKind === 'remove'
-                                    ? `Removing from queue: ${entry.summary}`
-                                    : `Remove from queue: ${entry.summary}`}
+                                    ? t('components.queuedBroadcastBanner.removingFromQueue', { summary: entry.summary })
+                                    : t('components.queuedBroadcastBanner.removeFromQueue', { summary: entry.summary })}
                             >
-                                {busyId === entry.id && busyKind === 'remove' ? 'Removing…' : 'Remove'}
+                                {busyId === entry.id && busyKind === 'remove' ? t('components.queuedBroadcastBanner.removing') : t('components.queuedBroadcastBanner.remove')}
                             </button>
                         </div>
                     </li>

@@ -26,6 +26,7 @@ import {
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -52,7 +53,7 @@ import styles from './AmountField.module.css';
  */
 export function AmountField({
     id,
-    label = 'Amount',
+    label = t('components.amountField.amount'),
     amount,
     size = 'md',
     fiatAmount = '',
@@ -189,9 +190,9 @@ export function AmountField({
                         }}
                         disabled={maxDisabled || maxBusy}
                         aria-busy={maxBusy || undefined}
-                        aria-label="Use max available amount"
+                        aria-label={t('components.amountField.useMaxAvailableAmount')}
                     >
-                        Max
+                        {t('components.amountField.max')}
                     </Button>
                 ) : null}
             </div>
@@ -207,8 +208,8 @@ export function AmountField({
                         }}
                         aria-pressed={isFiat}
                         aria-label={isFiat
-                            ? `Switch input to ${tickUpper || 'coin'}`
-                            : `Switch input to ${fiatCcy}`}
+                            ? t('components.amountField.switchInputTo', { value: tickUpper || 'coin' })
+                            : t('components.amountField.switchInputTo2', { fiatCcy })}
                     >
                         <span className={styles.amountSwapValue}>{derivedText}</span>
                     </Button>

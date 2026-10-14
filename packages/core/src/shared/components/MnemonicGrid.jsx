@@ -11,6 +11,7 @@
 import { useId, useMemo, useState } from 'react';
 import { Button } from '../../ui/Button.jsx';
 import styles from './MnemonicGrid.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * Read-only mnemonic display per §19.2. Keeps the phrase concealed until the
@@ -44,14 +45,14 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                     aria-expanded={revealed}
                     onClick={() => setRevealedKey(revealed ? null : mnemonicKey)}
                 >
-                    {revealed ? 'Hide recovery phrase' : 'Reveal recovery phrase'}
+                    {revealed ? t('components.mnemonicGrid.hideRecoveryPhrase') : t('components.mnemonicGrid.revealRecoveryPhrase')}
                 </Button>
             </div>
             <div id={contentId}>
                 {revealed ? (
                     <ol
                         className={gridClass}
-                        aria-label="Recovery phrase"
+                        aria-label={t('components.mnemonicGrid.recoveryPhrase')}
                         onCopy={(event) => event.preventDefault()}
                     >
                         {words.map((word, i) => (
@@ -63,7 +64,7 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                     </ol>
                 ) : (
                     <p className={styles.concealedMessage}>
-                        Recovery phrase hidden. Make sure no one can see your screen before revealing it.
+                        {t('components.mnemonicGrid.recoveryPhraseHiddenMakeSure')}
                     </p>
                 )}
             </div>

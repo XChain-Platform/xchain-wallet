@@ -12,6 +12,7 @@ import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
 import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
+import { t } from '../i18n/index.js';
 
 const PHONE_PLACEHOLDER_QUERY = '(max-width: 480px)';
 const LONG_PLACEHOLDER_LENGTH = 30;
@@ -348,7 +349,7 @@ export const Input = forwardRef(function Input(
                     role="status"
                     aria-live="polite"
                 >
-                    Caps Lock is on
+                    {t('ui.input.capsLockIsOn')}
                 </div>
             ) : null}
         </div>

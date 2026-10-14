@@ -31,6 +31,7 @@ import {
 } from '../utils/preflightFindingKey.js';
 import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -243,14 +244,14 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
     if (loading && !report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite" aria-busy="true">
-                <Spinner size="sm" label="Checking…" className={styles.spinner} />
+                <Spinner size="sm" label={t('components.preflightPanel.checking')} className={styles.spinner} />
             </div>
         );
     }
     if (!report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite">
-                <span className={styles.unverified}>Pre-flight unavailable; proceeding is at your discretion.</span>
+                <span className={styles.unverified}>{t('components.preflightPanel.preFlightUnavailableProceedingIs')}</span>
             </div>
         );
     }
@@ -351,7 +352,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                             {f.overridable && !isHardPreflightFinding(f) ? (
                                 <Checkbox
                                     className={styles.ack}
-                                    label="Sign anyway"
+                                    label={t('components.preflightPanel.signAnyway')}
                                     checked={acknowledged.has(preflightFindingKey(f))}
                                     onChange={() => onAcknowledge(preflightFindingKey(f))}
                                     data-testid={`ack-${preflightFindingKey(f)}`}
@@ -383,7 +384,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {report.restricted ? (
-                <div className={styles.restrictedChip} data-testid="preflight-restricted">Partial check</div>
+                <div className={styles.restrictedChip} data-testid="preflight-restricted">{t('components.preflightPanel.partialCheck')}</div>
             ) : null}
 
             {notices.length > 0 ? (
@@ -408,7 +409,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
             {report.unverified && report.unverified.length > 0 ? (
                 <details className={styles.unverifiedList}>
-                    <summary>Could not verify ({formatDecimalAmount(report.unverified.length)})</summary>
+                    <summary>{t('components.preflightPanel.couldNotVerify')}{formatDecimalAmount(report.unverified.length)})</summary>
                     <ul>
                         {report.unverified.map((u, i) => {
                             const { headline, detail } = unverifiedText(u);
@@ -426,7 +427,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {typeof report.stateHeight === 'number' ? (
-                <div className={styles.stamp}>Checked at block {formatDecimalAmount(report.stateHeight)}</div>
+                <div className={styles.stamp}>{t('components.preflightPanel.checkedAtBlock')} {formatDecimalAmount(report.stateHeight)}</div>
             ) : null}
         </div>
     );

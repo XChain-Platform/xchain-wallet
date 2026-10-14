@@ -11,6 +11,7 @@
 import { useEffect, useId, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * Settings tile in the pancake drawer that lets the user pick how
@@ -86,9 +87,9 @@ export function LayoutModeToggle() {
 
     return (
         <div className={styles.wrap}>
-            <span id={labelId} className={styles.label}>Open as</span>
+            <span id={labelId} className={styles.label}>{t('components.layoutModeToggle.openAs')}</span>
             <span id={descriptionId} className={styles.description}>
-                Choose how the wallet opens from the extension toolbar.
+                {t('components.layoutModeToggle.chooseHowTheWalletOpens')}
             </span>
             <div
                 className={styles.buttons}
@@ -104,7 +105,7 @@ export function LayoutModeToggle() {
                     onClick={() => pick('popup')}
                 >
                     <Icon.HomeIcon />
-                    <span>Popup</span>
+                    <span>{t('components.layoutModeToggle.popup')}</span>
                 </button>
                 <button
                     type="button"
@@ -114,7 +115,7 @@ export function LayoutModeToggle() {
                     onClick={() => pick('sidepanel')}
                 >
                     <Icon.MoreIcon />
-                    <span>Sidebar</span>
+                    <span>{t('components.layoutModeToggle.sidebar')}</span>
                 </button>
             </div>
         </div>

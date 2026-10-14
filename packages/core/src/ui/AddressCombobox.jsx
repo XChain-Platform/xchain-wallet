@@ -15,6 +15,7 @@ import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
+import { t } from '../i18n/index.js';
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
@@ -179,7 +180,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 aria-controls={listboxId}
                 aria-autocomplete="list"
                 aria-activedescendant={activeId}
-                placeholder="Address"
+                placeholder={t('routes.addressList.address')}
                 label={label}
                 size={size}
                 disabled={disabled}
@@ -286,7 +287,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                             <span className={styles.label}>
                                 {s.label}
                                 <span className={styles.badge}>
-                                    {s.source === 'contact' ? 'Contact' : 'Recent'}
+                                    {s.source === 'contact' ? t('ui.addressCombobox.contact') : t('ui.addressCombobox.recent')}
                                 </span>
                             </span>
                             {s.sublabel ? (
