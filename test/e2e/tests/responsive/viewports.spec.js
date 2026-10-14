@@ -162,6 +162,20 @@ test.describe('responsive: one interface at every width', () => {
                 await expectAboveFold(forgot, `${viewport.name} Forgot password link`);
             });
         }
+
+        // The link hides itself with the hidden attribute while its panel is
+        // open. The shared button's display rule used to outrank that
+        // attribute, so the link stayed on screen above the panel; jsdom
+        // applies no stylesheet, so only a real browser can show it.
+        await test.step('Forgot password leaves the screen while its panel is open', async () => {
+            const forgot = page.getByRole('button', { name: 'Forgot password?' });
+            await forgot.click();
+            await expect(page.getByRole('alertdialog', { name: 'Restore wallet access' })).toBeVisible();
+            await expect(forgot).toBeHidden();
+            await page.getByRole('alertdialog', { name: 'Restore wallet access' })
+                .getByRole('button', { name: 'Cancel', exact: true }).click();
+            await expect(forgot).toBeVisible();
+        });
     });
 
     test('every primary screen fits, from the 360px popup to desktop', async ({ page }) => {
