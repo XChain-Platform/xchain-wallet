@@ -146,15 +146,14 @@ describe('Receive keyboard operation', () => {
 
         const addressType = await screen.findByRole('combobox', { name: 'Address type' });
         addressType.focus();
-        // The QR actions and explorer link sit in the hero beside the address,
-        // above the label and request fields.
+        // The QR actions sit together below the address and above the request fields.
         const expected = [
-            screen.getByRole('button', { name: 'Generate new address' }),
             screen.getByRole('textbox', { name: 'Deposits' }),
             screen.getByRole('button', { name: 'Choose receive address' }),
             screen.getByRole('button', { name: 'Copy payment link' }),
             screen.getByRole('button', { name: 'Share QR payment link' }),
             screen.getByRole('link', { name: 'View address in block explorer' }),
+            screen.getByRole('button', { name: 'Generate new address' }),
             screen.getByRole('textbox', { name: 'Address label' }),
             screen.getByRole('button', { name: /^Token:/ }),
             screen.getByRole('textbox', { name: 'Amount (BTC)' }),
@@ -166,10 +165,10 @@ describe('Receive keyboard operation', () => {
         }
     });
 
-    it('tabs through the phone hero in its condensed visual order', async () => {
+    it.each([360, 1280])('tabs through the wrapping hero in visual order at %ipx', async (viewportWidth) => {
         const user = userEvent.setup();
         const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
 
         try {
             renderReceive();
