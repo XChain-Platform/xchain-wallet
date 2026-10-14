@@ -20,6 +20,7 @@ import {
     openSettings,
     unlockedShell,
 } from '../fixtures/wallet.js';
+import { launchGuardedElectron } from '../fixtures/electron.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -65,7 +66,7 @@ async function expectNoCredentialError(page, runtimeErrors) {
 test('desktop network round trip leaves Receive usable', async () => {
     test.setTimeout(10 * 60 * 1000);
     const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
-    const app = await electron.launch({
+    const app = await launchGuardedElectron(electron, {
         executablePath: requireFromDesktop('electron'),
         args: ['.', `--user-data-dir=${mkdtempSync(join(tmpdir(), 'xc-network-switch-'))}`],
         cwd: desktopDir,
