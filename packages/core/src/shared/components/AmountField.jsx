@@ -230,9 +230,9 @@ export function AmountField({
                 </span>
                 {onMax ? (
                     <Button
-                        ref={maxRef}
                         variant="primary"
                         size={size}
+                        ref={maxRef}
                         className={styles.maxAction}
                         icon={null}
                         onClick={() => {
