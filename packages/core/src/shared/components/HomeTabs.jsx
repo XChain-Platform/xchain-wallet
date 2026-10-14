@@ -49,6 +49,7 @@ import {
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 
 const TotalBalanceHero = memo(TotalBalanceHeroBase);
@@ -248,23 +249,37 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     );
     const nativeChainKey = nativeChainIds.join(',');
     const [nativePriceMap, setNativePriceMap] = useState(/** @type {Record<string, any>} */ ({}));
+    const [nativePricesLoading, setNativePricesLoading] = useState(false);
+    const [nativePricesError, setNativePricesError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         if (isDemo) {
             setNativePriceMap(synthesizeDemoNativePrices(nativeChainIds));
+            setNativePricesLoading(false);
+            setNativePricesError(null);
             return undefined;
         }
         if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
             setNativePriceMap({});
+            setNativePricesLoading(false);
+            setNativePricesError(null);
             return undefined;
         }
         let cancelled = false;
+        setNativePricesLoading(true);
+        setNativePricesError(null);
         messaging.getNativePricesRequest({
             chainIds: nativeChainIds,
+            includeSparkline: true,
             fiatCurrency: settings?.fiatCurrency || 'USD',
         }).then((result) => {
-            if (!cancelled) setNativePriceMap(result?.disabled ? {} : (result?.prices || {}));
-        }).catch(() => {
-            if (!cancelled) setNativePriceMap({});
+            if (cancelled) return;
+            setNativePriceMap(result?.disabled ? {} : (result?.prices || {}));
+            setNativePricesLoading(false);
+        }).catch((err) => {
+            if (cancelled) return;
+            setNativePriceMap({});
+            setNativePricesLoading(false);
+            setNativePricesError(readFailureMessage(err, 'load portfolio price history'));
         });
         return () => { cancelled = true; };
     }, [isDemo, messaging, nativeChainKey, settings?.fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -387,6 +402,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                     onCommandPalette={onCommandPalette}
                     onOpenSettings={onOpenSettings}
                     onLockWallet={onLockWallet}
+                    nativePriceMap={nativePriceMap}
                 />
             </RouteErrorBoundary>
 
@@ -397,6 +413,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 <PortfolioChart
                     rows={portfolioRows}
                     walletId={walletId}
+                    nativePriceMap={nativePriceMap}
+                    nativePricesLoading={nativePricesLoading}
+                    nativePricesError={nativePricesError}
                 />
             </RouteErrorBoundary>
 

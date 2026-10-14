@@ -47,7 +47,7 @@ import { percentChangeDisplay } from '../utils/percentFormat.js';
  * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
+export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
     const { total, unpriced, priceUnavailable } = useMemo(() => {
         const sum = sumFiatValue(rows);
         const meaningful = (rows || []).filter(hasNonZeroQuantity);
@@ -94,6 +94,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
 
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
     useEffect(() => {
+        if (nativePriceMap !== undefined) return undefined;
         if (isDemo) {
             setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
             return undefined;
@@ -111,7 +112,8 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+    const effectivePriceMap = nativePriceMap ?? priceMap;
 
     // Compute 24h delta: for each native row with a known change pct,
     // back-derive the 24h-ago fiat value and accumulate the difference.
@@ -124,7 +126,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             const cur = fiatValueOf(r);
             if (cur == null) continue;
             const pct = r.kind === 'native' && r.chainId
-                ? priceMap[r.chainId]?.change24hPct
+                ? effectivePriceMap[r.chainId]?.change24hPct
                 : null;
             if (typeof pct === 'number' && Number.isFinite(pct)) {
                 hasAny = true;
@@ -137,7 +139,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         const delta = Number(total) - total24hAgo;
         const pct = (delta / total24hAgo) * 100;
         return { delta, pct };
-    }, [rows, priceMap, total]);
+    }, [rows, effectivePriceMap, total]);
 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
@@ -292,11 +294,11 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                         : changeDisplay.direction === 'negative' ? styles.changeNegative
                                         : styles.changeNeutral
                                 }
-                                aria-label={`${changeDisplay.label}; ${formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}`}
+                                aria-label={`24-hour change. ${changeDisplay.label}; ${formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}`}
                             >
                                 {changeDisplay.direction === 'positive' ? '▲' : changeDisplay.direction === 'negative' ? '▼' : '-'}{' '}
                                 {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}{' '}
-                                ({changeDisplay.text})
+                                ({changeDisplay.text}) · 24h
                             </span>
                         ) : null}
                         {hasUnpriced ? (

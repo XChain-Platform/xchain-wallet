@@ -215,7 +215,11 @@ describe('TokenDetail price history', () => {
         });
 
         expect(await screen.findByRole('button', { name: 'Set price alert' })).toBeTruthy();
-        expect(screen.getByText('No price history yet')).toBeTruthy();
+        expect(screen.getByLabelText('7d price chart')).toBeTruthy();
+        expect(screen.queryByText('No price history yet')).toBeNull();
+        const chartRanges = screen.getByRole('tablist', { name: 'Chart range' });
+        expect([...chartRanges.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent))
+            .toEqual(['24h', '7d']);
         expect(actions.previousElementSibling).toBe(alertSlot);
         expect(screen.queryByRole('status', { name: 'Loading price history' })).toBeNull();
     });

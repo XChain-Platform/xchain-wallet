@@ -9,13 +9,21 @@ import { readFileSync } from 'node:fs';
 
 const mocks = vi.hoisted(() => ({
     getNativePricesRequest: vi.fn(),
+    heroProps: { current: null },
+    chartProps: { current: null },
 }));
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
-    TotalBalanceHero: () => null,
+    TotalBalanceHero: (props) => {
+        mocks.heroProps.current = props;
+        return null;
+    },
 }));
 vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () => ({
-    PortfolioChart: () => null,
+    PortfolioChart: (props) => {
+        mocks.chartProps.current = props;
+        return null;
+    },
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging: mocks, shell: 'web' }),
@@ -122,6 +130,8 @@ beforeEach(() => {
     _resetPriceLookupForTests();
     localStorage.clear();
     mocks.getNativePricesRequest.mockReset();
+    mocks.heroProps.current = null;
+    mocks.chartProps.current = null;
     mocks.getNativePricesRequest.mockResolvedValue({
         prices: {
             'bitcoin-mainnet': { change24hPct: 5 },
@@ -137,6 +147,26 @@ afterEach(() => {
 });
 
 describe('balance row sorting', () => {
+    it('shares one history-enabled native price response across the Home headline and chart', async () => {
+        const prices = {
+            'bitcoin-mainnet': { change24hPct: 1.4, sparkline: [100, 97.16] },
+            'litecoin-mainnet': { change24hPct: -1, sparkline: [100, 99] },
+            'dogecoin-mainnet': { change24hPct: 2, sparkline: [100, 102] },
+        };
+        mocks.getNativePricesRequest.mockResolvedValue({ prices });
+
+        mount();
+
+        await waitFor(() => expect(mocks.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: ['bitcoin-mainnet', 'dogecoin-mainnet', 'litecoin-mainnet'],
+            includeSparkline: true,
+            fiatCurrency: 'USD',
+        }));
+        await waitFor(() => expect(mocks.heroProps.current.nativePriceMap).toBe(prices));
+        expect(mocks.chartProps.current.nativePriceMap).toBe(prices);
+        expect(mocks.getNativePricesRequest).toHaveBeenCalledTimes(1);
+    });
+
     it('sorts exact values and changes descending, names ascending, and missing metrics last', () => {
         const rows = [
             { chainId: 'c:a', tick: 'AAA', displayName: 'Zulu', quantity: '9007199254740993', divisibility: 0, fiatRate: 1, change24hPct: -2 },
