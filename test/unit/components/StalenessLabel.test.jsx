@@ -23,16 +23,16 @@ describe('StalenessLabel', () => {
         render(<StalenessLabel lastSyncedAt={Date.parse('2026-07-08T14:00:00Z')} />);
 
         const label = screen.getByRole('status');
-        expect(label).toHaveTextContent('Updated 5 min ago');
+        expect(label).toHaveTextContent('Updated 5 minutes ago');
         expect(label).toHaveAttribute('title', 'Jul 8, 2026, 7:00 AM PDT');
-        expect(label.textContent).not.toMatch(/\b5m ago\b|5 minutes ago/);
+        expect(label.textContent).not.toMatch(/\b5m ago\b|5 min ago/);
     });
 
     it('replaces elapsed wording with the shared saved-data message while offline', () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
         render(<StalenessLabel lastSyncedAt={Date.now() - 5 * 60_000} warnAfterMs={60_000} />);
 
-        expect(screen.getByRole('status')).toHaveTextContent('Updated 5 min ago');
+        expect(screen.getByRole('status')).toHaveTextContent('Updated 5 minutes ago');
 
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
         act(() => { window.dispatchEvent(new Event('offline')); });

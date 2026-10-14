@@ -120,13 +120,19 @@ describe('ListForkForm list names', () => {
         ['an unnamed detail', { name: undefined }],
         ['an empty name', { name: '' }],
         ['a host without the detail read', { listRead: 'missing' }],
-        ['a failed detail read', { listRead: 'failed' }],
     ])('keeps the numeric review label for %s', async (_label, options) => {
         mountFork(options);
         await openFirstReview();
 
         expect(await screen.findByText('#2700')).toBeTruthy();
         expect(screen.queryByText('List #2700')).toBeNull();
+    });
+
+    it('shows a plain load error instead of a review when the list read fails', async () => {
+        mountFork({ listRead: 'failed' });
+
+        expect(await screen.findByText(/Couldn't load list #2700/)).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
     });
 
     it('neutralizes bidi controls in a named review label', async () => {

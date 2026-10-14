@@ -250,7 +250,7 @@ describe('price alert manager', () => {
 
         render(<NotificationsSection walletId="wallet-1" />);
 
-        const time = screen.getByText('2 min ago');
+        const time = screen.getByText('2 minutes ago');
         expect(time).toHaveAttribute('title', 'Jan 15, 2026, 3:58 AM PST');
     });
 

@@ -215,7 +215,7 @@ describe('Locked biometric unlock', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
 
-        expect(await screen.findByText(/biometric unlock failed/i)).toBeTruthy();
+        expect(await screen.findByText(/biometric unlock is unavailable. use your wallet password/i)).toBeTruthy();
         expect(password).toHaveFocus();
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
         expect(getLockoutState().failedAttempts).toBe(0);

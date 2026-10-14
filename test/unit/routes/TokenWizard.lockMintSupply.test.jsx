@@ -151,6 +151,9 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
         });
         fireEvent.change(screen.getByLabelText('Edition size'), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText('Copies per mint'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Image URL'), {
+            target: { value: 'https://example.com/prints.png' },
+        });
         submit();
 
         const params = await composedParams();

@@ -406,7 +406,7 @@ describe('Receive QR copy and share toasts', () => {
 
         await clickWhenEnabled('Copy QR code');
 
-        await waitFor(() => expect(writeText).toHaveBeenCalledWith('bitcoin:bcrt1qexample'));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith('bitcoin:bcrt1qexample?chain=bitcoin-regtest&label=Daily%20deposits'));
         expect(showToast).toHaveBeenCalledWith({
             message: 'Could not copy the QR code, so the payment link was copied instead.',
         });

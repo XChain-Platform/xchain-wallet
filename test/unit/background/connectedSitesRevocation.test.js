@@ -99,7 +99,7 @@ describe('connected-site revocation', () => {
         expect(harness.windows.remove).toHaveBeenCalledWith(1);
         expect(harness.bridgeEvents.disconnect).toHaveBeenCalledWith(
             site.origin,
-            'user-requested',
+            'user-revoked',
         );
 
         await harness.approvals.cancelAll();
@@ -141,7 +141,7 @@ describe('connected-site revocation', () => {
         expect(harness.records).toEqual([]);
         expect(harness.bridgeEvents.disconnect).toHaveBeenCalledWith(
             site.origin,
-            'user-requested',
+            'blocked-by-user',
         );
     });
 
@@ -166,7 +166,7 @@ describe('connected-site revocation', () => {
         expect(harness.windows.remove).toHaveBeenCalledWith(2);
         expect(harness.bridgeEvents.disconnect).toHaveBeenCalledWith(
             site.origin,
-            'user-requested',
+            'blocked-by-user',
         );
 
         await harness.approvals.cancelAll();

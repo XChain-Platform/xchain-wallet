@@ -152,7 +152,7 @@ describe('TotalBalanceHero refresh status', () => {
         const pricesFetchedAt = Date.now() - 10 * 60_000;
         const { rerender } = mount({ lastSyncedAt, pricesFetchedAt, onRefresh });
 
-        const status = screen.getByText('Updated 10 min ago');
+        const status = screen.getByText('Updated 10 minutes ago');
         expect(status.className).toMatch(/stale/);
         expect(screen.getAllByRole('status')).toHaveLength(1);
         screen.getByRole('button', { name: 'Refresh portfolio' }).click();

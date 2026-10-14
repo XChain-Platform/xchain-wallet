@@ -235,7 +235,7 @@ describe('PSBT form input controls', () => {
         await screen.findByRole('button', { name: /Chain: Bitcoin/ });
         const input = screen.getByLabelText(/Unsigned transaction/);
         fireEvent.change(input, { target: { value: PSBT_HEX } });
-        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no inputs this wallet can sign/i));
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/this transaction has no inputs/i));
 
         fireEvent.drop(input, {
             dataTransfer: {

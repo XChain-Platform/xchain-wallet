@@ -90,7 +90,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create' }));
 
-        expect(await utils.findByText('Per-fill give amount can have at most 2 decimal places for JDOG.'))
+        expect(await utils.findByText('Amount can have at most 2 decimal places.'))
             .toBeInTheDocument();
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });

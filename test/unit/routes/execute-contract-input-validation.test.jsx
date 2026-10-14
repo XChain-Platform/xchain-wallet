@@ -112,7 +112,10 @@ describe('ExecuteContractForm argument validation', () => {
         expect(await screen.findByText('config contains invalid JSON. Check the syntax and try again.'))
             .toBeInTheDocument();
         expect(screen.queryByText(/position|unexpected token|JSON\.parse/i)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Call contract' })).toBeDisabled();
+        const submit = screen.getByRole('button', { name: 'Call contract' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        expect(await screen.findAllByText('config contains invalid JSON. Check the syntax and try again.')).not.toHaveLength(0);
     });
 
     it('shows the required method message before compose', async () => {
