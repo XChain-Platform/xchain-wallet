@@ -32,8 +32,9 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { MEMO_HINT } from '../utils/memoLimit.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -42,6 +43,32 @@ const ARTWORK_ACCEPT = ['image/*', 'audio/*', '.svg', '.json', '.txt'];
 // Moderate oversize drops reach the exact metadata-aware error below, while
 // unexpectedly large drops stop before FileReader allocates their contents.
 const MAX_DROP_BYTES = 32 * 1024;
+const MAX_TITLE_LENGTH = 100;
+const POSITIVE_ACTION_INDEX = /^[1-9]\d*$/;
+
+function normalizedActionIndex(value) {
+    const index = String(value ?? '').trim();
+    return POSITIVE_ACTION_INDEX.test(index) ? index : null;
+}
+
+async function fetchGenesisActionIndex(messaging, chainId, tick) {
+    if (typeof messaging?.getGenesisForToken !== 'function') {
+        return { index: null, error: 'The token creation record lookup is unavailable. Try again later.' };
+    }
+    try {
+        const info = normalizeGenesisRow(await messaging.getGenesisForToken({ chainId, tick }));
+        if (info?.actionIndex == null || String(info.actionIndex).trim() === '') {
+            return { index: null, error: `The creation record for ${tick} isn't indexed yet. Try again in a minute.` };
+        }
+        const index = normalizedActionIndex(info.actionIndex);
+        if (!index) {
+            return { index: null, error: `The creation record for ${tick} returned an invalid action number. Try again later.` };
+        }
+        return { index, error: null };
+    } catch {
+        return { index: null, error: `Couldn't refresh the creation record for ${tick}. Check your connection and try again.` };
+    }
+}
 
 function artworkFileType(file) {
     const meta = publishFileType(file);
@@ -110,7 +137,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // The token's ISSUE action index (the LINK's second leg). Fetched
     // from the same genesis endpoint ManageToken renders.
     const [issueActionIndex, setIssueActionIndex] = useState(/** @type {string | null} */ (null));
-    const [genesisChecked, setGenesisChecked] = useState(false);
+    const [genesisRefreshing, setGenesisRefreshing] = useState(false);
 
     // Picked file. `bytes` is a Uint8Array; the flow converts it to a
     // Latin-1 binary string at submit time.
@@ -142,6 +169,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [fileActionIndex, setFileActionIndex] = useState(/** @type {string | null} */ (null));
     const [linkTxid, setLinkTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
+    const [indexLookupError, setIndexLookupError] = useState(/** @type {string | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileReadIdRef = useRef(0);
@@ -171,16 +199,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }, [walletId, chainId, messaging]);
 
     useEffect(() => {
-        if (typeof messaging?.getGenesisForToken !== 'function') { setGenesisChecked(true); return undefined; }
         let cancelled = false;
-        messaging.getGenesisForToken({ chainId, tick })
-            .then((row) => {
+        setIssueActionIndex(null);
+        fetchGenesisActionIndex(messaging, chainId, tick)
+            .then(({ index }) => {
                 if (cancelled) return;
-                const info = normalizeGenesisRow(row);
-                if (info?.actionIndex) setIssueActionIndex(String(info.actionIndex));
-                setGenesisChecked(true);
-            })
-            .catch(() => { if (!cancelled) setGenesisChecked(true); });
+                setIssueActionIndex(index);
+            });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick]);
 
@@ -221,13 +246,19 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             try {
                 const resp = await messaging.getActionByTxid({ chainId, txid: fileTxid });
                 if (cancelled) return;
-                const idx = extractActionIndex(resp);
-                if (idx) {
-                    setFileActionIndex(idx);
+                const rawIndex = extractActionIndex(resp);
+                const index = normalizedActionIndex(rawIndex);
+                if (rawIndex && !index) {
+                    setIndexLookupError('The network returned an invalid action number for the file. The wallet will keep checking.');
+                } else if (index) {
+                    setIndexLookupError(null);
+                    setFileActionIndex(index);
                     setStage('review-link');
                 }
-            } catch (err) {
-                // Keep polling through transient network errors.
+            } catch {
+                if (!cancelled) {
+                    setIndexLookupError('The wallet could not check the file record. It will keep trying.');
+                }
             }
         };
         tick_();
@@ -249,13 +280,19 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             try {
                 const resp = await messaging.getActionByTxid({ chainId, txid: tisTxid });
                 if (cancelled) return;
-                const idx = extractActionIndex(resp);
-                if (idx) {
-                    setTisActionIndex(idx);
+                const rawIndex = extractActionIndex(resp);
+                const index = normalizedActionIndex(rawIndex);
+                if (rawIndex && !index) {
+                    setIndexLookupError('The network returned an invalid action number for the token info. The wallet will keep checking.');
+                } else if (index) {
+                    setIndexLookupError(null);
+                    setTisActionIndex(index);
                     setStage('review-desc');
                 }
-            } catch (err) {
-                // Keep polling through transient network errors.
+            } catch {
+                if (!cancelled) {
+                    setIndexLookupError('The wallet could not check the token-info record. It will keep trying.');
+                }
             }
         };
         tick_();
@@ -298,6 +335,27 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRate = Number(feePick.customRate);
+    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
+    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
+    const customFeeDecimals = Math.max(
+        0,
+        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
+    );
+    const customFeePerKb = feeTiers?.unit && Number.isFinite(customFeeRate)
+        ? displayRateToSettingsCustom(feeTiers.unit, customFeeRate)
+        : null;
+    const feeValidationError = feePick.mode !== 'custom'
+        ? null
+        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
+            ? 'Enter a custom fee rate greater than zero.'
+            : customFeeDecimals > 8
+                ? 'Custom fee rate can have at most 8 decimal places.'
+                : customFeePerKb === 0
+                    ? 'Custom fee rate is too small to encode. Enter a larger rate.'
+                    : !feeCustomEstimate || !Number.isSafeInteger(customFeePerKb)
+                        ? 'Custom fee rate is too high. Enter a smaller rate.'
+                        : null;
 
     // Owner mismatch: the LINK leg will be recorded but not honoured
     // unless it's signed by the token's current owner.
@@ -406,6 +464,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         () => imagePreviewDataUrl(fileMeta?.bytes),
         [fileMeta],
     );
+    const fileParams = useMemo(
+        () => (fileMeta ? flowsLib.fileActionParams({
+            name: fileMeta.name, type: fileMeta.type, title, memo,
+        }) : null),
+        [fileMeta, title, memo],
+    );
 
     const attachmentCapFor = useCallback(
         (name, type) => flowsLib.maxPublicFileBytes({ name, type, title, memo }),
@@ -473,7 +537,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         },
     });
 
-    function handleReviewFile(event) {
+    async function handleReviewFile(event) {
         event.preventDefault();
         if (!fromAddress) {
             setFormError('No signing address available on this chain.');
@@ -483,16 +547,29 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setFormError('Pick a file first.');
             return;
         }
-        if (!issueActionIndex) {
-            setFormError(
-                genesisChecked
-                    ? `The creation record for ${tick} isn't indexed yet. Try again in a minute.`
-                    : 'Still looking up the token\'s creation record. One moment.',
-            );
+        if (!fileParams?.NAME) {
+            setFormError('The file name cannot be empty. Rename the file and choose it again.');
+            return;
+        }
+        if (!fileParams.TYPE) {
+            setFormError('The file content type cannot be empty. Choose the file again.');
             return;
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
+            return;
+        }
+        if (fileParams.TITLE.length > MAX_TITLE_LENGTH) {
+            setFormError(`Title cannot be longer than ${MAX_TITLE_LENGTH} characters.`);
+            return;
+        }
+        const memoTooLong = memoLengthError(fileParams.MEMO);
+        if (memoTooLong) {
+            setFormError(memoTooLong);
+            return;
+        }
+        if (feeValidationError) {
+            setFormError(feeValidationError);
             return;
         }
         if (setAsTokenInfo && !previewUrl) {
@@ -506,13 +583,33 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             );
             return;
         }
+        if (!fromAddress.id || typeof fromAddress.id !== 'string') {
+            setFormError('The selected signing address is missing its wallet ID. Choose another address.');
+            return;
+        }
+        if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
+            fromAddress.address,
+            descriptor.coin,
+            descriptor.networkKind,
+        )) {
+            setFormError(`The selected signing address is not valid for ${descriptor?.displayName || chainId}.`);
+            return;
+        }
+        setGenesisRefreshing(true);
+        const latestGenesis = await fetchGenesisActionIndex(messaging, chainId, tick);
+        setGenesisRefreshing(false);
+        setIssueActionIndex(latestGenesis.index);
+        if (!latestGenesis.index) {
+            setFormError(latestGenesis.error);
+            return;
+        }
         setFormError(null);
         setStage('review-file');
     }
 
     async function handleSignFile(event) {
         event.preventDefault();
-        if (submitting || !fileMeta) return;
+        if (submitting || !fileMeta || !fileParams) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
         const rawData = latin1Of(fileMeta.bytes);
@@ -521,9 +618,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             // and the submitted composition cannot drift (PC-28).
             actionData: {
                 action: 'FILE',
-                params: flowsLib.fileActionParams({
-                    name: fileMeta.name, type: fileMeta.type, title, memo,
-                }),
+                params: fileParams,
             },
             encoderOpts: { rawData },
             dispatch: (prebuiltPsbt) => submitFile({
@@ -542,6 +637,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             onBroadcast: (res) => {
                 const txid = res?.txid || res?.broadcast?.txid;
                 if (!txid) throw new Error('Broadcast did not return a transaction id.');
+                setIndexLookupError(null);
                 setFileTxid(txid);
                 setPassword('');
                 setStage('wait-index');
@@ -642,6 +738,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             onBroadcast: (res) => {
                 const txid = res?.txid || res?.broadcast?.txid;
                 if (!txid) throw new Error('Token-info upload did not return a txid.');
+                setIndexLookupError(null);
                 setTisTxid(txid);
                 setPassword('');
                 setStage('wait-tis');
@@ -811,6 +908,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     usually one or two blocks. Then one more signature links
                     it to {tick} and makes it official.
                 </p>
+                {indexLookupError ? (
+                    <StatusMessage variant="error" className={styles.error}>{indexLookupError}</StatusMessage>
+                ) : null}
                 {slow ? (
                     <p className={styles.hint}>
                         This is taking longer than usual. If you close this
@@ -845,6 +945,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     indexed. Then one final signature points {tick}'s
                     description at it.
                 </p>
+                {indexLookupError ? (
+                    <StatusMessage variant="error" className={styles.error}>{indexLookupError}</StatusMessage>
+                ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
                 </div>
@@ -884,6 +987,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Document</dt>
                     <dd className={styles.detailsValue}>{String(tick).toUpperCase()}.json</dd>
+                    <dt className={styles.detailsLabel}>Type</dt>
+                    <dd className={styles.detailsValue}>application/json</dd>
+                    <dt className={styles.detailsLabel}>Title</dt>
+                    <dd className={styles.detailsValue}>Token information</dd>
+                    <dt className={styles.detailsLabel}>Contents</dt>
+                    <dd className={styles.detailsValue}><code>{tisJson}</code></dd>
                     <dt className={styles.detailsLabel}>Artwork referenced</dt>
                     <dd className={styles.detailsValue}>
                         {fileMeta.name}
@@ -1009,7 +1118,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 )}
             >
                 <p className={styles.summary}>
-                    Upload {fileMeta.name} to the chain, then link it to {tick}.
+                    Upload {fileParams.NAME} to the chain, then link it to {tick}.
                 </p>
                 {previewUrl ? (
                     <img
@@ -1032,15 +1141,21 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         <AddressText address={fromAddress.address} />
                     </dd>
                     <dt className={styles.detailsLabel}>File</dt>
-                    <dd className={styles.detailsValue}>{fileMeta.name}</dd>
+                    <dd className={styles.detailsValue}>{fileParams.NAME}</dd>
                     <dt className={styles.detailsLabel}>Type</dt>
-                    <dd className={styles.detailsValue}>{fileMeta.type}</dd>
+                    <dd className={styles.detailsValue}>{fileParams.TYPE}</dd>
                     <dt className={styles.detailsLabel}>Size</dt>
-                    <dd className={styles.detailsValue}>{(fileMeta.bytes.length / 1024).toFixed(1)} KB</dd>
-                    {title.trim() ? (
+                    <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
+                    {fileParams.TITLE ? (
                         <>
                             <dt className={styles.detailsLabel}>Title</dt>
-                            <dd className={styles.detailsValue}>{title.trim()}</dd>
+                            <dd className={styles.detailsValue}>{fileParams.TITLE}</dd>
+                        </>
+                    ) : null}
+                    {fileParams.MEMO ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}><code>{fileParams.MEMO}</code></dd>
                         </>
                     ) : null}
                 </dl>
@@ -1107,12 +1222,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                     <dt className={styles.detailsLabel}>Artwork file record</dt>
                     <dd className={styles.detailsValue}>
-                        On-chain
+                        {coinTicker}
                         <span className={styles.detailsRef}>#{fileActionIndex}</span>
                     </dd>
                     <dt className={styles.detailsLabel}>Token creation record</dt>
                     <dd className={styles.detailsValue}>
-                        On-chain
+                        {coinTicker}
                         <span className={styles.detailsRef}>#{issueActionIndex}</span>
                     </dd>
                 </dl>
@@ -1154,7 +1269,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="submit" variant="primary">
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={genesisRefreshing}
+                    disabled={genesisRefreshing}
+                >
                     Review upload
                 </Button>
             )}
@@ -1219,7 +1339,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 autoComplete="off"
-                maxLength={100}
+                maxLength={MAX_TITLE_LENGTH}
             />
             <Input
                 label="Memo (optional)"

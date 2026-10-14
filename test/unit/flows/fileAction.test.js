@@ -30,10 +30,12 @@ describe('fileAction input validation', () => {
     it('rejects a missing or empty name', async () => {
         await expect(fileAction({ ...VALID, name: undefined })).rejects.toThrow(/name is required/);
         await expect(fileAction({ ...VALID, name: '' })).rejects.toThrow(/name is required/);
+        await expect(fileAction({ ...VALID, name: '   ' })).rejects.toThrow(/name is required/);
     });
 
     it('rejects a missing MIME type', async () => {
         await expect(fileAction({ ...VALID, type: undefined })).rejects.toThrow(/type \(MIME\) is required/);
+        await expect(fileAction({ ...VALID, type: '   ' })).rejects.toThrow(/type \(MIME\) is required/);
     });
 
     it('rejects missing or empty rawData', async () => {
@@ -45,6 +47,11 @@ describe('fileAction input validation', () => {
         await expect(fileAction({ ...VALID, name: 'a|b.png' })).rejects.toThrow(/cannot contain/);
         await expect(fileAction({ ...VALID, title: 'nice;title' })).rejects.toThrow(/cannot contain/);
         await expect(fileAction({ ...VALID, memo: 'm|m' })).rejects.toThrow(/cannot contain/);
+    });
+
+    it('rejects non-text optional metadata instead of silently dropping it', async () => {
+        await expect(fileAction({ ...VALID, title: 7 })).rejects.toThrow(/title must be text/);
+        await expect(fileAction({ ...VALID, memo: 7 })).rejects.toThrow(/memo must be text/);
     });
 
     it('rejects a missing source address', async () => {
