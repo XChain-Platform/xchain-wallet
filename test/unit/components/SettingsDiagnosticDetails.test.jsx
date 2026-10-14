@@ -145,7 +145,15 @@ describe('settings diagnostic disclosures', () => {
             }),
         };
         const descriptor = { id: 'bitcoin-regtest', displayName: 'Bitcoin Regtest' };
-        mount(<RegtestRow descriptor={descriptor} isActive={false} disabled={false} />, messaging);
+        mount(
+            <RegtestRow
+                descriptor={descriptor}
+                isActive={false}
+                disabled={false}
+                activeWallet={{ id: 'wallet-1' }}
+            />,
+            messaging,
+        );
 
         fireEvent.click(await screen.findByRole('button', { name: 'Activate…' }));
         const password = await screen.findByLabelText('Bitcoin Regtest activation password');
