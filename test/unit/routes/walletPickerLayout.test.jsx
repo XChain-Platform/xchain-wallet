@@ -106,6 +106,46 @@ describe('WalletPicker row layout', () => {
         expect(menuButtonRule).not.toMatch(/(?:width|height):\s*32px/);
     });
 
+    it('keeps the row action in place while it is pressed', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const menuButtonRule = /\.rowWrap \.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        // The kit's :active rule sets transform, so a translate used for
+        // centring is dropped on press and the release misses the button.
+        expect(menuButtonRule).not.toMatch(/transform\s*:/);
+        expect(menuButtonRule).toMatch(/inset-block:\s*0/);
+        expect(menuButtonRule).toMatch(/margin-block:\s*auto/);
+    });
+
+    it('renders the wallet-details glyph in the kit icon slot', async () => {
+        const wallet = { id: 'wallet-1', name: 'Primary', format: 'bip39' };
+        await act(async () => {
+            render(
+                <MessagingProvider
+                    shell="popup"
+                    messaging={{ listWallets: () => Promise.resolve([wallet]) }}
+                >
+                    <WalletPicker
+                        activeWalletId={wallet.id}
+                        onSwitch={() => {}}
+                        onAddWallet={() => {}}
+                        onShowDetails={() => {}}
+                        onBack={() => {}}
+                    />
+                </MessagingProvider>,
+            );
+            await Promise.resolve();
+        });
+
+        const details = screen.getByRole('button', { name: 'Wallet details for Primary' });
+        // A glyph passed as a label child is squeezed by the label padding
+        // into a sliver; the icon slot sizes it from the kit icon scale.
+        expect(details.querySelector('[aria-hidden="true"] > svg')).toBeTruthy();
+        expect(details.children).toHaveLength(1);
+    });
+
     it('labels imported-key wallets accurately', async () => {
         const wallet = {
             id: 'wallet-1',
