@@ -586,9 +586,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     </>
                 ) : null}
                 <p className={styles.hint}>
-                    Your offer is open on {giveDescriptor?.displayName}. The
-                    swap settles atomically when a counterparty fills it on{' '}
-                    {getDescriptor?.displayName}; until then no funds move.
+                    Your offer is open on the give chain. The swap settles atomically
+                    when a counterparty fills it on the get chain; until then no funds move.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -650,15 +649,16 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 )}
             >
                 <p className={styles.summary}>
-                    Offer to give {giveSide} on {giveDescriptor?.displayName || giveChainId} in exchange
-                    for {getSide} on {getDescriptor?.displayName || getChainId}.
+                    Offer to give {giveSide} in exchange for {getSide}.
                 </p>
                 {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
-                    <DetailRow
-                        label="Give chain"
-                        value={giveDescriptor ? <ChainBadge descriptor={giveDescriptor} size="sm" /> : giveChainId}
-                    />
+                    {giveDescriptor ? (
+                        <DetailRow
+                            label="Give chain"
+                            value={<ChainBadge descriptor={giveDescriptor} size="sm" />}
+                        />
+                    ) : null}
                     <DetailRow
                         label="Give"
                         value={giveSide}
@@ -667,10 +667,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         label="From"
                         value={<AddressText address={fromAddress.address} />}
                     />
-                    <DetailRow
-                        label="Get chain"
-                        value={getDescriptor ? <ChainBadge descriptor={getDescriptor} size="sm" /> : getChainId}
-                    />
+                    {getDescriptor ? (
+                        <DetailRow
+                            label="Get chain"
+                            value={<ChainBadge descriptor={getDescriptor} size="sm" />}
+                        />
+                    ) : null}
                     <DetailRow
                         label="Get"
                         value={getSide}

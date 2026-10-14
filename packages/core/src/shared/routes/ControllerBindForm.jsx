@@ -514,7 +514,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                             ? `Create unsigned transaction: ${verb.toLowerCase()} controller`
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()} controller`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${verb.toLowerCase()} controller`}
+                                : `Sign: ${verb.toLowerCase()} controller`}
                     </Button>
                 )}
             >
@@ -525,10 +525,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         : `Bind guard contract #${String(controller).trim()} over the ${actionClass} actions of ${subjectLabel}.`}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={descriptor} size="sm" />
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Signing from</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />

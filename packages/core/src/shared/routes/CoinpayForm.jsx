@@ -500,10 +500,12 @@ export function CoinpayForm({
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <DetailRow
-                        label="Chain"
-                        value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
-                    />
+                    {descriptor ? (
+                        <DetailRow
+                            label="Chain"
+                            value={<ChainBadge descriptor={descriptor} size="sm" />}
+                        />
+                    ) : null}
                     <DetailRow
                         label="From"
                         value={<AddressText address={selected.address} />}
@@ -596,7 +598,7 @@ export function CoinpayForm({
                                         }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{row.chainId}</span>}
+                                            {d ? <ChainBadge descriptor={d} size="sm" /> : null}
                                             <span style={{ fontWeight: 600 }}>
                                                 Matched order #{String(row.obligation.action_index)}
                                             </span>
@@ -647,10 +649,14 @@ export function CoinpayForm({
                     )}
                 >
                     <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Chain</dt>
-                        <dd className={styles.detailsValue}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
-                        </dd>
+                        {descriptor ? (
+                            <>
+                                <dt className={styles.detailsLabel}>Chain</dt>
+                                <dd className={styles.detailsValue}>
+                                    <ChainBadge descriptor={descriptor} size="sm" />
+                                </dd>
+                            </>
+                        ) : null}
                         <dt className={styles.detailsLabel}>Matched order</dt>
                         <dd className={styles.detailsValue}>
                             <code>{summary.actionIndex}</code>

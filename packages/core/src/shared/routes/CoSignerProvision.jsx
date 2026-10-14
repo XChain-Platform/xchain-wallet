@@ -31,7 +31,6 @@ import {
     Input,
     Select,
     ChainPicker,
-    ChainBadge,
     CopyButton,
     AddressText,
     FormPage,
@@ -229,8 +228,6 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         );
     }
 
-    const descriptor = chainRegistry.get(chainId);
-
     return wrap(
         <FormPage
             label="Create agent account"
@@ -298,13 +295,6 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             />
 
             <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
-
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                </dd>
-            </dl>
 
         </FormPage>,
     );
