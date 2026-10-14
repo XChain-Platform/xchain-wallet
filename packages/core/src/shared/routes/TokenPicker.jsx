@@ -545,7 +545,6 @@ export function TokenPicker({
                     autoCapitalize="characters"
                     spellCheck={false}
                     aria-label="Search coins or tokens"
-                    aria-expanded={balances !== null ? 'true' : 'false'}
                     aria-controls={balances !== null ? 'xc-token-picker-results' : undefined}
                 />
                 {tokenQuery ? (

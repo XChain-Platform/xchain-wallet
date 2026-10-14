@@ -275,7 +275,6 @@ describe('TokenPicker keyboard and return behavior', () => {
         const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
         const rows = screen.getAllByRole('button', { name: /^Select / });
 
-        expect(search).toHaveAttribute('aria-expanded', 'true');
         expect(search).toHaveAttribute('aria-controls', 'xc-token-picker-results');
         fireEvent.keyDown(search, { key: 'ArrowUp' });
         expect(rows.at(-1)).toHaveFocus();
