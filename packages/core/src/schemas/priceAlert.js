@@ -97,5 +97,6 @@ export function validatePriceAlert(record) {
 
 /** Canonical key so callers can dedupe without importing the comparator. */
 export function priceAlertKey(alert) {
-    return `${alert.chainId}::${alert.direction}::${alert.targetFiat}`;
+    const fiatCurrency = String(alert.fiatCurrency || 'usd').toLowerCase();
+    return `${alert.chainId}::${alert.direction}::${alert.targetFiat}::${fiatCurrency}`;
 }

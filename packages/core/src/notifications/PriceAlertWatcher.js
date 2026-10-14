@@ -35,11 +35,12 @@ import { taggedLogger } from './taggedLogger.js';
 // in-memory cache rather than issuing a fresh CoinGecko request.
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const FIRED_CAP = 500;
+const MAX_PRICE_AGE_MS = 5 * 60 * 1000;
 
 export class PriceAlertWatcher {
     /**
      * @param {Object} deps
-     * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
+     * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null, fetchedAt?: number }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
      *   the price source (typically a priceOracle.getNativePrices wrapper)
      * @param {() => Promise<import('../schemas/priceAlert.js').PriceAlert[]>} deps.listArmedAlerts
      *   the user's alerts; the watcher filters to status === 'armed'
@@ -187,11 +188,11 @@ export class PriceAlertWatcher {
                     this._log.error('PriceAlertWatcher: getNativePrices failed', e);
                     continue;
                 }
-                if (!result || result.disabled || !result.prices) continue;
+                if (!result || result.disabled || result.error || !result.prices) continue;
 
                 for (const alert of alerts) {
                     const entry = result.prices[alert.chainId];
-                    const price = entry && typeof entry.priceFiat === 'number' && Number.isFinite(entry.priceFiat)
+                    const price = this._isFreshPrice(entry)
                         ? entry.priceFiat
                         : null;
                     if (price == null) continue; // no price data for this chain (testnet/regtest/unmapped)
@@ -209,6 +210,14 @@ export class PriceAlertWatcher {
         if (alert.direction === 'above') return price >= alert.targetFiat;
         if (alert.direction === 'below') return price <= alert.targetFiat;
         return false;
+    }
+
+    _isFreshPrice(entry) {
+        if (!entry || typeof entry.priceFiat !== 'number' || !Number.isFinite(entry.priceFiat)) return false;
+        if (entry.fetchedAt === undefined) return true;
+        if (typeof entry.fetchedAt !== 'number' || !Number.isFinite(entry.fetchedAt)) return false;
+        const ageMs = this._now() - entry.fetchedAt;
+        return ageMs >= 0 && ageMs <= MAX_PRICE_AGE_MS;
     }
 
     /**
