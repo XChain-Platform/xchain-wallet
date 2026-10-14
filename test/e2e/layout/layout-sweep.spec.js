@@ -18,7 +18,7 @@
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '../fixtures/wallet.js';
-import { createSweep, layoutSweepFailures } from './sweep.js';
+import { createSweep, layoutSweepFailures, measureInPage } from './sweep.js';
 
 const DARK = process.env.LAYOUT_SCHEME === 'dark';
 const OUT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'tmp', DARK ? 'dark-sweep' : 'layout-sweep');
@@ -90,6 +90,27 @@ test('layout gutter assertion contract', () => {
         'activity: first content left 9px, expected 12px',
         'activity: first content right gap 8px, expected at least 12px',
         'form top gaps [16] do not match list top gaps [12]',
+    ]);
+});
+
+test('clip measurement skips text nobody can see', async ({ page, browserName }) => {
+    await page.setContent(`
+        <style>
+            .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+            input { width: 120px; font: 16px monospace; }
+            .cut { display: block; width: 60px; overflow: hidden; white-space: nowrap; }
+        </style>
+        <span class="sr-only">Screen reader text far wider than one pixel</span>
+        <input aria-label="hidden address" readonly style="color: transparent" value="bc1qhiddenvaluefarwiderthanitsfield0000000">
+        <input aria-label="shown address" readonly value="bc1qshownvaluefarwiderthanitsfield00000000">
+        <span class="cut">Visible text cut by its own box</span>
+    `);
+    const { clipped } = await page.evaluate(measureInPage, {});
+    // WebKit does not report an input's text overflow, so only Chromium
+    // can show the visible address being caught.
+    expect(clipped.map(({ el }) => el)).toEqual([
+        ...(browserName === 'chromium' ? ['input "shown address"'] : []),
+        'span.cut "Visible text cut by its own box"',
     ]);
 });
 

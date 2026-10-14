@@ -73,6 +73,10 @@ export function measureInPage(opts = {}) {
         if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
         const r = el.getBoundingClientRect();
         if (r.width < 1 || r.height < 1) continue;
+        // A 1x1 box is the visually-hidden pattern (.sr-only, the skip link
+        // before it has focus): text for screen readers, never seen. WebKit
+        // reports it a hair over 1px under page zoom.
+        if (r.width < 1.5 && r.height < 1.5) continue;
         if (scrollable(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) {
             push('xScrollers', { el: desc(el), by: el.scrollWidth - el.clientWidth, w: Math.round(r.width) });
         }
@@ -108,8 +112,12 @@ export function measureInPage(opts = {}) {
                 push('clipped', { el: desc(el), by: desc(clipX), cut: Math.round(Math.max(r.right - R, L - r.left)) });
             }
         }
+        // Text painted transparent is not seen, so it cannot be seen cut: a
+        // read-only address input keeps its full value that way under the
+        // shortened overlay that shows it.
+        const transparentText = /^rgba\(.*,\s*0\)$|^transparent$/.test(cs.color);
         if ((cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.children.length === 0
-            && el.scrollWidth > el.clientWidth + 1 && cs.textOverflow !== 'ellipsis') {
+            && el.scrollWidth > el.clientWidth + 1 && cs.textOverflow !== 'ellipsis' && !transparentText) {
             push('clipped', { el: desc(el), by: 'itself', cut: el.scrollWidth - el.clientWidth });
         }
         if (!fixed && !inYScroller && res.pageScrollY === 0 && B > vh + 1) {
