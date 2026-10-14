@@ -46,6 +46,13 @@ describe('locale-aware exact amount formatting', () => {
             .toBe('9,007,199,254,740,993.00000001');
     });
 
+    it('expands exponent notation while preserving atomic precision and signs', () => {
+        expect(formatDecimalAmount('-1.234567890123456789e+21', 'en-US'))
+            .toBe('-1,234,567,890,123,456,789,000');
+        expect(formatAtomicAmount('-1e+21', 8, 'en-US'))
+            .toBe('-10,000,000,000,000.00000000');
+    });
+
     it('uses the Language and Region locale for separators', async () => {
         await setLocale('de-DE');
         expect(formatAtomicAmount('123450', 2)).toBe('1.234,50');
@@ -102,6 +109,13 @@ describe('locale-aware exact fiat formatting', () => {
             currency: 'USD',
             locale: 'en-US',
             expected: '$9,007,199,254,740,993.00',
+        },
+        {
+            label: 'keeps a large negative exponent exact',
+            value: '-1.234567890123456789e+21',
+            currency: 'USD',
+            locale: 'en-US',
+            expected: '-$1,234,567,890,123,456,789,000.00',
         },
         {
             label: 'places a selected currency after a German value',

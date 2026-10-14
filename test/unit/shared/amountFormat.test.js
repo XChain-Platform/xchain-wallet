@@ -41,6 +41,16 @@ describe('shared/amountFormat display policy', () => {
     });
 
     it.each([
+        ['small positive exponent', '1e-8', '0.00000001'],
+        ['small negative exponent', '-1e-8', '-0.00000001'],
+        ['large positive exponent', '1.2e+21', '1,200,000,000,000,000,000,000'],
+        ['large negative exponent', '-1.2e+21', '-1,200,000,000,000,000,000,000'],
+    ])('expands a %s without float conversion', (_label, value, expected) => {
+        expect(formatDisplayAmount(value, 'en-US')).toBe(expected);
+        expect(formatDisplayAmount(value, 'en-US')).not.toMatch(/[eE]/);
+    });
+
+    it.each([
         ['incoming', '1.25000000', 'in', '+1.25'],
         ['outgoing', '1.25000000', 'out', '-1.25'],
         ['unknown direction', '1.25000000', null, '1.25'],
@@ -62,6 +72,12 @@ describe('shared/amountFormat formatTokenQuantity', () => {
         ['very large supply', '123456789012345678901234567890.5', 8, '123,456,789,012,345,678,901,234,567,890.5'],
     ])('formats a %s exactly', (_label, value, divisibility, expected) => {
         expect(formatTokenQuantity(value, divisibility, 'en-US')).toBe(expected);
+    });
+
+    it('applies asset precision and trimming after expanding exponent notation', () => {
+        expect(formatTokenQuantity('1e-8', 8, 'en-US')).toBe('0.00000001');
+        expect(formatTokenQuantity('-1.23000000e+21', 8, 'en-US'))
+            .toBe('-1,230,000,000,000,000,000,000');
     });
 });
 
@@ -121,6 +137,12 @@ describe('shared/amountFormat formatWithThousands', () => {
 
     it('accepts a numeric argument by stringifying it', () => {
         expect(formatWithThousands(12345)).toBe('12,345');
+    });
+
+    it('expands numeric arguments that stringify with exponents', () => {
+        expect(formatWithThousands(1e-8, 'en-US')).toBe('0.00000001');
+        expect(formatWithThousands(-1.2e21, 'en-US'))
+            .toBe('-1,200,000,000,000,000,000,000');
     });
 
     it.each([
