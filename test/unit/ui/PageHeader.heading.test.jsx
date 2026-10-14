@@ -16,12 +16,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
+import { Button } from '../../../packages/core/src/ui/Button.jsx';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
+import * as Icons from '../../../packages/core/src/ui/icons/index.jsx';
 
 const traverse = _traverse.default || _traverse;
-const routeSources = import.meta.glob(
-    '../../../packages/core/src/shared/routes/*.jsx',
+const sharedSources = import.meta.glob(
+    '../../../packages/core/src/shared/**/*.jsx',
     { query: '?raw', import: 'default', eager: true },
 );
 
@@ -57,6 +59,20 @@ function findNode(node, predicate) {
         }
     }
     return null;
+}
+
+function findNodes(node, predicate, matches = []) {
+    if (!node || typeof node !== 'object') return matches;
+    if (predicate(node)) matches.push(node);
+    for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'start', 'end'].includes(key)) continue;
+        if (Array.isArray(value)) {
+            for (const child of value) findNodes(child, predicate, matches);
+        } else {
+            findNodes(value, predicate, matches);
+        }
+    }
+    return matches;
 }
 
 afterEach(() => cleanup());
@@ -126,12 +142,13 @@ describe('PageHeader', () => {
         expect(pageHeaderCss).not.toMatch(/@media/);
     });
 
-    it('keeps every route on the shared back row and icon-only trailing action contract', () => {
+    it('keeps every shared screen on the back row and renders a non-zero trailing action icon', () => {
         let headerCount = 0;
         const handRolledBackRows = [];
         const invalidTrailingActions = [];
+        const pageHeaderActions = [];
 
-        for (const [file, source] of Object.entries(routeSources)) {
+        for (const [file, source] of Object.entries(sharedSources)) {
             const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
             traverse(ast, {
                 JSXElement(path) {
@@ -161,25 +178,52 @@ describe('PageHeader', () => {
                             && attribute.name.name === 'trailing',
                     );
                     if (!trailing) return;
-                    const action = findNode(
+                    const actions = findNodes(
                         trailing.value,
                         (node) => node.type === 'JSXElement'
                             && jsxName(node.openingElement.name) === 'Button',
-                    );
-                    const attributes = action?.openingElement.attributes || [];
-                    const hasLabel = attributes.some(
+                    ).filter((action) => !action.openingElement.attributes.some(
                         (attribute) => attribute.type === 'JSXAttribute'
-                            && attribute.name.name === 'aria-label',
-                    );
-                    const hasIcon = attributes.some(
-                        (attribute) => attribute.type === 'JSXAttribute'
-                            && attribute.name.name === 'icon',
-                    ) || Boolean(findNode(
-                        action?.children,
-                        (node) => node.type === 'JSXOpeningElement'
-                            && jsxName(node.name).startsWith('Icon.'),
+                            && attribute.name.name === 'role'
+                            && attribute.value?.value === 'menuitem',
                     ));
-                    if (!action || !hasLabel || !hasIcon) invalidTrailingActions.push(file);
+                    if (actions.length === 0) {
+                        invalidTrailingActions.push(file);
+                        return;
+                    }
+                    for (const action of actions) {
+                        const attributes = action.openingElement.attributes || [];
+                        const iconAttribute = attributes.find(
+                            (attribute) => attribute.type === 'JSXAttribute'
+                                && attribute.name.name === 'icon',
+                        );
+                        const hasLabel = attributes.some(
+                            (attribute) => attribute.type === 'JSXAttribute'
+                                && attribute.name.name === 'aria-label',
+                        );
+                        const propIconNode = findNode(
+                            iconAttribute?.value,
+                            (node) => node.type === 'JSXOpeningElement'
+                                && jsxName(node.name).startsWith('Icon.'),
+                        );
+                        const childIconNode = findNode(
+                            action.children,
+                            (node) => node.type === 'JSXOpeningElement'
+                                && jsxName(node.name).startsWith('Icon.'),
+                        );
+                        const iconNode = propIconNode || childIconNode;
+                        if (!hasLabel || !iconNode) {
+                            invalidTrailingActions.push(file);
+                            continue;
+                        }
+                        pageHeaderActions.push({
+                            file,
+                            iconName: jsxName(iconNode.name).slice(5),
+                            iconMode: propIconNode
+                                ? 'prop'
+                                : iconAttribute ? 'null-prop-child' : 'child',
+                        });
+                    }
                 },
             });
         }
@@ -187,6 +231,46 @@ describe('PageHeader', () => {
         expect(headerCount).toBeGreaterThan(90);
         expect(handRolledBackRows).toEqual([]);
         expect(invalidTrailingActions).toEqual([]);
+        expect(pageHeaderActions.length).toBeGreaterThan(10);
+
+        expect(pageHeaderActions.some(({ iconMode }) => iconMode === 'prop')).toBe(true);
+        expect(pageHeaderActions.some(({ iconMode }) => iconMode !== 'prop')).toBe(true);
+
+        for (const { file, iconName, iconMode } of pageHeaderActions) {
+            const ActionIcon = Icons[iconName];
+            expect(ActionIcon, `${file} must use an exported icon`).toBeTypeOf('function');
+            const action = iconMode === 'prop' ? (
+                <Button icon={<ActionIcon />} aria-label={`Action from ${file}`} />
+            ) : (
+                <Button
+                    {...(iconMode === 'null-prop-child' ? { icon: null } : {})}
+                    aria-label={`Action from ${file}`}
+                >
+                    <ActionIcon />
+                </Button>
+            );
+            const view = render(
+                <PageHeader
+                    title="Action inventory"
+                    trailing={action}
+                />,
+            );
+            const svg = screen.getByRole('button', { name: `Action from ${file}` })
+                .querySelector('svg[data-xc-icon]');
+            expect(Number(svg?.getAttribute('width'))).toBeGreaterThan(0);
+            expect(Number(svg?.getAttribute('height'))).toBeGreaterThan(0);
+            view.unmount();
+        }
+
+        const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
+        const trailingIcon = rule(
+            pageHeaderCss,
+            '.trailing button:not([role="menuitem"]) svg[data-xc-icon]',
+        );
+        expect(trailingButton).toMatch(/padding:\s*0/);
+        expect(trailingButton).toMatch(/gap:\s*0/);
+        expect(trailingIcon).toMatch(/min-width:\s*var\(--xc-icon-size\)/);
+        expect(trailingIcon).toMatch(/flex:\s*0 0 var\(--xc-icon-size\)/);
     });
 });
 
