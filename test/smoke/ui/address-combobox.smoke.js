@@ -38,7 +38,7 @@ const indexJs = readFileSync(
 
 assert.match(
     cmp,
-    /export const AddressCombobox = forwardRef/,
+    /export const AddressCombobox = (\/\* @__PURE__ \*\/ )?forwardRef/,
     'forwardRef-wrapped named export',
 );
 assert.match(

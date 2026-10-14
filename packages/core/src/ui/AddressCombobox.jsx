@@ -78,7 +78,7 @@ function inspectClipboardPaste(value) {
  * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
  */
-export const AddressCombobox = forwardRef(function AddressCombobox(
+export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombobox(
     {
         value,
         onChange,

@@ -16,11 +16,12 @@
 
 import { useContext, useEffect, useId, useState } from 'react';
 import { useReachability } from '../hooks/useReachability.js';
-import { branding as brandingLib, registry as registryLib } from '../../index.js';
+import { chainIconSmallUrl } from '../../branding/branding.js';
+import { defaultRegistry } from '../../registry/index.js';
 import { NoticesRouteContext, ReachabilityNoticeHiddenContext } from './noticesRoute.js';
 import styles from './ReachabilityBanner.module.css';
 
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 /**
  * @param {object} [props]
@@ -120,7 +121,7 @@ function affectedCoins(perChain) {
         coins.push({
             key,
             name: descriptor?.displayName || coinNameFromChainId(chain.chainId),
-            iconUrl: brandingLib.chainIconSmallUrl(
+            iconUrl: chainIconSmallUrl(
                 descriptor?.coin ? `${descriptor.coin}-mainnet` : chain.chainId,
             ),
         });

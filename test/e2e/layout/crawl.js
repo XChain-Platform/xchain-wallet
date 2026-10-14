@@ -447,17 +447,20 @@ export function createCrawl(page, {
         if (await menu.isVisible().catch(() => false)) {
             await menu.click();
             await page.waitForTimeout(300);
-            const rows = await page.locator('main button:visible:not([disabled])').evaluateAll((els) => els
+            // The header menu is a role=menu popover in the header, not part
+            // of <main>; its rows are the buttons (links leave the app).
+            const rows = await page.getByRole('menu').getByRole('menuitem').evaluateAll((els) => els
+                .filter((e) => e.tagName === 'BUTTON' && !e.disabled)
                 .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
             await home();
             for (const row of [...new Set(rows)]) {
-                if (!row || /^Back/.test(row) || DESTRUCTIVE.test(row)) continue;
+                if (!row || /^Back/.test(row) || DESTRUCTIVE.test(row) || /new window/i.test(row)) continue;
                 screens.push({
                     label: `menu: ${row}`,
                     open: async () => {
                         await page.getByRole('button', { name: 'Open menu' }).first().click();
                         await page.waitForTimeout(300);
-                        await page.locator('main button:visible').filter({ hasText: row }).first().click({ timeout: 5_000 });
+                        await page.getByRole('menu').getByRole('menuitem').filter({ hasText: row }).first().click({ timeout: 5_000 });
                     },
                 });
             }

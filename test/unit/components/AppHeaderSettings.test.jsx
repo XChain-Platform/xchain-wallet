@@ -503,7 +503,7 @@ describe('HeaderSettingsButton section gating', () => {
         expect(screen.getByText('Main')).toBeTruthy();
     });
 
-    it('renders the network section and reports changes when fully wired', () => {
+    it('renders the network section and reports changes when fully wired', async () => {
         const onNetworkFilterChange = vi.fn();
         render(
             <HeaderSettingsButton
@@ -514,7 +514,8 @@ describe('HeaderSettingsButton section gating', () => {
             />,
         );
         fireEvent.click(gear());
-        expect(screen.getByText('Chain filter')).toBeTruthy();
+        // The chain filter is a lazy chunk inside the popover.
+        expect(await screen.findByText('Chain filter')).toBeTruthy();
         const networkTrigger = screen.getByRole('button', { expanded: false, name: /All networks/ });
         expect(networkTrigger).toHaveAttribute('title', 'All networks');
         fireEvent.click(networkTrigger);

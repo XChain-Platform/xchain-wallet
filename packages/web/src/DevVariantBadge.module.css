@@ -165,29 +165,23 @@
     border-color: rgba(255, 255, 255, 0.4);
 }
 
+/* The chevron and its reserved end padding come from the shared dropdown
+   rule in tokens.css; the badge keeps its compact dark chrome. */
 .picker {
-    appearance: none;
-    background: rgba(15, 23, 42, 0.92);
+    background-color: rgba(15, 23, 42, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 6px;
     color: #FFFFFF;
     font-family: inherit;
     font-size: 11px;
+    height: auto;
     padding-block: 2px;
-    padding-inline: 8px 22px;
+    padding-inline-start: 8px;
     cursor: pointer;
     text-transform: lowercase;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path fill='%23ffffff' d='M6 8L0 0h12z'/></svg>");
-    background-repeat: no-repeat;
-    background-position: right 6px center;
-    background-size: 8px 6px;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
-}
-
-.picker:dir(rtl) {
-    background-position: left 6px center;
 }
 
 .picker:hover {
