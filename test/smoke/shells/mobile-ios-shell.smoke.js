@@ -146,13 +146,18 @@ assert.ok(!infoPlist.includes('NSAllowsArbitraryLoads'), 'arbitrary loads must n
 
 // --- 7. Usage strings, scheme, export compliance ----------------------
 
-const expectedUsageDescriptions = ['NSCameraUsageDescription', 'NSFaceIDUsageDescription'];
+const expectedUsageDescriptions = [
+    'NSCameraUsageDescription',
+    'NSFaceIDUsageDescription',
+    'NSLocalNetworkUsageDescription',
+    'NSPhotoLibraryUsageDescription',
+];
 const usageDescriptions = [...infoPlist.matchAll(/<key>(NS\w*UsageDescription)<\/key>/g)]
     .map((match) => match[1]).sort();
 assert.deepEqual(
     usageDescriptions,
     expectedUsageDescriptions,
-    'the app requests only camera access for QR scanning and Face ID for wallet unlock',
+    'the app declares exactly the usage descriptions required by its shipped capabilities',
 );
 for (const key of expectedUsageDescriptions) {
     const text = plistValue(infoPlist, key);
@@ -172,6 +177,16 @@ assert.ok(
     /Face ID.*unlock/i.test(plistValue(infoPlist, 'NSFaceIDUsageDescription'))
         && /does not approve/i.test(plistValue(infoPlist, 'NSFaceIDUsageDescription')),
     'the Face ID string must not imply biometrics approve a transaction; it gates unlock only',
+);
+assert.match(
+    plistValue(infoPlist, 'NSPhotoLibraryUsageDescription'),
+    /photo library.*(?:attachment|import)/i,
+    'the photo library string must explain that the wallet chooses images for attachments or imports',
+);
+assert.match(
+    plistValue(infoPlist, 'NSLocalNetworkUsageDescription'),
+    /(?:node|service).*local network/i,
+    'the local network string must explain that the wallet connects to local nodes or services',
 );
 
 const schemes = plistValue(infoPlist, 'CFBundleURLSchemes');
