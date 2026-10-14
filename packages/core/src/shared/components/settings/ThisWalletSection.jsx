@@ -263,6 +263,7 @@ export function ThisWalletSection({
 }
 
 const MIN_WALLET_PASSWORD_LENGTH = 8;
+const PASSWORD_MISMATCH = 'Passwords do not match.';
 
 function ChangePasswordRow({ walletId, disabled }) {
     const { messaging } = useMessaging();
@@ -272,7 +273,12 @@ function ChangePasswordRow({ walletId, disabled }) {
     const [newPassword, setNewPassword] = useState('');
     const [confirmation, setConfirmation] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    // Each message names the field it is about, so it renders under that
+    // field; a failure that is about no one field stays in the form status.
+    const [error, setErrorState] = useState(
+        /** @type {{ field: 'current' | 'new' | 'confirm' | null, text: string } | null} */ (null),
+    );
+    const setError = (text, field = null) => setErrorState(text ? { field, text } : null);
 
     const reset = () => {
         setCurrentPassword('');
@@ -290,19 +296,19 @@ function ChangePasswordRow({ walletId, disabled }) {
     const submit = async (event) => {
         event.preventDefault();
         if (!currentPassword) {
-            setError('Enter your current wallet password.');
+            setError('Enter your current wallet password.', 'current');
             return;
         }
         if (newPassword.length < MIN_WALLET_PASSWORD_LENGTH) {
-            setError(`New password must be at least ${MIN_WALLET_PASSWORD_LENGTH} characters.`);
+            setError(`New password must be at least ${MIN_WALLET_PASSWORD_LENGTH} characters.`, 'new');
             return;
         }
         if (newPassword !== confirmation) {
-            setError('Passwords do not match.');
+            setError(PASSWORD_MISMATCH, 'confirm');
             return;
         }
         if (newPassword === currentPassword) {
-            setError('Choose a new password that differs from the current password.');
+            setError('Choose a new password that differs from the current password.', 'new');
             return;
         }
         if (typeof messaging?.changePassword !== 'function') {
@@ -316,9 +322,8 @@ function ChangePasswordRow({ walletId, disabled }) {
         try {
             result = await messaging.changePassword({ walletId, currentPassword, newPassword });
         } catch (err) {
-            setError(isWrongPasswordError(err)
-                ? 'Current wallet password is incorrect.'
-                : (err?.message || 'Could not change the wallet password.'));
+            if (isWrongPasswordError(err)) setError('Current wallet password is incorrect.', 'current');
+            else setError(err?.message || 'Could not change the wallet password.');
             setBusy(false);
             return;
         }
@@ -371,6 +376,12 @@ function ChangePasswordRow({ walletId, disabled }) {
         setter(event.target.value);
         if (error) setError(null);
     };
+    const fieldError = (field) => (error?.field === field ? error.text : undefined);
+    // The mismatch shows while the confirmation is typed, keyed to its value
+    // so the field does not dismiss it as stale on the next keystroke.
+    const confirmError = confirmation && confirmation !== newPassword
+        ? PASSWORD_MISMATCH
+        : fieldError('confirm');
 
     return (
         <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} aria-busy={busy}>
@@ -389,6 +400,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                     autoComplete="current-password"
                     autoFocus
                     disabled={busy}
+                    error={fieldError('current')}
                 />
                 <Input
                     type="password"
@@ -399,6 +411,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                     aria-label="New wallet password"
                     autoComplete="new-password"
                     disabled={busy}
+                    error={fieldError('new')}
                 />
                 <Input
                     type="password"
@@ -409,12 +422,10 @@ function ChangePasswordRow({ walletId, disabled }) {
                     aria-label="Confirm new wallet password"
                     autoComplete="new-password"
                     disabled={busy}
+                    error={confirmError}
+                    errorKey={confirmation}
                 />
-                {(confirmation && confirmation !== newPassword)
-                    || error === 'Passwords do not match.' ? (
-                    <Status text="Passwords do not match." tone="error" />
-                ) : null}
-                {error && error !== 'Passwords do not match.' ? <Status text={error} tone="error" /> : null}
+                {error && error.field === null ? <Status text={error.text} tone="error" /> : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" size="sm" icon={null} onClick={close} disabled={busy}>
                         Cancel

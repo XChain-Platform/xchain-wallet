@@ -84,9 +84,11 @@ function isWrongPasswordError(err) {
     return name === 'AeadAuthError' || name === 'InvalidPasswordError';
 }
 
+const INCORRECT_PASSWORD = 'Incorrect password.';
+
 /** Plain copy for a password-gated backup step that failed. */
 function passwordStepFailure(err, fallback) {
-    return isWrongPasswordError(err) ? 'Incorrect password.' : userFacingMessage(err, fallback);
+    return isWrongPasswordError(err) ? INCORRECT_PASSWORD : userFacingMessage(err, fallback);
 }
 
 /**
@@ -665,8 +667,9 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                     autoFocus
                     autoComplete="current-password"
                     aria-label="Wallet password"
+                    error={error === INCORRECT_PASSWORD ? error : undefined}
                 />
-                {error ? <Status text={error} tone="error" /> : null}
+                {error && error !== INCORRECT_PASSWORD ? <Status text={error} tone="error" /> : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
                     <Button
@@ -1041,6 +1044,10 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                     autoComplete="new-password"
                     aria-label="Backup password"
                     disabled={busy}
+                    error={pw1.length > 0 && !passwordStrongEnough
+                        ? `Backup password must be at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters.`
+                        : undefined}
+                    errorKey={pw1}
                 />
                 <Input
                     type="password"
@@ -1051,16 +1058,9 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                     autoComplete="new-password"
                     aria-label="Confirm backup password"
                     disabled={busy}
+                    error={mismatch ? 'Backup passwords do not match.' : undefined}
+                    errorKey={pw2}
                 />
-                {pw1.length > 0 && !passwordStrongEnough ? (
-                    <Status
-                        text={`Backup password must be at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters.`}
-                        tone="error"
-                    />
-                ) : null}
-                {mismatch ? (
-                    <Status text="Backup passwords do not match." tone="error" />
-                ) : null}
                 {error ? <Status text={error} tone="error" /> : null}
                 {operationTime?.showElapsed ? (
                     <Status text={`Encrypting for ${operationTime.elapsedSeconds} seconds…`} />
