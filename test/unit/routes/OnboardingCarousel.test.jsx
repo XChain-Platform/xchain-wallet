@@ -27,6 +27,7 @@ import { OnboardingCarousel } from '../../../packages/core/src/shared/routes/Onb
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import * as branding from '../../../packages/core/src/branding/branding.js';
 
 const carouselCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/OnboardingCarousel.module.css'),
@@ -169,7 +170,10 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         stubMatchMedia(false);
         const onDone = vi.fn();
         render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
-        fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+        const skip = screen.getByRole('button', { name: 'Skip' });
+        expect(skip.className).toMatch(/skipBtn/);
+        expect(skip.className).not.toMatch(/ghost/);
+        fireEvent.click(skip);
         expect(onDone).toHaveBeenCalledTimes(1);
         expect(onDone).toHaveBeenCalledWith(false);
     });
@@ -322,6 +326,25 @@ describe('Onboarding: explainer gating', () => {
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
+    });
+
+    it('keeps the fresh welcome hierarchy and full-width primary and secondary actions', () => {
+        stubMatchMedia(false);
+        acceptLicense();
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+        mountOnboarding();
+
+        expect(screen.queryByRole('heading', { name: 'Wallet setup' })).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(branding.PRODUCT_NAME);
+
+        const create = screen.getByRole('button', { name: 'Create new wallet' });
+        const importWallet = screen.getByRole('button', { name: 'Import wallet' });
+        expect(create.className).toMatch(/primary/);
+        expect(importWallet.className).toMatch(/secondary/);
+        expect(create.className).toMatch(/block/);
+        expect(importWallet.className).toMatch(/block/);
+        expect(create.className).toMatch(/md/);
+        expect(importWallet.className).toMatch(/md/);
     });
 
     it('skips the carousel for the unlocked-vault Add-Wallet lane (onBack)', () => {

@@ -124,9 +124,9 @@ export function OnboardingCarousel({
     }
 
     const skipAction = (
-        <Button type="button" variant="ghost" size="sm" icon={null} onClick={handleSkip}>
+        <button type="button" className={styles.skipBtn} onClick={handleSkip}>
             {t('onboarding.carousel.skip')}
-        </Button>
+        </button>
     );
 
     const progressTabs = (

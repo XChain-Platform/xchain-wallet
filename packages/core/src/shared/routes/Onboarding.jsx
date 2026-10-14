@@ -365,13 +365,13 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         }
     }
 
-    const header = (
+    const header = onBack ? (
         <PageHeader
             onBack={onBack}
             backLabel="Back to wallets"
-            title={mustGraduate ? 'Leave the demo' : onBack ? 'Add wallet' : 'Wallet setup'}
+            title={mustGraduate ? 'Leave the demo' : 'Add wallet'}
         />
-    );
+    ) : null;
 
     // First-launch + version-bump gate. The Add-Wallet shortcut (when
     // `onBack` is supplied) skips the gate ONLY when the user has
@@ -444,7 +444,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 <FormPage
                     label="Leave the demo"
                     title="Leave the demo first"
-                    headingAs="h2"
+                    headingAs={header ? 'h2' : 'h1'}
                     visual={(
                         <img
                             src={branding.logoUrl()}
@@ -541,7 +541,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             <FormPage
                 label="Wallet setup"
                 title={branding.PRODUCT_NAME}
-                headingAs="h2"
+                headingAs={header ? 'h2' : 'h1'}
                 description={branding.TAGLINE}
                 visual={(
                     <img

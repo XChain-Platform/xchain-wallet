@@ -24,6 +24,30 @@
     flex: 0 0 auto;
 }
 
+.skipBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--xc-tap-min);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    background: none;
+    color: var(--xc-text-muted);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    cursor: pointer;
+}
+
+.skipBtn:hover {
+    color: var(--xc-text);
+}
+
+.skipBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: calc(var(--xc-space-1) / 2);
+}
+
 .frameViewport {
     flex: 1 1 auto;
     min-height: 0;
