@@ -39,6 +39,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .labelCell {
@@ -56,12 +58,16 @@
     font-weight: 600;
 }
 
+/* The row is a button, which the tokens make unselectable; addresses and
+   amounts inside it stay selectable for copying. */
 .context {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .primary {
