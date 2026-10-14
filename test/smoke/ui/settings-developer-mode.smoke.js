@@ -35,7 +35,7 @@ assert.match(
     /update\(\{\s*\[field\]:\s*next\s*\}\)/,
     'writes through update({ [field]: next })',
 );
-assert.match(src, /label="Developer Mode"/, 'Developer Mode toggle present');
+assert.match(src, /label=\{t\('settings\.toggle\.turnOn'\)\}\s*accessibleLabel=\{t\('settings\.developerMode\.switchAccessibleLabel'\)\}/, 'Developer Mode toggle present');
 assert.match(src, /label="Learn Mode"/, 'Learn Mode toggle present');
 assert.match(src, /onToggle\('developerMode'/, 'developerMode field wired');
 assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');

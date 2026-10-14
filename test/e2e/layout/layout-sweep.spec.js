@@ -31,6 +31,14 @@ test('layout gutter assertion contract', () => {
         first: { kind, left: gutter, rightGap: gutter, topGap },
     });
     expect(layoutSweepFailures([
+        { label: 'scaled', vw: 411, layout: layout(12), rootFontPx: 24, expectedRootFontPx: 24 },
+        { label: 'lost scale', vw: 411, layout: layout(12), rootFontPx: 16, expectedRootFontPx: 24 },
+        { label: 'unread', vw: 411, layout: layout(12), expectedRootFontPx: 20.8 },
+    ])).toEqual([
+        'lost scale: root font size 16px, expected 24px',
+        'unread: root font size unread, expected 20.8px',
+    ]);
+    expect(layoutSweepFailures([
         { label: 'compact', vw: 639, layout: layout(12, 'list', 12) },
         { label: 'rail lower bound', vw: 640, layout: layout(16) },
         { label: 'rail upper bound', vw: 899, layout: layout(16) },
@@ -74,7 +82,7 @@ test('layout sweep', async ({ page }, testInfo) => {
     const sweep = createSweep(page, {
         venue,
         outDir: join(OUT_ROOT, venue),
-        rootFontSize: testInfo.project.metadata?.rootFontSize,
+        fontScale: testInfo.project.metadata?.fontScale,
         contrast: DARK,
         onResult: (result) => screens.push(result),
     });

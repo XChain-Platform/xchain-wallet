@@ -58,7 +58,9 @@ async function openRoute(page, route) {
     }
 
     const main = page.getByRole('main');
-    await expect(main.locator(':scope > *').first()).toBeVisible();
+    // The notices slot is main's first child and stays empty and hidden when
+    // there is nothing to say, so wait for the first visible child instead.
+    await expect(main.locator(':scope > *:visible').first()).toBeVisible();
     if (route.formName) {
         await expect(main.getByRole('form', { name: route.formName, exact: true }))
             .toBeVisible();
@@ -69,7 +71,8 @@ async function openRoute(page, route) {
 
 async function geometry(page) {
     return page.getByRole('main').evaluate((main) => {
-        const first = main.firstElementChild;
+        // Skip the empty notices slot, which renders no box or a zero-height one.
+        const first = Array.from(main.children).find((el) => el.getBoundingClientRect().height > 0);
         const screenHeader = main.parentElement?.querySelector(':scope > header');
         const pageHeader = screenHeader?.firstElementChild;
         if (!first) throw new Error('Screen body has no first content block');

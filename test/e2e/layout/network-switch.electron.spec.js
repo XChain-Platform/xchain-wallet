@@ -87,7 +87,7 @@ test('desktop network round trip leaves Receive usable', async () => {
 
         await openSettings(page);
         await page.getByRole('button', { name: /^Developer mode/ }).click();
-        const developerMode = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+        const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
         if (!(await developerMode.isChecked())) {
             await developerMode.click();
             await expect(developerMode).toBeChecked();

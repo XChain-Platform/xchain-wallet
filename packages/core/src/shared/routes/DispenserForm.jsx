@@ -1863,14 +1863,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
             />
 
-            <div className={styles.feeToggleGap}>
-                <NativeFeeToggle
-                    checked={payFeeInNativeCoin}
-                    onChange={setPayFeeInNativeCoin}
-                    coinTicker={coinTicker}
-                    mandatory={nativeFeeMandatory}
-                />
-            </div>
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
+            />
 
         </FormPage>,
     );

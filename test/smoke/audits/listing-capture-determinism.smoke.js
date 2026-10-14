@@ -188,7 +188,7 @@ assert.match(read('packages', 'core', 'src', 'shared', 'components', 'HomeTabs.j
 // ─── 4. the demo lane and both capture harnesses are wired to it ───────
 
 const onboardingSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Onboarding.jsx');
-assert.match(onboardingSrc, /demoCaptureMnemonic\(\)\s*\n?\s*\|\|\s*cryptoLib\.generateBip39Mnemonic/,
+assert.match(onboardingSrc, /demoCaptureMnemonic\(\)\s*\n?\s*\|\|\s*generateBip39Mnemonic\(/,
     'handleEnterDemo must prefer the frozen capture mnemonic and fall back to a generated '
     + 'one. The fallback is what keeps a real user on a throwaway wallet.');
 
