@@ -1653,7 +1653,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             trailing={(
                 <Button
                     variant="ghost"
-                    size="sm"
                     icon={(
                         <span className={refreshing ? styles.refreshing : undefined}>
                             <Icon.RefreshIcon />
@@ -1672,11 +1671,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         setRefreshing(true);
                         setRefreshTick((n) => n + 1);
                     }}
-                >
-                    <span className={styles.visuallyHidden}>
-                        {refreshing ? t('history.refreshing') : t('history.refresh')}
-                    </span>
-                </Button>
+                />
             )}
         />
     );
