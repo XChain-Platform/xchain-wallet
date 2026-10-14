@@ -165,7 +165,7 @@ describe('ActionDetail on a pending entry', () => {
         const details = screen.getByRole('tabpanel');
 
         expect(within(details).getByRole('rowheader', { name: 'Action' })
-            .closest('tr').querySelector('td').textContent).toBe('Send');
+            .closest('tr').querySelector('td').textContent).toBe('Receive');
         expect(within(details).getByRole('rowheader', { name: 'Transaction ID' })).toBeTruthy();
         expect(within(details).getByRole('rowheader', { name: 'From' })).toBeTruthy();
         expect(within(details).getByRole('rowheader', { name: 'To' })).toBeTruthy();

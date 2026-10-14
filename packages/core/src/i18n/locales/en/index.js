@@ -962,6 +962,10 @@ export const en = {
         "This wallet doesn't read {action} data. The fields below are shown exactly as the network carries them.",
     'pending.detail.localRecordNote':
         "Taken from this wallet's own record of the send. The network hasn't reported the transaction data yet.",
+    'pending.detail.localRecordNoteIn':
+        "Taken from this wallet's own record of the incoming transfer. The network hasn't reported the transaction data yet.",
+    'pending.detail.localRecordNoteSelf':
+        "Taken from this wallet's own record of the transfer. The network hasn't reported the transaction data yet.",
     'pending.detail.noData': 'No action data has been reported for this transaction yet.',
 
     // M2.5: the amount annotation on a pending row. Verbs still in
