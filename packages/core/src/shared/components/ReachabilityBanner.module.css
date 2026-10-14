@@ -4,7 +4,7 @@
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: var(--xc-space-2);
     min-width: 0;
     min-height: var(--xc-tap-min);
     padding-inline: var(--xc-space-2);
@@ -37,7 +37,7 @@
 .retry,
 .detailsToggle {
     min-height: var(--xc-tap-min);
-    padding: 0 2px;
+    padding: 0 var(--xc-space-1);
     border: 0;
     background: transparent;
     color: inherit;

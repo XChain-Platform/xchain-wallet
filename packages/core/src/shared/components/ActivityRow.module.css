@@ -83,17 +83,17 @@
 }
 
 .confirmed {
-    background: color-mix(in srgb, var(--xc-success, #14b86c) 20%, transparent);
+    background: var(--xc-success-bg, rgba(20, 111, 52, 0.10));
     color: var(--xc-success, #14b86c);
 }
 
 .failed {
-    background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
+    background: var(--xc-danger-bg, rgba(220, 38, 38, 0.10));
     color: var(--xc-danger-fg, #d93838);
 }
 
 .pending {
-    background: color-mix(in srgb, var(--xc-warning, #d99000) 20%, transparent);
+    background: var(--xc-warning-bg, rgba(217, 119, 6, 0.10));
     color: var(--xc-warning, #d99000);
 }
 
@@ -116,7 +116,7 @@
 @media (max-width: 400px) {
     .row {
         grid-template-columns: auto minmax(38px, auto) minmax(0, 1fr) auto minmax(28px, 44px) auto;
-        gap: 6px;
+        gap: var(--xc-space-1);
         padding: var(--xc-space-2);
     }
 
@@ -131,7 +131,7 @@
     }
 
     .status {
-        padding: 0 4px;
+        padding: 0 var(--xc-space-1);
         font-size: 9px;
     }
 }
