@@ -150,7 +150,12 @@
 }
 
 /* The shell's fallback notices slot, for a route with no Screen, takes the
-   same page gutter as the body. */
+   same page gutter and top inset as the body. */
 .noticesFallback {
+    flex: 0 0 auto;
     padding-inline: var(--xc-page-gutter);
+}
+
+.noticesFallback > :not(:empty) {
+    margin-top: var(--xc-page-top);
 }

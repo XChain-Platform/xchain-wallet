@@ -20,6 +20,7 @@ import {
     ShellNoticesContext,
 } from './noticesRoute.js';
 import styles from './LeftNav.module.css';
+import screenStyles from '../../ui/Screen.module.css';
 
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
@@ -393,7 +394,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
                     noticesHost,
                 ) : null}
                 <div className={styles.mainBody}>
-                    {hasNotices ? <div ref={noticesFallbackRef} className={styles.noticesFallback} /> : null}
+                    {hasNotices ? <div ref={noticesFallbackRef} className={screenStyles.noticesFallback} /> : null}
                     <ShellNoticesContext.Provider value={shellNotices}>
                         {children}
                     </ShellNoticesContext.Provider>

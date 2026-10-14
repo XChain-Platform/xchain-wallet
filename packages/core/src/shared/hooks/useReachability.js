@@ -339,21 +339,17 @@ export function useReachability(opts = {}) {
     }, [probe]);
 
     useEffect(() => {
-        if (!sharedEntry) return undefined;
+        mountedRef.current = true;
         // Start from what another hook already published, then follow it.
+        // The probe below runs after, so a local offline reading still wins.
         const adopt = (published) => {
             provisionalRef.current = null;
             setOverall(published.overall);
             setPerChain(published.perChain);
             setLastChecked(published.lastChecked);
         };
-        if (sharedEntry.published) adopt(sharedEntry.published);
-        sharedEntry.listeners.add(adopt);
-        return () => sharedEntry.listeners.delete(adopt);
-    }, [sharedEntry]);
-
-    useEffect(() => {
-        mountedRef.current = true;
+        if (sharedEntry?.published) adopt(sharedEntry.published);
+        sharedEntry?.listeners.add(adopt);
         if (chainIds.length === 0) {
             // Drop any verdict derived from the previous chain set rather
             // than leaving a stale "offline" on screen with nothing behind it.
@@ -373,6 +369,7 @@ export function useReachability(opts = {}) {
         if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
         return () => {
             mountedRef.current = false;
+            sharedEntry?.listeners.delete(adopt);
             if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
             // Retire this probe generation: a response still in flight is
             // about a chain set we are no longer showing.
@@ -390,7 +387,7 @@ export function useReachability(opts = {}) {
                 confirmRef.current = null;
             }
         };
-    }, [probe, intervalMs, chainIds]);
+    }, [probe, intervalMs, chainIds, sharedEntry]);
 
     return { loading, overall, perChain, lastChecked, refresh, error };
 }

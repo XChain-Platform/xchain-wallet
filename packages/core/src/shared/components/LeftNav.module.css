@@ -123,17 +123,6 @@
     margin: 0;
 }
 
-/* Holds the notices only for a route that renders no Screen. Screen owns
-   the page gutter, so the slot takes its inset from there. */
-.noticesFallback {
-    composes: noticesFallback from '../../ui/Screen.module.css';
-    flex: 0 0 auto;
-}
-
-.noticesFallback > .notices:not(:empty) {
-    margin-top: var(--xc-page-top);
-}
-
 .mainBody {
     flex: 1 1 auto;
     min-height: 0;

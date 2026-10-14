@@ -56,7 +56,7 @@ export function EmptyState({
 
     return (
         <div
-            className={[styles.wrap, plain ? styles.plain : null, className].filter(Boolean).join(' ')}
+            className={[styles.wrap, plain && styles.plain, className].filter(Boolean).join(' ')}
             role={role}
             {...rest}
         >

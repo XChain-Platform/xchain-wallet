@@ -45,8 +45,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     // the place of this notice; the probe keeps running underneath.
     const hiddenByScreen = useContext(ReachabilityNoticeHiddenContext);
 
-    if (hiddenByScreen) return null;
-    if (overall !== 'degraded' && overall !== 'offline') return null;
+    if (hiddenByScreen || (overall !== 'degraded' && overall !== 'offline')) return null;
 
     const coins = affectedCoins(perChain);
     const staleness = lastChecked

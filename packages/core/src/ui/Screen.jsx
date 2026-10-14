@@ -100,9 +100,9 @@ export function Screen({
     }, [rootRef]);
 
     useLayoutEffect(() => {
+        // The slot renders only while this Screen owns the notices.
         const slot = noticesSlotRef.current;
-        if (!ownsNotices || !slot) return undefined;
-        return shellNotices.claim(slot);
+        return slot ? shellNotices.claim(slot) : undefined;
     }, [ownsNotices, shellNotices]);
 
     useLayoutEffect(() => {
