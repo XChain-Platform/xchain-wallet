@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { useId } from 'react';
 import styles from './ChoiceControl.module.css';
 
 /**
@@ -21,6 +22,8 @@ export function ChoiceControl({
     children,
     ...inputProps
 }) {
+    const generatedId = useId();
+    const inputId = inputProps.id || generatedId;
     const classes = [
         styles.control,
         disabled ? styles.disabled : null,
@@ -28,9 +31,10 @@ export function ChoiceControl({
     ].filter(Boolean).join(' ');
 
     return (
-        <label className={classes}>
+        <label className={classes} htmlFor={inputId}>
             <input
                 {...inputProps}
+                id={inputId}
                 className={styles.input}
                 type={type}
                 disabled={disabled}

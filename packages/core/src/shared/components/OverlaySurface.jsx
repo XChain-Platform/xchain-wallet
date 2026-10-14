@@ -103,6 +103,7 @@ export function OverlaySurface({
             className={`${styles.overlay} ${styles[`${variant}Overlay`]}`}
             role="dialog"
             aria-modal="true"
+            tabIndex={-1}
             onClick={onBackdrop}
             {...dialogProps}
         >
