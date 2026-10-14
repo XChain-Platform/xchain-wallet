@@ -112,6 +112,7 @@
 
 .licenseParagraph {
     margin: 0 0 var(--xc-space-2);
+    max-width: none;
     /* Start-aligned: justified text opens wide gaps between words on a
        narrow phone. */
     text-align: start;
@@ -137,14 +138,31 @@
 }
 
 .licenseAck {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
     margin: 0;
     width: 100%;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     line-height: 1.4;
+    white-space: nowrap;
+}
+
+.licenseActions {
+    display: flex;
+    width: 100%;
+}
+
+.licenseActions > * {
+    width: 100%;
+}
+
+@media (min-width: 600px) {
+    .licenseActions {
+        justify-content: flex-end;
+    }
+
+    .licenseActions > * {
+        width: auto;
+    }
 }
 
 /* Short landscape screens retain every onboarding action while trimming

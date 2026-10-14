@@ -100,6 +100,24 @@ describe('onboarding and Home layout guards', () => {
         expect(resumeSource).not.toMatch(/<button\b/);
     });
 
+    it('keeps the license gate full-width with one compact acknowledgement row', () => {
+        expect(onboardingCss).toMatch(/\.licenseParagraph\s*\{[^}]*max-width:\s*none;/s);
+        expect(onboardingCss).not.toMatch(/\.licenseAck\s*\{[^}]*display:\s*flex;/s);
+        expect(onboardingCss).toMatch(/\.licenseAck\s*\{[^}]*white-space:\s*nowrap;/s);
+        expect(onboardingSource).toMatch(
+            /actions=\{\(\s*<div className=\{styles\.licenseActions\}>\s*<Button/s,
+        );
+        expect(onboardingSource).not.toMatch(
+            /<Button\s+variant="primary"\s+block\s+onClick=\{handleAcceptLicense\}/,
+        );
+        expect(onboardingCss).toMatch(
+            /\.licenseActions > \*\s*\{[^}]*width:\s*100%;/s,
+        );
+        expect(onboardingCss).toMatch(
+            /@media \(min-width: 600px\)[\s\S]*?\.licenseActions\s*\{[^}]*justify-content:\s*flex-end;[^}]*\}[\s\S]*?\.licenseActions > \*\s*\{[^}]*width:\s*auto;/,
+        );
+    });
+
     it('uses theme tokens for assigned badges and icon overlays', () => {
         expect(balanceSource).not.toContain("color: '#FFFFFF'");
         expect(homeTabsSource).not.toContain("color: '#FFFFFF'");
