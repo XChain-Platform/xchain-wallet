@@ -79,6 +79,7 @@ import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
 import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
 import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
 import { createChromeNotifier } from './background/chromeNotifications.js';
+import { createRestartStringSetStorage } from './background/restartStateStorage.js';
 
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
@@ -217,6 +218,11 @@ let dispenserEscrowWatcher = null;
 const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
 const DEADLINE_SEEN_KEY = 'deadlinesSeen';
 const DISPENSER_ESCROW_SEEN_KEY = 'dispenserEscrowSeen';
+const PRICE_ALERT_FIRED_KEY = 'priceAlertsFired';
+const COINPAY_AUTOPAY_NOTIFIED_KEY = 'coinpayAutopayNotified';
+const EXTENSION_AUTOPAY_INSTANCE_ID = 'extension-service-worker';
+const priceAlertFiredStore = createRestartStringSetStorage(PRICE_ALERT_FIRED_KEY);
+const coinpayAutopayNotifiedStore = createRestartStringSetStorage(COINPAY_AUTOPAY_NOTIFIED_KEY);
 
 // chrome.notifications works while every wallet surface is closed.
 const chromeNotify = createChromeNotifier(
@@ -419,6 +425,8 @@ async function buildHost() {
             getSettings: () => flowsLib.getSettings(vault),
             notify: chromeNotify,
             markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+            loadFired: () => priceAlertFiredStore.load(),
+            saveFired: (ids) => priceAlertFiredStore.save(ids),
             logger: console,
         });
         priceAlertWatcher.start();
@@ -528,6 +536,9 @@ async function buildHost() {
             reservationLedger: host.reservationLedger,
             notify: chromeNotify,
             shellKind: 'extension',
+            instanceId: EXTENSION_AUTOPAY_INSTANCE_ID,
+            loadNotified: () => coinpayAutopayNotifiedStore.load(),
+            saveNotified: (keys) => coinpayAutopayNotifiedStore.save(keys),
             logger: console,
         });
         coinpayAutopayWatcher.start();
