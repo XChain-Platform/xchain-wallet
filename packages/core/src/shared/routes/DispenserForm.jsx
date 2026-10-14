@@ -45,6 +45,7 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
     formatWithThousands,
+    tokenAmountPrecisionError,
 } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -86,6 +87,8 @@ import {
     readDispenserAddressStanding,
 } from '../../flows/dispenserAddressStanding.js';
 import { listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { exceedsBalance } from '../utils/dividendPerUnit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -219,6 +222,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [derivingGetAddress, setDerivingGetAddress] = useState(false);
 
     const [ticker, setTicker] = useState((initialTick || reopen?.tick || '').toUpperCase());
+    const giveTokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     // PC-26: dispenses carry no gated-key handoff; warn when the
     // dispensed token has gated content.
     const gatedGiveNotice = useGatedTickNotice({ messaging, chainId, tick: ticker });
@@ -236,6 +240,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // lane; EXPIRATION + allow/block lists complete the field set.
     const [payWith, setPayWith] = useState(/** @type {'coin' | 'token'} */ (reopen?.payWith === 'token' ? 'token' : 'coin'));
     const [getTick, setGetTick] = useState(reopen?.getTick || '');
+    const paymentTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick,
+        skip: payWith !== 'token' || !getTick.trim(),
+    });
     const [getTokenAmount, setGetTokenAmount] = useState(reopen?.getTokenAmount || '');
     // Every form starts on the default window, a reopen included: the indexer fills a concrete
     // EXPIRATION into every dispenser, so a reopened one's expiration is usually the old default
@@ -842,13 +851,38 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setFormError('Per-fill give amount must be a positive number.');
             return;
         }
+        const givePrecisionError = tokenAmountPrecisionError(ga, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Per-fill give amount',
+        });
+        if (givePrecisionError) {
+            setFormError(givePrecisionError);
+            return;
+        }
         const esc = escrow.trim();
         if (!isPositiveDecimal(esc)) {
             setFormError('Escrow amount must be a positive number.');
             return;
         }
+        const escrowPrecisionError = tokenAmountPrecisionError(esc, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Escrow amount',
+        });
+        if (escrowPrecisionError) {
+            setFormError(escrowPrecisionError);
+            return;
+        }
         if (compareDecimalStrings(esc, ga) === -1) {
             setFormError('Escrow is smaller than a single fill; the dispenser would never dispense.');
+            return;
+        }
+        if (exceedsBalance(esc, sourceTickBalance)) {
+            setFormError(
+                `This address holds only ${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()}. `
+                + 'Enter an escrow amount at or below that balance.',
+            );
             return;
         }
         const oracle = oracleAddress.trim();
@@ -861,6 +895,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!isPositiveDecimal(getTokenAmount)) {
                 setFormError('Enter a positive token amount buyers pay per fill.'); return;
             }
+            const paymentPrecisionError = tokenAmountPrecisionError(getTokenAmount, {
+                divisibility: paymentTokenInfo?.divisibility,
+                tick: getTick,
+                noun: 'Payment amount',
+            });
+            if (paymentPrecisionError) { setFormError(paymentPrecisionError); return; }
         } else {
             if (!oracle && !fa && !trig) {
                 setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
@@ -888,6 +928,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             }
             if (!oracle && trig && !isPositiveDecimal(trig)) {
                 setFormError('Trigger price must be a positive number.');
+                return;
+            }
+            const triggerPrecisionError = !oracle && trig
+                ? tokenAmountPrecisionError(trig, {
+                    divisibility: 8,
+                    tick: coinTicker,
+                    noun: 'Trigger price',
+                })
+                : null;
+            if (triggerPrecisionError) {
+                setFormError(triggerPrecisionError);
                 return;
             }
             if (priceNotes.block) {
@@ -1132,7 +1183,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
         const header = (
         <PageHeader
-            onBack={leaveGuard.guardedOnBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : leaveGuard.guardedOnBack}
             titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
@@ -1589,6 +1642,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 hint="Tokens sent to the buyer every time the dispenser is triggered."
                 amount={giveAmount}
                 tick={ticker}
+                divisibility={giveTokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -1607,6 +1661,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 label="Escrow amount"
                 amount={escrow}
                 tick={ticker}
+                divisibility={giveTokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;

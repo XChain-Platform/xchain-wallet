@@ -9,6 +9,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = {
@@ -23,7 +24,14 @@ async function drainMicrotasks(rounds = 12) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsbtRequest, generateDispenserAddress } = {}) {
+async function mountForm({
+    walletMode = 'full',
+    onBack = vi.fn(),
+    buildActionPsbtRequest,
+    generateDispenserAddress,
+    getWalletBalances,
+    getTokenInfo,
+} = {}) {
     const composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
     });
@@ -33,7 +41,8 @@ async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsb
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        getWalletBalances: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+        getWalletBalances: getWalletBalances || vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+        getTokenInfo: getTokenInfo || vi.fn().mockResolvedValue(null),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         composeForConfirm,
         buildActionPsbtRequest: buildActionPsbtRequest || vi.fn().mockResolvedValue({
@@ -64,7 +73,10 @@ async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsb
     return { ...utils, composeForConfirm, buildActionPsbtRequest: target.buildActionPsbtRequest, onBack };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('DispenserForm numeric validation', () => {
     it('tabs through terms and opens review from Enter only when valid', async () => {
@@ -125,6 +137,77 @@ describe('DispenserForm numeric validation', () => {
 
         expect(utils.getByRole('alert')).toHaveTextContent('Per-fill give amount must be a positive number.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects give and escrow values beyond the dispensed token precision', async () => {
+        const utils = await mountForm({
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'JDOG', divisibility: 0 }),
+        });
+
+        fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1.1' } });
+        expect(utils.getByText('Amount can have at most 0 decimal places.')).toBeInTheDocument();
+        fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1' } });
+        fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10.1' } });
+        expect(utils.getByText('Amount can have at most 0 decimal places.')).toBeInTheDocument();
+        expect(utils.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects payment-token and native prices beyond their asset precision', async () => {
+        const utils = await mountForm({
+            getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve({ tick, divisibility: 0 })),
+        });
+        fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1' } });
+        fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
+        fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.000000001' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        expect(utils.getByRole('alert')).toHaveTextContent('Trigger price can have at most 8 decimal places for BTC.');
+
+        fireEvent.click(utils.getByLabelText('A token'));
+        fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'PAY' } });
+        fireEvent.change(utils.getByLabelText('Payment amount (per fill)'), { target: { value: '1.1' } });
+        await waitFor(() => expect(utils.getByRole('button', { name: 'Create' })).toBeEnabled());
+        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        expect(utils.getByRole('alert')).toHaveTextContent('Payment amount must be a whole number because PAY is indivisible.');
+        expect(utils.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects escrow above the source balance before composing', async () => {
+        const utils = await mountForm({
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: SOURCE.address,
+                    balances: { tokens: [{ tick: 'JDOG', quantity: '5', divisibility: 0 }] },
+                }],
+            }),
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'JDOG', divisibility: 0 }),
+        });
+        await waitFor(() => expect(utils.getAllByText('5 JDOG available')).toHaveLength(2));
+        fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1' } });
+        fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '6' } });
+        fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+
+        expect(utils.getByRole('alert')).toHaveTextContent('This address holds only 5 JDOG.');
+        expect(utils.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('returns from watcher review with all form values kept', async () => {
+        const utils = await mountForm({
+            walletMode: 'watcher',
+            generateDispenserAddress: vi.fn().mockResolvedValue({
+                id: 'dispenser', address: 'bc1qdispenserdispenserdispenserdispens',
+            }),
+        });
+        fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
+        fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
+        fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        expect(await utils.findByText(/Each time someone sends 0.001 BTC/)).toBeInTheDocument();
+
+        fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
+        expect(utils.getByLabelText(/^Give amount/)).toHaveValue('10');
+        expect(utils.getByLabelText(/^Escrow amount/)).toHaveValue('100');
+        expect(utils.getByLabelText(/^Trigger price/)).toHaveValue('0.001');
     });
 
     it('validates the payment-token ticker before composing', async () => {
