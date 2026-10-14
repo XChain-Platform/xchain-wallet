@@ -223,4 +223,16 @@ describe('History annotates what a pending transaction moves', () => {
         expect(view.container.querySelector('[data-pending-state]')).toBeNull();
         expect(annotation(view)).toBeNull();
     });
+
+    it('masks a settled figure when balances are hidden', async () => {
+        // Home and the pending annotation already mask; a confirmed History
+        // row printed the amount in full, in text and in its spoken name.
+        window.localStorage.setItem('xc:balancesHidden', '1');
+        const { view } = mountHistory({ history: [confirmedRow()] });
+        await waitFor(() => expect(view.container.querySelector('[data-history-amount]')).toBeTruthy());
+        const amount = view.container.querySelector('[data-history-amount]');
+        expect(amount.textContent).toBe('••••• XCHAIN');
+        expect(amount.getAttribute('aria-label')).toBeNull();
+        expect(view.container.textContent).not.toContain('100 XCHAIN');
+    });
 });

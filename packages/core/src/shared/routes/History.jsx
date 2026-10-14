@@ -4047,6 +4047,7 @@ export function isGeneratedAddressLabel(label, chainId) {
 
 export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
+    const [balancesHidden] = useBalancesHidden();
     const settledAmount = settledAmountAnnotation(entry);
     const actionKind = classifyEntryAction(entry, walletAddresses);
     const receiveLabel = entry.receiveLabel
@@ -4057,16 +4058,18 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
     const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });
     const rawTick = entry.raw?.tick ?? entry.raw?.TICK ?? entry.raw?.token;
     const tick = String(settledAmount?.tick || rawTick || nativeTick || '?');
+    // Hidden balances mask the figure here as they do on Home and in the
+    // pending annotation; the ticker stays, since it is not an amount.
     const amount = settledAmount ? (
         <span
             data-history-amount={settledAmount.direction || 'unknown'}
-            aria-label={formatHistoryAmountForSpeech(
+            aria-label={balancesHidden ? undefined : formatHistoryAmountForSpeech(
                 settledAmount.amount,
                 settledAmount.tick,
                 settledAmount.direction,
             )}
         >
-            {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+            {balancesHidden ? '•••••' : formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
         </span>
     ) : entry.blockIndex ? tick : (
         <>
