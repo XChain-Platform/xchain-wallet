@@ -18,7 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import AxeBuilder from '@axe-core/playwright';
-import { test } from '../fixtures/wallet.js';
+import { expect, test } from '../fixtures/wallet.js';
 import { freezeMotion } from '../fixtures/wallet.js';
 import { WCAG_TAGS } from '../fixtures/a11y.js';
 import { createSweep } from './sweep.js';
@@ -62,4 +62,6 @@ test('axe sweep', async ({ page }, testInfo) => {
     }
     writeFileSync(join(outDir, 'violations.json'), JSON.stringify(screens, null, 1));
     writeFileSync(join(outDir, 'summary.json'), JSON.stringify({ screens: screens.length, byRule }, null, 1));
+    // Check harness coverage, not findings: axe must have audited at least one screen.
+    expect(screens.length, 'harness coverage: axe audited no screen').toBeGreaterThan(0);
 });

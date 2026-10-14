@@ -64,7 +64,8 @@ if [ ! -d "$project" ]; then
     exit 1
 fi
 
-udid="$(xcrun simctl list devices available | grep -F "$device (" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
+# Let a no-match grep pass under pipefail so the missing-simulator message below prints
+udid="$(xcrun simctl list devices available | { grep -F "$device (" || true; } | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
 if [ -z "$udid" ]; then
     echo "ios-console: no available simulator named '$device'" >&2
     xcrun simctl list devices available | grep -E 'iPhone|iPad' >&2

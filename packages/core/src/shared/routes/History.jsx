@@ -1888,18 +1888,42 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     return wrap(
         <ListPage toolbar={entries.length > 0 ? (
             <>
-                <div className={styles.phoneFilterToggle}>
+                <div className={styles.toolbarTop}>
+                    <div className={styles.phoneFilterToggle}>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            block
+                            icon={<Icon.FilterIcon />}
+                            aria-expanded={phoneFiltersOpen}
+                            aria-controls="history-filter-panel"
+                            onClick={() => setPhoneFiltersOpen((open) => !open)}
+                        >
+                            {t('history.filters.toggle', { count: activeFilterCount })}
+                        </Button>
+                    </div>
+                    {/* Export stays outside the collapsible filter card so it is
+                        reachable while the filters are folded away. */}
                     <Button
+                        className={`${styles.toolbarControl} ${styles.exportButton}`}
                         variant="secondary"
-                        size="sm"
-                        block
-                        icon={<Icon.FilterIcon />}
-                        aria-expanded={phoneFiltersOpen}
-                        aria-controls="history-filter-panel"
-                        onClick={() => setPhoneFiltersOpen((open) => !open)}
+                        icon={null}
+                        aria-haspopup="dialog"
+                        aria-expanded={exportModalOpen}
+                        aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                        onClick={() => setExportModalOpen(true)}
+                        disabled={visibleEntries.length === 0}
                     >
-                        {t('history.filters.toggle', { count: activeFilterCount })}
+                        {t('history.export.open')}
                     </Button>
+                    {visibleEntries.length === 0 ? (
+                        <span
+                            id="history-export-disabled-reason"
+                            className={styles.visuallyHidden}
+                        >
+                            {t('history.export.noMatchingRows')}
+                        </span>
+                    ) : null}
                 </div>
                 <div
                     id="history-filter-panel"
@@ -2037,26 +2061,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             { id: 'flat', label: t('history.filters.flat') },
                         ]}
                     />
-                    <Button
-                        className={styles.toolbarControl}
-                        variant="secondary"
-                        icon={null}
-                        aria-haspopup="dialog"
-                        aria-expanded={exportModalOpen}
-                        aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
-                        onClick={() => setExportModalOpen(true)}
-                        disabled={visibleEntries.length === 0}
-                    >
-                        {t('history.export.open')}
-                    </Button>
-                    {visibleEntries.length === 0 ? (
-                        <span
-                            id="history-export-disabled-reason"
-                            className={styles.visuallyHidden}
-                        >
-                            {t('history.export.noMatchingRows')}
-                        </span>
-                    ) : null}
                 </div>
 
                 {moreFiltersOpen ? (
@@ -2858,7 +2862,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                     label={t('history.detail.copyRawJson')}
                                 />
                             </span>
-                            <pre className={styles.detailDecoded}>
+                            <pre className={styles.detailDecoded} tabIndex={0}>
                                 {decodeActionToText(rawForDisplay)}
                             </pre>
                         </div>
@@ -2885,7 +2889,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                                 label={t('history.detail.copyPeerRawJson')}
                                             />
                                         </span>
-                                        <pre className={styles.detailDecoded}>
+                                        <pre className={styles.detailDecoded} tabIndex={0}>
                                             {decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
                                         </pre>
                                     </div>
@@ -4917,11 +4921,11 @@ function ExportModal({
                         </p>
                     ) : null}
                     {operationTime.timedOut ? (
-                        <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
+                        <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>
                             {t('history.export.slow')}
                         </p>
                     ) : null}
-                    {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
+                    {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>{error}</p> : null}
                 </div>
 
                 <div style={MODAL_ACTIONS}>

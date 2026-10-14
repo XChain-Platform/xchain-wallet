@@ -22,6 +22,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -90,6 +91,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const listActionIndex = String(listRef.actionIndex);
     const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = TICKER_BY_COIN[descriptor?.coin] || '';
@@ -311,6 +313,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const formDisabled = sdkSupported !== true || !eligibility.ok || Boolean(ownershipReason);
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Share list"
             onSubmit={handleReview}
             status={(sdkSupported === false || formError) ? (

@@ -183,6 +183,12 @@
         margin-bottom: var(--xc-space-1);
     }
 
+    /* The page title names the screen; on a short landscape view the logo
+       would cost the terms about 70px of their height. */
+    .licenseLogo {
+        display: none;
+    }
+
     .licenseScroll {
         /* Keep two short lines visible while leaving room for landscape actions. */
         min-height: 96px;

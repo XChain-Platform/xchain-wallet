@@ -268,8 +268,10 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     // cross-chain list opt into naming the chain.
     //
     // The active network is never repeated on a row: the wallet runs on one
-    // network at a time and Settings is where it is chosen.
-    const subtitle = showChain && row.chainDisplayName
+    // network at a time and Settings is where it is chosen. Nor is a chain
+    // name the row's title already says: a native coin row reads "Bitcoin"
+    // over "BTC", not "BTC · Bitcoin".
+    const subtitle = showChain && row.chainDisplayName && row.chainDisplayName !== row.displayName
         ? `${row.tick} · ${row.chainDisplayName}`
         : row.tick;
     const fiat = useMemo(
@@ -364,8 +366,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     </span>
                 )}
                 subtitle={<span className={styles.subtitle} title={subtitle}>{subtitle}</span>}
+                trailingClassName={styles.amountsSlot}
                 trailing={<span className={styles.amounts}>
-                    <span className={styles.qty} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
+                    <span className={`${styles.qty} ${quantityLabel.length > LONG_QUANTITY_CHARS ? styles.qtyLong : ''}`.trim()} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
                         {/* Q-1 residual: an unread balance is not a zero, and a
                             fiat figure derived from one is not a value. When
                             nothing answered, say so instead of printing 0; when
@@ -466,6 +469,10 @@ function shallowEqualRow(previous, next) {
     return previousKeys.every((key) => Object.hasOwn(next, key)
         && Object.is(previous[key], next[key]));
 }
+
+// A balance longer than this (for example 1,000,000.00000000) steps down one
+// type size so it still fits the row instead of ending in an ellipsis.
+const LONG_QUANTITY_CHARS = 16;
 
 function FitAmount({ children, title }) {
     return (

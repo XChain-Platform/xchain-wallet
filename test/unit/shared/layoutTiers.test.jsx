@@ -186,13 +186,18 @@ describe('layout tiers', () => {
             expect(save).toHaveFocus();
         });
 
-        it('caps a compact notice stack so route content remains visible', () => {
+        it('lets notices scroll with the page instead of capping them in a strip', () => {
             const css = readFileSync(join(
                 process.cwd(),
                 'packages/core/src/shared/components/LeftNav.module.css',
             ), 'utf8');
-            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.notices\s*\{[^}]*max-height:\s*45%/s);
-            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.notices\s*\{[^}]*overflow-y:\s*auto/s);
+            // Notices are page content inside the route's scrolling body, so
+            // no rule gives them their own scroller, cap or gutter.
+            const noticeRules = [...css.matchAll(/([^{}]*\.notices)\s*\{([^}]*)\}/g)];
+            expect(noticeRules.length).toBeGreaterThan(0);
+            for (const [, selector, body] of noticeRules) {
+                expect(body, selector.trim()).not.toMatch(/overflow|max-height|padding-inline/);
+            }
             expect(css).toMatch(/\.routeFocusTarget:focus\s*\{[^}]*outline:\s*none/s);
         });
 

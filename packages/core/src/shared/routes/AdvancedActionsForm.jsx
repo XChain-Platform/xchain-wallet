@@ -18,6 +18,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -126,6 +127,7 @@ const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions({
  */
 export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -553,6 +555,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setStage('form');
     }
 
+        // Name the action in words on the review stage, as the queued and success copy do.
+        const actionLabelLower = actionDisplayLabel(action).toLowerCase() || 'action';
         const header = (
         <PageHeader
             onBack={stage === 'review'
@@ -560,7 +564,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? `Review ${action || 'action'}`
+                    ? `Review ${actionLabelLower}`
                     : 'Advanced action'}
         />
     );
@@ -629,6 +633,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review advanced action"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -648,10 +653,10 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         }
                     >
                         {isWatcherMode
-                            ? `Create unsigned transaction: ${action || 'action'}`
+                            ? `Create unsigned transaction: ${actionLabelLower}`
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${action || 'action'}`
-                                : `Sign: ${action || 'action'}`}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${actionLabelLower}`
+                                : `Sign: ${actionLabelLower}`}
                     </Button>
                 )}
             >
@@ -754,6 +759,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Compose advanced action"
             onSubmit={handleReview}
             status={formError ? (

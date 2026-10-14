@@ -9,6 +9,9 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
+    /* Holds the toolbar height when neither lane has a control (Back hidden
+       on a top-level destination, no trailing action). */
+    min-height: var(--xc-page-header-side);
 }
 
 .back {

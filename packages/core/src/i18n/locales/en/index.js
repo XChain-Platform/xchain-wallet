@@ -22,11 +22,14 @@
 // `t()` in `i18n/index.js` renders the matched template through
 // formatjs (`IntlMessageFormat` from `intl-messageformat`), so the full
 // ICU grammar is available: plural, select, selectordinal, number and
-// date skeletons, nested patterns and offset. Templates here use only
-// plural and select today, which is a choice about the copy, not a
-// limit of the runtime. The plural/select-only subset the wallet
-// shipped before v0.334 survives as `legacyFormat()` in `i18n/index.js`
-// and is reached only when formatjs refuses to parse a template.
+// date skeletons, nested patterns and offset. The plural/select-only
+// subset the wallet shipped before v0.334 survives as `legacyFormat()`
+// in `i18n/index.js`, and it is reached on two routes: formatjs throws
+// while parsing or rendering the template, or the caller omits an
+// argument formatjs coerces (a `number`, `plural`, `selectordinal`,
+// `date` or `time` one). The second route prints each missing argument
+// as its bare `{name}` token and applies no number formatting, so pass
+// every coerced argument a template names.
 //
 // Adding a new locale: copy this directory to `locales/<bcp47>/index.js`,
 // translate every value, then call
@@ -42,6 +45,8 @@ export const en = {
     'common.clear': 'Clear',
     'common.copyTransactionId': 'Copy transaction ID',
     'common.tryAgain': 'Try again',
+    'balances.unchecked.title': "Balances couldn't be checked",
+    'balances.unchecked.body': 'Your balance may be out of date. Try again to refresh it.',
     'common.openNetworkSettings': 'Open network settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',
@@ -465,7 +470,7 @@ export const en = {
     'importWallet.phrase.placeholder': 'word word word…',
     'importWallet.phrase.freeWalletCount': '{count} / 12 words',
     'importWallet.phrase.wordCount':
-        '{count, plural, one {# word entered (use 12, 15, 18, 21, or 24)} other {# words entered (use 12, 15, 18, 21, or 24)}}',
+        '{count, plural, one {# word entered} other {# words entered}}',
     'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
     'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
     'importWallet.phrase.suggestions': 'BIP39 word suggestions',
@@ -519,6 +524,9 @@ export const en = {
         "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; use the field below to send those too.",
     'issue.sendInitialMintOptional': 'Send the initial mint to (optional)',
     'issue.sendInitialMintHint': 'Leave blank to keep the minted tokens at the issuing address.',
+
+    // --- demo wallet guard ----------------------------------------
+    'demo.guard.blocked': "Demo wallets can't move funds. Create a real wallet to continue.",
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',

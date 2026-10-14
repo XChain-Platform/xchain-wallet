@@ -119,14 +119,25 @@
 }
 
 .rowTick {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-md);
     font-weight: 600;
 }
 
+/* A ticker may run to 250 characters with no space to wrap at; it ends in
+   an ellipsis before the lock mark instead of running under it. */
+.rowTickName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .lockedBadge {
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;

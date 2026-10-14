@@ -374,7 +374,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         <PageHeader
             onBack={onBack}
             backLabel="Back to wallets"
-            title={mustGraduate ? 'Leave the demo' : 'Add wallet'}
+            title="Add wallet"
         />
     ) : null;
 
@@ -394,7 +394,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         <img
                             src={branding.logoUrl()}
                             alt={branding.PRODUCT_NAME}
-                            className={isFull ? styles.logoFull : styles.logoPopup}
+                            className={`${isFull ? styles.logoFull : styles.logoPopup} ${styles.licenseLogo}`}
                         />
                     )}
                     actions={(

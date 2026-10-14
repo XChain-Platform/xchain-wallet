@@ -53,7 +53,7 @@ describe('ios-console.sh', () => {
         expect(commands).toContain('simctl install 11111111-1111-1111-1111-111111111111');
     });
 
-    it.skip('stops before launch when unknown (bug: pipefail exits before the missing-simulator diagnostic)', () => {
+    it('stops before launch when the simulator is unknown', () => {
         const fixture = makeFixture({ profile: 'default' });
         const result = run(fixture, ['iPhone Missing']);
 

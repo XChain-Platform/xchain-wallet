@@ -14,6 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -147,6 +148,7 @@ function ComposeMessageForm({
     onSent,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
 
@@ -881,6 +883,7 @@ function ComposeMessageForm({
             : (encryptionChoice === 'ecdh' && !hw ? 'ECDH' : 'ECIES');
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review message"
                 onSubmit={handleSubmit}
                 status={hw && submitError ? (
@@ -1022,6 +1025,7 @@ function ComposeMessageForm({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="New message"
             onSubmit={handleReview}
             status={submitError ? (

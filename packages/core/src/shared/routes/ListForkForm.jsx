@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -117,6 +118,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     // true / false from the explorer, null when it does not say.
     const resolution = typeof listRef.editResolutionActive === 'boolean' ? listRef.editResolutionActive : null;
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isTick = String(listType) === '1';
@@ -847,6 +849,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     if (stage === 'review-2' && fromAddress) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list removal"
                 onSubmit={handleSignSecond}
                 noValidate
@@ -934,6 +937,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         }
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list edit"
                 onSubmit={handleSignFirst}
                 noValidate
@@ -1058,6 +1062,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Edit list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}

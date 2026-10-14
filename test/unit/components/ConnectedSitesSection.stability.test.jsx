@@ -195,7 +195,9 @@ describe('ConnectedSitesSection settings controls', () => {
 
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();
         expect(screen.getByRole('group', { name: 'Connected sites and dApp permissions' })).toBeTruthy();
-        expect(screen.getByRole('region', { name: 'Connected sites' })).toBeTruthy();
+        // The page header already reads Connected sites, so the list's own heading names what it holds.
+        expect(screen.getByRole('region', { name: 'Allowed sites' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Connected sites' })).toBeNull();
         expect(screen.getByText(/When a website asks to connect/)).toBeTruthy();
     });
 

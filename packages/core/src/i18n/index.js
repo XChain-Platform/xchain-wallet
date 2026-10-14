@@ -418,9 +418,11 @@ function fillMissingArgs(mf, values) {
 
 // --- legacy fallback substitution ------------------------------------
 //
-// The pre-formatjs hand-rolled ICU subset, kept only as a last-resort
-// path for templates formatjs refuses to parse. It handles simple
-// substitution, plural, select, `=N` exact match, and `#`.
+// The pre-formatjs hand-rolled ICU subset, kept as the fallback for a
+// template formatjs throws on AND for one whose caller omitted a coercing
+// argument (fillMissingArgs returns null; see COERCING_ARG_TYPES). It
+// handles simple substitution, plural, select, `=N` exact match, and `#`;
+// any other type, `number` included, renders as plain substitution.
 
 function legacyFormat(template, vars, locale = 'en') {
     if (typeof template !== 'string') return String(template);
