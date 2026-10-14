@@ -50,6 +50,9 @@ import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
+    allowZero ? /^(?:0|[1-9]\d*)$/ : /^[1-9]\d*$/
+).test(String(value ?? '').trim());
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -535,15 +538,24 @@ function OrderActionPanel({
     async function submit(event) {
         event.preventDefault();
         if (submitting || lane.composing) return;
+        const orderActionIndex = String(row.action_index ?? '').trim();
+        if (!isCanonicalActionIndex(orderActionIndex)) {
+            setError('Order ID must be a positive whole number.'); return;
+        }
         if (type === 'edit') {
             if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
             if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
                 setError('Expiration must be a future date and time.'); return;
             }
+            if (allowListIdx && !isCanonicalActionIndex(allowListIdx, { allowZero: true })) {
+                setError('Allow-list ID must be a whole number.'); return;
+            }
+            if (blockListIdx && !isCanonicalActionIndex(blockListIdx, { allowZero: true })) {
+                setError('Block-list ID must be a whole number.'); return;
+            }
         }
         setSubmitting(true);
         setError(null);
-        const orderActionIndex = String(row.action_index);
         // The wire params the confirm page composes and previews; the signing
         // flow rebuilds the same set from `orderActionIndex` and `params`.
         const params = isCancel
@@ -563,7 +575,7 @@ function OrderActionPanel({
                 setError(err?.name === 'InvalidPasswordError' ? 'Incorrect password.' : submitFailureMessage(err, {
                     chainId,
                     mandatory: nativeFee.mandatory,
-                    fallback: err?.message || `${isCancel ? 'Cancel' : 'Edit'} failed.`,
+                    fallback: `Could not ${isCancel ? 'cancel' : 'edit'} the order. Try again.`,
                 }));
             }
         } finally {
@@ -663,7 +675,7 @@ function OrderActionPanel({
                     type="submit"
                     variant={isCancel ? 'danger' : 'primary'}
                     loading={submitting || lane.composing}
-                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
+                    disabled={submitting || lane.composing}
                 >
                     {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
                 </Button>

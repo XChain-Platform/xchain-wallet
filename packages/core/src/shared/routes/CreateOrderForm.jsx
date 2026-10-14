@@ -22,7 +22,6 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
-import { humanizeError } from '../utils/humanizeError.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
@@ -41,6 +40,13 @@ import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ActionIntentSummary } from '../components/ActionIntentSummary.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { compareAmounts } from '../../market/orderMath.js';
+import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { addressValidationError } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -59,6 +65,9 @@ function localInputToUnix(localStr) {
 }
 
 const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(String(v).trim()) > 0;
+const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
+    allowZero ? /^(?:0|[1-9]\d*)$/ : /^[1-9]\d*$/
+).test(String(value ?? '').trim());
 
 /**
  * Standalone Create Order form (PC-17). Composes a full ORDER v0 across
@@ -141,6 +150,25 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
+
+    const giveAssetTick = giveType === 'coin' ? coinTicker : giveTick;
+    const giveBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: giveAssetTick,
+    });
+    const giveTokenInfo = useTokenInfo({
+        chainId,
+        tick: giveTick,
+        skip: giveType !== 'token' || giveOwnership || !giveTick.trim(),
+    });
+    const getTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick,
+        skip: getType !== 'token' || getOwnership || !getTick.trim(),
+    });
 
     // PC-16 auto-pay: only a native-coin GIVE settles via COINPay and can
     // arm auto-pay; HW / watch-only can never sign unattended, so they stay
@@ -253,19 +281,45 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         // GIVE side.
         if (giveType === 'token') {
             if (!giveTick.trim()) { setFormError('Enter the ticker to give.'); return false; }
+            const tickError = tickerReferenceError(giveTick, { noun: 'Give ticker', allowRef: true });
+            if (tickError) { setFormError(tickError); return false; }
             if (!giveOwnership && !isPlainPositive(giveAmount)) { setFormError('Enter a positive amount to give.'); return false; }
         } else if (!isPlainPositive(giveAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to give.`); return false;
         }
+        if (!giveOwnership) {
+            const precisionError = tokenAmountPrecisionError(giveAmount, {
+                divisibility: giveType === 'coin' ? 8 : giveTokenInfo?.divisibility,
+                tick: giveAssetTick,
+                noun: 'Give amount',
+            });
+            if (precisionError) { setFormError(precisionError); return false; }
+            if (giveBalance !== null && compareAmounts(giveAmount, giveBalance) === 1) {
+                setFormError(`Give amount exceeds your available ${giveAssetTick.toUpperCase()} balance of ${giveBalance}.`);
+                return false;
+            }
+        }
         // GET side.
         if (getType === 'token') {
             if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
+            const tickError = tickerReferenceError(getTick, { noun: 'Get ticker', allowRef: true });
+            if (tickError) { setFormError(tickError); return false; }
             if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         } else if (!isPlainPositive(getAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to get.`); return false;
         }
+        if (!getOwnership) {
+            const getAssetTick = getType === 'coin' ? coinTicker : getTick;
+            const precisionError = tokenAmountPrecisionError(getAmount, {
+                divisibility: getType === 'coin' ? 8 : getTokenInfo?.divisibility,
+                tick: getAssetTick,
+                noun: 'Get amount',
+            });
+            if (precisionError) { setFormError(precisionError); return false; }
+        }
         const ga = getAddress.trim();
-        if (ga && (ga.includes('|') || ga.includes(';'))) { setFormError('Receive address is invalid.'); return false; }
+        const receiveError = ga ? addressValidationError(ga, descriptor) : null;
+        if (receiveError) { setFormError(receiveError); return false; }
         if (expMode === 'custom') {
             const raw = expInput.trim();
             if (!raw) { setFormError('Pick an expiration date and time, or switch to the default window.'); return false; }
@@ -274,6 +328,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
+        if (allowListIdx && !isCanonicalActionIndex(allowListIdx)) {
+            setFormError('Allow-list ID must be a positive whole number.'); return false;
+        }
+        if (blockListIdx && !isCanonicalActionIndex(blockListIdx)) {
+            setFormError('Block-list ID must be a positive whole number.'); return false;
+        }
         if (ackRequired && !keepOpenAck) {
             setFormError('Acknowledge the auto-pay requirement (or turn auto-pay off) to continue.');
             return false;
@@ -352,7 +412,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: humanizeError(err, 'order').message,
+                fallback: 'Could not create the order. Check the details and try again.',
             }));
         } finally {
             submitInFlightRef.current = false;
@@ -394,8 +454,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
-                chainId,
-                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Order failed.',
+                chainId, coinTicker, mandatory: nativeFee.mandatory,
+                fallback: 'Could not create the order. Check the details and try again.',
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
@@ -563,12 +623,16 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </>
                 )}
             >
-                <p className={styles.summary}>{decoded?.summary}</p>
+                {decoded ? <ActionIntentSummary decoded={decoded} simulation={null} /> : null}
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
+                    <DetailRow label="Settlement address" value={getAddress.trim() || fromAddress.address} />
+                    {expMode === 'default' ? (
+                        <DetailRow label="Expiration" value="Default window" />
+                    ) : null}
                     <DetailRow
                         label="Network fee"
                         value={feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
