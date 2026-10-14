@@ -130,7 +130,7 @@ describe('ContractsList ownership and empty actions', () => {
             contractMessaging({ getContractsForSource }),
         );
 
-        expect(await screen.findByText("Couldn't load contracts on Bitcoin. Try again.")).toBeInTheDocument();
+        expect(await screen.findByText("Couldn't load contracts. Try again.")).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await waitFor(() => expect(getContractsForSource).toHaveBeenCalledTimes(2));

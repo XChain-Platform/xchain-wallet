@@ -174,7 +174,7 @@ describe('contract list failure containment', () => {
         )));
 
         await waitFor(() => {
-            expect(screen.getAllByText(/Couldn't load contracts on Bitcoin/)).toHaveLength(3);
+            expect(screen.getAllByText(/Couldn't load contracts\. Try again\./)).toHaveLength(3);
         });
     });
 
@@ -193,7 +193,7 @@ describe('contract list failure containment', () => {
             />
         )));
 
-        expect(await screen.findByText(/Couldn't load contracts on Bitcoin/)).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn't load contracts\. Try again\./)).toBeInTheDocument();
     });
 });
 
