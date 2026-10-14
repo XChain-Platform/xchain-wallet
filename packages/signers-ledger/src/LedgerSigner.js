@@ -54,6 +54,7 @@
 import { sha256 } from '@noble/hashes/sha2';
 import {
     Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
+    hardwareSigningError,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
 // Imported from validate.js rather than the registry barrel so this package
@@ -201,8 +202,9 @@ export class LedgerSigner extends Signer {
      *                    UI should prompt the user to open the right one
      *   - `'unsupported-network'`: a chainId was passed that the Ledger path
      *                    cannot derive (no app / non-mainnet coin-type)
-     *   - `'disconnected'`: the app-info read throws (cable unplugged,
-     *                       PIN locked, transport error)
+     *   - `'locked'`: the app-info read reports a locked device
+     *   - `'disconnected'`: the app-info read throws after a cable or
+     *                       transport failure
      *
      * `expectedApp` is optional: pass the chainId you care about, or
      * omit it to accept any app (useful for initial pairing before a
@@ -215,7 +217,10 @@ export class LedgerSigner extends Signer {
         let info;
         try {
             info = await readLedgerAppInfo(this._transport);
-        } catch {
+        } catch (err) {
+            if (hardwareSigningError(this._id, 'ledger', err).status === 'locked') {
+                return 'locked';
+            }
             return 'disconnected';
         }
         // An empty name is as unusable as a missing one: it can never match
@@ -453,20 +458,26 @@ export class LedgerSigner extends Signer {
         try {
             info = await readLedgerAppInfo(this._transport);
         } catch (err) {
-            throw new SignerStatusError(
-                this._id, 'disconnected', `could not read the open Ledger app: ${err?.message || err}`,
-            );
+            const failure = hardwareSigningError(this._id, 'ledger', err);
+            if (failure.status !== 'error') throw failure;
+            throw hardwareSigningError(this._id, 'ledger', {
+                name: 'Device_Disconnected',
+                message: 'The Ledger app probe disconnected',
+                cause: err,
+            });
         }
         if (!info || !info.name) {
-            throw new SignerStatusError(this._id, 'disconnected', 'the Ledger reported no open app');
+            throw hardwareSigningError(this._id, 'ledger', {
+                name: 'Device_Disconnected',
+                message: 'The Ledger reported no open app',
+            });
         }
         const expected = LEDGER_APP_NAME_FOR_CHAIN[chainId];
         if (info.name !== expected) {
-            throw new SignerStatusError(
-                this._id,
-                'wrong-app',
-                `The "${info.name}" app is open on this Ledger. Open the ${expected} app to continue.`,
-            );
+            throw hardwareSigningError(this._id, 'ledger', {
+                name: 'WrongAppError',
+                message: `Wrong app is open: ${info.name} instead of ${expected}`,
+            });
         }
     }
 
@@ -625,9 +636,7 @@ async function runLedger(signerId, method, fn) {
     try {
         return await fn();
     } catch (err) {
-        const msg = err && err.message ? String(err.message) : String(err);
-        const code = err && err.statusCode ? ` (0x${Number(err.statusCode).toString(16)})` : '';
-        throw new SignerStatusError(signerId, 'error', `${method} failed: ${msg}${code}`);
+        throw hardwareSigningError(signerId, 'ledger', err);
     }
 }
 
