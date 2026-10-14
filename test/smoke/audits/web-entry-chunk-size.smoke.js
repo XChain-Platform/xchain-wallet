@@ -21,16 +21,16 @@ const jsLimitMatch = budgetSource.match(/WEB_INITIAL_JS_SIZE_LIMIT\s*=\s*([\d_]+
 assert.ok(jsLimitMatch, 'web build declares an initial JavaScript size limit');
 assert.equal(
     Number(jsLimitMatch[1].replaceAll('_', '')),
-    905_000,
-    'web initial JavaScript ceiling remains 905,000 bytes',
+    900_000,
+    'web initial JavaScript ceiling remains 900,000 bytes',
 );
 
 const cssLimitMatch = budgetSource.match(/WEB_INITIAL_CSS_SIZE_LIMIT\s*=\s*([\d_]+)/);
 assert.ok(cssLimitMatch, 'web build declares an initial CSS size limit');
 assert.equal(
     Number(cssLimitMatch[1].replaceAll('_', '')),
-    120_000,
-    'web initial CSS ceiling remains 120,000 bytes',
+    100_000,
+    'web initial CSS ceiling remains 100,000 bytes',
 );
 assert.match(
     budgetSource,

@@ -183,6 +183,15 @@ describe('web startup imports', () => {
         expect(appSource).not.toMatch(/from '\.\/DevVariantBadge\.jsx'/);
     });
 
+    it('loads the header chain filter with the settings popover', () => {
+        const headerSettingsSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.jsx'),
+            'utf8',
+        );
+        expect(headerSettingsSource).toContain("const loadNetworkFilter = () => import('./NetworkFilter.jsx');");
+        expect(headerSettingsSource).not.toMatch(/from '\.\/NetworkFilter\.jsx'/);
+    });
+
     it('loads the demo fixtures only when a demo wallet is entered', () => {
         const onboardingSource = readFileSync(
             resolve(process.cwd(), 'packages/core/src/shared/routes/Onboarding.jsx'),
