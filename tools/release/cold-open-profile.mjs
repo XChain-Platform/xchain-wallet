@@ -72,6 +72,7 @@ import https from 'node:https';
 
 import { ChainRegistry } from '../../packages/core/src/registry/index.js';
 import { SDKRegistry, DEFAULT_SDK_NETWORK_OPTIONS } from '../../packages/core/src/sdk/SDKRegistry.js';
+import { sharedExplorerLimiter } from '../../packages/core/src/sdk/explorerRateLimit.js';
 import { walletBalances, BALANCE_POLL_INTERVAL_MS } from '../../packages/core/src/flows/balances.js';
 import { createPollThrottle } from '../../packages/core/src/flows/pollThrottle.js';
 import { getCoinpayObligationsForAddress } from '../../packages/core/src/flows/coinpayQueries.js';
@@ -502,6 +503,12 @@ export async function measureColdOpen({
     const record = ({ host, path, method }) => { requests.push({ step, host, path, method }); };
     const restoreSockets = interceptRequests(record);
     const restoreFetch = interceptFetch(record);
+    // A refused connection is a transient failure to the shared gate, which
+    // pauses the host for a real-time backoff. The measurement refuses every
+    // request on purpose, so the pause is switched off for its duration and
+    // the request count stays one attempt per call.
+    const savedBackoffMs = sharedExplorerLimiter.opts.baseBackoffMs;
+    sharedExplorerLimiter.opts.baseBackoffMs = 0;
 
     const coinpayScan = () => Promise.all(addresses.map((a) => getCoinpayObligationsForAddress({
         sdkRegistry,
@@ -622,6 +629,7 @@ export async function measureColdOpen({
         await coinpayScan();
         var badgeRequests = requests.splice(badgeStart);
     } finally {
+        sharedExplorerLimiter.opts.baseBackoffMs = savedBackoffMs;
         restoreFetch();
         restoreSockets();
     }
