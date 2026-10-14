@@ -103,22 +103,6 @@
     white-space: nowrap;
 }
 
-.chain {
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 45%;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.lg .chain {
-    max-width: 100%;
-}
-
 .placeholder {
     flex: 1 1 auto;
     min-width: 0;

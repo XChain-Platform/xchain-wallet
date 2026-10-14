@@ -381,35 +381,6 @@
     background: var(--xc-bg-muted);
 }
 
-.rowHeader {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.rowDetails {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    min-width: 0;
-}
-
-.actionBadge {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.crosschainBadge {
-    font-size: var(--xc-text-xs);
-    padding: 0 var(--xc-space-1);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-accent-secondary, var(--xc-accent-primary));
-    color: var(--xc-on-accent, #fff);
-}
-
 .rowMeta {
     display: flex;
     flex-wrap: wrap;
@@ -418,14 +389,6 @@
     min-width: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-}
-
-.rowSummary {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    overflow-wrap: anywhere;
-    -webkit-user-select: text;
-    user-select: text;
 }
 
 /* Relative timestamp now lives on the meta line (line 3), pushed to
@@ -472,34 +435,11 @@
 
 /* Source-address line (line 2). Monospace + muted so it visually
    subordinates to the action label above. */
-.rowSourceAddress {
-    font-family: var(--xc-font-mono, monospace);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    -webkit-user-select: text;
-    user-select: text;
-}
-
-.rowReceiveLabel {
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    color: var(--xc-text);
-    word-break: break-word;
-}
 
 /* Which contract a DEPLOY / EXECUTE / DEPOSIT / WITHDRAW row touched, named
    the way every other surface names one: "Escrow v1.0.0 (C:BTC:12)". Not
    monospaced like the address line above, because the leading half is a
    human-written name and the address is short enough to read either way. */
-.rowContractLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    word-break: break-word;
-}
 
 /* Confirmation count pill rendered next to the block number on line 3.
    Uses the accent color so it pops against the row's muted meta line;
@@ -1054,18 +994,6 @@
     /* intentionally empty */
 }
 
-.groupCount {
-    display: none;
-}
-
-.linkPairConnector {
-    display: inline-flex;
-    align-items: center;
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    padding: 0 0.125rem;
-}
-
 .groupMembers {
     display: flex;
     flex-direction: column;
@@ -1241,7 +1169,6 @@
 
 .dateRow input,
 .paginationCount,
-.rowSourceAddress,
 .confirmationsPill,
 .copyableText,
 .pendingSegments,
@@ -1293,17 +1220,9 @@
         box-sizing: border-box;
     }
 
-    .rowHeader,
     .rowMeta {
         flex-wrap: wrap;
         min-width: 0;
-    }
-
-    .rowSourceAddress,
-    .rowContractLabel,
-    .rowSummary {
-        min-width: 0;
-        overflow-wrap: anywhere;
     }
 
     .pendingAmount {

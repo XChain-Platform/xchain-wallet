@@ -30,11 +30,6 @@
     flex-wrap: nowrap;
 }
 
-.actionSlot {
-    display: inline-flex;
-    flex: 0 0 auto;
-}
-
 .bar [data-network-status-trigger] {
     width: auto;
     min-width: 38px;
