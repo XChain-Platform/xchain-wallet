@@ -132,8 +132,9 @@ describe('web startup imports', () => {
 
     it('defers command-palette demo fixtures until balances are requested', () => {
         expect(appSource).toContain(
-            "import { isDemoWallet } from '../../core/src/flows/demoMode.js';",
+            "import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';",
         );
+        expect(appSource).not.toContain("from '../../core/src/flows/demoMode.js'");
         expect(appSource).not.toContain("from '@xchain-wallet/core/flows'");
         expect(appSource).toContain(
             "import('@xchain-wallet/core/shared/utils/displayBalances.js')",

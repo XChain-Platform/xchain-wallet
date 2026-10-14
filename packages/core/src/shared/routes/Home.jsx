@@ -26,7 +26,7 @@ import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
-import { DemoBanner } from '../components/DemoBanner.jsx';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { buildWalletAlerts } from '../walletAlerts.js';
 import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
@@ -41,6 +41,7 @@ import {
 import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
+import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
@@ -189,7 +190,7 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0, demoBannerInHeader = false }) {
+export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
     useNativeBackRoot();
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -218,11 +219,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';
     const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
-    const quickActionsReason = isDemoActive
-        ? 'Demo wallets are read-only, so actions that receive or move funds are hidden.'
-        : isWatcherMode
-            ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
-            : null;
+    const quickActionsReason = isWatcherMode
+        ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
+        : null;
+    const [demoSendNoticeOpen, setDemoSendNoticeOpen] = useState(false);
+    const [demoExitConfirmOpen, setDemoExitConfirmOpen] = useState(false);
+    const [demoExitBusy, setDemoExitBusy] = useState(false);
+    const [demoExitError, setDemoExitError] = useState(/** @type {string | null} */ (null));
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     // Local fallback used only when the host doesn't supply
     // `activeAccountIdProp` (e.g. desktop shell pinned to an older
@@ -386,9 +389,32 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         }
         return out;
     }, [isDemoActive, onSwap, runNetworkAction]);
-    const quickActionCount = (isDemoActive ? 0 : 2)
+    const quickActionCount = (isDemoActive ? 1 : 2)
         + (onExchange ? 1 : 0)
         + (homeMoreActions.length > 0 ? 1 : 0);
+    useEffect(() => {
+        setDemoSendNoticeOpen(false);
+        setDemoExitConfirmOpen(false);
+        setDemoExitBusy(false);
+        setDemoExitError(null);
+    }, [activeWalletId]);
+
+    const handleExitDemo = useCallback(async () => {
+        if (demoExitBusy || !activeWalletId) return;
+        setDemoExitBusy(true);
+        setDemoExitError(null);
+        try {
+            const { reloaded } = await exitDemoWallet({ messaging, walletId: activeWalletId });
+            if (reloaded) return;
+            setDemoExitConfirmOpen(false);
+            setDemoSendNoticeOpen(false);
+            if (typeof onLocked === 'function') onLocked();
+        } catch {
+            setDemoExitError('Could not exit demo mode. Please try again.');
+        } finally {
+            setDemoExitBusy(false);
+        }
+    }, [activeWalletId, demoExitBusy, messaging, onLocked]);
     // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -1056,13 +1082,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 aria-label={t('home.quickActions')}
                 aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
             >
-                {!isDemoActive ? (
-                    <SendQuickAction
-                        onSend={onSend}
-                        networkActionsAvailable={networkActionsAvailable}
-                        onOffline={() => runNetworkAction('Sending', onSend)}
-                    />
-                ) : null}
+                <SendQuickAction
+                    onSend={isDemoActive ? () => setDemoSendNoticeOpen(true) : onSend}
+                    networkActionsAvailable={isDemoActive || networkActionsAvailable}
+                    onOffline={() => runNetworkAction('Sending', onSend)}
+                />
                 {!isDemoActive ? (
                     <Button
                         type="button"
@@ -1132,8 +1156,27 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     </div>
                 ) : null}
             </div>
+            {isDemoActive && demoSendNoticeOpen ? (
+                <StatusMessage
+                    recovery={{
+                        label: 'Exit demo & wipe',
+                        onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
+                    }}
+                >
+                    Demo wallets cannot send. Create a real wallet to send.
+                </StatusMessage>
+            ) : null}
+            {demoExitConfirmOpen ? (
+                <DemoExitConfirm
+                    busy={demoExitBusy}
+                    error={demoExitError}
+                    onConfirm={handleExitDemo}
+                    onCancel={() => { setDemoExitConfirmOpen(false); setDemoExitError(null); }}
+                />
+            ) : null}
         </div>
     ), [
+        demoExitBusy, demoExitConfirmOpen, demoExitError, demoSendNoticeOpen, handleExitDemo,
         homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onExchange,
         onReceive, onSend, quickActionCount, quickActionsReason, runNetworkAction,
     ]);
@@ -1191,17 +1234,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <h1 className="sr-only">{t('home.title')}</h1>
                     {loadErrorText ? (
                         <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
-                    ) : null}
-                    {/* §25.2 / Cluster J FOLLOWUP 2: shells that
-                        mount the banner in their layout header say so with
-                        `demoBannerInHeader`, and Home skips its own copy so
-                        the disclosure never renders twice. Shells without a
-                        header slot (the extension popup) get it here. */}
-                    {activeWalletId && !demoBannerInHeader ? (
-                        <DemoBanner
-                            activeWalletId={activeWalletId}
-                            onExited={onLocked}
-                        />
                     ) : null}
                     <SignerHomeBody
                         onSignPsbt={onSignPsbt}
@@ -1342,17 +1374,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                   * component owns that policy) so an observer sees no cue.
                   */}
                 <PanicFreezeNotice surface="home" />
-                {/* the demo disclosure sits above the balances, so a
-                    first-time visitor reads "this is a demo, the forms read 0
-                    because there is nothing to spend" before scrolling into a
-                    seven-figure fixture portfolio. Skipped when the shell
-                    already mounts it in its header (see `demoBannerInHeader`). */}
-                {activeWalletId && !demoBannerInHeader ? (
-                    <DemoBanner
-                        activeWalletId={activeWalletId}
-                        onExited={onLocked}
-                    />
-                ) : null}
                 {balances ? (
                     <HomeTabs
                         chainRegistry={chainRegistry}

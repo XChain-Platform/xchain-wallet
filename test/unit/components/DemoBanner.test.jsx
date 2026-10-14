@@ -32,6 +32,7 @@ import React from 'react';
 
 import { DemoBanner } from '../../../packages/core/src/shared/components/DemoBanner.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { useDemoAutoWipe } from '../../../packages/core/src/shared/hooks/useDemoAutoWipe.js';
 import {
     markDemoWallet,
     clearDemoWalletId,
@@ -48,6 +49,14 @@ const popupAppSource = readFileSync(
     join(process.cwd(), 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
+const webAppSource = readFileSync(
+    join(process.cwd(), 'packages', 'web', 'src', 'App.jsx'),
+    'utf8',
+);
+const homeSource = readFileSync(
+    join(process.cwd(), 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx'),
+    'utf8',
+);
 
 function mount(props = {}) {
     return render(
@@ -55,6 +64,11 @@ function mount(props = {}) {
             <DemoBanner {...props} />
         </MessagingProvider>,
     );
+}
+
+function AutoWipeHarness({ walletId, onExited }) {
+    useDemoAutoWipe(walletId, onExited);
+    return null;
 }
 
 beforeEach(() => {
@@ -78,6 +92,20 @@ function setNarrowViewport(narrow) {
 }
 
 describe('DemoBanner: the demo disclosure on Home', () => {
+    it('keeps expiry enforcement mounted without rendering a page-top notice', async () => {
+        markDemoWallet('demo-1', { ttlMs: 1, now: Date.now() - 1000 });
+        const onExited = vi.fn();
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AutoWipeHarness walletId="demo-1" onExited={onExited} />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(exitDemoWallet).toHaveBeenCalledTimes(1));
+        expect(onExited).toHaveBeenCalledTimes(1);
+        expect(view.container).toBeEmptyDOMElement();
+    });
+
     it('renders nothing for a real wallet', () => {
         const { container } = mount({ activeWalletId: 'real-wallet-1' });
         expect(container.textContent).toBe('');
@@ -304,12 +332,10 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         expect(view.container).toBeEmptyDOMElement();
     });
 
-    it('mounts the extension banner in the layout notices slot, beside the AppHeader header, so it cannot consume route height', () => {
-        expect(popupAppSource).toMatch(
-            /<FullLayoutWithNav[\s\S]*?header=\{\(\s*<AppHeader[\s\S]*?\/>\s*\)\}\s*notices=\{\(\s*<>[\s\S]*?\{activeWalletId \? <DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/> : null\}\s*<\/>\s*\)\}\s*bottomBar=/,
-        );
-        expect(popupAppSource).not.toMatch(
-            /<FullLayoutWithNav[\s\S]*?>\s*\{activeWalletId \? \(\s*<DemoBanner/,
-        );
+    it('is not mounted as a page-top notice in web, extension, or Home', () => {
+        for (const source of [popupAppSource, webAppSource, homeSource]) {
+            expect(source).not.toContain('<DemoBanner');
+            expect(source).not.toContain('components/DemoBanner.jsx');
+        }
     });
 });

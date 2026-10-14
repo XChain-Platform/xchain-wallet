@@ -51,6 +51,7 @@ import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEn
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
+import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
@@ -60,10 +61,7 @@ import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/Reacha
 // §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
 import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/UpdateNoticeBanner.jsx';
-import { isDemoWallet } from '../../core/src/flows/demoMode.js';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
-import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
@@ -695,6 +693,7 @@ function AppInner() {
                 }),
             );
     }, []);
+    useDemoAutoWipe(activeWalletId, refresh);
 
     function clearTransientActionState() {
         setFormReturnView(null);
@@ -2798,13 +2797,9 @@ function AppInner() {
             // across every unlocked view, not only Home.
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
-                    {/* `demoBannerInHeader`: this shell mounts
-                        DemoBanner in the layout header, which already renders
-                        above Home, so Home must not mount a second one. */}
                     <Home
                         activeWalletId={activeWalletId}
                         resumeKey={nativeResumeKey}
-                        demoBannerInHeader
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
                         tokenQuery={globalTokenQuery}
@@ -3035,27 +3030,19 @@ function AppInner() {
                                     activeNetwork={activeNetwork}
                                     developerMode={developerMode}
                                     onActiveNetworkChange={handleActiveNetworkChange}
-                                    onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                                     // Cross-site navigation for the *.xchain.io family.
                                     // Web only: the extension popup and desktop app do
                                     // not pass this, so they render no switcher.
                                     platformCurrent="wallet"
                                 />
-                                <NetworkBanner activeNetwork={activeNetwork} />
                             </>
                         ) : null
                     }
                     notices={
                         activeWalletId ? (
                             <>
-                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
-                                    unlocked view via the shared layout notices slot, not
-                                    just Home. The notices sit apart from the header row
-                                    so their compact-tier scroll cap cannot clip the
-                                    header popovers. */}
-                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
-                                {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
+                                <ReachabilityBanner />
                                 <UpdateNoticeBanner />
                             </>
                         ) : null
