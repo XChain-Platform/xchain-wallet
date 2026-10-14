@@ -49,6 +49,12 @@ function fakeTimers() {
     };
 }
 
+function deferred() {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+}
+
 function makeHost(sendHold) {
     return createBackgroundHost({
         broadcastQueueStorage: null,
@@ -208,5 +214,74 @@ describe('background send hold wiring', () => {
 
         expect(response).toEqual({ ok: true, result: { cancelled: true } });
         expect(sendHold.cancel).toHaveBeenCalledWith('send-1');
+    });
+
+    it('rejects the same send started by popup and side panel', async () => {
+        const pending = deferred();
+        sendTokenMock.mockReturnValue(pending.promise);
+        const host = makeHost();
+        const request = {
+            walletId: 'wallet-one',
+            chainId: 'bitcoin-mainnet',
+            from: { address: 'source-one' },
+            to: 'recipient-one',
+            tick: 'BTC',
+            amount: '0.25',
+        };
+
+        const popupSend = host.handle({ type: 'action.send', request });
+        await vi.waitFor(() => expect(sendTokenMock).toHaveBeenCalledTimes(1));
+        const sidePanelSend = host.handle({
+            type: 'action.send',
+            request: { ...request },
+        });
+        for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+
+        expect(sendTokenMock).toHaveBeenCalledTimes(1);
+        await expect(sidePanelSend).resolves.toEqual({
+            ok: false,
+            error: {
+                name: 'SendAlreadyInProgressError',
+                message: 'A matching send is already in progress in another wallet window.',
+            },
+        });
+        pending.resolve({ txid: 'tx-shared' });
+        await expect(popupSend).resolves.toEqual({ ok: true, result: { txid: 'tx-shared' } });
+
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-retry' });
+        await expect(host.handle({ type: 'action.send', request })).resolves.toEqual({
+            ok: true,
+            result: { txid: 'tx-retry' },
+        });
+        expect(sendTokenMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not coalesce different concurrent sends', async () => {
+        const first = deferred();
+        sendTokenMock
+            .mockReturnValueOnce(first.promise)
+            .mockResolvedValueOnce({ txid: 'tx-two' });
+        const host = makeHost();
+        const base = {
+            walletId: 'wallet-one',
+            chainId: 'bitcoin-mainnet',
+            from: { address: 'source-one' },
+            tick: 'BTC',
+            amount: '0.25',
+        };
+
+        const popupSend = host.handle({
+            type: 'action.send',
+            request: { ...base, to: 'recipient-one' },
+        });
+        const sidePanelSend = host.handle({
+            type: 'action.send',
+            request: { ...base, to: 'recipient-two' },
+        });
+
+        await vi.waitFor(() => expect(sendTokenMock).toHaveBeenCalledTimes(2));
+        await expect(sidePanelSend).resolves.toEqual({ ok: true, result: { txid: 'tx-two' } });
+        first.resolve({ txid: 'tx-one' });
+        await expect(popupSend).resolves.toEqual({ ok: true, result: { txid: 'tx-one' } });
     });
 });
