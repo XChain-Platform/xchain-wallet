@@ -121,7 +121,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                     lineWidth: 2,
                     priceFormat: {
                         type: 'custom',
-                        formatter: (value) => `${formatChartPrice(value)} ${tick2}`,
+                        formatter: formatAxisPrice,
                     },
                     priceLineVisible: false,
                     lastValueVisible: true,
@@ -366,4 +366,13 @@ function extractRows(resp) {
 
 function formatChartPrice(value) {
     return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
+}
+
+// The price scale and its last-value tag show a price below 1 to four
+// significant digits, a larger one to four decimals, and no unit: eight digits plus " BTC" made a sub-satoshi price tag about 170px
+// wide, which left a phone-width chart half its plot. The unit is in the
+// market header, and the chart's accessible description keeps full precision.
+function formatAxisPrice(value) {
+    const options = Math.abs(value) >= 1 ? { maximumFractionDigits: 4 } : { maximumSignificantDigits: 4 };
+    return new Intl.NumberFormat('en-US', options).format(value);
 }
