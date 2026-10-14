@@ -18,9 +18,9 @@
 // getAction(...).state.status does NOT promptly reflect a cancel, so
 // "cancelled" is read from the authoritative + immediate swap_cancels
 // table (getSwapCancelsForAddress). The list feed carries lifecycle inline
-// as `swap_status`, while action detail carries edited expiration. A failed
-// or older detail read falls back to the creation expiration. Cancel/edit
-// are offered only while open.
+// as `swap_status`, while action detail carries edited expiration and the
+// chain-clock expiry classification. A failed or older detail read falls
+// back to the creation expiration. Cancel/edit are offered only while open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -91,7 +91,11 @@ const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
 function swapStateOf(detail) {
     const state = detail?.state || detail?.data?.state;
     if (!state || typeof state !== 'object') return null;
-    return { status: String(state.status || ''), expiration: state.expiration ?? null };
+    return {
+        status: String(state.status || ''),
+        expiration: state.expiration ?? null,
+        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
+    };
 }
 
 async function readSwapStates(messaging, candidates) {
@@ -118,6 +122,8 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
     if (swapStatus === 'complete' || swapStatus === 'filled' || swapStatus === 'settled') return 'settled';
     if (swapStatus === 'cancelled') return 'cancelled';
     if (swapStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus != null) return 'open';
     const exp = Number(item.live?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
