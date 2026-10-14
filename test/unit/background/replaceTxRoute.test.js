@@ -249,4 +249,47 @@ describe('tx.replace background route', () => {
             expect.objectContaining({ txid: ORIGINAL, status: 'broadcast', rbfReplacement: null }),
         ]));
     });
+
+    it('settles a speedup the node already holds as delivered', async () => {
+        const h = harness();
+        h.broadcastTx.mockRejectedValueOnce(new Error('Encoder RPC error: txn-already-known'));
+        const response = await call(h.host, {});
+
+        expect(response.ok, JSON.stringify(response.error)).toBe(true);
+        expect(response.result.replacementTxHash).toBe(REPLACEMENT);
+        const rows = [...h.rows.values()];
+        expect(rows).toEqual(expect.arrayContaining([
+            expect.objectContaining({ txid: REPLACEMENT, status: 'broadcast' }),
+            expect.objectContaining({ txid: ORIGINAL, status: 'rbf-replaced', rbfReplacement: REPLACEMENT }),
+        ]));
+        expect(rows.some((row) => row.txid === REPLACEMENT && row.status === 'failed')).toBe(false);
+    });
+
+    it('settles a cancel whose already-in-mempool answer sits in a nested cause', async () => {
+        const h = harness();
+        h.broadcastTx.mockRejectedValueOnce(Object.assign(new Error('broadcast failed'), {
+            cause: new Error('txn-already-in-mempool'),
+        }));
+        const response = await call(h.host, { strategy: 'cancel' });
+
+        expect(response.ok, JSON.stringify(response.error)).toBe(true);
+        const rows = [...h.rows.values()];
+        expect(rows).toEqual(expect.arrayContaining([
+            expect.objectContaining({ txid: REPLACEMENT, status: 'broadcast' }),
+            expect.objectContaining({ txid: ORIGINAL, status: 'rbf-replaced', rbfReplacement: REPLACEMENT }),
+        ]));
+        expect(rows.some((row) => row.txid === REPLACEMENT && row.status === 'failed')).toBe(false);
+    });
+
+    it('still records a spent-input rejection as failed', async () => {
+        const h = harness();
+        h.broadcastTx.mockRejectedValueOnce(new Error('bad-txns-inputs-missingorspent'));
+        const response = await call(h.host, {});
+
+        expect(response.ok).toBe(false);
+        expect([...h.rows.values()]).toEqual(expect.arrayContaining([
+            expect.objectContaining({ txid: REPLACEMENT, status: 'failed' }),
+            expect.objectContaining({ txid: ORIGINAL, status: 'broadcast', rbfReplacement: null }),
+        ]));
+    });
 });

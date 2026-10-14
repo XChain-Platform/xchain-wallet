@@ -41,6 +41,10 @@
 // empty. Write the entries first; that is editorial work and no tool can
 // do it for you.
 //
+// A PRERELEASE LEAVES THE CHANGELOG ALONE: `-beta.N` and `-respin.N` ride the
+// release they belong to, as version-lockstep.smoke.js already exempts them, so
+// Unreleased keeps its entries for the stable bump to promote whole.
+//
 // Usage:
 //   node tools/release/bump-version.mjs 0.337.0
 //   node tools/release/bump-version.mjs v0.337.0 --date 2026-08-07
@@ -69,6 +73,10 @@ function usage() {
 
   Refuses to run if "## [Unreleased]" is empty: a release section with a
   heading and no entries passes every gate here and documents nothing.
+
+  A prerelease (-beta.N, -respin.N) writes every version but leaves
+  CHANGELOG.md untouched: it rides the release it is a prerelease of, so
+  the entries stay under "## [Unreleased]" for the stable bump.
 
   Verify the result with:
     node test/smoke/audits/version-lockstep.smoke.js
@@ -215,7 +223,13 @@ for (const rel of packageFiles) {
 
 // --- 5. The CHANGELOG, and this is the fail-shut one --------------------
 
-{
+// Skip the changelog for a prerelease, by the same predicate the lockstep smoke uses
+const isPrerelease = target.includes('-');
+const notes = [];
+if (isPrerelease) {
+    notes.push(`CHANGELOG.md left unchanged: a prerelease rides the ${target.split('-')[0]} release,`
+        + ' so the entries stay under "## [Unreleased]" for that bump');
+} else {
     const rel = 'CHANGELOG.md';
     const text = read(rel);
     const heading = new RegExp(`^## \\[${escapeRegExp(target)}\\]`, 'm');
@@ -239,11 +253,8 @@ for (const rel of packageFiles) {
     // gate in this repo and tells a reader nothing about what they are
     // installing, which is the state this refusal exists to end.
     if (!/^[-*] \S/m.test(body)) {
-        const isPrerelease = target.includes('-');
         fail('"## [Unreleased]" carries no entries, so this bump would create an empty release section',
-            isPrerelease
-                ? 'Prereleases are exempt from the smoke\'s changelog check, but a release'
-                : 'version-lockstep.smoke.js requires the section to exist;',
+            'version-lockstep.smoke.js requires the section to exist;',
             'nothing requires it to say anything, which is why this refusal is here.',
             'Write the entries under "## [Unreleased]" first, one short sentence each,',
             'then re-run. `git log --oneline v<previous>..HEAD` is the raw material.');
@@ -262,6 +273,7 @@ process.stdout.write(`bump-version: ${current} -> ${target}${dryRun ? '  (dry ru
 for (const edit of edits) {
     process.stdout.write(`  ${edit.file.padEnd(46)} ${edit.from} -> ${edit.to}   ${edit.what}\n`);
 }
+for (const note of notes) process.stdout.write(`  ${note}\n`);
 
 if (!dryRun) {
     for (const [rel, contents] of writes) writeFileSync(join(ROOT, rel), contents);

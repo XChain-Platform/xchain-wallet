@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     Screen,
     PageHeader,
@@ -211,11 +212,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             // The add path stores a second wallet in the existing vault. The
             // fresh-install create path rejects devices that already have one.
             if (typeof messaging.addImportedWallet !== 'function') {
-                throw new Error('messaging.addImportedWallet is not available in this shell.');
+                throw new Error('Adding a second wallet is not supported in this version of the app.');
             }
             const result = await messaging.addImportedWallet({ password, mnemonic, name, origin: 'created' });
             const id = result?.walletId || result?.id || result?.wallet?.id;
-            if (!id) throw new Error('Adding the BIP39 wallet did not return a walletId.');
+            // Warn against a blind retry: the save may have stored the wallet even without returning its id
+            if (!id) throw new Error('The new wallet could not be confirmed. Check your wallet list before trying again.');
             setNewWalletId(id);
             try { flowsLib.markBackupVerified(id); } catch { /* best-effort reminder metadata */ }
             setPassword('');
@@ -223,7 +225,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             setMnemonic(null);
             setStage('done');
         } catch (err) {
-            setError(err?.message || 'Could not create the BIP39 wallet.');
+            // Show user copy as is; developer text from the save becomes a retry prompt
+            setError(userFacingMessage(err,
+                'Could not create the new wallet. Your recovery phrase is still here, so you can try again.'));
             setStage('verify');
         }
     }

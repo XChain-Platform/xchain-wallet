@@ -103,3 +103,75 @@ test('updates every derived version declaration and promotes the changelog', (t)
     assert.match(changelog, /## \[Unreleased\]\n\n## \[1\.3\.0\] - 2026-10-13/);
     assert.match(changelog, /Exercise the release transformation/);
 });
+
+// Empty the fixture's Unreleased section, the state a respin or a stable bump right after one meets
+function emptyUnreleased(root) {
+    writeFileSync(path.join(root, 'CHANGELOG.md'), `# Changelog
+
+## [Unreleased]
+
+## [${CURRENT}] - 2026-01-01
+
+- Previous release.
+`);
+}
+
+test('a beta bump writes every version but leaves the changelog byte-identical', (t) => {
+    const { root, tool } = fixture();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const before = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+
+    const result = run(tool, ['1.3.0-beta.1', '--date', '2026-10-13']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version, '1.3.0-beta.1');
+    assert.match(readFileSync(path.join(root, 'packages', 'core', 'src', 'buildInfo.js'), 'utf8'),
+        /WALLET_VERSION = '1\.3\.0-beta\.1'/);
+    assert.match(readFileSync(path.join(root, 'README.md'), 'utf8'), /badge\/version-1\.3\.0--beta\.1-blue/);
+    assert.equal(readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'), before);
+    assert.match(result.stdout, /CHANGELOG\.md left unchanged/);
+});
+
+test('a stable bump after a beta promotes every entry the beta carried', (t) => {
+    const { root, tool } = fixture();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+
+    const beta = run(tool, ['1.3.0-beta.1', '--date', '2026-10-13']);
+    assert.equal(beta.status, 0, beta.stderr);
+    const stable = run(tool, ['1.3.0', '--date', '2026-10-20']);
+
+    assert.equal(stable.status, 0, stable.stderr);
+    const changelog = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+    assert.match(changelog, /## \[Unreleased\]\n\n## \[1\.3\.0\] - 2026-10-20\n\n### Fixed\n- Exercise the release transformation\./);
+    assert.doesNotMatch(changelog, /## \[1\.3\.0-beta\.1\]/);
+});
+
+test('a respin bumps with an empty Unreleased section and writes no changelog section', (t) => {
+    const { root, tool } = fixture();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    emptyUnreleased(root);
+    const before = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+
+    const result = run(tool, ['1.2.3-respin.1', '--dry-run']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /CHANGELOG\.md left unchanged/);
+
+    const written = run(tool, ['1.2.3-respin.1']);
+    assert.equal(written.status, 0, written.stderr);
+    assert.equal(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version, '1.2.3-respin.1');
+    assert.equal(readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'), before);
+});
+
+test('a stable bump still refuses an empty Unreleased section and writes nothing', (t) => {
+    const { root, tool } = fixture();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    emptyUnreleased(root);
+    const before = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+
+    const result = run(tool, ['1.3.0']);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /carries no entries/);
+    assert.equal(readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'), before);
+    assert.equal(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version, CURRENT);
+});

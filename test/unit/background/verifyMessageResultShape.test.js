@@ -24,21 +24,34 @@ function verificationHost(verifyMessage) {
     });
 }
 
+function verify(host) {
+    return host.handle({
+        type: 'auth.verifyMessage',
+        request: {
+            chainId: 'bitcoin-mainnet',
+            address: 'wrong-address',
+            message: 'modified message',
+            signature: 'signature',
+        },
+    });
+}
+
 describe('background message verification result shape', () => {
-    // BUG: auth.verifyMessage treats the SDK's { valid: false } result object as truthy.
-    it.skip('preserves an invalid SDK verification result', async () => {
+    // The SDK answers an object, so a { valid: false } verdict must not read as truthy
+    it('preserves an invalid SDK verification result', async () => {
         const host = verificationHost(() => ({ valid: false, error: null }));
 
-        const response = await host.handle({
-            type: 'auth.verifyMessage',
-            request: {
-                chainId: 'bitcoin-mainnet',
-                address: 'wrong-address',
-                message: 'modified message',
-                signature: 'signature',
-            },
-        });
+        expect(await verify(host)).toMatchObject({ ok: true, result: { valid: false } });
+    });
 
-        expect(response).toMatchObject({ ok: true, result: { valid: false } });
+    it('preserves a valid SDK verification result', async () => {
+        const host = verificationHost(() => ({ valid: true, error: null }));
+
+        expect(await verify(host)).toMatchObject({ ok: true, result: { valid: true } });
+    });
+
+    it('accepts the bare boolean the demo stubs answer', async () => {
+        expect(await verify(verificationHost(() => false))).toMatchObject({ ok: true, result: { valid: false } });
+        expect(await verify(verificationHost(() => true))).toMatchObject({ ok: true, result: { valid: true } });
     });
 });
