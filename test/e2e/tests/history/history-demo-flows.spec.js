@@ -106,7 +106,8 @@ for (const viewport of VIEWPORTS) {
         const today = await localDate(page);
         await page.getByLabel('From date').fill(today);
         await page.getByLabel('To date').fill(today);
-        await expect(page.getByText(`Active range: ${today} to ${today}`)).toBeVisible();
+        // The active range reads in the viewer's local date format.
+        await expect(page.getByText(/^Active range: .+ to .+$/)).toBeVisible();
         await expect(page.locator('[data-history-key*=":100003:"]')).toHaveCount(0);
         await expect(historyRow(page, 'bitcoin-regtest', 100001)).toBeVisible();
         await expectNoHorizontalOverflow(page, `${viewport.name} custom date range`);

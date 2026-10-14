@@ -256,7 +256,7 @@ for (const viewport of VIEWPORTS) {
                 summary: 'Mint 25 XCP on Bitcoin',
                 details: {
                     Token: 'XCP',
-                    Amount: '25',
+                    Amount: '25 XCP',
                     Destination: 'broadcasting address',
                 },
                 label: `${viewport.name} Mint review`,
@@ -284,7 +284,7 @@ for (const viewport of VIEWPORTS) {
                 details: {
                     'Holders of': 'XCP',
                     Receive: 'PEPECASH',
-                    'Per-unit amount': '0.0001',
+                    'Per-unit amount': '0.0001 PEPECASH',
                     Memo: 'Quarterly payout',
                 },
                 label: `${viewport.name} Dividend review`,
@@ -307,7 +307,7 @@ for (const viewport of VIEWPORTS) {
                 summary: 'Destroy 2 XCP on Bitcoin',
                 details: {
                     Token: 'XCP',
-                    Amount: '2',
+                    Amount: '2 XCP',
                 },
                 label: `${viewport.name} Destroy review`,
             });
