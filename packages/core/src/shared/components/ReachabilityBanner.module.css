@@ -11,7 +11,20 @@
     border-radius: var(--xc-card-radius);
     border: 1px solid;
     font-size: var(--xc-text-sm);
-    margin: var(--xc-space-2);
+    margin-block: var(--xc-space-2);
+    margin-inline: var(--xc-space-3);
+}
+
+@media (min-width: 640px) {
+    .banner {
+        margin-inline: var(--xc-space-4);
+    }
+}
+
+@media (min-width: 900px) {
+    .banner {
+        margin-inline: var(--xc-space-6);
+    }
 }
 
 .degraded {
