@@ -61,6 +61,19 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
             if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
             const origin = `chrome-extension://${new URL(worker.url()).host}`;
             const page = await context.newPage();
+            // The side panel refuses to render unless its active tab runs the
+            // provider bridge, and here the active tab is the panel itself, so
+            // the content-script probe is answered the way a regular website's
+            // content script answers it.
+            if (SURFACE === 'sidepanel') {
+                await page.addInitScript(() => {
+                    const tabs = globalThis.chrome?.tabs;
+                    if (!tabs) return;
+                    tabs.sendMessage = (_id, _message, callback) => {
+                        if (typeof callback === 'function') callback({ available: true });
+                    };
+                });
+            }
             // The popup has no nav to go Home by, and it reopens on the last
             // view it showed, so every restart forgets that view first and
             // the reload lands on Home. The licence gate is taken the way a
