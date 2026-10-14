@@ -18,7 +18,7 @@ const expectedLocalDeclarations = new Map(Object.entries({
     'shared/components/PlatformSwitcher.module.css': ['20'],
     'shared/components/TxStatusTimeline.module.css': ['1'],
     'shared/routes/AddressList.module.css': ['200'],
-    'shared/routes/ContactsList.module.css': ['100', '1000'],
+    'shared/routes/ContactsList.module.css': ['100'],
     'shared/routes/DispenserDetail.module.css': ['20'],
     'shared/routes/History.module.css': ['20', '20', '1'],
     'shared/routes/Home.module.css': ['20'],
