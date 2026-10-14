@@ -21,7 +21,8 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 const TEST_WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
-const DESTINATION = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+// The demo wallet runs on Bitcoin regtest, so the destination is a regtest address.
+const DESTINATION = 'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080';
 
 async function settle(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -42,9 +43,10 @@ async function gotoPalette(page, title) {
 
 async function expectMatchingInlineControlHeights(page, label) {
     const mismatches = await page.getByRole('main').evaluate((main) => {
-        const controls = [...main.querySelectorAll(
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        const controls = [...Array.from(main.querySelectorAll(
             'button, input:not([type="hidden"]), select, textarea',
-        )].flatMap((element) => {
+        )).filter((el) => !el.closest('[aria-hidden="true"]'))].flatMap((element) => {
             const style = getComputedStyle(element);
             const box = element.getBoundingClientRect();
             if (style.display === 'none' || style.visibility === 'hidden'
@@ -118,6 +120,10 @@ async function checkPrivateKeyScrubbing(page, label) {
     expect(keyIsCleared, `${label}: the WIF remains in the field after leaving its import lane`)
         .toBe(true);
     await page.getByRole('button', { name: 'Back to wallet setup' }).click();
+    // Let the setup screen finish loading so the next navigation does not
+    // abort one still in flight.
+    await expect(page.getByRole('button', { name: 'Try in demo mode' })).toBeVisible();
+    await page.waitForLoadState('load');
 }
 
 async function setWatcherMode(page, label) {
@@ -155,7 +161,7 @@ for (const viewport of VIEWPORTS) {
 
         const source = await main.getByRole('textbox', { name: 'From', exact: true }).inputValue();
         expect(source.length, `${viewport.name}: sweep source is empty`).toBeGreaterThan(0);
-        await main.getByLabel('Destination address').fill(DESTINATION);
+        await main.getByRole('textbox', { name: 'Destination address' }).fill(DESTINATION);
 
         await expect(main.getByRole('checkbox', { name: /^Token balances \(\d+\)$/ }))
             .toBeVisible({ timeout: 30_000 });
@@ -178,8 +184,9 @@ for (const viewport of VIEWPORTS) {
         expect(await main.evaluate((element) => element.scrollTop),
             `${viewport.name}: sweep review did not open at the top`).toBeLessThanOrEqual(1);
         await expect(detailValue(review, 'Chain')).toContainText('Bitcoin');
-        await expect(detailValue(review, 'From')).toHaveText(source);
-        await expect(detailValue(review, 'Destination')).toHaveText(DESTINATION);
+        // Addresses are middle-truncated on screen; the accessible name is the full value.
+        await expect(detailValue(review, 'From').getByLabel(source, { exact: true })).toBeVisible();
+        await expect(detailValue(review, 'Destination').getByLabel(DESTINATION, { exact: true })).toBeVisible();
         await expect(detailValue(review, 'Sweeps'))
             .toHaveText('Token balances, Token ownerships');
         await expectScreenLayout(page, 'Review sweep', `${viewport.name} sweep review`);
