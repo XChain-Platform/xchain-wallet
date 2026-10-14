@@ -14,6 +14,7 @@
 import { WalletNotFoundError } from './unlockWallet.js';
 
 const NAME_MAX_LENGTH = 64;
+const nameLength = (value) => Array.from(value).length;
 
 /**
  * @param {object} opts
@@ -29,7 +30,8 @@ export async function renameWallet({ walletId, name, vault }) {
     if (typeof name !== 'string' || name.trim().length === 0) {
         throw new Error('renameWallet: name must be a non-empty string');
     }
-    if (name.trim().length > NAME_MAX_LENGTH) {
+    const trimmed = name.trim();
+    if (nameLength(trimmed) > NAME_MAX_LENGTH) {
         throw new Error(`renameWallet: name must be ${NAME_MAX_LENGTH} characters or fewer`);
     }
     if (!vault) throw new Error('renameWallet: vault is required');
@@ -37,7 +39,6 @@ export async function renameWallet({ walletId, name, vault }) {
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
 
-    const trimmed = name.trim();
     const wallets = await vault.wallets.list();
     if (wallets.some((candidate) => candidate.id !== walletId
         && candidate.name.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {

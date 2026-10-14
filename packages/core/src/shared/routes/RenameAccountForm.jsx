@@ -14,6 +14,7 @@ import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
 const NAME_MAX_LENGTH = 64;
+const nameLength = (value) => Array.from(value).length;
 
 /**
  * RenameAccountForm: change an Account record's `name` field. No
@@ -68,7 +69,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             setError('Account name is required.');
             return;
         }
-        if (name.length > NAME_MAX_LENGTH) {
+        if (nameLength(trimmed) > NAME_MAX_LENGTH) {
             setError(`Account name must be ${NAME_MAX_LENGTH} characters or fewer.`);
             return;
         }
@@ -92,7 +93,8 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         }
     }
 
-    const saveDisabled = busy || name.trim().length === 0 || name.length > NAME_MAX_LENGTH;
+    const saveDisabled = busy || name.trim().length === 0
+        || nameLength(name.trim()) > NAME_MAX_LENGTH;
 
     const header = (
         <PageHeader
@@ -121,8 +123,13 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
                 ref={nameRef}
                 label={t('renameAccount.name')}
                 value={name}
-                onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
-                maxLength={NAME_MAX_LENGTH}
+                onChange={(e) => {
+                    const nextName = e.target.value;
+                    setName(nextName);
+                    setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
+                        ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                        : null);
+                }}
                 autoComplete="off"
                 disabled={busy}
                 error={error || undefined}
