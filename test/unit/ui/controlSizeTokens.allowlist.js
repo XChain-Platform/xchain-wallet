@@ -1,7 +1,6 @@
 // Literal dimensions in this list either size non-control artwork or predate
 // the shared control scale. New entries require a selector-specific reason.
 export const CONTROL_SIZE_LITERAL_ALLOWLIST = [
-    { file: 'shared/components/HomeFilterBar.module.css', selector: '.search', property: 'min-height', value: '38px', reason: 'Legacy home search control pending control-token migration.' },
     { file: 'shared/components/HomeTabs.module.css', selector: '.tokenIconSquare', property: 'height', value: '48px', reason: 'Token artwork geometry is not a control height.' },
     { file: 'shared/routes/AddressList.module.css', selector: '.addBtn', property: 'height', value: '38px', reason: 'Legacy add action pending shared Button adoption.' },
     { file: 'shared/routes/AddressList.module.css', selector: '.quickActionIcon', property: 'height', value: '32px', reason: 'Quick-action artwork geometry is not a control height.' },
