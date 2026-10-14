@@ -70,7 +70,7 @@ import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
-import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsActionRow, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -631,15 +631,11 @@ function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
 
 function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
     return (
-        <SectionHeader
-            title={label}
-            description={hint}
-            trailing={(
-                <Button variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
-                    {actionLabel}
-                </Button>
-            )}
-        />
+        <SettingsActionRow label={label} hint={hint}>
+            <Button variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
+                {actionLabel}
+            </Button>
+        </SettingsActionRow>
     );
 }
 

@@ -15,6 +15,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -76,6 +77,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function DestroyForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const lockedToken = !!(initialChainId && initialTick);
@@ -409,20 +411,21 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     if (loadError) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Destroy token"
                 status={<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>}
             />,
         );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<FormPage label="Destroy token"><p className={styles.hint}>Loading…</p></FormPage>);
+        return wrap(<FormPage demoGuard={demoGuard} label="Destroy token"><p className={styles.hint}>Loading…</p></FormPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <FormPage label="Unsigned destroy transaction">
+                <FormPage demoGuard={demoGuard} label="Unsigned destroy transaction">
                     <WatcherResultPanel
                         result={result}
                         onBuildAnother={handleBuildAnother}
@@ -434,13 +437,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         // Signed but not broadcast. Nothing has been destroyed yet.
         if (result?.queued) {
             return wrap(
-                <FormPage label="Queued destroy transaction">
+                <FormPage demoGuard={demoGuard} label="Queued destroy transaction">
                     <QueuedResultPanel onDone={onBack} what="destroy" unsaved={result.unsaved} />
                 </FormPage>,
             );
         }
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Destroy result"
                 actions={<Button variant="primary" onClick={onBack}>Done</Button>}
             >
@@ -460,6 +464,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review destroy"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -630,6 +635,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Destroy token"
             onSubmit={handleReview}
             status={formError ? (

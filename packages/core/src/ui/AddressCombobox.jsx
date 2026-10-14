@@ -292,7 +292,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                             {s.sublabel ? (
                                 <span className={styles.sublabel}>{s.sublabel}</span>
                             ) : null}
-                            <AddressText address={s.address} className={styles.sublabel} size="sm" />
+                            <AddressText address={s.address} className={styles.sublabel} size="sm" focusable={false} />
                         </li>
                     ))}
                 </ul>

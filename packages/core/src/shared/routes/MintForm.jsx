@@ -15,6 +15,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -84,6 +85,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function MintForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
 
@@ -546,6 +548,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review mint"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -714,6 +717,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Mint tokens"
             onSubmit={handleReview}
             status={formError ? (

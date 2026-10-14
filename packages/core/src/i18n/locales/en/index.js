@@ -42,6 +42,8 @@ export const en = {
     'common.clear': 'Clear',
     'common.copyTransactionId': 'Copy transaction ID',
     'common.tryAgain': 'Try again',
+    'balances.unchecked.title': "Balances couldn't be checked",
+    'balances.unchecked.body': 'Your balance may be out of date. Try again to refresh it.',
     'common.openNetworkSettings': 'Open network settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',
@@ -465,7 +467,7 @@ export const en = {
     'importWallet.phrase.placeholder': 'word word word…',
     'importWallet.phrase.freeWalletCount': '{count} / 12 words',
     'importWallet.phrase.wordCount':
-        '{count, plural, one {# word entered (use 12, 15, 18, 21, or 24)} other {# words entered (use 12, 15, 18, 21, or 24)}}',
+        '{count, plural, one {# word entered} other {# words entered}}',
     'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
     'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
     'importWallet.phrase.suggestions': 'BIP39 word suggestions',
@@ -519,6 +521,9 @@ export const en = {
         "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; use the field below to send those too.",
     'issue.sendInitialMintOptional': 'Send the initial mint to (optional)',
     'issue.sendInitialMintHint': 'Leave blank to keep the minted tokens at the issuing address.',
+
+    // --- demo wallet guard ----------------------------------------
+    'demo.guard.blocked': "Demo wallets can't move funds. Create a real wallet to continue.",
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',

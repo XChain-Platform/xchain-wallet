@@ -415,3 +415,41 @@ describe('the chain-id memo key', () => {
         expect([BTC, LTC].join(NUL).split(NUL)).toEqual([BTC, LTC]);
     });
 });
+
+describe('useReachability: one verdict across hooks', () => {
+    it('starts a later hook from the verdict an earlier hook already published', async () => {
+        // The shell's notice and a screen's own empty state read separate
+        // hooks; a screen mounting later must not sit on its own silent cold
+        // start while the notice says balances may be out of date.
+        const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+
+        const first = renderHook(
+            () => useReachability({ intervalMs: 0, startupGraceMs: 0, confirmMs: 0 }),
+            { wrapper: wrapperFor(messaging) },
+        );
+        await waitFor(() => expect(first.result.current.overall).toBe('degraded'));
+
+        const second = renderHook(() => useReachability({ intervalMs: 0 }), { wrapper: wrapperFor(messaging) });
+        await waitFor(() => expect(second.result.current.overall).toBe('degraded'));
+        // Adopted, not re-derived: the later hook's own grace window is 8s.
+        expect(second.result.current.perChain.map((c) => c.mode)).toEqual(['degraded', 'degraded']);
+    });
+
+    it('tells every hook at once when a retry from one of them finds the network back', async () => {
+        let answer = oneServiceDown;
+        const check = vi.fn(async ({ chainIds }) => answer(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+        const opts = { intervalMs: 0, startupGraceMs: 0, confirmMs: 0 };
+
+        const notice = renderHook(() => useReachability(opts), { wrapper: wrapperFor(messaging) });
+        const screenHook = renderHook(() => useReachability(opts), { wrapper: wrapperFor(messaging) });
+        await waitFor(() => expect(notice.result.current.overall).toBe('degraded'));
+        await waitFor(() => expect(screenHook.result.current.overall).toBe('degraded'));
+
+        answer = healthy;
+        await act(async () => { screenHook.result.current.refresh(); });
+        await waitFor(() => expect(screenHook.result.current.overall).toBe('normal'));
+        expect(notice.result.current.overall).toBe('normal');
+    });
+});

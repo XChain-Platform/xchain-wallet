@@ -493,7 +493,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
     const changeDisplay = percentChangeDisplay(changeNum);
     const changeColor = changeDisplay?.direction === 'positive'
         ? 'var(--xc-success)'
-        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
     // Depth intensity: same accent hue, more saturated background as
     // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.
     const depthPct = typeof depth === 'number' && Number.isFinite(depth)
@@ -591,7 +591,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                             <span style={{
                                 display: 'inline-block',
                                 background: `color-mix(in srgb, var(--xc-accent-primary) ${depthPct}%, transparent)`,
-                                color: 'var(--xc-accent-text)',
+                                color: 'var(--xc-text)',
                                 fontWeight: 600,
                                 padding: '1px 8px',
                                 borderRadius: 999,

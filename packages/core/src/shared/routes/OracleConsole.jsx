@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -80,6 +81,7 @@ function countdownLabel(targetSec, nowSec) {
  */
 export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
 
@@ -323,6 +325,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
             </Button>
         )}>
+            {demoGuard.note}
+            {demoGuard.dialog}
             {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {!rows ? <p>Loading your markets…</p> : null}
             {rows && rows.length === 0 && !error ? (
@@ -445,7 +449,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     <Button
                                         variant="primary"
                                         loading={actionConfirm.composing}
-                                        disabled={!allowList.trim() && !blockList.trim()}
+                                        disabled={demoGuard.blocked || (!allowList.trim() && !blockList.trim())}
                                         onClick={() => runOracleAction(f, 'editFeedListsParams', submitEdit, {
                                             feedActionIndex: f.action_index,
                                             allowList: allowList.trim(),
@@ -478,7 +482,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     <Button
                                         variant="primary"
                                         loading={actionConfirm.composing}
-                                        disabled={outcome === null}
+                                        disabled={demoGuard.blocked || outcome === null}
                                         onClick={() => runOracleAction(f, 'resolveMarketParams', submitResolve, {
                                             feedActionIndex: f.action_index, outcome,
                                         })}
@@ -500,6 +504,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     <Button
                                         variant="danger"
                                         loading={actionConfirm.composing}
+                                        disabled={demoGuard.blocked}
                                         onClick={() => runOracleAction(f, 'cancelMarketParams', submitCancel, {
                                             feedActionIndex: f.action_index,
                                         })}

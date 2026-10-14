@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -98,6 +99,7 @@ function expirationValidationError(mode, input, nowSec = Math.floor(Date.now() /
  */
 export function CrossChainSwapForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const networkAvailable = useOnlineStatus();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -678,6 +680,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             : `${swapParams.GET_AMOUNT} ${swapParams.GET_TICK}`;
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review cross-chain swap"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -883,6 +886,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Cross-chain swap"
             onSubmit={handleReview}
             sectioned

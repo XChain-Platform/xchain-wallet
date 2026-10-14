@@ -1661,7 +1661,7 @@ function PgpsigBlock({ pgpsig }) {
     return (
         <div className={styles.metaBlock}>
             <SectionHeader title="PGP signature" />
-            <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
+            <pre className={styles.pgpsigBlock} tabIndex={0}>{pgpsig}</pre>
         </div>
     );
 }

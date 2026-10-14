@@ -100,30 +100,27 @@
     background: var(--xc-surface);
 }
 
-/* Stacked banners (QueuedBroadcastBanner, ReachabilityBanner, ...) under
-   the header row. They are the part that can grow, so the cap lives here
-   rather than on .header. */
+/* The notices host (QueuedBroadcastBanner, ReachabilityBanner, ...). It is
+   page content, not toolbar: the route's Screen moves it to the top of its
+   scrolling body, so it takes the body's gutter and full content width and
+   scrolls with the page. Empty when no notice is showing. */
 .notices {
-    composes: scrollArea from '../../ui/Screen.module.css';
-    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    /* Each tier publishes a notice inset beside its page gutter, so stacked
-       notices line up with route content; compact keeps the base gutter. */
-    padding-block: var(--xc-space-2);
-    padding-inline: calc(var(--xc-notice-inset, var(--xc-space-3)) + var(--xc-scrollbar-lane, 0px));
+    min-width: 0;
+}
+
+.notices:empty {
+    display: none;
+}
+
+.notices:not(:empty) {
+    margin-bottom: var(--xc-space-3);
 }
 
 .notices > * {
     margin: 0;
-}
-
-/* Keep stacked notices from consuming the route on phone-sized layouts. */
-.layout[data-xc-tier='compact'] .notices {
-    max-height: 45%;
-    overflow-y: auto;
-    overscroll-behavior: contain;
 }
 
 .mainBody {
@@ -367,16 +364,6 @@
 
 .layout[data-xc-tier='full'] {
     --xc-page-top: var(--xc-space-4);
-}
-
-/* Notices sit above Screen, so they take the tier's gutter value here
-   rather than reading the Screen-owned page gutter. */
-.layout[data-xc-tier='rail'] .notices {
-    --xc-notice-inset: var(--xc-space-4);
-}
-
-.layout[data-xc-tier='full'] .notices {
-    --xc-notice-inset: var(--xc-space-6);
 }
 
 /* The brand wordmark has no icon-only form. The app header keeps the

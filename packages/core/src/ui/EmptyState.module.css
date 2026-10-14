@@ -16,6 +16,14 @@
     color: var(--xc-text);
 }
 
+/* Plain form: when the empty state is the screen's whole content it sits
+   directly in the page at full content width, with no box around it. */
+.plain {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
 .icon {
     --xc-icon-size: var(--xc-icon-xl);
     display: inline-flex;

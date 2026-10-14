@@ -25,8 +25,8 @@ import {
     INPUT,
     ROW,
     ROW_HINT,
+    ROW_TITLE,
     ROW_LABEL,
-    ROW_VALUE,
     SELECT,
     STACK,
     SettingsLoadError,
@@ -69,7 +69,7 @@ export function SafetySection() {
     return (
         <div style={STACK}>
             <div style={ROW}>
-                <span style={ROW_LABEL}>Auto-lock timeout</span>
+                <span style={ROW_TITLE}>Auto-lock timeout</span>
                 <select
                     value={String(autolockValue)}
                     onChange={(e) => onAutolockChange(e.target.value)}
@@ -88,7 +88,7 @@ export function SafetySection() {
             </div>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_LABEL}>New-recipient test-send warning (sats)</span>
+                    <span style={ROW_TITLE}>New-recipient test-send warning (sats)</span>
                     <span id="test-send-threshold-hint" style={ROW_HINT}>
                         For native-coin sends above this amount to a recipient outside your contacts
                         and send history. Enter 0 to turn this warning off.
@@ -130,13 +130,13 @@ export function SafetySection() {
             ) : null}
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_LABEL}>Lookalike address warnings</span>
+                    <span style={ROW_TITLE}>Lookalike address warnings</span>
                     <span style={ROW_HINT}>
                         The send form warns when an address closely resembles a contact or a previous
                         recipient.
                     </span>
                 </div>
-                <span style={ROW_VALUE}>Always on</span>
+                <span style={ROW_LABEL}>Always on</span>
             </div>
             <UndoSendRow />
             <BiometricRow />
@@ -144,13 +144,13 @@ export function SafetySection() {
             <DuressPassphraseRow />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_LABEL}>Backup reminders</span>
+                    <span style={ROW_TITLE}>Backup reminders</span>
                     <span style={ROW_HINT}>
                         Shown automatically for wallets without a verified recovery phrase or
                         encrypted backup.
                     </span>
                 </div>
-                <span style={ROW_VALUE}>Automatic</span>
+                <span style={ROW_LABEL}>Automatic</span>
             </div>
         </div>
     );

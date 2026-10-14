@@ -19,6 +19,7 @@ import { AppHeader } from '../../../packages/core/src/shared/components/AppHeade
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import { BalancesUncheckedState } from '../../../packages/core/src/shared/components/BalancesUncheckedState.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
@@ -176,6 +177,9 @@ const fixtures = [
             quantity: '100000000',
             divisibility: 8,
         }]} onSelectToken={noop} />
+    )],
+    ['BalancesUncheckedState', () => (
+        <BalancesUncheckedState onRetry={noop} onReceive={noop} />
     )],
     ['BottomTabBar', () => (
         <BottomTabBar currentView="home" onSelect={noop} onLock={noop} onOpenSettings={noop} />

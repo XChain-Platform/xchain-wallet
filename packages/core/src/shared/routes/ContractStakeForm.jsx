@@ -13,6 +13,7 @@ import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, I
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -103,6 +104,7 @@ export function ContractStakeForm({
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -597,6 +599,7 @@ export function ContractStakeForm({
         const verb = mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate';
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`${verb} review`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -775,6 +778,7 @@ export function ContractStakeForm({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Contract stake"
             onSubmit={handleReview}
             status={formError ? (
