@@ -11,7 +11,7 @@
 // ThisWalletSection (§35.1 This Wallet panel) owns wallet-level identity,
 // watch-only export, recovery-format upgrade and removal controls.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import {
     Button,
@@ -278,7 +278,24 @@ function ChangePasswordRow({ walletId, disabled }) {
     const [error, setErrorState] = useState(
         /** @type {{ field: 'current' | 'new' | 'confirm' | null, text: string } | null} */ (null),
     );
-    const setError = (text, field = null) => setErrorState(text ? { field, text } : null);
+    const setError = (text, field = null) => {
+        if (text) focusAfterErrorRef.current = field || 'current';
+        setErrorState(text ? { field, text } : null);
+    };
+    // The fields are disabled while the change runs, which drops focus to the
+    // page. After a refusal the cursor goes back to the field to fix, with its
+    // text selected, the same way the Locked screen returns it.
+    const currentRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const newRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const confirmRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const focusAfterErrorRef = useRef(/** @type {'current' | 'new' | 'confirm' | null} */ (null));
+    useEffect(() => {
+        if (busy || !error || !focusAfterErrorRef.current) return;
+        const target = { current: currentRef, new: newRef, confirm: confirmRef }[focusAfterErrorRef.current];
+        focusAfterErrorRef.current = null;
+        target.current?.focus();
+        target.current?.select();
+    }, [busy, error]);
 
     const reset = () => {
         setCurrentPassword('');
@@ -391,6 +408,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                 className={styles.panel}
             >
                 <Input
+                    ref={currentRef}
                     type="password"
                     revealable
                     label="Current wallet password"
@@ -403,6 +421,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                     error={fieldError('current')}
                 />
                 <Input
+                    ref={newRef}
                     type="password"
                     revealable
                     label="New wallet password"
@@ -414,6 +433,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                     error={fieldError('new')}
                 />
                 <Input
+                    ref={confirmRef}
                     type="password"
                     revealable
                     label="Confirm new wallet password"
