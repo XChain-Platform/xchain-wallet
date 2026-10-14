@@ -19,7 +19,6 @@ const COMPONENT_DIR = join(process.cwd(), 'packages/core/src/shared/components')
 const ROUTE_DIR = join(process.cwd(), 'packages/core/src/shared/routes');
 const UI_DIR = join(process.cwd(), 'packages/core/src/ui');
 const KEYBOARD_DIR = join(process.cwd(), 'packages/core/src/shared/keyboard');
-const ROUTE_DIR = join(process.cwd(), 'packages/core/src/shared/routes');
 const STYLE_DIR = join(process.cwd(), 'packages/core/src/shared/styles');
 const VIEWPORT = { width: 320, height: 568 };
 
@@ -64,7 +63,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('360x640 modal inventory', () => {
+describe('320x568 modal inventory', () => {
     it('keeps modal semantics in the shared overlay kit and specialized viewers', () => {
         expect([
             ...modalFiles(COMPONENT_DIR),
@@ -98,7 +97,7 @@ describe('360x640 modal inventory', () => {
     });
 });
 
-describe('360x640 modal renders', () => {
+describe('320x568 modal renders', () => {
     it('keeps Notice content in a scroller and its close action in a footer', () => {
         render(
             <NoticeModal
@@ -209,7 +208,7 @@ describe('360x640 modal renders', () => {
     });
 });
 
-describe('360x640 modal layout contracts', () => {
+describe('320x568 modal layout contracts', () => {
     it('bounds centered dialogs and isolates their scrolling content', () => {
         const overlay = css('OverlaySurface.module.css');
         const surface = rule(overlay, '.surface');
@@ -253,9 +252,10 @@ describe('360x640 modal layout contracts', () => {
         expect(sheetClose).toMatch(/height:\s*var\(--xc-control-h-md\)/);
         expect(sheetClose).not.toMatch(/position:\s*absolute/);
         const button = readFileSync(join(UI_DIR, 'Button.module.css'), 'utf8');
-        expect(rule(button, '.md')).toMatch(/min-height:\s*var\(--xc-control-h-md,\s*40px\)/);
+        expect(rule(button, '.md')).toMatch(/--xc-button-height:\s*var\(--xc-control-h-md\)/);
         expect(button).toMatch(
-            /@media \(pointer:\s*coarse\)[\s\S]*?\.btn::after\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/,
+            // Touch tokens make md 44px tall; only sm needs an invisible hit extension.
+            /@media \(pointer:\s*coarse\)[\s\S]*?\.sm::before\s*\{[^}]*width:\s*max\(100%,\s*var\(--xc-control-hit-min/,
         );
         expect(rule(overlay, '.body')).toMatch(/min-height:\s*0/);
         expect(rule(overlay, '.body')).toMatch(/flex:\s*1 1 auto/);
