@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useContext, useState } from 'react';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
-import { ReachabilityNoticeHiddenContext } from '../../../packages/core/src/shared/components/noticesRoute.js';
+import { NoticesRouteContext } from '../../../packages/core/src/shared/components/noticesRoute.js';
 import { HideReachabilityNotice } from '../../../packages/core/src/shared/components/hideReachabilityNotice.js';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
 
@@ -126,7 +126,7 @@ describe('shell notices placement', () => {
 
     it('lets a screen that states the balance problem itself hide the reachability notice', () => {
         function HideAware() {
-            return <p data-testid="hide-aware">{useContext(ReachabilityNoticeHiddenContext) ? 'hidden' : 'shown'}</p>;
+            return <p data-testid="hide-aware">{useContext(NoticesRouteContext) === false ? 'hidden' : 'shown'}</p>;
         }
         const shell = (children) => (
             <FullLayoutWithNav routeKey="home" nav={<nav />} notices={<HideAware />}>{children}</FullLayoutWithNav>

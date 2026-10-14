@@ -19,45 +19,34 @@ import { t } from '../../i18n/index.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useHideReachabilityNotice } from './hideReachabilityNotice.js';
 
-// Plain literals, like the token pickers' copy: the English catalogue loads
-// with the shell, and this state only ships with the screens that show it.
-const UNCHECKED_TITLE = "Balances couldn't be checked";
-const UNCHECKED_BODY = 'Your balance may be out of date. Try again to refresh it.';
-
 /**
  * Whether balances could not be checked, and the retry that rechecks them.
  * Reads the same shared verdict as the shell's reachability notice.
  *
- * @returns {{ unchecked: boolean, checking: boolean, recheck: () => void }}
+ * @returns {{ unchecked: boolean, recheck: () => void }}
  */
 export function useBalancesUnchecked() {
-    const { overall, loading, refresh } = useReachability({});
-    return {
-        unchecked: overall === 'degraded' || overall === 'offline',
-        checking: loading,
-        recheck: refresh,
-    };
+    const { overall, refresh } = useReachability({});
+    return { unchecked: overall === 'degraded' || overall === 'offline', recheck: refresh };
 }
 
 /**
  * @param {object} props
- * @param {() => void} props.onRetry
- * @param {boolean} [props.checking]
+ * @param {() => void} props.onRetry       a press while a check runs joins it
  * @param {() => void} [props.onReceive]
  * @param {boolean} [props.plain]          default true; false inside a list area
  * @param {'h2' | 'h3' | 'p'} [props.titleAs]
  */
-export function BalancesUncheckedState({ onRetry, checking = false, onReceive, plain = true, titleAs }) {
+export function BalancesUncheckedState({ onRetry, onReceive, plain = true, titleAs }) {
     useHideReachabilityNotice(true);
     return (
         <EmptyState
             plain={plain}
             titleAs={titleAs}
             icon={<Icon.InfoIcon />}
-            title={UNCHECKED_TITLE}
-            body={UNCHECKED_BODY}
-            actionLabel={checking ? 'Checking…' : t('common.tryAgain')}
-            // A press while checking joins the check already in flight.
+            title={t('balances.unchecked.title')}
+            body={t('balances.unchecked.body')}
+            actionLabel={t('common.tryAgain')}
             onAction={onRetry}
             actionIcon={<Icon.RefreshIcon />}
             secondaryActionLabel={onReceive ? t('home.receive') : undefined}

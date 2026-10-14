@@ -16,7 +16,6 @@ import { useLayoutTier } from '../styles/useLayoutTier.js';
 import { ROUTE_NAV_GROUPS, ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
 import {
     NoticesRouteContext,
-    ReachabilityNoticeHiddenContext,
     ShellNoticesContext,
 } from './noticesRoute.js';
 import styles from './LeftNav.module.css';
@@ -386,10 +385,8 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
                 {hasNotices ? createPortal(
-                    <NoticesRouteContext.Provider value={routeKey ?? null}>
-                        <ReachabilityNoticeHiddenContext.Provider value={reachabilityHidden > 0}>
-                            {notices}
-                        </ReachabilityNoticeHiddenContext.Provider>
+                    <NoticesRouteContext.Provider value={reachabilityHidden > 0 ? false : routeKey ?? null}>
+                        {notices}
                     </NoticesRouteContext.Provider>,
                     noticesHost,
                 ) : null}

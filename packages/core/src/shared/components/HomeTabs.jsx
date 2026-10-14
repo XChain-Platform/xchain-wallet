@@ -176,9 +176,8 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
  * @param {boolean} [props.balancesUnchecked] balances could not be checked: an empty tab says that instead of "nothing yet"
  * @param {() => void} [props.onRecheckBalances] rechecks reachability and balances from that state
- * @param {boolean} [props.recheckingBalances]
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances, recheckingBalances = false }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
@@ -417,7 +416,6 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     const uncheckedState = showUnchecked ? (
         <BalancesUncheckedState
             plain={false}
-            checking={recheckingBalances}
             onRetry={onRecheckBalances}
             onReceive={hasAddresses ? onReceive : undefined}
         />

@@ -124,7 +124,7 @@ export function TokenPicker({
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
     const [balanceReload, setBalanceReload] = useState(0);
-    const { unchecked: balancesUnchecked, checking: balancesChecking, recheck: recheckBalances } = useBalancesUnchecked();
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const [balanceLoad, setBalanceLoad] = useState({
         walletId: null,
         accountId: null,
@@ -637,7 +637,6 @@ export function TokenPicker({
                         // not proof of an empty wallet: say that once instead.
                         <BalancesUncheckedState
                             plain={false}
-                            checking={balancesChecking}
                             onRetry={() => {
                                 recheckBalances();
                                 setBalanceReload((value) => value + 1);

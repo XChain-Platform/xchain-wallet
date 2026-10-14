@@ -381,11 +381,7 @@ function normalizePastedRecipient(value) {
  */
 export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive }) {
     const { messaging, shell } = useMessaging();
-    const {
-        overall: reachabilityOverall,
-        loading: reachabilityChecking,
-        refresh: recheckReachability,
-    } = useReachability({});
+    const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
     // The verdict behind the shell's "Some balances may be out of date".
     const balancesUnchecked = reachabilityOverall === 'degraded' || networkOffline;
@@ -2648,7 +2644,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // stale-balances notice.
         return wrap(
             <BalancesUncheckedState
-                checking={reachabilityChecking}
                 onRetry={() => {
                     recheckReachability();
                     setBalanceRecheck((n) => n + 1);

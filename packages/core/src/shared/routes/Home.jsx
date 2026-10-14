@@ -200,7 +200,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const browserOnline = useOnlineStatus();
     const {
         overall: reachabilityOverall,
-        loading: reachabilityChecking,
         refresh: recheckReachability,
     } = useReachability({});
     // Treat a corroborated service outage as offline even when the device
@@ -1502,7 +1501,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         // check words the empty tabs instead.
                         balancesUnchecked={!offline && reachabilityOverall === 'degraded'}
                         onRecheckBalances={recheckBalances}
-                        recheckingBalances={reachabilityChecking || portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
