@@ -146,10 +146,15 @@ describe('Receive keyboard operation', () => {
 
         const addressType = await screen.findByRole('combobox', { name: 'Address type' });
         addressType.focus();
+        // The QR actions and explorer link sit in the hero beside the address,
+        // above the label and request fields.
         const expected = [
             screen.getByRole('button', { name: 'Generate new address' }),
             screen.getByRole('textbox', { name: 'Deposits' }),
             screen.getByRole('button', { name: 'Choose receive address' }),
+            screen.getByRole('button', { name: 'Copy payment link' }),
+            screen.getByRole('button', { name: 'Share QR payment link' }),
+            screen.getByRole('link', { name: 'View address in block explorer' }),
             screen.getByRole('textbox', { name: 'Address label' }),
             screen.getByRole('button', { name: /^Token:/ }),
             screen.getByRole('textbox', { name: 'Amount (BTC)' }),
@@ -174,7 +179,7 @@ describe('Receive keyboard operation', () => {
             await waitFor(() => expect(copy).not.toBeDisabled());
             addressType.focus();
             const expected = [
-                screen.getByRole('textbox', { name: 'Copy payment link for receive address' }),
+                screen.getByRole('textbox', { name: 'Deposits' }),
                 screen.getByRole('button', { name: 'Choose receive address' }),
                 copy,
                 screen.getByRole('button', { name: 'Share QR payment link' }),
@@ -222,13 +227,14 @@ describe('Receive keyboard operation', () => {
         const expected = [
             screen.getByRole('button', { name: 'Switch input to USD' }),
             screen.getByRole('button', { name: 'Paste from clipboard' }),
-            copy,
         ];
         for (const control of expected) {
             await user.tab();
             expect(document.activeElement).toBe(control);
         }
 
+        // The QR actions sit in the hero above the request fields.
+        copy.focus();
         await user.keyboard('{Enter}');
         await waitFor(() => expect(write).toHaveBeenCalledOnce());
         expect(writeText).not.toHaveBeenCalled();
