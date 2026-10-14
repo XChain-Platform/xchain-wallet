@@ -13,7 +13,10 @@
     padding-block: 0;
     padding-inline: var(--xc-button-padding-x, 16px);
     border-radius: var(--xc-control-radius, 8px);
-    border: var(--xc-control-border, 1px) solid transparent;
+    /* --xc-control-border is a colour token, so the width is a plain 1px:
+       passing the colour as a width made the whole shorthand invalid and
+       left every button without a border. */
+    border: 1px solid transparent;
     font-family: var(--xc-font-sans);
     font-size: var(--xc-button-font-size, 14px);
     line-height: var(--xc-control-line, 1.25);

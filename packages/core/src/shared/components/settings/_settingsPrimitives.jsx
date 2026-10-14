@@ -35,7 +35,7 @@ export const ROW = {
 export const STACK = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
+    gap: 'var(--xc-settings-row-gap)',
 };
 export const ROW_LABEL = { color: 'var(--xc-text-muted)' };
 // A row's own title: full-strength text so every card in one list reads alike.

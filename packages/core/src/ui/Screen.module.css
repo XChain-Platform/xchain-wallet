@@ -77,17 +77,18 @@
     scroll-padding-block: var(--xc-space-3);
 }
 
-/* The shared scroll class reserves matching lanes on both inline edges, so
-   content stays centered whether or not the end lane contains a scrollbar.
+/* The shared scroll class reserves the scrollbar lane on the end edge only,
+   so content runs to the page gutter on the start edge and stops one gutter
+   short of the scrollbar on the end edge, with no blank lane on the left.
    Safari 16 lacks scrollbar-gutter, so the reservation sits behind
    @supports; iOS overlay scrollbars need no reserved gutter there. */
 @supports (scrollbar-gutter: stable) {
     .body {
-        scrollbar-gutter: stable both-edges;
+        scrollbar-gutter: stable;
     }
 
     .scrollArea {
-        scrollbar-gutter: stable both-edges;
+        scrollbar-gutter: stable;
     }
 }
 
