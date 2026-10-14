@@ -1905,9 +1905,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     {/* Export stays outside the collapsible filter card so it is
                         reachable while the filters are folded away. */}
                     <Button
-                        className={styles.exportButton}
+                        className={`${styles.toolbarControl} ${styles.exportButton}`}
                         variant="secondary"
-                        size="sm"
                         icon={null}
                         aria-haspopup="dialog"
                         aria-expanded={exportModalOpen}
