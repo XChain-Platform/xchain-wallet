@@ -118,7 +118,7 @@ describe('offline route behavior from reachability', () => {
             <Home activeWalletId={WALLET.id} onSend={vi.fn()} onReceive={() => {}} />
         ));
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
         expectOneOfflineNotice();
         const send = screen.getByRole('button', { name: 'Send' });

@@ -577,26 +577,31 @@ export function ManageToken({
             <ListPage className={styles.body}>
                 {/* Hero: identity (no Total Balance; this is the issuer view). */}
                 <section className={styles.hero} aria-label={t('routes.manageToken.tokenIdentity')}>
-                    {locked ? (
-                        <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
-                            <Icon.LockIcon />{t('routes.manageToken.locked')}
-                        </span>
-                    ) : (
-                        <span className={`${styles.lockBadge} ${styles.lockBadgeUnlocked}`}>
-                            <Icon.UnlockIcon />{t('routes.manageToken.unlocked')}
-                        </span>
-                    )}
-                    {sleepState.paused ? (
-                        <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? t('routes.manageToken.pausedIndefinitely') : (sleepState.resumeBlock ? t('routes.manageToken.pausedUntilBlock', { resumeBlock: sleepState.resumeBlock }) : t('routes.manageToken.paused'))}>
-                            <Icon.LockIcon />{t('routes.manageToken.paused')}
-                        </span>
-                    ) : null}
                     <div className={styles.heroIconWrap}>
                         <TickerIcon chainId={chainId} tick={tick} size={64} />
                     </div>
                     <div className={styles.heroMain}>
+                        {/* The badges sit in the title row's flow, pushed to
+                            its end, so a long ticker wraps them to the next
+                            line and a paused, locked token shows both. */}
                         <div className={styles.heroTitleRow}>
                             <h2 className={styles.heroTick}>{tick}</h2>
+                            <span className={styles.heroBadges}>
+                                {locked ? (
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
+                                        <Icon.LockIcon />Locked
+                                    </span>
+                                ) : (
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeUnlocked}`}>
+                                        <Icon.UnlockIcon />Unlocked
+                                    </span>
+                                )}
+                                {sleepState.paused ? (
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? 'Paused indefinitely' : (sleepState.resumeBlock ? `Paused until block ${sleepState.resumeBlock}` : 'Paused')}>
+                                        <Icon.LockIcon />Paused
+                                    </span>
+                                ) : null}
+                            </span>
                         </div>
                         <div className={styles.heroSub}>
                             <span>{descriptor?.displayName || chainId}</span>

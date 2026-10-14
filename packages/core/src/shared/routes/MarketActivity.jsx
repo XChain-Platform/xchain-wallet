@@ -14,6 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
+import { useSettings } from '../hooks/useSettings.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -78,9 +79,18 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const variant = screenVariantFor(shell);
 
     // Live registry read (re-rendered on every descriptor mutation), so a
-    // synced chain reaches the market picker without a restart.
+    // synced chain reaches the market picker without a restart. Scoped to
+    // the active network like the Dispenser explorer: the registry knows
+    // every network, and a wallet on Regtest must neither query mainnet
+    // feeds nor badge the featured token with the mainnet coin. Empty while
+    // settings load, so nothing escapes the filter; a shell that cannot read
+    // settings gets the default network.
+    const { settings, loading: settingsLoading } = useSettings();
     const supportedChains = useSupportedChains(chainRegistry);
-    const chains = useMemo(() => supportedChains.map((d) => d.id), [supportedChains]);
+    const chains = useMemo(() => {
+        if (settingsLoading) return [];
+        return flowsLib.filterChainIdsByActiveNetwork(supportedChains.map((d) => d.id), settings, chainRegistry);
+    }, [supportedChains, settings, settingsLoading]);
     // A representative chain for the featured-token icon (prefer Bitcoin).
     const defaultChainId = useMemo(
         () => chains.find((id) => coinFromChainId(id) === 'bitcoin') || chains[0] || null,
@@ -110,7 +120,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     // different coin/token. Demo wallets are served fabricated feeds; real
     // wallets fan out across every supported chain in parallel.
     useEffect(() => {
-        if (!tick) return undefined;
+        if (!tick || chains.length === 0) return undefined;
         let cancelled = false;
         const marketKey = `${walletId || ''}:${tick}:${chains.join(',')}`;
         const hasCachedRows = loadedMarketKeyRef.current === marketKey;

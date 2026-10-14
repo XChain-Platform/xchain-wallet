@@ -333,10 +333,14 @@
 
 /* ───── Per-tab content ───── */
 
+/* Cells size to their values and wrap to a new line when a phone row
+   cannot hold all three, so a long price or market cap is shown whole
+   instead of being cut to an ellipsis in a third of the width. */
 .stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: var(--xc-space-3);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--xc-space-2) var(--xc-space-3);
 }
 
 /* The third stats cell (24h change) is right-aligned so the +/- pct
@@ -345,13 +349,16 @@
 .stats > .statCell:last-child {
     text-align: end;
     align-items: flex-end;
+    margin-inline-start: auto;
 }
 
 .statCell {
     display: flex;
     flex-direction: column;
+    flex: 0 1 auto;
     gap: 2px;
     min-width: 0;
+    max-width: 100%;
 }
 
 .statLabel {
