@@ -158,7 +158,7 @@ describe('MultisigCosignerShare address selection', () => {
 });
 
 describe('MultisigCosignerShare key details', () => {
-    it('shows the same complete public payload as QR and copyable text', async () => {
+    it('shows the same complete public payload as a phone-scannable QR and copyable text', async () => {
         mount({ networkKind: 'mainnet' });
         selectAddress();
 
@@ -175,10 +175,19 @@ describe('MultisigCosignerShare key details', () => {
             derivationPath: INFO.derivationPath,
         });
         expect(screen.getByRole('button', { name: 'Copy cosigner share payload' })).toBeTruthy();
-        expect(await screen.findByRole('img', {
+        const qr = await screen.findByRole('img', {
             name: 'QR code for multisig cosigner share payload',
-        })).toHaveAttribute('src', 'data:image/png,cosigner-share');
-        expect(toDataURL).toHaveBeenCalledWith(text.value, expect.any(Object));
+        });
+        expect(qr).toHaveAttribute('src', 'data:image/png,cosigner-share');
+        expect(qr).toHaveAttribute('width', '256');
+        expect(qr).toHaveStyle({ width: '100%', maxWidth: '256px', height: 'auto' });
+        expect(qr).toHaveStyle({ background: '#FFFFFF' });
+        expect(toDataURL).toHaveBeenCalledWith(text.value, {
+            errorCorrectionLevel: 'M',
+            margin: 4,
+            width: 256,
+            color: { dark: '#000000', light: '#FFFFFF' },
+        });
         expect(screen.getByRole('note')).toHaveTextContent(
             /compare the master fingerprint and derivation path.*separate trusted channel/i,
         );
