@@ -26,7 +26,7 @@ import { resolveFieldRequirement } from './fieldRequirement.js';
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'sm' | 'md' | 'lg'} [size] field size, matching Input.
  */
-export const Select = forwardRef(function Select(
+export const Select = /* @__PURE__ */ forwardRef(function Select(
     {
         label,
         hint,

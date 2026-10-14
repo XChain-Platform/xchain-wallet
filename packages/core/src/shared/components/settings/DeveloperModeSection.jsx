@@ -67,6 +67,7 @@ import {
     Status,
     ToggleRow,
 } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 import styles from './DeveloperModeSection.module.css';
 
 const PROTOCOL_COIN_TICKER = {
@@ -121,8 +122,12 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
     return (
         <FormPage as="div" sectioned fullWidth label="Developer mode settings">
             <FormSection title="Developer options">
+                {/* The page title already names the subject, so the switch reads as
+                    an action; screen readers, which may reach it out of context,
+                    hear the subject too. */}
                 <ToggleRow
-                    label="Developer Mode"
+                    label={t('settings.toggle.turnOn')}
+                    accessibleLabel={t('settings.developerMode.switchAccessibleLabel')}
                     hint="Unlocks test networks, endpoint overrides, custom chains, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet."
                     checked={developerMode}
                     onChange={onDeveloperModeToggle}

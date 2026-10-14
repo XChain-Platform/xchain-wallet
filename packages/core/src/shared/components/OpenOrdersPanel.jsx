@@ -281,9 +281,10 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             aria-label="Open orders"
             aria-busy={addressesLoading || ordersLoading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
             <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Open orders</p>
@@ -386,9 +387,10 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     noValidate
                     style={{
                         marginTop: '0.5rem',
-                        padding: '0.5rem',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: '4px',
+                        padding: 'var(--xc-card-pad)',
+                        border: 'var(--xc-card-border)',
+                        background: 'var(--xc-card-bg)',
+                        borderRadius: 'var(--xc-card-radius)',
                     }}
                 >
                     <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', fontWeight: 600 }}>

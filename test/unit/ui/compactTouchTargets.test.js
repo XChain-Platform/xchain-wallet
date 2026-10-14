@@ -54,7 +54,9 @@ describe('compact touch targets', () => {
         // The card clips overflow; the layer ends at its bottom padding and
         // grows upward instead of being cut short below the chips.
         expect(rule(css, '.wrap')).toMatch(/overflow:\s*hidden/);
-        expect(rule(css, '.wrap')).toMatch(/padding:\s*var\(--xc-space-2\)/);
+        // The wrap is the shared card, whose padding (--xc-card-pad) is never
+        // under --xc-space-2, so the layer below the chips stays inside it.
+        expect(rule(css, '.wrap')).toMatch(/composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css'/);
         const layer = coarseBlock(css).match(/\.range::before\s*\{([^}]*)\}/)[1];
         expect(layer).toMatch(/inset-block-end:\s*calc\(-1 \* var\(--xc-space-2\)\)/);
     });

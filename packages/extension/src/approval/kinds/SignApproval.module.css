@@ -15,7 +15,7 @@
     grid-template-columns: auto 1fr;
     gap: var(--xc-space-2);
     padding: var(--xc-space-1) 0;
-    border-bottom: 1px dashed var(--xc-border);
+    border-bottom: 1px solid var(--xc-border);
 }
 
 .detailsLabel {

@@ -1,8 +1,5 @@
 .root {
-    border: 1px solid var(--xc-border);
-    background: var(--xc-surface-raised);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3);
+    composes: card from '../../ui/Card.module.css';
     margin-bottom: var(--xc-space-3);
 }
 
@@ -79,14 +76,12 @@
 }
 
 .confirmRow {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     align-items: flex-start;
     gap: var(--xc-space-2);
     margin: var(--xc-space-3) 0 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     cursor: pointer;

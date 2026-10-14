@@ -100,10 +100,10 @@ assert.match(
     /disabled=\{password\.length === 0 \|\| isLockedOut\}/,
     'submit button disabled while locked',
 );
-assert.match(
+assert.doesNotMatch(
     lockedSrc,
     /Locked \(\$\{formatCountdown\(remainingMs\)\}\)/,
-    'button label flips to Locked + countdown',
+    'the banner alone says how long to wait; the button does not repeat the countdown',
 );
 
 // --- banner aria + countdown formatting -------------------------------

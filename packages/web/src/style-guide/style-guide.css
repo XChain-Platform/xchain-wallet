@@ -156,7 +156,7 @@ body {
 
 .sg-example {
     background: var(--xc-surface);
-    border: 1px dashed var(--xc-border);
+    border: 1px solid var(--xc-border);
     border-radius: 8px;
     padding: 20px;
     margin-top: 12px;

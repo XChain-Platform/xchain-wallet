@@ -84,7 +84,7 @@ describe('web app variant branches', () => {
         expect(extension).not.toEqual(sidebar);
     });
 
-    it('shows the variant badge only when both developer settings allow it', () => {
+    it('shows the variant badge only when both developer settings allow it', async () => {
         const { rerender } = render(<App />);
         expect(screen.queryByTestId('variant-badge')).toBeNull();
 
@@ -94,6 +94,7 @@ describe('web app variant branches', () => {
 
         controls.settings = { developerMode: true, showVariantBadge: true };
         rerender(<App />);
-        expect(screen.getByTestId('variant-badge')).toHaveTextContent('full');
+        // The badge is a lazy chunk, loaded only once both settings allow it.
+        expect(await screen.findByTestId('variant-badge')).toHaveTextContent('full');
     });
 });
