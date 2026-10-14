@@ -400,7 +400,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) {

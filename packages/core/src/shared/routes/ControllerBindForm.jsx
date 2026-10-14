@@ -444,7 +444,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) {

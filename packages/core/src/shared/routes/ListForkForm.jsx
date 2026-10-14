@@ -685,7 +685,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'review-1' && stage !== 'review-2'}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);

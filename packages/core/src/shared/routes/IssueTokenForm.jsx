@@ -686,7 +686,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
             {leaveGuard.confirmation}
         </Screen>

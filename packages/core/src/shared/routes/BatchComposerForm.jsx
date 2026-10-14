@@ -397,7 +397,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <PageHeader onBack={onBack} title={stage === 'compose' ? 'Batch' : 'Review batch'} />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);

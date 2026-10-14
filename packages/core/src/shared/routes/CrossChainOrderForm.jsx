@@ -391,7 +391,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
