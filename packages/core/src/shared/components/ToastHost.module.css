@@ -143,8 +143,12 @@
     word-break: break-word;
 }
 
+/* The controls box passes taps through too; only the buttons inside it take
+   them. At 360 wide the box once wrapped onto a full-width row of its own, and
+   that strip swallowed taps on whatever sat under it (Receive's "Switch input
+   to USD"). The toast now stays one row at every width. */
 .controls {
-    pointer-events: auto;
+    pointer-events: none;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -152,6 +156,7 @@
 }
 
 .actionBtn {
+    pointer-events: auto;
     background: transparent;
     border: none;
     color: inherit;
@@ -182,6 +187,7 @@
 }
 
 .dismissBtn {
+    pointer-events: auto;
     background: transparent;
     border: none;
     color: inherit;
@@ -208,15 +214,3 @@
     outline-offset: 2px;
 }
 
-@media (max-width: 360px) {
-    .toast {
-        align-items: stretch;
-        flex-wrap: wrap;
-    }
-
-    .controls {
-        flex: 1 1 100%;
-        min-width: 0;
-        justify-content: flex-end;
-    }
-}

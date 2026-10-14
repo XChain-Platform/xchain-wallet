@@ -64,8 +64,14 @@ assert.ok(/pointer-events:\s*none/.test(thCssSrc),
 // screen's bottom controls); only its buttons take them.
 assert.ok(/\.toast\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
     'a toast card passes taps through to the control beneath it');
-assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*auto/.test(thCssSrc),
-    'the toast Undo / Dismiss buttons still take taps');
+assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
+    'the toast controls box passes taps through, so it never becomes a tap-catching strip');
+for (const button of ['actionBtn', 'dismissBtn']) {
+    assert.ok(new RegExp(`\\.${button}\\s*\\{[^}]*pointer-events:\\s*auto`).test(thCssSrc),
+        `the toast ${button} still takes taps`);
+}
+assert.ok(!/@media[^{]*max-width[^{]*\{\s*\.toast\s*\{[^}]*flex-wrap:\s*wrap/.test(thCssSrc),
+    'the toast stays one row on narrow phones instead of wrapping its controls onto a strip of their own');
 
 // --- 3. ContactsList delete shows an Undo toast --------------------------
 
