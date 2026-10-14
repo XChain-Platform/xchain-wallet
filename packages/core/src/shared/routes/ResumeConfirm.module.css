@@ -2,13 +2,10 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later */
 
 .resultCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .details {

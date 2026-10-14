@@ -70,7 +70,8 @@ describe('Send from an address holding no coin', () => {
         // the page body, with no card or dashed box around it.
         const emptyState = heading.closest('[role="status"]');
         expect(emptyState.parentElement).toBe(screen.getByRole('main'));
-        expect(emptyState.className).toMatch(/plain/);
+        // Every empty state is unboxed, so the plain variant has no class of its own.
+        expect(emptyState.className).toMatch(/wrap/);
         expect(screen.queryByRole('group', { name: 'Send' })).toBeNull();
         expect(within(emptyState).getByText('Receive coins or tokens on this chain before creating a payment.'))
             .toBeInTheDocument();

@@ -1,12 +1,9 @@
 .root {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
     margin: var(--xc-space-3) 0;
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
 }
 
 .heading {
@@ -44,7 +41,7 @@
     column-gap: var(--xc-space-3);
     align-items: baseline;
     padding: var(--xc-space-1) 0;
-    border-bottom: 1px dashed var(--xc-border-soft, var(--xc-border));
+    border-bottom: 1px solid var(--xc-border-soft, var(--xc-border));
 }
 
 .row:last-child {

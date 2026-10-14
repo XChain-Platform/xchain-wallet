@@ -86,14 +86,11 @@
 /* One big card wrapping all contacts, mirroring the Home BalanceList:
    rows are separated by a hairline divider and highlight on hover. */
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
     list-style: none;
-    padding: 0;
     margin: 0;
 }
 
@@ -327,21 +324,15 @@
 
 /* Cards in the contact detail view: one for name + notes, one per address. */
 .infoCard {
-    padding: var(--xc-space-4);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
+    composes: card from '../../ui/Card.module.css';
 }
 
 .addressCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
     margin-bottom: var(--xc-space-2);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .addressCard:last-child {
