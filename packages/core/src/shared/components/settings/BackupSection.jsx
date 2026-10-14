@@ -760,7 +760,7 @@ function RevealedMnemonic({
                         icon={null}
                         onCopy={blockSecretCopy}
                         onClick={onToggle}
-                        aria-label={hidden ? t('settings.backup.revealPassphrase') : t('settings.backup.hidePassphrase')}
+                        aria-label={hidden ? t('settings.backup.revealPassphrase') : t('common.hidePassphrase')}
                         className={styles.secret}
                         style={{
                             background: 'var(--xc-bg)',

@@ -197,8 +197,8 @@ export const Input = forwardRef(function Input(
     // the button as well as the field.
     const revealsPassphrase = /passphrase/i.test(fieldName || '');
     const revealLabel = revealsPassphrase
-        ? (revealed ? t('ui.input.hidePassphrase') : t('ui.input.showPassphrase'))
-        : (revealed ? t('ui.input.hidePassword') : t('ui.input.showPassword'));
+        ? (revealed ? t('common.hidePassphrase') : t('common.showPassphrase'))
+        : (revealed ? t('common.hidePassword') : t('common.showPassword'));
     const [capsLockOn, setCapsLockOn] = useState(false);
     const [focused, setFocused] = useState(false);
     const showCapsLock = isPassword && focused && capsLockOn;
