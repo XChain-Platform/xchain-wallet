@@ -79,13 +79,13 @@ describe('HomeTabs network filtering', () => {
         expect(screen.getByText('BTC · Custom Bitcoin')).toBeInTheDocument();
     });
 
-    it('keeps textual chain badges on cross-chain amount rows', () => {
+    it('uses the shared compact row without textual chain badges on Home activity', () => {
         const home = readFileSync('packages/core/src/shared/components/HomeTabs.jsx', 'utf8');
         const dispensers = readFileSync('packages/core/src/shared/routes/DispensersList.jsx', 'utf8');
         const staking = readFileSync('packages/core/src/shared/routes/StakingList.jsx', 'utf8');
 
-        expect(home).toMatch(/function ActivityRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
-        expect(home).toMatch(/function DemoDefiList[\s\S]*?<ChainBadge descriptor=\{chainRegistry\.get\(p\.chainId\)\}/);
+        expect(home).toMatch(/<SharedActivityRow/);
+        expect(home).not.toMatch(/ChainBadge/);
         expect(dispensers).toMatch(/function DispenserRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
         expect(staking).toMatch(/function StakeRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
     });

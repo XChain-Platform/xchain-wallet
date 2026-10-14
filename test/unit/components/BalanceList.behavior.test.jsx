@@ -130,7 +130,7 @@ describe('BalanceList ordering and visibility', () => {
         const image = document.querySelector(`img[src="${imageUrl}"]`);
         expect(image).toHaveAttribute('alt', '');
         expect(image).toHaveAttribute('aria-hidden', 'true');
-        expect(image).toHaveStyle({ position: 'absolute', inset: '0' });
+        expect(image.closest('[data-asset-mark]')).not.toBeNull();
         expect(screen.getByText('A')).toBeInTheDocument();
 
         fireEvent.error(image);
