@@ -259,6 +259,11 @@
     margin: var(--xc-space-1) var(--xc-space-3) 0;
 }
 
+.action > button {
+    gap: var(--xc-space-3);
+    padding-inline: calc(var(--xc-space-1) - var(--xc-control-border, 1px));
+}
+
 .itemActive {
     background: var(--xc-surface);
     font-weight: 600;

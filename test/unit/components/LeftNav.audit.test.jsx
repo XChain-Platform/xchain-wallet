@@ -17,6 +17,8 @@ import {
     LEFT_NAV_VIEW_GROUPS,
     activeLeftNavItem,
 } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import navStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 afterEach(() => {
     cleanup();
@@ -99,7 +101,10 @@ describe('LeftNav rail interaction', () => {
         expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('title', 'Home');
         expect(screen.getByRole('button', { name: 'DEX' })).toHaveAttribute('title', 'DEX');
         expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('title', 'Settings');
-        expect(screen.getByRole('button', { name: 'Lock' })).toHaveAttribute('title', 'Lock');
+        const lock = screen.getByRole('button', { name: 'Lock' });
+        expect(lock).toHaveAttribute('title', 'Lock');
+        expect(lock).toHaveClass(buttonStyles.secondary);
+        expect(lock.parentElement).toHaveClass(navStyles.action);
     });
 
     it('moves focus with arrows and Home or End without activating a route', () => {
@@ -145,5 +150,6 @@ describe('LeftNav rail interaction', () => {
         expect(css).toMatch(/background:\s*var\(--xc-surface-raised\)/);
         expect(css).toMatch(/color:\s*var\(--xc-text\)/);
         expect(css).toMatch(/border-inline-end:\s*1px solid var\(--xc-border\)/);
+        expect(css).toMatch(/\.action > button\s*\{[\s\S]*?gap:\s*var\(--xc-space-3\);[\s\S]*?padding-inline:\s*calc\(var\(--xc-space-1\) - var\(--xc-control-border,\s*1px\)\)/);
     });
 });
