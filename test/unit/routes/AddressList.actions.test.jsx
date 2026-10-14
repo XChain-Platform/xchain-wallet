@@ -291,7 +291,7 @@ describe('Address detail actions', () => {
         expect(screen.queryByRole('button', { name: 'Show more addresses' })).toBeNull();
     });
 
-    it('labels every address row with its chain and non-mainnet kind', async () => {
+    it('uses chain icons without rendering coin or network-kind row text', async () => {
         mount(messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({
                 [CHAIN]: [{ id: 'btc', address: ADDRESS, source: 'hd', role: 'receive' }],
@@ -304,7 +304,9 @@ describe('Address detail actions', () => {
         expect(bitcoinRow).toHaveClass(listRowStyles.row, listRowStyles.interactive);
         expect(dogecoinRow).toHaveClass(listRowStyles.row, listRowStyles.interactive);
         expect(bitcoinRow).toHaveAttribute('aria-busy', 'false');
-        expect(bitcoinRow).toHaveTextContent(/Bitcoin\s+regtest/i);
-        expect(dogecoinRow).toHaveTextContent(/Dogecoin\s+regtest/i);
+        expect(bitcoinRow.querySelector('img')).toBeTruthy();
+        expect(dogecoinRow.querySelector('img')).toBeTruthy();
+        expect(bitcoinRow).not.toHaveTextContent(/Bitcoin|regtest|testnet|not mainnet/i);
+        expect(dogecoinRow).not.toHaveTextContent(/Dogecoin|regtest|testnet|not mainnet/i);
     });
 });

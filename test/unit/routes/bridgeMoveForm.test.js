@@ -234,16 +234,16 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
     it('states the direction and that the credit cannot be undone or redirected', async () => {
         mount();
         await waitFor(
-            () => expect(screen.getByText(/This locks XCHAIN on Bitcoin and credits it on Dogecoin/i))
+            () => expect(screen.getByText(/This locks XCHAIN on the source chain and credits it on the destination chain/i))
                 .toBeInTheDocument(),
             WAIT,
         );
         expect(screen.getByText(/cannot be undone or redirected/i)).toBeInTheDocument();
         const route = screen.getByLabelText('Bridge route');
-        expect(route.textContent).toContain('Source chainBitcoin');
-        expect(route.textContent).toContain('Destination chainDogecoin');
+        expect(route.querySelectorAll('img')).toHaveLength(2);
+        expect(route.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(route.textContent).toContain(
-            'Expected arrivalAfter the source transaction reaches its required confirmation depth on Bitcoin and validators sign the transfer.',
+            'Expected arrivalAfter the source transaction reaches its required confirmation depth and validators sign the transfer.',
         );
     });
 
@@ -272,7 +272,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
 describe('BridgeMoveForm: unhappy path - no destination account', () => {
     it('refuses to offer a destination and says how to create one', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS] } });
-        const msg = await screen.findByText(/You have no address on another mainnet chain yet/i, {}, WAIT);
+        const msg = await screen.findByText(/You have no address on another chain yet/i, {}, WAIT);
         expect(msg.textContent).toContain('Use Receive to create one first');
         expect(msg.textContent).toContain('cannot be redirected once it applies');
         expect(screen.queryByLabelText('Receive at')).toBeNull();
@@ -281,7 +281,7 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 
     it('does not treat an empty address group as a usable destination', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [] } });
-        expect(await screen.findByText(/You have no address on another mainnet chain yet/i, {}, WAIT))
+        expect(await screen.findByText(/You have no address on another chain yet/i, {}, WAIT))
             .toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
         expect(moveButton()).toBeDisabled();
@@ -289,15 +289,15 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 });
 
 describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', () => {
-    it('refuses a destination the issuer never opted in to, and names the ones they did', async () => {
+    it('refuses a destination the issuer never opted in to without repeating chain names', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] },
             initialTick: 'FUFU',
             balances: { FUFU: '100' },
             tokenInfo: { chainId: DOGE, tick: 'FUFU', bridgeChains: 'LTC' },
         });
-        const msg = await screen.findByText(/has not opened it to Bitcoin/i, {}, WAIT);
-        expect(msg.textContent).toContain('It can be moved to: Litecoin');
+        const msg = await screen.findByText(/cannot move to the selected destination chain/i, {}, WAIT);
+        expect(msg.textContent).not.toMatch(/Bitcoin|Litecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(moveButton()).toBeDisabled();
     });
 
@@ -308,7 +308,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
             balances: { 'BTC.PEPECASH': '50' },
         });
         await waitFor(
-            () => expect(screen.getByText(/PEPECASH here is a bridged copy of a Bitcoin asset/i))
+            () => expect(screen.getByText(/PEPECASH here is a bridged copy of its origin-chain asset/i))
                 .toBeInTheDocument(),
             WAIT,
         );
@@ -330,8 +330,9 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
             balances: { 'BTC.PEPECASH': '50' },
         });
         const msg = await screen.findByText(/This bridge route is unavailable/i, {}, WAIT);
-        expect(msg.textContent).toContain('PEPECASH on Dogecoin can only move to Bitcoin');
-        expect(msg.textContent).toContain('Use Receive on Bitcoin to create one first');
+        expect(msg.textContent).toContain('no address on the required destination chain');
+        expect(msg.textContent).toContain('Use Receive there to create one first');
+        expect(msg.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
         expect(moveButton('Review move back')).toBeDisabled();
     });
@@ -407,17 +408,21 @@ describe('BridgePendingPanel', () => {
             leg: { leg: 'lock' },
             amount: '12.5',
             tickLabel: 'XCHAIN',
-            sourceLabel: 'Bitcoin',
-            destLabel: 'Dogecoin',
+            sourceDescriptor: {
+                id: BTC, coin: 'bitcoin', displayName: 'Bitcoin', networkKind: 'mainnet', color: '#f7931a',
+            },
+            destDescriptor: {
+                id: DOGE, coin: 'dogecoin', displayName: 'Dogecoin', networkKind: 'mainnet', color: '#c2a633',
+            },
             destAddress: DOGE_ADDRESS.address,
             minDepth: 8,
             onDone() {},
         }));
 
         expect(screen.getByRole('status')).toHaveTextContent('Bridge transfer pending');
-        expect(screen.getByText('Bitcoin', { selector: 'dd' })).toBeInTheDocument();
-        expect(screen.getByText('Dogecoin', { selector: 'dd' })).toBeInTheDocument();
-        expect(screen.getByText(/Lock broadcast on Bitcoin; pending on Dogecoin/)).toBeInTheDocument();
+        expect(document.body.querySelectorAll('dd img')).toHaveLength(2);
+        expect(document.body.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
+        expect(screen.getByText(/Lock broadcast; destination pending/)).toBeInTheDocument();
         expect(screen.getByText(/This token requires at least 8 confirmations/)).toBeInTheDocument();
     });
 });
@@ -430,7 +435,7 @@ describe('BridgeMoveForm: unhappy path - amount above balance', () => {
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '11' } });
-        const msg = await screen.findByText(/You hold 10 XCHAIN on Bitcoin/i, {}, WAIT);
+        const msg = await screen.findByText(/You hold 10 XCHAIN at the source address/i, {}, WAIT);
         expect(msg.textContent).toContain('cannot be partly funded');
         expect(moveButton()).toBeDisabled();
     });
@@ -442,7 +447,7 @@ describe('BridgeMoveForm: unhappy path - amount above balance', () => {
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '10' } });
-        await waitFor(() => expect(screen.queryByText(/You hold 10 XCHAIN on Bitcoin/i)).toBeNull(), WAIT);
+        await waitFor(() => expect(screen.queryByText(/You hold 10 XCHAIN at the source address/i)).toBeNull(), WAIT);
         expect(moveButton()).not.toBeDisabled();
     });
 });

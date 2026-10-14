@@ -36,7 +36,7 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainPicker, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -236,8 +236,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // A chain switch keeps queued rows, so every row is checked against
         // the chain that will receive the batch.
         if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
-            const chainName = chainRegistry.get(chainId)?.displayName || chainId;
-            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on ${chainName}.`;
+            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected chain.`;
         }
         if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
             return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
@@ -410,7 +409,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -505,8 +503,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     composer, where each action is its own transaction from the start.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress?.address} /></dd>
                 </dl>
@@ -572,20 +568,17 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             actions={<Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>}
         >
             <FormSection title="Batch settings">
-                <Select
+                <ChainPicker
                     label="Chain"
                     value={chainId || ''}
-                    onChange={(e) => {
-                        const cid = e.target.value;
+                    onChange={(cid) => {
                         setChainId(cid);
                         setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || [], activeByChain[cid]));
                     }}
-                >
-                    {chainsWithAddresses.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        return <option key={cid} value={cid}>{d ? d.displayName : cid}</option>;
-                    })}
-                </Select>
+                    chainIds={chainsWithAddresses}
+                    chainRegistry={chainRegistry}
+                    hideNetworkKind
+                />
                 <Select
                     label="From address"
                     value={fromAddressId || ''}

@@ -80,14 +80,13 @@ const DERIVED_SOURCES = new Set(['hd', 'trezor', 'ledger']);
  *
  * @param {object} opts
  * @param {{ source?: string, derivationPath?: string | null, role?: string } | null | undefined} opts.record
- * @param {string} opts.chainName
  * @param {string[]} [opts.holdings]   formatted non-zero balances ("0.5 DOGE", "1,000 XCP")
  * @param {boolean} [opts.hidden]      Privacy Mode: say funds exist without the amounts
  * @param {boolean} [opts.active]      this is the chain's active address
  * @param {boolean} [opts.last]        this is the chain's only address in the wallet
  * @returns {string}
  */
-export function deleteAddressMessage({ record, chainName, holdings = [], hidden = false, active = false, last = false }) {
+export function deleteAddressMessage({ record, holdings = [], hidden = false, active = false, last = false }) {
     const parts = [];
     if (holdings.length > 0) {
         parts.push(hidden ? 'It holds funds.' : `It holds ${holdings.join(', ')}.`);
@@ -96,14 +95,14 @@ export function deleteAddressMessage({ record, chainName, holdings = [], hidden 
         parts.push('It runs a dispenser, which this wallet cannot show or manage while the address is gone.');
     }
     if (active) {
-        parts.push(`It is the active ${chainName} address; the lowest remaining address takes over.`);
+        parts.push('It is the active address; the lowest remaining address on the chain takes over.');
     }
     if (last) {
-        parts.push(`It is the only ${chainName} address in this wallet, so ${chainName} leaves the wallet until you add one.`);
+        parts.push('It is the only address on this chain, so the chain leaves the wallet until you add one.');
     }
     const derived = DERIVED_SOURCES.has(record?.source) && typeof record?.derivationPath === 'string';
     if (derived) {
-        parts.push(`Its key comes from your recovery phrase, so it is not lost: Add address > Generate on ${chainName} re-derives the lowest missing address before any new one.`);
+        parts.push('Its key comes from your recovery phrase, so it is not lost: Add address > Generate re-derives the lowest missing address before any new one.');
     } else if (record?.source === 'watch-only') {
         parts.push('A watch-only address can be added again from its address string.');
     } else {
@@ -743,6 +742,7 @@ export function AddressList({
                         }}
                         chainIds={wifChainIds}
                         chainRegistry={chainRegistry}
+                        hideNetworkKind
                         disabled={advancedBusy}
                     />
                     {advancedDescriptor ? (
@@ -837,6 +837,7 @@ export function AddressList({
                             }}
                             chainIds={wifChainIds}
                             chainRegistry={chainRegistry}
+                            hideNetworkKind
                             disabled={wifBusy}
                         />
                         {wifChainId ? (
@@ -1031,7 +1032,7 @@ export function AddressList({
         const canSecret = !!(onShowPrivateKey && selected.record && !selected.multisig);
         const canDelete = !!selected.record?.id;
         const fields = [
-            { label: 'Network', value: d ? <ChainBadge descriptor={d} size="sm" /> : selected.chainId },
+            ...(d ? [{ label: 'Network', value: <ChainBadge descriptor={d} size="sm" showName={false} /> }] : []),
             { label: 'Balance', value: amountTextFor(selected) },
             { label: 'Type', value: typeLabelFor(selected) },
         ];
@@ -1123,13 +1124,11 @@ export function AddressList({
             // chain: the active pointer falls back to the lowest remaining
             // index on its own, and removing the last record is the only
             // way to drop a chain from the wallet. The dialog says both.
-            const chainName = d?.displayName || selected.chainId;
             const onChain = (addressesByChain[selected.chainId] || []).filter((a) => a?.id);
             if (!(await confirmDialog.confirm({
                 title: 'Delete this address?',
                 message: deleteAddressMessage({
                     record: selected.record,
-                    chainName,
                     holdings: holdingsFor(selected),
                     hidden: balancesHidden,
                     active: isActiveRow(selected),
@@ -1529,9 +1528,7 @@ export function AddressList({
                                             </span>
                                         ) : null}
                                         <span className={local.addrLine1}>
-                                            {d
-                                                ? <ChainBadge descriptor={d} size="sm" />
-                                                : <span>{row.chainId}</span>}
+                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
                                             <AddressText address={row.address} truncate={false} />
                                             {row.multisig ? (
                                                 <MultisigBadge

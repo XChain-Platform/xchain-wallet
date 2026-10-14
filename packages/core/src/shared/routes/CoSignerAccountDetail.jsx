@@ -264,10 +264,14 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
             </p>
 
             <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : account.chainId}
-                </dd>
+                {descriptor ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Network</dt>
+                        <dd className={styles.detailsValue}>
+                            <ChainBadge descriptor={descriptor} size="sm" showName={false} />
+                        </dd>
+                    </>
+                ) : null}
                 <dt className={styles.detailsLabel}>Fund this address</dt>
                 <dd className={styles.detailsValue} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
                     <AddressText address={account.aggregateAddress} />

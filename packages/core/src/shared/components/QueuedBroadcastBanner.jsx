@@ -257,7 +257,9 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                         <div className={styles.summary}>
                             <span className={styles.summaryText}>{entry.summary}</span>
                             <span className={styles.meta}>
-                                {chainLabel(entry.chainId)} · signed {ageString(entry.signedAt)}
+                                {chainBadge(entry.chainId)}
+                                {chainRegistry.get(entry.chainId) ? ' · ' : ''}
+                                signed {ageString(entry.signedAt)}
                             </span>
                             {/* A resumed claim is a send the wallet had already handed to
                                 the network when it was interrupted, so it may have landed.
@@ -352,11 +354,9 @@ export function queuedBroadcastFailure(err, list, id) {
     };
 }
 
-// Name the chain the way every other screen does (the raw id shows only
-// when the registry has no entry for it).
-function chainLabel(chainId) {
+function chainBadge(chainId) {
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    return descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId;
+    return descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null;
 }
 
 function ageString(signedAt) {
