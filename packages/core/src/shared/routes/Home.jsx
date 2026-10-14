@@ -365,7 +365,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof action !== 'function') return;
         if (!networkActionsAvailable) {
             showToast({
-                message: `${label} needs a network connection. Your cached balances are still available.`,
+                message: `${label} needs a network connection.`,
                 variant: 'error',
             });
             return;
@@ -1379,7 +1379,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
-                        onRefresh={refreshPortfolio}
+                        onRefresh={() => runNetworkAction('Refreshing balances', refreshPortfolio)}
                         refreshing={portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
@@ -1411,8 +1411,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <Button
                         variant="secondary"
                         block={!isFull}
-                        onClick={onCreateToken}
+                        onClick={() => runNetworkAction('Creating a token', onCreateToken)}
                         disabled={!onCreateToken}
+                        aria-disabled={!networkActionsAvailable ? 'true' : undefined}
+                        title={!networkActionsAvailable ? 'Creating a token needs a network connection' : undefined}
                         icon={<Icon.TokenIcon />}
                     >
                         {t('home.createToken')}

@@ -29,6 +29,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -85,6 +86,7 @@ const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
  */
 export function CrossChainSwapForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -381,6 +383,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // Compose, tamper-check and pre-flight run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        if (!networkAvailable) return;
         if (submitInFlightRef.current) return;
         submitInFlightRef.current = true;
         const from = {
@@ -432,6 +435,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // reachable only from the review screen.
     function handleReview(event) {
         event.preventDefault();
+        if (!networkAvailable) return;
         if (!fromAddress || !giveChainId || !getChainId) {
             setFormError('Pick a source address first.');
             return;
@@ -452,6 +456,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
+        if (!networkAvailable) return;
         if (stage === 'submitting') return;
         if (!fromAddress || !giveChainId || !getChainId) return;
         if (validationError) return;
@@ -544,6 +549,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
+            {!networkAvailable ? (
+                <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
+            ) : null}
             {children}
         </Screen>
     );
@@ -827,7 +835,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || !networkAvailable}
+                    title={!networkAvailable ? 'Swapping needs a network connection' : undefined}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'

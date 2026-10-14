@@ -351,8 +351,10 @@ const home = readFileSync(
     'utf8',
 );
 assert.ok(
-    /onCreateToken/.test(home) && /onClick=\{onCreateToken\}/.test(home),
-    'Home accepts + wires onCreateToken for the wizard entry',
+    /onCreateToken/.test(home)
+        && /onClick=\{\(\) => runNetworkAction\('Creating a token', onCreateToken\)\}/.test(home)
+        && /Creating a token needs a network connection/.test(home),
+    'Home wires onCreateToken through the offline network-action gate',
 );
 
 for (const [shell, appPath] of [

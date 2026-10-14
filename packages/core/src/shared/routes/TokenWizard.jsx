@@ -45,6 +45,7 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -93,6 +94,7 @@ function isValidIssueAddress(value, descriptor) {
  */
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
     const { settings } = useSettings();
@@ -485,6 +487,7 @@ export function TokenWizard({ walletId, onBack }) {
     // Compose, tamper-check, and pre-flight run host-side after review.
     // Approve signs the byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
     async function openConfirmScreen() {
+        if (!networkAvailable) return;
         if (submitPendingRef.current) return;
         submitPendingRef.current = true;
         const from = fromAddress ? {
@@ -564,6 +567,9 @@ export function TokenWizard({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
+            {!networkAvailable ? (
+                <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
+            ) : null}
             {children}
         </Screen>
     );
@@ -789,7 +795,13 @@ export function TokenWizard({ walletId, onBack }) {
                     <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
                 ) : null}
                 actions={(
-                    <Button type="submit" variant="primary" loading={actionConfirm.composing}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={actionConfirm.composing}
+                        disabled={actionConfirm.composing || !networkAvailable}
+                        title={!networkAvailable ? 'Creating a token needs a network connection' : undefined}
+                    >
                         Continue to confirmation
                     </Button>
                 )}
