@@ -5310,17 +5310,19 @@ export function createBackgroundHost(deps) {
                 return { ok: false, status: 0, error: 'price data disabled' };
             }
         }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         try {
             const resp = await globalThis.fetch(url, {
                 headers: { Accept: 'application/json' },
-                ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout
-                    ? { signal: AbortSignal.timeout(8000) }
-                    : {}),
+                signal: controller.signal,
             });
             if (!resp.ok) return { ok: false, status: resp.status };
             return { ok: true, status: resp.status, body: await resp.json() };
         } catch (err) {
             return { ok: false, status: 0, error: err?.message ? String(err.message) : String(err) };
+        } finally {
+            clearTimeout(timeoutId);
         }
     });
 
