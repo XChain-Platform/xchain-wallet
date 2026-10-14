@@ -84,6 +84,7 @@ export const TOKEN_GROUPS = [
             token('--xc-label-gap', 'var(--xc-space-1)', 'Gap from a field label to its control', 'length'),
             token('--xc-help-gap', 'var(--xc-space-1)', 'Gap from a control to its help or error text', 'length'),
             token('--xc-section-gap', 'var(--xc-space-4)', 'Gap between form sections and list page blocks', 'length'),
+            token('--xc-settings-row-gap', 'var(--xc-space-2)', 'One gap between every stacked Settings row, drill-in or field', 'length'),
             token('--xc-section-header-gap', 'var(--xc-space-2)', 'Gap from a section header to its content', 'length'),
             token('--xc-list-row-padding', 'var(--xc-space-3)', 'Inset inside a list row', 'length'),
             token('--xc-page-gutter', 'var(--xc-space-3)', 'Inline page inset, applied only by Screen body (16px rail, 24px full)', 'length'),

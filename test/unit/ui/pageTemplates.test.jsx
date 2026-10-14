@@ -169,6 +169,25 @@ describe('<FormErrorSummary>', () => {
         expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
     });
 
+    it('names the field once when the message already opens with its label', () => {
+        render(
+            <FormErrorSummary errors={[
+                { id: 'password', label: 'Password', message: 'Password must be at least 8 characters.' },
+                { id: 'w5', label: 'Word 5', message: 'Word 5 does not match your written copy.' },
+                { id: 'w1', label: 'Word 1', message: 'Word 12 is missing.' },
+                { id: 'confirm', label: 'Confirm password', message: 'Passwords do not match.' },
+            ]} focusKey={1} />,
+        );
+
+        const links = within(screen.getByRole('alert', { name: 'Form errors' })).getAllByRole('link');
+        expect(links.map((link) => link.textContent)).toEqual([
+            'Password must be at least 8 characters.',
+            'Word 5 does not match your written copy.',
+            'Word 1: Word 12 is missing.',
+            'Confirm password: Passwords do not match.',
+        ]);
+    });
+
     it('does not show a summary until the form has been submitted', () => {
         const errors = [{ id: 'amount', label: 'Amount', message: 'Amount must be positive.' }];
         const { rerender } = render(<FormErrorSummary errors={errors} focusKey={0} />);
@@ -464,12 +483,14 @@ describe('page gutter ownership', () => {
         expect(tokens).toMatch(/--xc-page-top:\s*var\(--xc-space-3\)/);
 
         const shell = readFileSync(join(coreSrcDir(), 'shared', 'components', 'LeftNav.module.css'), 'utf8');
-        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-gutter:\s*var\(--xc-space-4\)[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
-        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-gutter:\s*var\(--xc-space-6\)[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        // One gutter on every tier: the shell sets only the top inset per tier.
+        expect(shell).not.toMatch(/--xc-page-gutter:/);
+        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
         expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
     });
 
-    it('keeps scrolling, balanced gutters, and page padding on Screen body', () => {
+    it('keeps scrolling, an end-edge scrollbar lane, and page padding on Screen body', () => {
         const body = screenRoot.nodes.find((node) => node.type === 'rule' && node.selector === '.body');
         const declarations = Object.fromEntries(body.nodes
             .filter((node) => node.type === 'decl')
@@ -479,9 +500,9 @@ describe('page gutter ownership', () => {
         const guarded = screenRoot.nodes.find((node) => node.type === 'atrule'
             && node.name === 'supports' && node.params === '(scrollbar-gutter: stable)');
         const guardedBody = guarded?.nodes.find((node) => node.type === 'rule' && node.selector === '.body');
-        expect(guardedBody?.nodes.find((node) => node.prop === 'scrollbar-gutter')?.value).toBe('stable both-edges');
+        expect(guardedBody?.nodes.find((node) => node.prop === 'scrollbar-gutter')?.value).toBe('stable');
         const guardedScrollArea = guarded?.nodes.find((node) => node.type === 'rule' && node.selector === '.scrollArea');
-        expect(guardedScrollArea?.nodes.find((node) => node.prop === 'scrollbar-gutter')?.value).toBe('stable both-edges');
+        expect(guardedScrollArea?.nodes.find((node) => node.prop === 'scrollbar-gutter')?.value).toBe('stable');
         expect(declarations).not.toHaveProperty('scrollbar-width');
         expect(declarations).not.toHaveProperty('scrollbar-color');
     });

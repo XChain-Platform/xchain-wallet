@@ -219,7 +219,7 @@ export function AboutSection() {
                         repo on GitHub to read what they're agreeing to. */}
                     <Button
                         size="sm"
-                        variant="ghost"
+                        variant="secondary"
                         onClick={() => setLicenseOpen((open) => !open)}
                         aria-expanded={licenseOpen}
                         aria-controls="full-license-text"

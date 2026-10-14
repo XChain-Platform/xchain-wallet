@@ -150,6 +150,6 @@ describe('LeftNav rail interaction', () => {
         expect(css).toMatch(/background:\s*var\(--xc-surface-raised\)/);
         expect(css).toMatch(/color:\s*var\(--xc-text\)/);
         expect(css).toMatch(/border-inline-end:\s*1px solid var\(--xc-border\)/);
-        expect(css).toMatch(/\.action > button\s*\{[\s\S]*?gap:\s*var\(--xc-space-3\);[\s\S]*?padding-inline:\s*calc\(var\(--xc-space-1\) - var\(--xc-control-border,\s*1px\)\)/);
+        expect(css).toMatch(/\.action > button\s*\{[\s\S]*?gap:\s*var\(--xc-space-3\);[\s\S]*?padding-inline:\s*calc\(var\(--xc-space-1\) - 1px\)/);
     });
 });

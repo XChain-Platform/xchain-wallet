@@ -45,6 +45,7 @@
     --xc-label-gap: var(--xc-space-1);
     --xc-help-gap: var(--xc-space-1);
     --xc-section-gap: var(--xc-space-4);
+    --xc-settings-row-gap: var(--xc-space-2);
     --xc-section-header-gap: var(--xc-space-2);
     --xc-list-row-padding: var(--xc-space-3);
 
