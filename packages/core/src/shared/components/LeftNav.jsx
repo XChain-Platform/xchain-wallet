@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
@@ -19,8 +20,13 @@ import {
     SIDEBAR_SECONDARY_DESTINATIONS,
 } from '../routeRegistry.js';
 import { NavSurfaceContext } from './navSurface.js';
-import { NoticesRouteContext } from './noticesRoute.js';
+import {
+    NoticesRouteContext,
+    ReachabilityNoticeHiddenContext,
+    ShellNoticesContext,
+} from './noticesRoute.js';
 import styles from './LeftNav.module.css';
+import screenStyles from '../../ui/Screen.module.css';
 
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
@@ -303,11 +309,15 @@ function skipToMain(e) {
  *
  * The `header` slot (§49 / Cluster G FOLLOWUP 4) renders persistent
  * chrome above the route content so it survives route changes, so Home
- * no longer has to mount it itself. The `notices` slot below it holds
- * the stacked banners (queued broadcasts, reachability, …). Only the
- * notices scroll when the stack grows past its compact-tier cap: the
- * header row hosts anchored popovers (the settings gear, the scan menu),
- * and a scroll box around it would clip them to its own height.
+ * no longer has to mount it itself. It never clips: the header row hosts
+ * anchored popovers (the settings gear, the scan menu).
+ *
+ * The `notices` (queued broadcasts, reachability, update notices) are not
+ * toolbar content. They stay mounted here, so their state survives route
+ * changes, but render into a detached host that the route's `<Screen>`
+ * moves into its scrolling body, below the page header and above the route
+ * content (see noticesRoute.js). A route without a Screen shows them in a
+ * fallback slot at the top of the route area.
  *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav
@@ -327,19 +337,36 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     // that would duplicate a visible nav row.
     const navSurface = sidebar ? 'sidebar' : (bar ? 'tabBar' : null);
 
-    // Route bodies reserve a scrollbar lane on both inline edges; notices
-    // above them sit outside that scroller, so they read the lane width here
-    // to keep the same inset as route content.
-    useEffect(() => {
-        const root = document.documentElement;
-        if (!globalThis.CSS?.supports?.('scrollbar-gutter: stable')) return;
-        const probe = document.createElement('div');
-        probe.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden';
-        document.body.appendChild(probe);
-        const lane = probe.offsetWidth - probe.clientWidth;
-        probe.remove();
-        root.style.setProperty('--xc-scrollbar-lane', `${Math.max(0, lane)}px`);
-    }, []);
+    const [noticesHost] = useState(() => {
+        const host = document.createElement('div');
+        host.className = styles.notices;
+        return host;
+    });
+    const noticesFallbackRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const noticeSlotsRef = useRef(/** @type {HTMLElement[]} */ ([]));
+    const [reachabilityHidden, setReachabilityHidden] = useState(0);
+    const hasNotices = Boolean(notices);
+    // The newest claiming Screen shows the notices; with none, the fallback slot.
+    const placeNotices = () => {
+        (noticeSlotsRef.current.at(-1) ?? noticesFallbackRef.current)?.appendChild(noticesHost);
+    };
+    const shellNotices = useMemo(() => (hasNotices ? {
+        claim(slot) {
+            noticeSlotsRef.current.push(slot);
+            placeNotices();
+            return () => {
+                noticeSlotsRef.current = noticeSlotsRef.current.filter((s) => s !== slot);
+                placeNotices();
+            };
+        },
+        setReachabilityHidden,
+    } : null), [hasNotices]);
+
+    // Child Screens claim the host in their own layout effects, which run
+    // before this one; anything left unclaimed goes to the fallback slot.
+    useLayoutEffect(() => {
+        if (hasNotices && !noticesHost.parentNode) placeNotices();
+    });
 
     useEffect(() => {
         if (previousRouteKeyRef.current === routeKey) return;
@@ -374,15 +401,21 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
-                {notices ? (
-                    <div className={styles.notices}>
-                        <NoticesRouteContext.Provider value={routeKey ?? null}>
+                {hasNotices ? createPortal(
+                    <NoticesRouteContext.Provider value={routeKey ?? null}>
+                        <ReachabilityNoticeHiddenContext.Provider value={reachabilityHidden > 0}>
                             {notices}
-                        </NoticesRouteContext.Provider>
-                    </div>
+                        </ReachabilityNoticeHiddenContext.Provider>
+                    </NoticesRouteContext.Provider>,
+                    noticesHost,
                 ) : null}
                 <div className={styles.mainBody}>
-                    <NavSurfaceContext.Provider value={navSurface}>{children}</NavSurfaceContext.Provider>
+                    {hasNotices ? <div ref={noticesFallbackRef} className={screenStyles.noticesFallback} /> : null}
+                    <NavSurfaceContext.Provider value={navSurface}>
+                        <ShellNoticesContext.Provider value={shellNotices}>
+                            {children}
+                        </ShellNoticesContext.Provider>
+                    </NavSurfaceContext.Provider>
                 </div>
             </div>
             {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}

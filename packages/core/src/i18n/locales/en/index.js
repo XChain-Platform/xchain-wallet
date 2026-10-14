@@ -42,6 +42,8 @@ export const en = {
     'common.clear': 'Clear',
     'common.copyTransactionId': 'Copy transaction ID',
     'common.tryAgain': 'Try again',
+    'balances.unchecked.title': "Balances couldn't be checked",
+    'balances.unchecked.body': 'Your balance may be out of date. Try again to refresh it.',
     'common.openNetworkSettings': 'Open network settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',

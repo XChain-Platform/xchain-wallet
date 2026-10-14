@@ -30,6 +30,7 @@ import styles from './EmptyState.module.css';
  * @param {string} [props.secondaryActionLabel]           optional outline action shown after the primary action
  * @param {() => void} [props.onSecondaryAction]
  * @param {import('react').ReactNode | null} [props.secondaryActionIcon]
+ * @param {boolean} [props.plain]                        no outline or fill: the screen's whole content, not a list's placeholder
  * @param {'h2' | 'h3' | 'p'} [props.titleAs]             default h2; h3 under a SectionHeader
  * @param {string} [props.role]                           default 'status'
  * @param {string} [props.className]
@@ -44,6 +45,7 @@ export function EmptyState({
     secondaryActionLabel,
     onSecondaryAction,
     secondaryActionIcon,
+    plain = false,
     titleAs: Title = 'h2',
     role = 'status',
     className,
@@ -53,7 +55,11 @@ export function EmptyState({
     const hasSecondaryAction = Boolean(secondaryActionLabel && onSecondaryAction);
 
     return (
-        <div className={[styles.wrap, className].filter(Boolean).join(' ')} role={role} {...rest}>
+        <div
+            className={[styles.wrap, plain && styles.plain, className].filter(Boolean).join(' ')}
+            role={role}
+            {...rest}
+        >
             {icon ? <div className={styles.icon} aria-hidden="true">{icon}</div> : null}
             <Title className={styles.title}>{title}</Title>
             {body ? <p className={styles.body}>{body}</p> : null}
