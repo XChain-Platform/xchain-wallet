@@ -73,6 +73,9 @@ export const en = {
         '{count, plural, one {Hide # small balance} other {Hide # small balances}}',
     'balanceList.rowChainSpeech': 'on {chain}',
     'createOrder.side.assetType': 'Asset type',
+    'common.allNetworks': 'All networks',
+    'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
+    'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
     'addressList.hidden.show':
         '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
     'addressList.hidden.hide':
