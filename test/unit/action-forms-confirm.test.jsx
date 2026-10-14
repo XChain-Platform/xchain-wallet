@@ -61,6 +61,7 @@ import { ComposeMessage } from '../../packages/core/src/shared/routes/ComposeMes
 import { PollDetail } from '../../packages/core/src/shared/routes/PollDetail.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
+const VOTE_DELEGATE = 'bc1qdevmock03aabbcc';
 
 // Same frozen fee-payer the Layer-4 harness uses: a newest HD address at
 // change index 0, which every form auto-selects as the source.
@@ -508,12 +509,12 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: DelegateVoteForm,
             props: { presetTick: 'JDOG' },
             actionLabel: 'Delegate votes',
-            fill: (utils) => setValue(utils, 'Delegate to address', 'bc1qdelegate'),
+            fill: (utils) => setValue(utils, 'Delegate to address', VOTE_DELEGATE),
         });
         const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
         expect(compose, 'composed through the VOTE builder route').toBeTruthy();
         expect(compose.args.builder).toBe('delegateVoteParams');
-        expect(compose.args.params).toMatchObject({ tick: 'JDOG', delegateTo: 'bc1qdelegate' });
+        expect(compose.args.params).toMatchObject({ tick: 'JDOG', delegateTo: VOTE_DELEGATE });
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         const submit = calls.find((c) => c.method === 'delegateVoteAction');
         expect(submit, 'delegateVoteAction dispatched on Approve').toBeTruthy();
@@ -1469,11 +1470,11 @@ const PROTOCOL_FAILURE_FORMS = [
         composeMethod: 'composeVoteForConfirm',
         submitMethod: 'delegateVoteAction',
         fill: (u) => {
-            setValue(u, 'Delegate to address', 'bc1qdelegate');
+            setValue(u, 'Delegate to address', VOTE_DELEGATE);
             setValue(u, 'Memo (optional)', 'keep my vote');
         },
         expectValues: (u) => {
-            expect(u.getByLabelText('Delegate to address').value).toBe('bc1qdelegate');
+            expect(u.getByLabelText('Delegate to address').value).toBe(VOTE_DELEGATE);
             expect(u.getByLabelText('Memo (optional)').value).toBe('keep my vote');
         },
     },

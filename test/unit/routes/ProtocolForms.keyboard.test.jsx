@@ -156,7 +156,7 @@ describe('protocol form keyboard operation', () => {
         expect(utils.getByRole('alert')).toHaveTextContent('Delegate-to address is required.');
         expect(utils.composeVoteForConfirm).not.toHaveBeenCalled();
 
-        fireEvent.change(delegateTo, { target: { value: 'bc1qdelegate' } });
+        fireEvent.change(delegateTo, { target: { value: 'bc1qdevmock03aabbcc' } });
         memo.focus();
         await user.keyboard('{Enter}');
 
