@@ -45,3 +45,10 @@ describe('Messaging conversation rows', () => {
         expect(body).not.toMatch(/text-overflow/);
     });
 });
+
+describe('Messaging thread composer', () => {
+    it('sits at the footer gutter rather than pulling past it', () => {
+        const body = rule(read('packages/core/src/shared/routes/MessagingInbox.module.css'), '.composer');
+        expect(body).toMatch(/margin:\s*calc\(var\(--xc-space-2\) - var\(--xc-space-3\)\) 0;/);
+    });
+});
