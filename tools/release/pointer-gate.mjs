@@ -29,6 +29,10 @@
 // The lanes come from the SIGNED header: `# rehearsal-os:` names the OSes a
 // rehearsal covers, `# lanes:` the lanes a partial covers, and no header
 // means every updater lane in shipped-lanes.txt. Every check fails shut.
+//
+// 4. The signed header records `# dev-mock-gate: enforced`. The client refuses
+// any other value, an absent header included, so a release signed with the
+// gate skipped would publish green and update nobody.
 
 import { readFileSync, realpathSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -132,7 +136,7 @@ export function checkPointers({ pointers, manifestText, tag, channel, lanesText 
     const want = String(tag ?? '').trim().replace(/^v/, '');
     if (!want) return ['no tag to check the channel pointers against'];
     if (!channel) return ['no channel to name the expected pointers by'];
-    const { entries } = parseManifestText(String(manifestText ?? ''), 'RELEASE_HASHES.txt');
+    const { entries, gate } = parseManifestText(String(manifestText ?? ''), 'RELEASE_HASHES.txt');
     if (entries.size === 0) return ['the signed manifest lists no files, so no pointer can be covered'];
     let laneFeeds;
     try {
@@ -145,6 +149,12 @@ export function checkPointers({ pointers, manifestText, tag, channel, lanesText 
     if (scope.lanes.length === 0) return [`${scope.source} names no lane, so no pointer set can be expected`];
     const expected = expectedPointers({ channel, lanes: scope.lanes, laneFeeds });
     problems.push(...expected.problems);
+    // Refuse a release the client refuses by its gate before any pointer goes up.
+    if ((pointers.length > 0 || expected.names.size > 0) && gate !== 'enforced') {
+        problems.push(`the signed manifest records the dev-mock gate as '${gate || 'unrecorded'}', not 'enforced'; `
+            + 'every desktop client refuses this release. Re-sign with the gate running '
+            + '(SIGN_SKIP_DEV_MOCK_CHECK unset). There is no override flag.');
+    }
     const present = new Set(pointers.map(({ name }) => basename(name)));
     const scopeText = `lane(s) ${scope.lanes.join(' ')} (${scope.source})`;
     for (const name of [...expected.names].sort()) {
@@ -180,6 +190,8 @@ Checks every channel pointer (*.yml update-info) in <release dir> the way the
 desktop client will: its version must be the tag's, and every file it names
 must be in the signed manifest. Then checks the set: exactly the pointers the
 lanes in the manifest's signed header need, none missing and none extra.
+Refuses any pointer set whose manifest does not record the dev-mock gate as
+enforced, which the client refuses too.
 --lanes defaults to the shipped-lanes.txt beside this script.
 Exit 0 all pass, 1 any refused, 2 usage error.
 `;

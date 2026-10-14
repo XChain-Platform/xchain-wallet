@@ -555,6 +555,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setStage('form');
     }
 
+        // Name the action in words on the review stage, as the queued and success copy do.
+        const actionLabelLower = actionDisplayLabel(action).toLowerCase() || 'action';
         const header = (
         <PageHeader
             onBack={stage === 'review'
@@ -562,7 +564,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? `Review ${action || 'action'}`
+                    ? `Review ${actionLabelLower}`
                     : 'Advanced action'}
         />
     );
@@ -651,10 +653,10 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         }
                     >
                         {isWatcherMode
-                            ? `Create unsigned transaction: ${action || 'action'}`
+                            ? `Create unsigned transaction: ${actionLabelLower}`
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${action || 'action'}`
-                                : `Sign: ${action || 'action'}`}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${actionLabelLower}`
+                                : `Sign: ${actionLabelLower}`}
                     </Button>
                 )}
             >

@@ -356,6 +356,8 @@ function AppInner() {
     // for LeftNav / BottomTabBar wallet-switcher labelling and so the
     // 'settings' top-level view can pass `activeWallet` into Settings.
     const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
+    // Bumped when a sibling window moves the active network, so chain-scoped routes remount.
+    const [networkRevision, setNetworkRevision] = useState(0);
     const statusStateRef = useRef(status.state);
     const walletListRef = useRef(walletList);
     const pendingActiveWalletId = useRef(/** @type {string | null} */ (null));
@@ -625,6 +627,14 @@ function AppInner() {
         return bridge.onStateChange((change) => {
             if (change?.kind === 'session') {
                 refresh();
+                return;
+            }
+            // A sibling's settings write reaches this window's useSettings the way its own does.
+            if (change?.kind === 'settings' || change?.kind === 'network') {
+                const settings = change.settings;
+                if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return;
+                window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: settings }));
+                if (change.kind === 'network') setNetworkRevision((value) => value + 1);
                 return;
             }
             if (change?.kind !== 'active-wallet' || statusStateRef.current !== 'unlocked') return;
@@ -2842,7 +2852,7 @@ function AppInner() {
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                     >
-                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                        <Fragment key={`${palette.navigationKey}:${networkRevision}`}>{routeNode}</Fragment>
                     </ShellRouteOutlet>
                     {messageSentNotice ? (
                         <NoticeModal

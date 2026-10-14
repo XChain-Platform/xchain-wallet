@@ -43,6 +43,10 @@ const DRYRUN_UNAVAILABLE = 'DRYRUN_UNAVAILABLE';
 // and the amounts owed.
 const DRYRUN_SUBCOMMAND_UNJUDGED = 'DRYRUN_SUBCOMMAND_UNJUDGED';
 const DRYRUN_ORACLE_FEES_OWED    = 'DRYRUN_ORACLE_FEES_OWED';
+// Name the two info codes the SDK's own trading check emits with no network in
+// the loop; both land in the notice list and say what was NOT checked.
+const EXPIRY_IN_PAST        = 'EXPIRY_IN_PAST';
+const GIVE_NOT_BALANCE_MODE = 'GIVE_NOT_BALANCE_MODE';
 
 // Export the set so a test can pin it against the SDK registry without this
 // component importing the SDK (#3935). Adds no runtime import, no bundle weight.
@@ -110,7 +114,7 @@ export const SUPPORTED_SCHEMA_VERSION = 1;
 // below already follows: the sentence must be true of EVERY state its code can
 // carry. A fixed string is only safe while that holds, and DRYRUN_VALID stopped
 // holding it when the arbiter began answering a BATCH at two levels.
-const NOTICE_COPY = {
+export const NOTICE_COPY = Object.freeze({
     // A batch is answered twice over: the transaction is accepted, and each
     // command inside it is judged separately - or not judged at all, because a
     // settlement leg inside a batch answers with no status the probe can read.
@@ -147,7 +151,17 @@ const NOTICE_COPY = {
     // screen is in front of, so the amounts render as the detail and the
     // headline says what it means for signing.
     [DRYRUN_ORACLE_FEES_OWED]: 'This batch owes oracle usage fees the pre-flight cannot check are covered. Confirm the amounts below before signing.',
-};
+    // Say the check happens later: it fires on every order or swap with a numeric
+    // expiration, and nothing is known to be past, whatever the code name says.
+    [EXPIRY_IN_PAST]: 'The network checks this trade\'s expiration when the transaction confirms. It was not checked here.',
+    // Cover both states in one line: an ownership give and a native-coin give carry
+    // no data to tell them apart, and neither is drawn from a token balance.
+    [GIVE_NOT_BALANCE_MODE]: 'What this trade gives is not drawn from a token balance, so no balance check applies to it.',
+});
+
+// Head a notice code with no entry above (a newer SDK, say) in neutral words, so
+// its report-reader text renders only as the detail, as warningText does.
+const NOTICE_FALLBACK = 'The pre-flight checks added a note about this action.';
 
 /*
  * Resolve one notice into the headline the panel vouches for and the
@@ -162,6 +176,9 @@ const NOTICE_COPY = {
  * the cases where it does not.
  */
 function noticeText(f) {
+    if (!Object.hasOwn(NOTICE_COPY, f.code)) {
+        return { headline: NOTICE_FALLBACK, detail: f.message || null };
+    }
     const copy = NOTICE_COPY[f.code];
     const headline = (typeof copy === 'function' ? copy(f) : copy) || f.message;
     return { headline, detail: f.message && f.message !== headline ? f.message : null };

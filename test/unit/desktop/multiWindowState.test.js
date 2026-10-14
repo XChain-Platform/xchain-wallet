@@ -51,6 +51,52 @@ describe('desktop multi-window state notifications', () => {
     });
 });
 
+describe('desktop multi-window settings notifications', () => {
+    const saved = { schemaVersion: 2, activeNetwork: 'mainnet', theme: 'dark', fiatCurrency: 'EUR' };
+
+    it('broadcasts the saved settings for a settings.update that leaves the network alone', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { patch: { theme: 'dark' } } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'settings', settings: saved });
+        // The host also accepts the patch as the request itself.
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { fiatCurrency: 'EUR' } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'settings', settings: saved });
+    });
+
+    it('broadcasts a network change for a patch that moves the active network', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { patch: { activeNetwork: 'testnet' } } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'network', settings: saved });
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { activeNetwork: 'testnet', developerMode: false } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'network', settings: saved });
+    });
+
+    it('broadcasts a network change for settings.setActiveNetwork', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.setActiveNetwork', request: { walletId: 'wallet-1', network: 'testnet' } },
+            { ok: true, result: { settings: saved, addresses: [] } },
+        )).toEqual({ kind: 'network', settings: saved });
+    });
+
+    it('does not broadcast a failed settings write or one with no settings object', () => {
+        const update = { type: 'settings.update', request: { patch: { theme: 'dark' } } };
+        expect(stateChangeForMessage(update, { ok: false, result: saved })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true, result: null })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true, result: [saved] })).toBeNull();
+        expect(stateChangeForMessage(
+            { type: 'settings.setActiveNetwork', request: {} },
+            { ok: true, result: { addresses: [] } },
+        )).toBeNull();
+    });
+});
+
 describe('desktop window bounds memory', () => {
     it('round-trips a normal window rectangle through the file store', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'xchain-window-bounds-'));
