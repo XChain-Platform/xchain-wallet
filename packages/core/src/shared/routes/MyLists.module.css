@@ -120,6 +120,12 @@
     min-width: 0;
 }
 
+/* The status chip keeps its width; a long name truncates instead. Doubled
+   class to outrank ListRow's own trailing slot, which may shrink to zero. */
+.statusSlot.statusSlot {
+    flex-shrink: 0;
+}
+
 .status {
     flex: 0 0 auto;
     font-size: var(--xc-text-xs);

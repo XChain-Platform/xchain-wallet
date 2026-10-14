@@ -30,6 +30,12 @@ describe('My lists rows', () => {
         expect(body).toMatch(/display:\s*block/);
         expect(body).toMatch(/text-overflow:\s*ellipsis/);
     });
+
+    it('keeps the status chip whole beside a long name', () => {
+        const css = read('packages/core/src/shared/routes/MyLists.module.css');
+        expect(rule(css, '.statusSlot.statusSlot')).toMatch(/flex-shrink:\s*0/);
+        expect(read('packages/core/src/shared/routes/MyLists.jsx')).toMatch(/trailingClassName=\{local\.statusSlot\}/);
+    });
 });
 
 describe('Messaging conversation rows', () => {
