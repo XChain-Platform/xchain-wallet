@@ -177,7 +177,7 @@ describe('IssueTokenForm initial mint', () => {
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('does not offer a per-form network selector', async () => {
+    it('resets a custom fee preview when the network changes', async () => {
         mountForm({
             getAddressesByChain: vi.fn().mockResolvedValue({
                 ...ADDRESSES,
@@ -191,8 +191,28 @@ describe('IssueTokenForm initial mint', () => {
             }),
         });
         await screen.findByLabelText('Ticker');
-        expect(screen.queryByRole('button', { name: /Network:/i })).toBeNull();
-        expect(screen.queryByRole('option', { name: /Dogecoin/i })).toBeNull();
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '25' } });
+        expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext',
+            expect.stringMatching(/^Custom:/),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/i }));
+        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/i }));
+
+        await waitFor(() => expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext',
+            expect.stringMatching(/^Normal:/),
+        ));
+        expect(screen.queryByLabelText(/Custom fee rate/)).toBeNull();
+
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        expect(screen.getByLabelText(/Custom fee rate/)).toHaveValue('1');
     });
 
     it('tabs in field order and opens review from Enter only when valid', async () => {
