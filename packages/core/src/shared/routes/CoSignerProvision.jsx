@@ -30,7 +30,6 @@ import {
     Button,
     Input,
     Select,
-    ChainBadge,
     ChainPicker,
     CopyButton,
     AddressText,
@@ -296,11 +295,6 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                     <dd className={styles.detailsValue}>{reviewPayload.name}</dd>
                     <dt className={styles.detailsLabel}>Wallet</dt>
                     <dd className={styles.detailsValue}><code>{reviewPayload.walletId}</code></dd>
-                    <dt className={styles.detailsLabel}>Network</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-                        {' '}<code>{reviewPayload.chainId}</code>
-                    </dd>
                     <dt className={styles.detailsLabel}>This wallet's address</dt>
                     <dd className={styles.detailsValue}><AddressText address={daemonAddress?.address || ''} /></dd>
                     <dt className={styles.detailsLabel}>This wallet's public key</dt>

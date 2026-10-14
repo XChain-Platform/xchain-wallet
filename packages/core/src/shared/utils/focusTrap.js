@@ -127,6 +127,8 @@ function focusableWithin(container) {
     // hidden/inert checks are sufficient.
     return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter((el) => {
         if (el.hidden) return false;
+        // tabindex=-1 opts a control out of the Tab order, so the trap skips it too.
+        if (el.getAttribute('tabindex') === '-1') return false;
         if (el.closest('[inert]')) return false;
         if (el.getAttribute('aria-hidden') === 'true') return false;
         return true;

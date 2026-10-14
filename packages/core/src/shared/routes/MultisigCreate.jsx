@@ -62,7 +62,7 @@ export function parseCosignerSharePayload(value, networkKind) {
         throw new Error('Shared cosigner setup has an unsupported type or version.');
     }
     if (payload.network !== networkKind) {
-        throw new Error(`Shared cosigner setup is for ${payload.network || 'an unknown network'}, not ${networkKind}.`);
+        throw new Error('Shared cosigner setup is for a different network than this wallet.');
     }
     if (!isCompressedPublicKey(payload.pubkey)) {
         throw new Error('Shared cosigner setup contains an invalid public key.');

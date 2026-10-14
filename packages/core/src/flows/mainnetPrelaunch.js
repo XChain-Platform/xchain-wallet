@@ -25,7 +25,7 @@ export class MainnetPrelaunchError extends Error {
     }
 }
 
-function isMainnetChainId(chainId) {
+export function isMainnetChainId(chainId) {
     return typeof chainId === 'string' && chainId.endsWith('-mainnet');
 }
 

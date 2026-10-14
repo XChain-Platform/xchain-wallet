@@ -22,8 +22,8 @@
     border-top: 1px solid var(--xc-border);
     z-index: var(--xc-z-sticky);
     /* Fill the cutout gutters while keeping tabs and the home indicator clear. */
-    padding-inline-start: env(safe-area-inset-left, 0px);
-    padding-inline-end: env(safe-area-inset-right, 0px);
+    padding-inline-start: env(safe-area-inset-left, 0);
+    padding-inline-end: env(safe-area-inset-right, 0);
     padding-bottom: env(safe-area-inset-bottom, 0);
     box-sizing: content-box;
 }

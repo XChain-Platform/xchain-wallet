@@ -56,6 +56,7 @@ import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagin
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
+import { isDemoWallet } from '../../core/src/flows/demoMode.js';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';

@@ -592,7 +592,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             descriptor.coin,
             descriptor.networkKind,
         )) {
-            setFormError(`The selected signing address is not valid for ${descriptor?.displayName || chainId}.`);
+            setFormError('The selected signing address is not valid for this network.');
             return;
         }
         setGenesisRefreshing(true);

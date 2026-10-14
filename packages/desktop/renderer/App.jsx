@@ -156,6 +156,7 @@ import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/Toast
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { useDeepLinks } from './deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 

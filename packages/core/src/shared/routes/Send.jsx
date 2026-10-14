@@ -2498,7 +2498,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             rootRef={reviewPageRef}
             variant={variant}
             header={header}
-            restoreScroll={stage !== 'review' && stage !== 'submitting'}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
         >
             {children}
             {footer}
