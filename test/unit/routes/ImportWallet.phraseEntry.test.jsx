@@ -85,6 +85,14 @@ describe('ImportWallet recovery phrase entry', () => {
         expect(action).not.toHaveAttribute('aria-describedby');
     });
 
+    it('names the accepted word counts once, in the hint and not again in the live count', () => {
+        renderImport();
+        const description = screen.getByLabelText('Recovery phrase').getAttribute('aria-describedby')
+            .split(' ').map((id) => document.getElementById(id)?.textContent || '').join(' ');
+        expect(description.match(/12, 15, 18, 21, or 24/g)).toHaveLength(1);
+        expect(screen.getByText('0 words entered')).toBeTruthy();
+    });
+
     it('normalizes spaces and newlines when a whole phrase is pasted', async () => {
         const importMnemonic = renderImport();
         const textarea = screen.getByLabelText('Recovery phrase');
@@ -95,7 +103,7 @@ describe('ImportWallet recovery phrase entry', () => {
         });
 
         expect(textarea).toHaveValue(BIP39_PHRASE);
-        expect(screen.getByText('12 words entered (use 12, 15, 18, 21, or 24)')).toBeTruthy();
+        expect(screen.getByText('12 words entered')).toBeTruthy();
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
 
         fillPasswords();
@@ -119,7 +127,7 @@ describe('ImportWallet recovery phrase entry', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }));
 
         await waitFor(() => expect(screen.getByLabelText('Recovery phrase')).toHaveValue(BIP39_PHRASE));
-        expect(screen.getByText('12 words entered (use 12, 15, 18, 21, or 24)')).toBeTruthy();
+        expect(screen.getByText('12 words entered')).toBeTruthy();
     });
 
     it('normalizes upper-case words before import', async () => {
@@ -203,7 +211,7 @@ describe('ImportWallet recovery phrase entry', () => {
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
 
         fireEvent.change(textarea, { target: { value: BIP39_24_WORD_PHRASE } });
-        expect(screen.getByText('24 words entered (use 12, 15, 18, 21, or 24)')).toBeTruthy();
+        expect(screen.getByText('24 words entered')).toBeTruthy();
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
     });
 
