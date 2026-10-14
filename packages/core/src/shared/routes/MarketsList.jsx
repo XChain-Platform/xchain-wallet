@@ -538,12 +538,15 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 leading={<TickerIcon chainId={chainId} tick={otherTick} />}
                 title={(
                     <span
-                        style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}
+                        style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap', minWidth: 0 }}
                     >
-                        <Chip>
-                            <span>{tick1}</span>
+                        {/* A ticker may run to 250 characters; the pair chip
+                            shortens it with an ellipsis inside the row rather
+                            than pushing the 24h change off the screen. */}
+                        <Chip className={marketsStyles.pairChip} title={`${tick1} / ${tick2}`}>
+                            <span className={marketsStyles.pairTick}>{tick1}</span>
                             <span aria-hidden="true">{' / '}</span>
-                            <span>{tick2}</span>
+                            <span className={marketsStyles.pairTick}>{tick2}</span>
                         </Chip>
                         {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
                             <span>{otherName}</span>

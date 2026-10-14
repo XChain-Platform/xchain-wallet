@@ -115,6 +115,25 @@
     cursor: pointer;
 }
 
+.pairChip {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.pairTick {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The quote side (usually a short coin) keeps its full width up to half the
+   chip, so the long side is the one that gives way. */
+.pairTick:last-child {
+    flex-shrink: 0;
+    max-width: 50%;
+}
+
 .marketButton:disabled {
     cursor: not-allowed;
 }
