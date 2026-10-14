@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { activeNetworkLabel, normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
 import styles from './NetworkStatusIndicator.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -47,8 +48,9 @@ function serviceSummary(chain) {
  *
  * @param {object} props
  * @param {() => void} props.onOpenNetworkSettings
+ * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
  */
-export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
+export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork }) {
     const { overall, perChain } = useReachability();
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
@@ -70,6 +72,8 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
         : state === 'offline'
             ? `${label}: no selected chain is reachable`
             : label;
+    const networkName = activeNetworkLabel(normalizeActiveNetwork(activeNetwork));
+    const triggerLabel = `${networkName}. ${explanation}`;
 
     useBackHandler(open ? () => {
         setOpen(false);
@@ -105,13 +109,15 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                 ref={triggerRef}
                 type="button"
                 className={styles.trigger}
+                data-network-status-trigger
                 onClick={() => setOpen((value) => !value)}
-                aria-label={explanation}
+                aria-label={triggerLabel}
                 aria-haspopup="dialog"
                 aria-expanded={open ? 'true' : 'false'}
-                title={explanation}
+                title={triggerLabel}
             >
                 <span className={styles.dot} aria-hidden="true" />
+                <span data-network-name>{networkName}</span>
             </button>
             <div className={styles.popover} role="dialog" aria-label="Network status">
                 <div className={styles.title}>{label}</div>

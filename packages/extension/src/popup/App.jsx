@@ -2800,6 +2800,11 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onCommandPalette={palette.openPalette}
                             onLock={handleLock}
                             isWatcherMode={isWatcherMode}
+                            activeWallet={activeWalletId ? {
+                                id: activeWalletId,
+                                name: walletList.find((wallet) => wallet.id === activeWalletId)?.name,
+                            } : null}
+                            activeNetwork={settings?.activeNetwork}
                             onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                         />
                     )}

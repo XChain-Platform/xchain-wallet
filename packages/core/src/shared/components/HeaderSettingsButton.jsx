@@ -19,6 +19,7 @@ import {
     normalizeActiveNetwork,
 } from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
+import menuStyles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 
 /**
@@ -59,6 +60,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
+ * @param {boolean} [props.menuRow] renders the trigger as a labelled overflow-menu row
  */
 export function HeaderSettingsButton({
     activeWallet,
@@ -75,6 +77,7 @@ export function HeaderSettingsButton({
     activeNetwork,
     developerMode = false,
     onActiveNetworkChange,
+    menuRow = false,
 }) {
     const [open, setOpen] = useState(false);
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
@@ -147,36 +150,42 @@ export function HeaderSettingsButton({
     };
 
     return (
-        <div ref={wrapRef} className={styles.wrap}>
-            {hasActiveNetwork ? (
-                <span
-                    className={`${styles.networkBadge} ${currentNetwork === 'mainnet' ? '' : styles.networkBadgeNonMainnet}`}
-                    aria-label={`Active network: ${activeNetworkLabel(currentNetwork)}`}
-                    title={`Active network: ${activeNetworkLabel(currentNetwork)}`}
-                >
-                    {/* Short form for phone widths: the dot shows and the
-                        name is visually hidden but still read out, so the
-                        badge never renders as clipped letters. */}
-                    <span className={styles.networkBadgeDot} aria-hidden="true" />
-                    <span className={styles.networkBadgeText}>{activeNetworkLabel(currentNetwork)}</span>
-                </span>
-            ) : null}
+        <div ref={wrapRef} className={`${styles.wrap} ${menuRow ? menuStyles.settingsWrap : ''}`.trim()}>
             <span ref={triggerRef} className={styles.trigger}>
-                <Button
-                    variant="secondary"
-                    icon={(
-                        <>
+                {menuRow ? (
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className={menuStyles.actionRow}
+                        onClick={() => setOpen((v) => !v)}
+                        aria-haspopup="dialog"
+                        aria-expanded={open ? 'true' : 'false'}
+                        data-active={anyNonDefault ? 'true' : undefined}
+                    >
+                        <span className={menuStyles.rowIcon} aria-hidden="true">
                             <Icon.GearIcon />
                             {anyNonDefault ? <span className={styles.dot} /> : null}
-                        </>
-                    )}
-                    onClick={() => setOpen((v) => !v)}
-                    aria-haspopup="dialog"
-                    aria-expanded={open ? 'true' : 'false'}
-                    aria-label="Settings"
-                    title="Settings"
-                    data-active={anyNonDefault ? 'true' : undefined}
-                />
+                        </span>
+                        <span className={menuStyles.rowLabel}>Settings</span>
+                        <span className={menuStyles.rowIcon} aria-hidden="true"><Icon.ForwardIcon /></span>
+                    </button>
+                ) : (
+                    <Button
+                        variant="secondary"
+                        icon={(
+                            <>
+                                <Icon.GearIcon />
+                                {anyNonDefault ? <span className={styles.dot} /> : null}
+                            </>
+                        )}
+                        onClick={() => setOpen((v) => !v)}
+                        aria-haspopup="dialog"
+                        aria-expanded={open ? 'true' : 'false'}
+                        aria-label="Settings"
+                        title="Settings"
+                        data-active={anyNonDefault ? 'true' : undefined}
+                    />
+                )}
             </span>
             {open ? (
                 <div

@@ -2829,6 +2829,8 @@ function AppInner() {
                             onCommandPalette={palette.openPalette}
                             onLock={handleNavLock}
                             isWatcherMode={isWatcherMode}
+                            activeWallet={activeWalletId ? { id: activeWalletId, name: activeWalletName } : null}
+                            activeNetwork={settings?.activeNetwork}
                             onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                         />
                     }
