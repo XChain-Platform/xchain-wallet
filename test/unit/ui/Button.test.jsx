@@ -217,9 +217,11 @@ describe('<Button>', () => {
             const css = readCss(`ui/${component}.module.css`);
             const source = readFileSync(`packages/core/src/ui/${component}.jsx`, 'utf8');
             expect(source).toMatch(/styles\[size\] \|\| ''/);
-            expect(source).toMatch(
-                /paddingInlineEnd: 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
-            );
+            if (component === 'AddressField') {
+                expect(source).toMatch(
+                    /paddingInlineEnd: 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
+                );
+            }
             for (const size of ['sm', 'md', 'lg']) {
                 const block = css.match(new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
                 expect(block).toMatch(new RegExp(
@@ -243,6 +245,24 @@ describe('<Button>', () => {
             expect(iconButton).toMatch(/align-items:\s*center/);
             expect(iconButton).toMatch(/justify-content:\s*center/);
         }
+
+        const addressComboboxCss = readCss('ui/AddressCombobox.module.css');
+        const addressComboboxSource = readFileSync('packages/core/src/ui/AddressCombobox.jsx', 'utf8');
+        const addressPaste = addressComboboxCss.match(/\.pasteAction button\s*\{[^}]*\}/s)?.[0] || '';
+        expect(addressComboboxSource).toMatch(/className=\{styles\.pasteAction\}/);
+        expect(addressPaste).toMatch(/inset-inline-end:\s*0/);
+        expect(addressPaste).toMatch(/height:\s*var\(--address-control-height\)/);
+        expect(addressPaste).toMatch(/min-height:\s*var\(--address-control-height\)/);
+
+        const amountCss = readCss('shared/components/AmountField.module.css');
+        const amountSource = readFileSync('packages/core/src/shared/components/AmountField.jsx', 'utf8');
+        const amountActions = amountCss.match(/\.pasteAction button,\s*\.maxAction\s*\{[^}]*\}/s)?.[0] || '';
+        expect(amountSource).toMatch(/className=\{styles\.pasteAction\}/);
+        expect(amountSource).toMatch(/className=\{styles\.maxAction\}/);
+        expect(amountActions).toMatch(/position:\s*absolute/);
+        expect(amountActions).toMatch(/height:\s*var\(--amount-control-height\)/);
+        expect(amountActions).toMatch(/min-height:\s*var\(--amount-control-height\)/);
+        expect(amountCss).toMatch(/\.maxAction\s*\{[^}]*inset-inline-end:\s*0/s);
 
         const addressFieldCss = readCss('ui/AddressField.module.css');
         const readOnlyValue = addressFieldCss.match(/\.readOnlyValue\s*\{[^}]*\}/s)?.[0] || '';

@@ -18,15 +18,66 @@
 /* The shared controls own their dimensions through the same `size` prop. */
 
 .amountFieldWrap {
+    --amount-control-height: var(--xc-control-h-md);
+    --amount-action-width: calc(var(--amount-control-height) + var(--xc-space-6));
     display: flex;
     align-items: flex-end;
     flex-wrap: wrap;
     gap: var(--xc-space-2);
+    position: relative;
+}
+
+.sm {
+    --amount-control-height: var(--xc-control-h-sm);
+}
+
+.md {
+    --amount-control-height: var(--xc-control-h-md);
+}
+
+.lg {
+    --amount-control-height: var(--xc-control-h-lg);
+}
+
+.amountFieldWrap label {
+    line-height: 20px;
 }
 
 .amountFieldWrap > div:first-child {
     flex: 1 1 12rem;
     min-width: 0;
+}
+
+.pasteAction,
+.pasteAction > span {
+    display: contents !important;
+}
+
+.pasteAction button,
+.maxAction {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    top: calc(20px + var(--xc-space-1));
+    width: var(--amount-action-width);
+    height: var(--amount-control-height);
+    min-height: var(--amount-control-height);
+}
+
+.pasteAction button {
+    inset-inline-end: 0;
+}
+
+.hasMax .pasteAction button {
+    inset-inline-end: var(--amount-action-width);
+}
+
+.maxAction {
+    inset-inline-end: 0;
+}
+
+.pasteAction [role='alert'] {
+    flex: 1 0 100%;
+    margin-block-start: var(--xc-help-gap);
 }
 
 .amountFieldWrap input,

@@ -127,7 +127,11 @@ export function AmountField({
 
     return (
         <div className={styles.amountBlock}>
-            <div className={styles.amountFieldWrap}>
+            <div className={[
+                styles.amountFieldWrap,
+                styles[size] || '',
+                onMax ? styles.hasMax : '',
+            ].filter(Boolean).join(' ')}>
                 <Input
                     ref={inputRef}
                     size={size}
@@ -140,11 +144,34 @@ export function AmountField({
                     onChange={handleChange}
                     autoComplete="off"
                     placeholder="0.00"
+                    style={{
+                        paddingInlineEnd: onMax
+                            ? 'calc((var(--amount-action-width) * 2) + var(--xc-space-2))'
+                            : 'calc(var(--amount-action-width) + var(--xc-space-2))',
+                    }}
                 />
+                <span className={styles.pasteAction}>
+                    <ClipboardPasteButton
+                        onPaste={(text) => {
+                            const inspected = inspectFieldPaste(text);
+                            if (!inspected.ok) {
+                                setInputError(inspected.error);
+                                return;
+                            }
+                            handleChange({
+                                target: {
+                                    value: inspected.value,
+                                    selectionStart: inspected.value.length,
+                                },
+                            });
+                        }}
+                    />
+                </span>
                 {onMax ? (
                     <Button
                         variant="primary"
                         size={size}
+                        className={styles.maxAction}
                         icon={null}
                         onClick={() => {
                             setInputError('');
@@ -179,21 +206,6 @@ export function AmountField({
                     <span />
                 )}
                 <span className={styles.amountFooterRight}>
-                    <ClipboardPasteButton
-                        onPaste={(text) => {
-                            const inspected = inspectFieldPaste(text);
-                            if (!inspected.ok) {
-                                setInputError(inspected.error);
-                                return;
-                            }
-                            handleChange({
-                                target: {
-                                    value: inspected.value,
-                                    selectionStart: inspected.value.length,
-                                },
-                            });
-                        }}
-                    />
                     <span
                         role={hasBalanceText ? 'status' : undefined}
                         aria-live={hasBalanceText ? 'polite' : undefined}
