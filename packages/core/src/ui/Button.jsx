@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { forwardRef } from 'react';
 import styles from './Button.module.css';
 import { iconForLabel } from './icons/index.jsx';
 
@@ -57,8 +58,9 @@ function defaultIconFor(children) {
  * @param {(e: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
  * @param {import('react').ReactNode | null} [props.icon]   icon node before the label, or `null` to suppress the auto-default
  * @param {import('react').ReactNode} [props.children]
+ * @param {import('react').Ref<HTMLButtonElement>} [ref]  forwarded to the native button so callers can restore focus to it
  */
-export function Button({
+export const Button = forwardRef(function Button({
     variant = 'primary',
     size = 'md',
     block = false,
@@ -70,7 +72,7 @@ export function Button({
     icon,
     children,
     ...rest
-}) {
+}, ref) {
     // `icon` is `undefined` when the caller didn't pass it → fall back
     // to the auto-lookup. `null` is the explicit opt-out and renders
     // no icon at all. Any truthy value renders verbatim.
@@ -95,6 +97,7 @@ export function Button({
     ].filter(Boolean).join(' ');
     return (
         <button
+            ref={ref}
             type={type}
             className={className}
             disabled={disabled || loading}
@@ -111,4 +114,4 @@ export function Button({
             {iconOnly ? null : <span className={styles.label}>{children}</span>}
         </button>
     );
-}
+});
