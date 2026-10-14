@@ -317,7 +317,9 @@ export class Vault {
      * @param {Uint8Array} [opts.masterKey]   the new 32-byte key; omitted keeps the current one
      * @param {Array<import('../schemas/wallet.js').Wallet>} [opts.wallets]   replacements for existing records, matched by id
      * @param {Array<import('../schemas/wallet.js').Wallet>} [opts.readWallets]   the records the replacements were prepared from, as `wallets.list()` returned them
-     * @returns {Promise<void>}
+     * @returns {Promise<boolean>}   true when the open vault now holds the write; false when a
+     *   close (a lock) landed while the blob was saving, so the blob changed but this handle is
+     *   closed and the caller must not re-arm any session state from it
      */
     async rekey({ masterKey, wallets = [], readWallets } = {}) {
         this._assertOpen();
@@ -360,7 +362,7 @@ export class Vault {
             // state now; the blob is written, so only the in-memory copy is skipped.
             if (this._doc !== previous || !this._masterKey) {
                 if (nextKey) nextKey.fill(0);
-                return;
+                return false;
             }
             if (nextKey) {
                 this._masterKey.fill(0);
@@ -368,7 +370,13 @@ export class Vault {
             }
             this._doc = next;
             logConsole.record({ source: 'vault', level: 'info', message: nextKey ? 'rekey' : 'reseal wallets' });
+            return true;
         });
+    }
+
+    /** Whether this handle is open: false once close() or clear() has run, or before open(). */
+    get isOpen() {
+        return this._opened && Boolean(this._doc) && Boolean(this._masterKey);
     }
 
     /** Zero the cached master key and close. Safe to call multiple times. */

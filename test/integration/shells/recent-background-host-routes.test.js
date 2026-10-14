@@ -282,13 +282,22 @@ describe('recent background host routes across extension, web, and desktop shell
             id: 'wallet-1',
         });
         const sessionSaves = [];
+        // An unlocked session caches the old key; the keyring moves it only
+        // while the slot still holds that key.
+        let sessionSlot = new Uint8Array(oldKey);
         const unlockOne = vi.fn(async () => {});
         const host = makeHost({
             vault,
             signerPool: { get: () => null, has: () => false, evict: vi.fn(), unlockOne },
             vaultKeyring: createVaultKeyring({
                 metaBackend: { load: async () => ({ kdfParams }) },
-                sessionBackend: { save: async (key) => { sessionSaves.push(new Uint8Array(key)); } },
+                sessionBackend: {
+                    load: async () => sessionSlot,
+                    save: async (key) => {
+                        sessionSlot = new Uint8Array(key);
+                        sessionSaves.push(new Uint8Array(key));
+                    },
+                },
             }),
         });
 

@@ -29,10 +29,20 @@ import { saveSigningSecret } from './signingSecretSession.js';
 /**
  * @typedef {Object} VaultKeyring
  * @property {() => Promise<object | null>} kdfParams   the params the vault key is derived under
- * @property {(next: { masterKey: Uint8Array, password: string }) => Promise<void>} commit
- *   called once the vault blob is sealed under the new key; caches it and the new password.
- *   The caller zeroes `masterKey` afterwards, so a backend must keep its own copy.
+ * @property {(next: { masterKey: Uint8Array, password: string, previousKey: Uint8Array }) => Promise<boolean>} commit
+ *   called once the vault blob is sealed under the new key; caches it and the new password,
+ *   but only while the session slot still holds `previousKey`. A lock clears that slot, so
+ *   a change that finishes after a lock re-arms nothing. Resolves true when it wrote.
+ *   The caller zeroes both keys afterwards, so a backend must keep its own copy.
  */
+
+/** @param {unknown} a @param {unknown} b */
+function sameKeyBytes(a, b) {
+    if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array) || a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+    return diff === 0;
+}
 
 /**
  * @param {Object} backends
@@ -50,9 +60,16 @@ export function createVaultKeyring({ metaBackend, sessionBackend = null, signing
             const meta = /** @type {any} */ (await metaBackend.load());
             return meta?.kdfParams ?? null;
         },
-        async commit({ masterKey, password }) {
-            if (sessionBackend) await sessionBackend.save(masterKey);
+        async commit({ masterKey, password, previousKey }) {
+            // Session slot empty or on another key: the session was locked (or
+            // never cached) while the change ran, and writing now would leave
+            // an unlocked-looking session behind the lock.
+            if (sessionBackend) {
+                if (!sameKeyBytes(await sessionBackend.load(), previousKey)) return false;
+                await sessionBackend.save(masterKey);
+            }
             await saveSigningSecret(signingSecretBackend, password);
+            return true;
         },
     };
 }

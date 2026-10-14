@@ -5521,8 +5521,9 @@ export async function changeWalletPassword(req, deps, operations = {}) {
         }
 
         if (vaultRekeyed) newVaultKey = await deriveKey(newPassword, vaultKdfParams);
+        let applied;
         try {
-            await deps.vault.rekey({
+            applied = await deps.vault.rekey({
                 ...(newVaultKey ? { masterKey: newVaultKey } : {}),
                 wallets: candidates,
                 readWallets: stored,
@@ -5532,13 +5533,23 @@ export async function changeWalletPassword(req, deps, operations = {}) {
             throw err;
         }
 
+        const result = { changed: true, vaultRekeyed, walletIds: candidates.map((c) => c.id) };
+        // A lock that lands while the change runs closes this vault. The blob
+        // is written either way, so the change stands, but nothing below may
+        // run after a lock: a session key or signing password written now, or
+        // a signer pooled now, would leave the wallet usable behind the lock.
+        const stillOpen = () => deps.vault.isOpen !== false;
+        if (applied === false || !stillOpen()) return result;
+
         // Committed. The shell's caches follow the vault key: a stale session
         // key would reopen nothing after a worker restart or relaunch, and a
         // stale signing password would refill the pool with nothing. A failure
         // here does not undo the change; it costs one password unlock later.
+        // The keyring writes only while its slot still holds the old key,
+        // which a lock clears before it closes the vault.
         if (newVaultKey) {
             try {
-                await keyring.commit({ masterKey: newVaultKey, password: newPassword });
+                await keyring.commit({ masterKey: newVaultKey, password: newPassword, previousKey: oldVaultKey });
             } catch (err) {
                 console.error('[xchain] wallet.changePassword: session cache not updated:', err);
             }
@@ -5548,7 +5559,7 @@ export async function changeWalletPassword(req, deps, operations = {}) {
         // the old seals; reopen them from the records as stored now.
         const pool = deps.signerPool;
         for (const candidate of candidates) {
-            if (!pool) break;
+            if (!pool || !stillOpen()) break;
             try {
                 await pool.unlockOne({
                     wallet: candidate,
@@ -5556,11 +5567,13 @@ export async function changeWalletPassword(req, deps, operations = {}) {
                     chainRegistry: deps.chainRegistry,
                     sdkRegistry: deps.sdkRegistry,
                 });
+                // Each unlock is an Argon2id derivation; a lock can land inside it.
+                if (!stillOpen()) pool.evict?.(candidate.id);
             } catch {
                 pool.evict?.(candidate.id);
             }
         }
-        return { changed: true, vaultRekeyed, walletIds: candidates.map((c) => c.id) };
+        return result;
     } finally {
         if (oldVaultKey) oldVaultKey.fill(0);
         if (newVaultKey) newVaultKey.fill(0);

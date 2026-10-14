@@ -97,7 +97,9 @@ describe('changeWalletPassword', () => {
         const [{ masterKey, wallets }] = rekeyVault.mock.calls[0];
         expect(masterKey).toBe(keys[1]);
         expect(wallets).toEqual([expect.objectContaining({ encryptedSeed: 'new-ciphertext', kdfParams: KDF_PARAMS })]);
-        expect(commit).toHaveBeenCalledWith({ masterKey: keys[1], password: 'new-password' });
+        // previousKey is the old vault key, so the keyring moves its cache only
+        // while the session slot still holds it (a lock clears that slot).
+        expect(commit).toHaveBeenCalledWith({ masterKey: keys[1], password: 'new-password', previousKey: keys[0] });
         expect(unlockOne).toHaveBeenCalledWith(expect.objectContaining({ password: 'new-password' }));
         // Both derived keys are zeroed once the change is done.
         expect(keys.every((k) => k.every((b) => b === 0))).toBe(true);

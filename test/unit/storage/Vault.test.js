@@ -243,11 +243,25 @@ describe('storage/Vault rekey (password change)', () => {
         expect(vault.keyMatches(KEY)).toBe(true);
     });
 
+    it('reports a close that lands while the blob saves, and isOpen follows the handle', async () => {
+        const { vault, backend } = await opened();
+        expect(vault.isOpen).toBe(true);
+        const realSave = backend.save.bind(backend);
+        backend.save = async (blob) => {
+            await realSave(blob);
+            vault.close();
+        };
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [] })).resolves.toBe(false);
+        expect(vault.isOpen).toBe(false);
+        // The blob itself was written under the new key.
+        await new Vault({ backend, masterKey: NEXT }).open();
+    });
+
     it('writes when the wallets are still the records the replacements were prepared from', async () => {
         const { vault } = await opened();
         const read = await vault.wallets.list();
         const replaced = { ...read[0], encryptedSeed: 'c2VhbGVkLW5ldw==' };
-        await vault.rekey({ masterKey: NEXT, wallets: [replaced], readWallets: read });
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [replaced], readWallets: read })).resolves.toBe(true);
         expect(vault.keyMatches(NEXT)).toBe(true);
     });
 

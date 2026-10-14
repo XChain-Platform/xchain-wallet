@@ -321,6 +321,59 @@ describe('wallet.changePassword, then wallet.unlock', () => {
         expect(creds?.password === winner).toBe(true);
     });
 
+    // wallet.lock (or the idle auto-lock) is a separate message and can land
+    // during the seconds a change takes. It clears the session and signing
+    // slots, closes the vault and empties the pool, in that order. The change
+    // must not write any of them back afterwards, or the next message reopens
+    // the wallet without a password.
+    async function lockNow(env, pool) {
+        await env.sessionBackend.clear();
+        await env.signingSecretBackend.clear();
+        env.vault.close();
+        pool.lockAll();
+    }
+
+    it('a lock that lands while the vault blob saves re-arms nothing', async () => {
+        const env = await onboardedVault([{ id: 'w1', mnemonic: MNEMONIC_A, password: OLD, kdfParams: VAULT_KDF }]);
+        const pool = new signersLib.SignerPool();
+        const realSave = env.storageBackend.save;
+        env.storageBackend.save = async (blob) => {
+            await realSave(blob);
+            await lockNow(env, pool);
+        };
+
+        const res = await changeWalletPassword(
+            { walletId: 'w1', currentPassword: OLD, newPassword: NEW }, hostDeps(env, pool));
+        env.storageBackend.save = realSave;
+
+        expect(res).toMatchObject({ changed: true, vaultRekeyed: true });
+        expect(await env.sessionBackend.load()).toBeNull();
+        expect(await env.signingSecretBackend.load()).toBeNull();
+        expect(pool.size()).toBe(0);
+        // The blob did change, so the next unlock takes the new password.
+        expect(await unlockOutcome(env, NEW)).toBe('opened; signers for [w1]');
+        expect(await unlockOutcome(env, OLD)).toBe('refused: InvalidPasswordError');
+    });
+
+    it('a lock that clears the session slot before the cache moves leaves it cleared', async () => {
+        const env = await onboardedVault([{ id: 'w1', mnemonic: MNEMONIC_A, password: OLD, kdfParams: VAULT_KDF }]);
+        const pool = new signersLib.SignerPool();
+        const deps = hostDeps(env, pool);
+        // The lock's slot clears land between the vault write and the cache
+        // move; its close has not run yet, so the vault still reads as open.
+        const realCommit = deps.vaultKeyring.commit;
+        deps.vaultKeyring.commit = async (next) => {
+            await env.sessionBackend.clear();
+            await env.signingSecretBackend.clear();
+            return realCommit(next);
+        };
+
+        await changeWalletPassword({ walletId: 'w1', currentPassword: OLD, newPassword: NEW }, deps);
+        expect(await env.sessionBackend.load()).toBeNull();
+        expect(await env.signingSecretBackend.load()).toBeNull();
+        pool.lockAll();
+    });
+
     it('refuses before any write when the shell gives no way to move the vault key', async () => {
         const env = await onboardedVault([{ id: 'w1', mnemonic: MNEMONIC_A, password: OLD, kdfParams: VAULT_KDF }]);
         const deps = { ...hostDeps(env), vaultKeyring: undefined };
