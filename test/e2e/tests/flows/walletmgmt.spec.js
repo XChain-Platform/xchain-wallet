@@ -50,7 +50,7 @@ async function expectScreen(page, title, label, { atTop = false } = {}) {
     }
 }
 
-async function expectSameLineHeight(controls, label) {
+async function expectSameLineHeight(controls, label, { matchHeights = true } = {}) {
     const boxes = [];
     for (const control of controls) {
         await expect(control, `${label}: control is missing`).toBeVisible();
@@ -63,11 +63,16 @@ async function expectSameLineHeight(controls, label) {
         - Math.min(...boxes.map((box) => box.y + box.height / 2));
     expect(centerSpread, `${label}: controls do not share a line`).toBeLessThanOrEqual(2);
 
+    if (!matchHeights) return;
     const heightSpread = Math.max(...boxes.map((box) => box.height))
         - Math.min(...boxes.map((box) => box.height));
     expect(heightSpread, `${label}: same-line control heights differ by more than 2px`)
         .toBeLessThanOrEqual(2);
 }
+
+// PageHeader draws Back as a bare chevron and trailing actions as 38px
+// circles by design, so a header pair shares a centre line, not a height.
+const HEADER_PAIR = { matchHeights: false };
 
 async function expectGroupedControlHeights(group, label) {
     const boxes = await group.getByRole('button').evaluateAll((buttons) => buttons
@@ -129,9 +134,9 @@ for (const viewport of VIEWPORTS) {
                 await openSettings(page);
                 await expectScreen(page, 'Settings', `${size} settings`, { atTop: true });
 
-                await page.getByRole('button', { name: 'This wallet', exact: true }).click();
+                await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).click();
                 await expectScreen(page, 'This wallet', `${size} this wallet`, { atTop: true });
-                await expect(page.getByText(ORIGINAL_WALLET, { exact: true })).toBeVisible();
+                await expect(page.getByRole('main').getByText(ORIGINAL_WALLET, { exact: true })).toBeVisible();
 
                 await page.getByRole('button', { name: 'Switch / rename…' }).click();
                 await expectScreen(page, 'Wallets', `${size} wallet picker`, { atTop: true });
@@ -159,7 +164,7 @@ for (const viewport of VIEWPORTS) {
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Back to previous screen' }),
                     page.getByRole('button', { name: 'Save' }),
-                ], `${size} rename wallet header`);
+                ], `${size} rename wallet header`, HEADER_PAIR);
                 await walletName.fill(RENAMED_WALLET);
                 await page.getByRole('button', { name: 'Save' }).click();
 
@@ -175,13 +180,16 @@ for (const viewport of VIEWPORTS) {
                 await expectScreen(page, 'Wallets', `${size} wallet picker after rename`, {
                     atTop: true,
                 });
-                await expect(page.getByText(RENAMED_WALLET, { exact: true })).toBeVisible();
+                await expect(page.getByRole('main').getByText(RENAMED_WALLET, { exact: true })).toBeVisible();
                 await page.getByRole('button', { name: 'Back to previous screen' }).click();
+                // The picker was opened from This wallet, so Back returns there first.
+                await expectScreen(page, 'This wallet', `${size} this wallet after rename`);
+                await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
                 await expectScreen(page, 'Settings', `${size} settings after wallet rename`, {
                     atTop: true,
                 });
 
-                await page.getByRole('button', { name: 'Accounts & addresses', exact: true }).click();
+                await page.getByRole('main').getByRole('button', { name: /^Accounts & addresses/ }).click();
                 await expectScreen(page, 'Accounts', `${size} account picker`, { atTop: true });
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Add account' }),
@@ -193,14 +201,14 @@ for (const viewport of VIEWPORTS) {
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Back to previous screen' }),
                     page.getByRole('button', { name: 'Save' }),
-                ], `${size} rename account header`);
+                ], `${size} rename account header`, HEADER_PAIR);
                 await page.getByLabel('Account name').fill(RENAMED_ACCOUNT);
                 await page.getByRole('button', { name: 'Save' }).click();
 
                 await expectScreen(page, 'Accounts', `${size} renamed account picker`, {
                     atTop: true,
                 });
-                await expect(page.getByText(RENAMED_ACCOUNT, { exact: true })).toBeVisible();
+                await expect(page.getByRole('main').getByText(RENAMED_ACCOUNT, { exact: true })).toBeVisible();
             });
 
             await test.step('reveal a private key and clear it on leave', async () => {
@@ -267,8 +275,15 @@ for (const viewport of VIEWPORTS) {
 
             await test.step('reach wallet removal confirmation without removing it', async () => {
                 await openSettings(page);
-                await expectScreen(page, 'Settings', `${size} settings before removal`, { atTop: true });
-                await page.getByRole('button', { name: 'This wallet', exact: true }).click();
+                // Settings reopens on the sub-page it was last left on, which is
+                // This wallet after the rename above; open it from the list only
+                // when the list is what shows.
+                const title = page.getByRole('heading', { level: 1, name: /^(Settings|This wallet)$/ });
+                await expect(title).toBeVisible();
+                if ((await title.textContent())?.trim() === 'Settings') {
+                    await expectScreen(page, 'Settings', `${size} settings before removal`, { atTop: true });
+                    await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).click();
+                }
                 await expectScreen(page, 'This wallet', `${size} removal settings`, { atTop: true });
 
                 await page.getByRole('button', { name: 'Remove…' }).click();
