@@ -65,17 +65,38 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));          // test/smoke
 const wsRoot = join(here, '..', '..');                          // xchain-wallet
 
+export function resolveDocsRoot({
+    env = process.env,
+    repoRoot = wsRoot,
+    exists = existsSync,
+    getGitCommonDir = () => execFileSync(
+        'git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+        { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim(),
+} = {}) {
+    if (env.XCHAIN_DOCS_ROOT) return env.XCHAIN_DOCS_ROOT;
+
+    const sibling = resolve(repoRoot, '..', 'xchain-documentation');
+    if (exists(sibling)) return sibling;
+
+    try {
+        const platformSibling = resolve(getGitCommonDir(), '..', '..', 'xchain-documentation');
+        if (exists(platformSibling)) return platformSibling;
+    } catch { /* a non-git checkout keeps the adjacent default */ }
+
+    return sibling;
+}
+
 // Resolved from this file's own location, never cwd, so a smoke run from
 // anywhere finds the same checkout. XCHAIN_DOCS_ROOT overrides it when the
 // sibling lives somewhere other than beside this repo.
-export const DOCS_ROOT = process.env.XCHAIN_DOCS_ROOT
-    || join(wsRoot, '..', 'xchain-documentation');
+export const DOCS_ROOT = resolveDocsRoot();
 
 export const WALLET_DOCS = join(DOCS_ROOT, 'components', 'wallet');
 
