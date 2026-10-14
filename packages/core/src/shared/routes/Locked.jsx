@@ -755,6 +755,7 @@ export function Locked({ onUnlocked }) {
                 id="locked-capture-passphrase"
                 ref={captureRef}
                 type="password"
+                revealable
                 label="Passphrase"
                 value={captureValue}
                 onChange={(e) => {

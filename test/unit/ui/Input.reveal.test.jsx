@@ -93,6 +93,7 @@ describe('<Input revealable>', () => {
         ['BackupSection.jsx', 6],
         ['DuressPassphraseRow.jsx', 3],
         ['BiometricRow.jsx', 1],
+        ['../../routes/Locked.jsx', 2],
     ])('marks every password field in %s revealable', (file, count) => {
         const source = readFileSync(`${SETTINGS}/${file}`, 'utf8');
         const fields = source.split(/<Input\b/).slice(1)
