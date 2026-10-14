@@ -119,14 +119,20 @@
     gap: var(--xc-space-3);
 }
 
-/* Two columns at every width. Supply and holding are whole token quantities
-   (up to 19 digits plus separators and decimals), and a quarter of the card
-   was too narrow for them from phone width up to about 1100px, so the value
-   broke mid-number. Quantities share the first row, the two counts the second. */
+/* Supply and holding are whole token quantities (up to 19 digits plus
+   separators and decimals). A quarter of the card is wide enough for them
+   only from 1024px; below that it broke the value mid-number, so the strip
+   goes two by two: quantities on the first row, the two counts on the second. */
 .statsStrip {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-3);
+}
+
+@media (min-width: 1024px) {
+    .statsStrip {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
 }
 
 /* Half a phone row is still too narrow: there each quantity takes a whole
