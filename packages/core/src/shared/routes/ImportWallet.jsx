@@ -896,17 +896,6 @@ export function ImportWallet({
                 : lane === 'wif'
                     ? handleWifSubmit
                     : handleSubmit}
-            /* The phrase and key lanes carry their guidance as field hints, so
-               only the backup lane keeps a page description. */
-            description={!isFreeWallet && lane === 'backup'
-                ? (isFull
-                    ? (mode === 'add'
-                        ? t('importWallet.backup.addFullSubtitle')
-                        : t('importWallet.backup.replaceFullSubtitle'))
-                    : (mode === 'add'
-                        ? t('importWallet.backup.addSubtitle')
-                        : t('importWallet.backup.replaceSubtitle')))
-                : undefined}
             status={formStatus}
             actions={formActions}
         >

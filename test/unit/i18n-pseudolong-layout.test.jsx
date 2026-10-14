@@ -299,7 +299,7 @@ describe('pseudo-long narrow layouts', () => {
             <div style={{ width: 320 }}>
                 <Button>Claim rewards</Button>
                 <Chip>Closing soon</Chip>
-                <ChainBadge descriptor={{
+                <ChainBadge showName descriptor={{
                     id: 'bitcoin-mainnet',
                     coin: 'BTC',
                     color: '#F7931A',

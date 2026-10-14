@@ -41,9 +41,11 @@ const CONTACT_ACTIONS = {
     flexWrap: 'wrap',
     gap: 'var(--xc-space-2)',
 };
+// Equal flex bases keep the three actions the same width on a row; growing
+// instead of a fixed width lets a longer translation widen its button rather
+// than clip a label that must stay on one line.
 const CONTACT_ACTION_BUTTON = {
-    flex: '0 0 9.5rem',
-    width: '9.5rem',
+    flex: '1 0 9.5rem',
     whiteSpace: 'nowrap',
 };
 

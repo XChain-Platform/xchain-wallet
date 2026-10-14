@@ -178,8 +178,8 @@ describe('settings form validation', () => {
         for (const button of [exportButton, csvButton, importButton]) {
             expect(button.className).toMatch(/secondary/);
             expect(button.className).toMatch(/sm/);
-            expect(button.style.width).toBe('9.5rem');
-            expect(button.style.flex).toBe('0 0 9.5rem');
+            expect(button.style.width).toBe('');
+            expect(button.style.flex).toBe('1 0 9.5rem');
             expect(button.style.whiteSpace).toBe('nowrap');
         }
 

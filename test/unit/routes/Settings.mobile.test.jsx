@@ -300,7 +300,7 @@ describe('Settings at a 320px viewport', () => {
         expect(actions.style.flexWrap).toBe('wrap');
         for (const button of buttons) {
             expect(button.parentElement).toBe(actions);
-            expect(button.style.width).toBe('9.5rem');
+            expect(button.style.flex).toBe('1 0 9.5rem');
         }
     });
 
