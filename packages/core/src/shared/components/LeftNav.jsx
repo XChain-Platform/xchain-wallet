@@ -60,20 +60,20 @@ export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 // routeRegistry.js, which PageHeader also reads to decide where Back is
 // redundant.
 const LEFT_NAV_ITEMS = [
-    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
-    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
-    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
-    { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon, requiresDex: true },
-    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
-    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
-    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+    { id: 'home', get label() { return t('home.title'); }, Icon: Icon.HomeIcon },
+    { id: 'history', get label() { return t('history.title'); }, Icon: Icon.HistoryIcon },
+    { id: 'send', get label() { return t('send.title'); }, Icon: Icon.SendIcon, spendable: true },
+    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'scan', get label() { return t('scan.title'); }, Icon: Icon.ScanIcon },
+    { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'market-activity', get label() { return t('nav.marketplace'); }, Icon: Icon.LineChartIcon, requiresDex: true },
+    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
+    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
+    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
+    { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; badge = payable pending count.
-    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
+    { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon },
 ];
 
 /** The label and icon row for a nav destination id. */

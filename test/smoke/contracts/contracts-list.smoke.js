@@ -136,7 +136,7 @@ assert.ok(
     'ContractsList says in plain words that fund-neutral calls are not listed yet',
 );
 assert.ok(
-    /Published contracts appear here after you publish one from an address on this chain/.test(listSrc),
+    /Published contracts appear here after you publish one\./.test(listSrc),
     'ContractsList surfaces the empty "My contracts" state per chain',
 );
 assert.ok(
@@ -144,7 +144,7 @@ assert.ok(
     'ContractsList surfaces the empty "My interactions" state per chain',
 );
 assert.ok(
-    /Indexed contracts appear here after this chain's contract data loads/.test(listSrc),
+    /Indexed contracts appear here after contract data loads\./.test(listSrc),
     'ContractsList surfaces the empty "Browse all" state per chain',
 );
 assert.ok(

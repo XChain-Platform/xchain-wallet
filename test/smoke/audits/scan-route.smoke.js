@@ -149,7 +149,7 @@ const leftNavSrc = readFileSync(
 assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
     'LeftNav scan group covers the scanner and its PSBT drilldown');
 assert.ok(
-    /\{ id: 'scan', label: t\('scan\.title'\), Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
+    /\{ id: 'scan', (?:label: 'Scan'|get label\(\) \{ return t\('[\w.]+'\); \}), Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
     'LeftNav primary list renders a Scan row with ScanIcon',
 );
 

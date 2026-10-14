@@ -2697,6 +2697,7 @@ export const en = {
     'routes.manageToken.pausedIndefinitely': 'Paused indefinitely',
     'routes.manageToken.pausedUntilBlock': 'Paused until block {resumeBlock}',
     'routes.manageToken.paused': 'Paused',
+    'nav.marketplace': 'Marketplace',
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {
