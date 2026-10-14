@@ -88,7 +88,7 @@ describe('native share bridge regression', () => {
 
         await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({
             title: 'Receive BTC with XChain',
-            url: 'bitcoin:bcrt1qnativeshare',
+            url: 'bitcoin:bcrt1qnativeshare?chain=bitcoin-regtest',
         })));
         expect(copyText).not.toHaveBeenCalled();
     });
@@ -99,7 +99,7 @@ describe('native share bridge regression', () => {
         await sharePaymentLink();
 
         // The share helper passes its platform env as a second argument.
-        await waitFor(() => expect(copyText).toHaveBeenCalledWith('bitcoin:bcrt1qnativeshare', expect.anything()));
+        await waitFor(() => expect(copyText).toHaveBeenCalledWith('bitcoin:bcrt1qnativeshare?chain=bitcoin-regtest', expect.anything()));
         expect(copyText).toHaveBeenCalledTimes(1);
     });
 });

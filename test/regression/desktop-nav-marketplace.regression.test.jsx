@@ -141,6 +141,8 @@ describe('regression/desktop-nav-marketplace', () => {
     it.each(INTERNAL_SETTINGS_PAGES)(
         '[REGRESSION P1] returns from the %s Settings sub-page with Back to settings',
         (sectionId, title) => {
+            // Network & endpoints is listed only in Developer Mode.
+            if (sectionId === 'network-endpoints') settings = { ...settings, developerMode: true };
             renderSettingsPage(sectionId);
 
             expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();

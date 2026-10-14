@@ -77,7 +77,8 @@ describe('regression/no-letter-wrap', () => {
             <div style={{ width: 320 }}>
                 <Button icon={null}>Claim</Button>
                 <Chip>Closing soon</Chip>
-                <ChainBadge descriptor={descriptor} />
+                {/* The visible-name form is the one whose label could wrap. */}
+                <ChainBadge descriptor={descriptor} showName />
                 <NetworkFilter
                     chainRegistry={chainRegistry}
                     coinFamilies={['bitcoin']}

@@ -112,7 +112,7 @@ describe('regression/receive-share-order', () => {
         expect(nativeShare).toHaveBeenCalledWith(expect.objectContaining({
             title: 'Receive BTC with XChain',
             text: 'Send BTC to this XChain wallet.',
-            url: 'bitcoin:bcrt1qsharefallback',
+            url: 'bitcoin:bcrt1qsharefallback?chain=bitcoin-regtest&label=Share%20fallback',
         }));
         expect(webShare).not.toHaveBeenCalled();
         expect(writeText).not.toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe('regression/receive-share-order', () => {
         await clickShare();
 
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(
-            'bitcoin:bcrt1qsharefallback',
+            'bitcoin:bcrt1qsharefallback?chain=bitcoin-regtest&label=Share%20fallback',
         ));
         expect(showToast).toHaveBeenCalledWith({
             message: 'Sharing is unavailable, so the payment link was copied to the clipboard.',

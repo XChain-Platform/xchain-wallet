@@ -42,6 +42,8 @@ function installCameraApi(getUserMedia) {
 
 afterEach(() => {
     cleanup();
+    // The scanner remembers a camera failure for the session; each case starts fresh.
+    sessionStorage.clear();
     vi.restoreAllMocks();
     restoreProperty(window, 'BarcodeDetector', savedBarcodeDetector);
     restoreProperty(navigator, 'mediaDevices', savedMediaDevices);

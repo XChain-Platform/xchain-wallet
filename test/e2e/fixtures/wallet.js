@@ -172,7 +172,8 @@ function navDestination(scope, name) {
 // falls through to More.
 async function onScreen(locator) {
     if (!(await locator.isVisible())) return false;
-    const box = await locator.boundingBox();
+    const box = await locator.boundingBox({ timeout: 2_000 }).catch(() => null);
+    if (!box) return false;
     const viewport = locator.page().viewportSize();
     if (!box || !viewport) return Boolean(box);
     return box.x + box.width > 0 && box.y + box.height > 0
@@ -183,16 +184,24 @@ async function onScreen(locator) {
 // viewport (or under enlarged text spacing), so a row can be scrolled out of
 // view; bring it back before the on-screen check. The closed phone bar's
 // off-screen sheet rows are neither, so they still fall through to More.
+// A resize can unmount the row between the count and these calls, so each
+// is bounded and a vanished row simply counts as not on screen.
 async function revealInScroller(locator) {
     if (await locator.count() === 0) return;
-    const scrolls = await locator.first().evaluate((el) => {
-        const navEl = el.closest('nav');
-        if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
-        const sheet = el.closest('[role="dialog"]');
-        return Boolean(sheet && sheet.getAttribute('aria-labelledby')
-            && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
-    });
-    if (scrolls && await locator.first().isVisible()) await locator.first().scrollIntoViewIfNeeded();
+    try {
+        const scrolls = await locator.first().evaluate((el) => {
+            const navEl = el.closest('nav');
+            if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
+            const sheet = el.closest('[role="dialog"]');
+            return Boolean(sheet && sheet.getAttribute('aria-labelledby')
+                && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
+        }, undefined, { timeout: 2_000 });
+        if (scrolls && await locator.first().isVisible()) {
+            await locator.first().scrollIntoViewIfNeeded({ timeout: 2_000 });
+        }
+    } catch {
+        // Gone mid-resize: the caller's on-screen check decides.
+    }
 }
 
 async function clickDestination(scope, name) {

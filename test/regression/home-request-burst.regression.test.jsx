@@ -253,12 +253,20 @@ describe('regression/home-request-burst', () => {
             },
         });
 
-        const results = await Promise.all(Array.from(
+        // The burst coalesces into one send; a 429 is surfaced, not retried,
+        // and the host pause it names is honoured once by the next request.
+        const results = await Promise.allSettled(Array.from(
             { length: 8 },
             () => sdk.explorer.get('/balances/bcrt1qduplicate'),
         ));
 
-        expect(results).toEqual(Array.from({ length: 8 }, () => ({ rows: ['landed'] })));
+        expect(results.map((result) => result.status)).toEqual(Array(8).fill('rejected'));
+        for (const result of results) {
+            expect(result.reason).toMatchObject({ response: { status: 429 } });
+        }
+        expect(networkGet).toHaveBeenCalledTimes(1);
+
+        await expect(sdk.explorer.get('/balances/bcrt1qduplicate')).resolves.toEqual({ rows: ['landed'] });
         expect(networkGet).toHaveBeenCalledTimes(2);
         expect(sleeps).toEqual([3_000]);
     });
