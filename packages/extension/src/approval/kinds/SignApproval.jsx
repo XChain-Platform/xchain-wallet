@@ -41,10 +41,13 @@ import { describeUnreadableReason } from '@xchain-wallet/core/shared/components/
 import { describePolicyReason } from '@xchain-wallet/core/shared/components/coSignPolicyReasons.js';
 import { isDeveloperMessage, userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
+import { useFeeFiat } from '@xchain-wallet/core/shared/hooks/useFeeFiat.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel, psbtActionSummary } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
+import { resolveFeeUnit, settingsCustomToDisplayRate } from '@xchain-wallet/core/flows/feeEstimate.js';
 import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../../../core/src/registry/coinTicker.js';
 import {
     listWallets,
     resolveApproval,
@@ -137,6 +140,17 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const requestedFee = approvalFeeRequest(payload, descriptor);
+    const nativeTicker = tickerForDescriptor(descriptor);
+    const { formatNativeFee } = useFeeFiat({
+        chainId,
+        chainCoin: requestedFee?.coinAmount ? descriptor?.coin : null,
+        nativeTicker,
+        settings,
+    });
+    const approvalFeeText = requestedFee
+        ? formatApprovalFee(requestedFee, nativeTicker, formatNativeFee)
+        : null;
 
     const walletSigningTargets = useMemo(() => {
         if (!chainId) return [];
@@ -770,6 +784,13 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 sourceAddress={preflightSourceAddress}
             />
 
+            {approvalFeeText ? (
+                <div className={shared.summary} data-testid="sign-approval-fee">
+                    <p className={shared.summaryLabel}>{t('send.networkFee')}</p>
+                    <p className={shared.summaryValue}>{approvalFeeText}</p>
+                </div>
+            ) : null}
+
             {kind === 'signIn' ? (
                 <fieldset className={shared.summary} aria-label={t('extension.sign.signInAs')}>
                     <legend className={shared.summaryLabel}>{t('extension.sign.signInAs')}</legend>
@@ -954,6 +975,60 @@ function advisoryPreflightReport(report) {
             return { ...finding, overridable: true, ...(data ? { data } : {}) };
         }),
     };
+}
+
+function firstApprovalField(payload, names) {
+    const inner = payload?.payload;
+    const sources = [inner, inner?.requested, payload];
+    for (const source of sources) {
+        if (!source || typeof source !== 'object') continue;
+        for (const name of names) {
+            if (Object.hasOwn(source, name)
+                && source[name] !== null
+                && source[name] !== '') {
+                return { name, value: source[name] };
+            }
+        }
+    }
+    return null;
+}
+
+function approvalFeeRequest(payload, descriptor) {
+    const fee = firstApprovalField(payload, ['fee', 'networkFeeSats']);
+    const rate = firstApprovalField(payload, ['feeRate', 'feePerKb']);
+    const actionNeedsFeeSummary = ['SEND', 'SWEEP'].includes(
+        String(payload?.action || '').toUpperCase(),
+    );
+    if (!fee && !rate && !actionNeedsFeeSummary) return null;
+
+    const coinAmount = fee ? formatNativeBaseUnits(fee.value, descriptor) : null;
+    let rateText = null;
+    if (rate && (typeof rate.value === 'number' || typeof rate.value === 'string')) {
+        const unit = resolveFeeUnit(descriptor);
+        const raw = String(rate.value).trim();
+        if (rate.name === 'feePerKb') {
+            const feePerKb = Number(raw);
+            if (Number.isFinite(feePerKb) && feePerKb >= 0) {
+                rateText = `${settingsCustomToDisplayRate(unit, feePerKb)} ${unit}`;
+            }
+        } else if (/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) {
+            rateText = `${raw} ${unit}`;
+        } else if (raw) {
+            rateText = neutralizeControlText(raw, { maxLength: 80 });
+        }
+    }
+
+    return { coinAmount, rateText };
+}
+
+function formatApprovalFee(requestedFee, nativeTicker, formatNativeFee) {
+    if (requestedFee.coinAmount !== null && nativeTicker) {
+        const fiat = formatNativeFee(requestedFee.coinAmount);
+        return `${requestedFee.coinAmount} ${nativeTicker}${fiat ? ` (${fiat})` : ''}`;
+    }
+    return t('extension.sign.feeSetBySite', {
+        rate: requestedFee.rateText ? ` (${requestedFee.rateText})` : '',
+    });
 }
 
 function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = null }) {

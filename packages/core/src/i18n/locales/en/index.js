@@ -969,6 +969,7 @@ export const en = {
     'extension.sign.noSignInAddress': 'This site has no address it may sign in with.',
     'extension.sign.checkingWalletMode': 'Checking wallet mode…',
     'extension.sign.passwordHint': 'Required to sign. Your password stays in this window.',
+    'extension.sign.feeSetBySite': 'Set by the site{rate}',
     'extension.sign.alwaysAllow':
         'Always allow this site. You can revoke this in Connected sites.',
     'extension.sign.warningNoun.message': 'message',
