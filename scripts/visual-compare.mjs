@@ -109,9 +109,9 @@ export const SCREENS = [
     { key: 'history', title: 'History' },
     { key: 'send', title: 'Send' },
     { key: 'receive', title: 'Receive' },
-    { key: 'swap', title: 'Swap' },
-    { key: 'create-token', title: 'Create a token' },
-    { key: 'markets', title: 'Open DEX' },
+    { key: 'swap', title: 'Swap', heading: 'Swap tokens' },
+    { key: 'create-token', title: 'Create a token', heading: 'Issue a token' },
+    { key: 'markets', title: 'Open DEX', heading: 'Decentralized exchange' },
     { key: 'contacts', title: 'Contacts' },
     { key: 'addresses', title: 'Addresses' },
     { key: 'settings', title: 'Settings' },
@@ -254,8 +254,9 @@ async function settle(page) {
 function makeShooter(page, side, size, entries) {
     const dir = join(OUT, 'shots', side, size.name);
     mkdirSync(dir, { recursive: true });
-    return async function shoot(key) {
+    return async function shoot(key, expectedHeading = null) {
         await settle(page);
+        if (expectedHeading) await assertScreenHeading(page, expectedHeading);
         for (const phase of ['top', 'bottom']) {
             let metrics = null;
             try { metrics = await page.evaluate(scrollAll, phase); } catch (err) { metrics = { error: String(err.message || err) }; }
@@ -270,6 +271,30 @@ function makeShooter(page, side, size, entries) {
         }
         await page.evaluate(scrollAll, 'top').catch(() => {});
     };
+}
+
+async function assertScreenHeading(page, expected) {
+    const actual = await page.evaluate(() => {
+        const visible = (element) => {
+            if (!element) return false;
+            const style = getComputedStyle(element);
+            return style.display !== 'none' && style.visibility !== 'hidden'
+                && element.getClientRects().length > 0;
+        };
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].find(visible);
+        if (dialog) {
+            const label = dialog.getAttribute('aria-label');
+            if (label) return label.trim();
+            const labelledBy = dialog.getAttribute('aria-labelledby');
+            const labelled = labelledBy && document.getElementById(labelledBy);
+            if (labelled?.textContent) return labelled.textContent.trim();
+        }
+        const headings = [...document.querySelectorAll('h1, [role="heading"][aria-level="1"]')].filter(visible);
+        return headings.at(-1)?.textContent?.trim() || null;
+    });
+    if (actual !== expected) {
+        throw new Error(`heading mismatch: expected "${expected}", found ${actual ? `"${actual}"` : 'none'}`);
+    }
 }
 
 async function newContext(browser, size, opts) {
@@ -348,6 +373,32 @@ async function clickSettingsRow(page, label) {
     await rows.nth(index).click({ timeout: 5_000 });
 }
 
+async function gotoSettingsScreen(page, label) {
+    await gotoByPalette(page, 'Settings');
+    await settle(page);
+    const back = page.getByRole('button', { name: 'Back to settings' });
+    if (await back.count() > 0 && await back.first().isVisible().catch(() => false)) {
+        await back.first().click();
+        await page.waitForTimeout(250);
+    }
+    if (label === 'Keyboard') {
+        await gotoByPalette(page, 'Settings → Keyboard');
+        return 'Keyboard';
+    }
+    if (label === 'Import…') {
+        await page.getByLabel('Import contacts JSON').setInputFiles({
+            name: 'contacts.json',
+            mimeType: 'application/json',
+            buffer: Buffer.from('[]'),
+        });
+        await page.getByRole('dialog', { name: 'Import contacts?' })
+            .waitFor({ state: 'visible', timeout: 5_000 });
+        return 'Import contacts?';
+    }
+    await clickSettingsRow(page, label);
+    return label === 'Accounts & addresses' ? 'Accounts' : label;
+}
+
 async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
     const license = (/LICENSE_VERSION\s*=\s*'([^']+)'/.exec(readFileSync(join(tree, 'packages/core/src/buildInfo.js'), 'utf8')) || [])[1] || '2';
     const popupCssPath = join(tree, 'packages/extension/src/popup/popup.css');
@@ -389,7 +440,7 @@ async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
         if (!wantScreen(screen.key)) continue;
         try {
             await gotoByPalette(page, screen.title);
-            await shoot(screen.key);
+            await shoot(screen.key, screen.heading || screen.title);
         } catch (err) { skip(screen.key, err); continue; }
         if (screen.key !== 'settings') continue;
         let labels = [];
@@ -397,15 +448,8 @@ async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
         for (const label of labels) {
             const key = `settings - ${label}`;
             try {
-                await gotoByPalette(page, 'Settings');
-                await settle(page);
-                const back = page.getByRole('button', { name: 'Back to settings' });
-                if (await back.count() > 0 && await back.first().isVisible().catch(() => false)) {
-                    await back.first().click();
-                    await page.waitForTimeout(250);
-                }
-                await clickSettingsRow(page, label);
-                await shoot(key);
+                const expectedHeading = await gotoSettingsScreen(page, label);
+                await shoot(key, expectedHeading);
             } catch (err) { skip(key, err); }
         }
     }
