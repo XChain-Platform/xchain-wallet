@@ -257,9 +257,9 @@ describe('AppHeader action row', () => {
         expect(search.className).toMatch(/secondary/);
     });
 
-    it('keeps only network state, lock and menu in one header row at 360px', () => {
+    it.each([320, 360, 400])('keeps the logo and buttons in one header row at %dpx', (width) => {
         const originalWidth = window.innerWidth;
-        window.innerWidth = 360;
+        window.innerWidth = width;
         const { container } = render(
             <MessagingProvider
                 shell="web"
@@ -279,15 +279,28 @@ describe('AppHeader action row', () => {
             </MessagingProvider>,
         );
 
+        const barRule = /\.bar\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
+        const leftRule = /\.left\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
         const rightRule = /\.right\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
+        expect(barRule).toMatch(/display:\s*flex/);
+        expect(barRule).toMatch(/align-items:\s*center/);
+        expect(barRule).toMatch(/justify-content:\s*space-between/);
+        expect(barRule).toMatch(/flex-wrap:\s*nowrap/);
+        expect(barRule).toMatch(/padding:\s*var\(--xc-space-2\) var\(--xc-space-3\)/);
+        expect(barRule).not.toMatch(/(?:min-|max-)?height\s*:/);
+        expect(leftRule).toMatch(/flex:\s*1 1 auto/);
+        expect(leftRule).toMatch(/min-width:\s*0/);
         expect(rightRule).toMatch(/gap:\s*var\(--xc-space-1\)/);
+        expect(rightRule).toMatch(/flex:\s*0 0 auto/);
         expect(rightRule).toMatch(/flex-wrap:\s*nowrap/);
         expect(container.querySelector('[data-xc-tier]')).toHaveAttribute('data-xc-tier', 'compact');
-        expect(screen.getByRole('region', { name: 'App header' }).style.flexWrap).toBe('');
+        const header = screen.getByRole('region', { name: 'App header' });
+        expect(header.children).toHaveLength(2);
+        expect(header.firstElementChild).toContainElement(screen.getByAltText('XChain Wallet'));
+        expect(header.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
+        expect(header.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Open menu' }));
         expect(container.querySelectorAll('[data-header-control]')).toHaveLength(3);
         expect(screen.getByRole('button', { name: 'Mainnet. Network connected' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Lock wallet' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Open menu' })).toBeTruthy();
         expect(screen.getByText('Wallet: Main')).toBeTruthy();
         window.innerWidth = originalWidth;
     });
