@@ -118,7 +118,9 @@ test.describe('license gate', () => {
     // ones. Reverting acknowledgeTerms to a bare checkbox.check() reddens this
     // test while the rest stay green.
     test.describe('with terms too long for the viewport', () => {
-        test.use({ viewport: { width: 1280, height: 500 } });
+        // The terms span the full content width on wide screens, so at
+        // 1280 wide they fit in 500px; 360px leaves the panel well short.
+        test.use({ viewport: { width: 1280, height: 360 } });
 
         test('the gate opens, and only once the terms are scrolled', async ({ page }) => {
             await page.goto('/');
