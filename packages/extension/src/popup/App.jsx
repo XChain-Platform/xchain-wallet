@@ -1956,6 +1956,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 return (
                     <CoSignerAccountDetail
                         accountId={coSignerAccountId}
+                        walletId={activeWalletId}
                         onBack={() => setUnlockedView('cosigner-accounts')}
                     />
                 );
