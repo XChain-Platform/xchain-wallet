@@ -1,5 +1,6 @@
 .wrap {
     --address-control-height: var(--xc-control-h-md);
+    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-6));
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     position: relative;
 }
@@ -33,7 +34,7 @@
     min-block-size: var(--xc-tap-min);
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: 4px;
+    inset-inline-end: var(--address-paste-width);
     top: calc(20px + var(--xc-space-1));
     width: var(--address-control-height);
     height: var(--address-control-height);
@@ -48,7 +49,31 @@
     cursor: pointer;
 }
 
+.pasteAction,
+.pasteAction > span {
+    display: contents !important;
+}
+
+.pasteAction button {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-inline-end: 0;
+    top: calc(20px + var(--xc-space-1));
+    width: var(--address-paste-width);
+    height: var(--address-control-height);
+    min-height: var(--address-control-height);
+}
+
+.pasteAction [role='alert'] {
+    display: block;
+    margin-block-start: var(--xc-help-gap);
+}
+
 .noLabel .iconButton {
+    top: 0;
+}
+
+.noLabel .pasteAction button {
     top: 0;
 }
 

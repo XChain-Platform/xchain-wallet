@@ -185,10 +185,12 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 disabled={disabled}
                 dir="ltr"
                 autoComplete="off"
-                style={IconComponent ? {
-                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                style={{
+                    paddingInlineEnd: IconComponent
+                        ? 'calc((var(--address-control-height) * 2) + var(--xc-space-8))'
+                        : 'calc(var(--address-control-height) + var(--xc-space-8))',
                     ...style,
-                } : style}
+                }}
                 value={value}
                 onChange={(e) => {
                     setPasteError('');
@@ -238,9 +240,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     <IconComponent />
                 </button>
             ) : null}
-            {/* After the in-field icon button so focus follows the visual order:
-                field, its trailing icon, then the paste control below it. */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+            <span className={styles.pasteAction}>
                 <ClipboardPasteButton
                     disabled={disabled}
                     onPaste={(text) => {
@@ -263,7 +263,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                         setActiveIndex(-1);
                     }}
                 />
-            </div>
+            </span>
             {showDropdown ? (
                 <ul
                     id={listboxId}
