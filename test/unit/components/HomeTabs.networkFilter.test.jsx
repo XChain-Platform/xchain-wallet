@@ -86,7 +86,10 @@ describe('HomeTabs network filtering', () => {
 
         expect(home).toMatch(/<SharedActivityRow/);
         expect(home).not.toMatch(/ChainBadge/);
-        expect(dispensers).toMatch(/function DispenserRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
-        expect(staking).toMatch(/function StakeRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
+        // Dispenser and stake rows name their chain through the asset icon's chain overlay.
+        expect(dispensers).toMatch(/function DispenserRow[\s\S]*?className=\{local\.chainOverlay\}/);
+        expect(dispensers).not.toMatch(/ChainBadge/);
+        expect(staking).toMatch(/function StakeRow[\s\S]*?className=\{local\.chainOverlay\}/);
+        expect(staking).not.toMatch(/ChainBadge/);
     });
 });

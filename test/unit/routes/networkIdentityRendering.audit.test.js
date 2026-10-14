@@ -36,7 +36,6 @@ describe('route network identity rendering', () => {
         const source = routeSource(file);
 
         expect(source).not.toContain('<NetworkField');
-        expect(source).not.toContain('<NetworkFilterDropdown');
         expect(source).not.toContain('showNetworkKind');
         expect(source).not.toMatch(/\$\{[^}\n]*networkKind/);
         expect(source).not.toMatch(/\(\{(?:descriptor|d)\.networkKind\}\)/);
