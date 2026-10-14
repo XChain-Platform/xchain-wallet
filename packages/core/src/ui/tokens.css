@@ -102,8 +102,11 @@
     --xc-avatar-pip-header: 14px;
     --xc-avatar-pip-list: 20px;
     --xc-avatar-pip-hero: 32px;
-    --xc-avatar-initials-header: var(--xc-text-xs);
-    --xc-avatar-initials-list: var(--xc-text-md);
+    /* The circles are fixed pixels while the initials follow the rem scale, so
+       a large text size (iOS Dynamic Type, browser zoom) would push two letters
+       past the clipped circle. The initials stop growing once they fill it. */
+    --xc-avatar-initials-header: min(var(--xc-text-xs), calc(var(--xc-avatar-size-header) * 0.4));
+    --xc-avatar-initials-list: min(var(--xc-text-md), calc(var(--xc-avatar-size-list) * 0.45));
     --xc-avatar-initials-hero: 36px;
     --xc-avatar-shape: var(--xc-radius-pill);
 
