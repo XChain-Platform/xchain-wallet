@@ -665,7 +665,6 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     </>
                 )}
             >
-                <p className={styles.summary}>Vote on poll #{String(pollIndex)} ({poll.tick}).</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>

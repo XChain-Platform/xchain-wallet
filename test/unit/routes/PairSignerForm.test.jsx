@@ -193,7 +193,7 @@ describe('PairSignerForm pairing flow', () => {
         });
         expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-        expect(screen.getByText(/Which kind of device/i)).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Choose hardware signer' })).toBeInTheDocument();
     });
 
     it('ignores a late hardware result after the user cancels the flow', async () => {
@@ -211,6 +211,6 @@ describe('PairSignerForm pairing flow', () => {
             finishPairing({ signer: {}, pairingInfo: PAIRING_INFO });
         });
         expect(screen.queryByLabelText('Label')).not.toBeInTheDocument();
-        expect(screen.getByText(/Which kind of device/i)).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Choose hardware signer' })).toBeInTheDocument();
     });
 });
