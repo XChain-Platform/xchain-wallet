@@ -497,14 +497,30 @@ export function measureControlRows() {
         }
     }
 
+    // A row that spills: a control past its row container's edge or past the
+    // window. Rows that scroll sideways on purpose (tab strips, chip
+    // scrollers) are left alone, and so is a control parked wholly off screen
+    // until focused (a skip link).
+    const viewportWidth = document.documentElement.clientWidth;
+    const scrollsSideways = (el) => /(auto|scroll)/.test(getComputedStyle(el).overflowX);
+    const parkedOffScreen = (item) => item.rect.right <= 0 || item.rect.left >= viewportWidth;
+    const spills = (container, items) => {
+        if (scrollsSideways(container)) return false;
+        const box = container.getBoundingClientRect();
+        return items.some((item) => !parkedOffScreen(item)
+            && (item.rect.left < Math.max(box.left, 0) - 1
+                || item.rect.right > Math.min(box.right, viewportWidth) + 1));
+    };
+
     const findings = [];
     const signatures = new Set();
-    for (const rows of grouped.values()) {
+    for (const [container, rows] of grouped.entries()) {
         for (const row of rows) {
             const items = [...row].sort((a, b) => a.rect.left - b.rect.left);
             const heights = items.map((item) => item.height);
             const styled = items.filter((item) => !item.iconOnly);
             const problems = [];
+            if (spills(container, items)) problems.push('overflow');
             if (Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
             if (styled.length > 1 && new Set(styled.map((item) => item.radius)).size > 1) problems.push('border-radius');
             if (styled.length > 1 && new Set(styled.map((item) => item.fontSize)).size > 1) problems.push('font-size');

@@ -53,9 +53,13 @@
     --xc-page-gutter: var(--xc-space-3);
     --xc-page-top: var(--xc-space-3);
 
-    /* Card interiors share one inset and radius across content types. */
+    /* Every card (ui/Card.module.css) shares one border, fill, inset and
+       radius across content types, and a wide form card one width. */
     --xc-card-pad: var(--xc-space-4);
     --xc-card-radius: var(--xc-radius-md);
+    --xc-card-border: 1px solid var(--xc-border);
+    --xc-card-bg: var(--xc-surface-raised);
+    --xc-form-card-max-width: 560px;
 
     /* Data and key-value tables share cell rhythm and column geometry. */
     --xc-table-cell-padding-block: var(--xc-space-2);
@@ -427,6 +431,14 @@
 @media (max-width: 480px) {
     :root {
         --xc-card-pad: var(--xc-space-3);
+    }
+}
+
+/* The narrowest phones keep the card inset to 8px so a two-column recovery
+   phrase grid still fits; every card narrows with it. */
+@media not all and (min-width: 360px) {
+    :root {
+        --xc-card-pad: var(--xc-space-2);
     }
 }
 

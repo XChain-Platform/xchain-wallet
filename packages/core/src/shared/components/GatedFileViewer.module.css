@@ -109,7 +109,7 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text);
     background: var(--xc-bg-muted);
-    border: 1px dashed var(--xc-border);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     line-height: 1.4;
 }

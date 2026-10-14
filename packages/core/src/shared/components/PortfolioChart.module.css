@@ -1,14 +1,9 @@
 .wrap {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     /* The compact chart-stack gap has no spacing-token equivalent. */
     gap: 2px;
-    background: var(--xc-surface);
-    /* Blue accent border so the chart pops against neutral surface, the
-       same visual cue the quick-action buttons use beneath it. */
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
     /* The halo overlap has no spacing-token equivalent. */
     margin-top: -6px;
     min-width: 0;
@@ -49,7 +44,8 @@
     position: relative;
     appearance: none;
     background: transparent;
-    border: none;
+    /* A visible boundary so an unselected range is recognisably a button. */
+    border: 1px solid var(--xc-control-border);
     padding: var(--xc-space-1) var(--xc-control-pad-x);
     /* The tap-min floor keeps the compact uppercase pill accessible. */
     display: inline-flex;
@@ -94,6 +90,7 @@
 
 .rangeActive {
     background: var(--xc-accent-primary);
+    border-color: var(--xc-accent-primary);
     color: var(--xc-on-accent);
 }
 

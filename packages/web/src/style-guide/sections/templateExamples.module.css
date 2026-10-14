@@ -22,12 +22,9 @@
 }
 
 .list {
+    composes: flush from '../../../../core/src/ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 

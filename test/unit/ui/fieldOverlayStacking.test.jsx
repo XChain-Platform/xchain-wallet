@@ -21,7 +21,6 @@ const tokens = css('packages/core/src/ui/tokens.css');
 const inputCss = css('packages/core/src/ui/Input.module.css');
 const addressFieldCss = css('packages/core/src/ui/AddressField.module.css');
 const comboboxCss = css('packages/core/src/ui/AddressCombobox.module.css');
-const lockedCss = css('packages/core/src/shared/routes/Locked.module.css');
 
 function ruleBody(text, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -57,7 +56,7 @@ describe('overlays drawn on a kit Input', () => {
         ['AddressField address preview', addressFieldCss, '.readOnlyValue'],
         ['AddressField picker icon', addressFieldCss, '.iconButton'],
         ['AddressCombobox picker icon', comboboxCss, '.iconButton'],
-        ['Locked password toggle', lockedCss, '.passwordToggle'],
+        ['Input password show and hide toggle', inputCss, '.revealToggle'],
     ])('stacks the %s above the input', (_name, text, selector) => {
         const body = ruleBody(text, selector);
         expect(body).toMatch(/position:\s*absolute/);
