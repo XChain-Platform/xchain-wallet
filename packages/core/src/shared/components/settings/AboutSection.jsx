@@ -284,7 +284,7 @@ export function AboutSection() {
                 )}
             </Row>
             <Row label="Diagnostics">
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center', justifyContent: 'flex-end' }}>
                     <Button
                         size="sm"
                         variant="ghost"
@@ -352,11 +352,25 @@ export function AboutSection() {
     );
 }
 
+// When a narrow row wraps its value under the label, the value keeps to the
+// row end, where every other Settings control sits.
+const ROW_END = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    marginInlineStart: 'auto',
+    minWidth: 0,
+    maxWidth: '100%',
+    textAlign: 'end',
+};
+
 function Row({ label, children }) {
     return (
         <div style={ROW}>
             <span style={ROW_LABEL}>{label}</span>
-            {children}
+            <div style={ROW_END}>{children}</div>
         </div>
     );
 }

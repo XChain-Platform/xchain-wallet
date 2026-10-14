@@ -116,3 +116,13 @@ describe('Settings field rows', () => {
         expect(src).not.toMatch(/^\s*embedded\s*$/m);
     });
 });
+
+describe('About rows', () => {
+    it('keeps a wrapped About value at the row end', () => {
+        const src = readFileSync(join(SETTINGS_DIR, 'components/settings/AboutSection.jsx'), 'utf8');
+        const rowEnd = src.match(/const ROW_END = \{([^}]*)\}/)[1];
+        expect(rowEnd).toMatch(/marginInlineStart: 'auto'/);
+        expect(rowEnd).toMatch(/justifyContent: 'flex-end'/);
+        expect(src).toMatch(/<div style=\{ROW_END\}>\{children\}<\/div>/);
+    });
+});
