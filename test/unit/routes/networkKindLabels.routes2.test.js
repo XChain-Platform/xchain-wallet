@@ -39,7 +39,8 @@ describe.each(routes)('%s network label rendering', (route) => {
         const source = withoutComments(routeSource(route));
         const routeOwnedRender = source
             .split('\n')
-            .filter((line) => !line.includes('chainLabel=') && !line.includes('aria-label='))
+            // Validation messages may name the chain; they are not rendered labels.
+            .filter((line) => !line.includes('chainLabel=') && !line.includes('aria-label=') && !line.includes('setFormError('))
             .join('\n');
 
         expect(source).not.toMatch(/['"`]([^'"`]*(?:regtest|testnet|not mainnet)[^'"`]*)['"`]/i);

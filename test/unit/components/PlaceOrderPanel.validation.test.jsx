@@ -108,7 +108,7 @@ describe('PlaceOrderPanel validation', () => {
         const messaging = mount({}, {
             getWalletBalances: vi.fn().mockResolvedValue(balances()),
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1.001' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
@@ -130,7 +130,7 @@ describe('PlaceOrderPanel validation', () => {
         const messaging = mount({}, {
             getWalletBalances: vi.fn().mockResolvedValue(balances({ xchain: '1000' })),
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '10.01' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
@@ -146,7 +146,7 @@ describe('PlaceOrderPanel validation', () => {
             getWalletBalances: vi.fn().mockResolvedValue(balances()),
             getTokenInfo: vi.fn(async ({ tick }) => ({ divisibility: tick === 'OTHER' ? 1 : 2 })),
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
         fireEvent.change(screen.getByLabelText('Price (OTHER)'), { target: { value: '0.01' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'OTHER' })));

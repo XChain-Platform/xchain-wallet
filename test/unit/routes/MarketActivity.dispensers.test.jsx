@@ -119,7 +119,7 @@ describe('Marketplace on explorer-shaped rows', () => {
         renderMarket();
 
         const sale = await screen.findByText('Sold 15 XCHAIN for 0.03 BTC');
-        const time = within(sale.closest('li')).getByText('5 min ago');
+        const time = within(sale.closest('li')).getByText('5 minutes ago');
         expect(time.tagName).toBe('TIME');
         expect(time).toHaveAttribute('title', formatLocalDateTime(timestamp));
     });

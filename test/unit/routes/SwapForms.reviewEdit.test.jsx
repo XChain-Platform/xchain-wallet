@@ -182,7 +182,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
-        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (receive address, lists)' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options' }));
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'not an address' } });
         expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
 

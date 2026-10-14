@@ -587,8 +587,8 @@ describe('governance route audit', () => {
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'Fund it' } });
         fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
 
-        expect(await screen.findByText('Vote on poll #8 (VOTE).')).toBeTruthy();
-        expect(screen.getByText('Fund it')).toBeTruthy();
+        // The review lists the vote's fields; the repeated summary sentence is gone.
+        expect(await screen.findByText('Fund it')).toBeTruthy();
         expect(screen.getByText('Network fee').nextElementSibling).toHaveTextContent('BTC');
         fireEvent.click(screen.getByRole('button', { name: 'Back' }));
         expect(screen.getByLabelText('0: Yes')).toBeChecked();

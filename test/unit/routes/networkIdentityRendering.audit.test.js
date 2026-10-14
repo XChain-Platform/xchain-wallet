@@ -45,7 +45,13 @@ describe('route network identity rendering', () => {
     it.each(ROUTES)('%s does not render coin names or raw chain ids as badges', (file) => {
         const source = routeSource(file);
 
-        expect(source).not.toMatch(/descriptor\??\.displayName/);
+        // Validation messages may name the chain the address belongs to; only
+        // rendered labels and badges are audited here.
+        const rendered = source
+            .split('\n')
+            .filter((line) => !/setFormError\(|must be (?:BURN or )?a valid address|is not valid for/.test(line))
+            .join('\n');
+        expect(rendered).not.toMatch(/descriptor\??\.displayName/);
         expect(source).not.toMatch(/<ChainBadge[^>]*\/>\s*:\s*(?:chainId|row\.chainId|<span>\{cid\}<\/span>)/);
         for (const [badge] of source.matchAll(/<ChainBadge\b[^>]*\/>/g)) {
             expect(badge).not.toContain('showNetworkKind');

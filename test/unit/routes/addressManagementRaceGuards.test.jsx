@@ -77,16 +77,17 @@ describe('address management async guards', () => {
             </MessagingProvider>
         );
         const view = render(tree('wallet-1'));
-        expect(await screen.findByText(FIRST)).toBeInTheDocument();
+        // Address cards middle-truncate the visible text; the label carries the full value.
+        expect(await screen.findByLabelText(FIRST)).toBeInTheDocument();
 
         view.rerender(tree('wallet-2'));
 
-        expect(screen.queryByText(FIRST)).toBeNull();
+        expect(screen.queryByLabelText(FIRST)).toBeNull();
         expect(screen.getByRole('status', { name: 'Loading addresses' })).toBeInTheDocument();
         await act(async () => oldLate.resolve({
             [CHAIN]: [{ address: FIRST, balances: { native: { tick: 'BTC', quantity: '1' } } }],
         }));
-        expect(screen.queryByText(FIRST)).toBeNull();
+        expect(screen.queryByLabelText(FIRST)).toBeNull();
         await act(async () => nextAddresses.resolve({}));
         expect(await screen.findByText('No addresses yet')).toBeInTheDocument();
     });

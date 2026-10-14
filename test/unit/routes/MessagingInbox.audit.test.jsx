@@ -266,7 +266,7 @@ describe('MessagingInbox audit states', () => {
 
         fireEvent.click(await screen.findByText('timestamped message'));
 
-        const time = await screen.findByText('5 min ago');
+        const time = await screen.findByText('5 minutes ago');
         expect(time.tagName).toBe('TIME');
         expect(time).toHaveAttribute('title');
     });

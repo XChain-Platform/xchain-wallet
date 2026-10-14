@@ -569,11 +569,11 @@ describe('HeaderSettingsButton section gating', () => {
         fireEvent.click(gear());
         const select = screen.getByLabelText('Active network in header');
         expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet']);
+        // Without Developer Mode only Mainnet is offered, so a test network
+        // value never reaches the switch or its confirmation.
         fireEvent.change(select, { target: { value: 'testnet' } });
-        const dialog = screen.getByRole('dialog', { name: 'Switch to Testnet?' });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-        await waitFor(() => expect(dialog).not.toBeInTheDocument());
+        expect(screen.queryByRole('dialog', { name: 'Switch to Testnet?' })).toBeNull();
         expect(onActiveNetworkChange).not.toHaveBeenCalled();
         expect(select.value).toBe('mainnet');
     });

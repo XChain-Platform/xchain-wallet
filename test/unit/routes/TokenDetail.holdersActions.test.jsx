@@ -165,7 +165,7 @@ describe('TokenDetail holders', () => {
         });
 
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
-        const table = await screen.findByRole('table', { name: 'Holder balances' });
+        const table = await screen.findByRole('list', { name: 'Holder balances' });
         expect(within(table).getAllByText('-', { exact: true })).toHaveLength(4);
         expect(table.textContent).not.toMatch(/undefined|NaN/);
     });

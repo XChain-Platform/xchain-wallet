@@ -27,7 +27,7 @@ describe('<TokenField>', () => {
         expect(onSubmit).not.toHaveBeenCalled();
     });
 
-    it('shows only the ticker text and preserves a long ticker when the value clears', () => {
+    it('shows only the ticker text, names the chain for screen readers, and preserves a long ticker', () => {
         const { rerender } = render(
             <TokenField
                 label="Asset"
@@ -37,7 +37,7 @@ describe('<TokenField>', () => {
         );
 
         expect(screen.getByRole('button', {
-            name: `Asset: ${LONG_TICKER}`,
+            name: `Asset: ${LONG_TICKER} on Bitcoin`,
         })).toBeInTheDocument();
         expect(screen.getByText(LONG_TICKER)).toHaveAttribute('title', LONG_TICKER);
         expect(screen.queryByText(/Bitcoin|regtest/)).toBeNull();

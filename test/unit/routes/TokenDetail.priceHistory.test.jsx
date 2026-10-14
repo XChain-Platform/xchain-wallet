@@ -285,7 +285,10 @@ describe('TokenDetail price history', () => {
         expect(screen.queryByText('$2.00')).toBeNull();
         expect(screen.queryByText(/DEX price/)).toBeNull();
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        expect(screen.getByText('Estimated value').nextElementSibling).toHaveTextContent('-');
+        // Detail fields are list rows: the value sits in the same row as its label.
+        const estimate = screen.getByText('Estimated value').closest('li');
+        expect(estimate).toHaveTextContent('-');
+        expect(estimate).not.toHaveTextContent('2.00');
     });
 
     it('renders dashes instead of non-finite native market values', async () => {

@@ -193,7 +193,8 @@ for (const viewport of VIEWPORTS) {
                 await expectScreen(page, 'Accounts', `${size} account picker`, { atTop: true });
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Add account' }),
-                    page.getByRole('button', { name: 'Manage account' }),
+                    // The footer action reads "Manage" so the pair stays on one line.
+                    page.getByRole('button', { name: 'Manage', exact: true }),
                 ], `${size} account picker footer`);
 
                 await page.getByRole('button', { name: /^Rename / }).first().click();

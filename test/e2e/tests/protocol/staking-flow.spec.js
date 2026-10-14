@@ -173,7 +173,7 @@ for (const viewport of VIEWPORTS) {
             await expect(page.getByRole('form', { name: 'Stake XCHAIN' })).toBeVisible();
 
             await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} new stake form`);
-            await expect(page.getByRole('button', { name: 'Network: Bitcoin · regtest' }))
+            await expect(page.getByRole('button', { name: 'Network: Bitcoin' }))
                 .toBeVisible();
 
             const form = page.getByRole('form', { name: 'Stake XCHAIN' });

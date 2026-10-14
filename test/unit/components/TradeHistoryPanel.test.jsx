@@ -125,7 +125,7 @@ describe('TradeHistoryPanel', () => {
 
         renderPanel();
 
-        const recentTime = await screen.findByText('5 min ago');
+        const recentTime = await screen.findByText('5 minutes ago');
         expect(recentTime.tagName).toBe('TIME');
         expect(recentTime).toHaveAttribute('title', formatLocalDateTime(recent));
         expect(screen.getByText(formatActivityTime(older, now))).toBeInTheDocument();
