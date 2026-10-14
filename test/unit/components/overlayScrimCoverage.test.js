@@ -32,6 +32,10 @@ describe('modal scrims cover the whole viewport', () => {
         const overlay = rule(readFileSync(file, 'utf8'), '.overlay');
         expect(overlay).toMatch(/position:\s*fixed/);
         expect(overlay).toMatch(/inset:\s*0/);
+        // A cap on the visible height alone would stop a top-anchored scrim
+        // short of the bottom edge by the top safe-area inset on a notched phone.
+        const cap = /max-height:([^;]*);/.exec(overlay)?.[1];
+        if (cap) expect(cap).toMatch(/\+\s*env\(safe-area-inset-top/);
         expect(overlay).toMatch(/background:\s*var\(--xc-overlay,\s*rgba\(15, 23, 42, 0\.55\)\)/);
     });
 });
