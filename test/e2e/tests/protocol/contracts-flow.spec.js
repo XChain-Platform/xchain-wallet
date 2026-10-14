@@ -63,7 +63,8 @@ async function installContractFixture(page) {
             },
         },
     };
-    const onFixtureChain = request?.chainId === 'bitcoin-mainnet';
+    // The demo wallet's Bitcoin chain.
+    const onFixtureChain = request?.chainId === 'bitcoin-regtest';
     if (type === 'contracts.forSource' || type === 'contracts.browseAll') {
         return onFixtureChain ? [fixtureContract] : [];
     }
@@ -103,13 +104,14 @@ async function settle(page) {
 
 async function mismatchedControlRows(page) {
     return page.getByRole('main').evaluate((main) => {
-        const controls = Array.from(main.querySelectorAll([
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        const controls = Array.from(Array.from(main.querySelectorAll([
             'button',
             'input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"])',
             'select',
             'textarea',
             '[role="tab"]',
-        ].join(','))).filter((control) => {
+        ].join(','))).filter((el) => !el.closest('[aria-hidden="true"]'))).filter((control) => {
             const rect = control.getBoundingClientRect();
             const style = getComputedStyle(control);
             return rect.width > 0 && rect.height > 0
@@ -194,7 +196,7 @@ function definitionValue(main, term) {
 
 async function setWatcherMode(page) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet Mode/ }).click();
+    await page.getByRole('button', { name: /^Wallet mode/ }).click();
     const watcher = page.getByRole('radio', { name: /^Watcher/ });
     await expect(watcher).toBeVisible();
     await watcher.click();
@@ -220,10 +222,10 @@ async function walkExecute(page, viewport) {
     await expectScreen(page, viewport, `Call contract #${CONTRACT_INDEX}`);
 
     await main.getByLabel('amount (amount)', { exact: true }).fill(CALL_AMOUNT);
-    await main.getByRole('button', { name: /^Deposit:/ }).click();
+    await main.getByRole('button', { name: /^Deposit \(optional\):/ }).click();
     await expectScreen(page, viewport, 'Token to deposit');
     await main.getByLabel('Search coins or tokens').fill(DEPOSIT_TICK);
-    await main.locator(`[data-balance-key="bitcoin-mainnet:${DEPOSIT_TICK}"]`).first().click();
+    await main.locator(`[data-balance-key="bitcoin-regtest:${DEPOSIT_TICK}"]`).first().click();
     await main.getByRole('textbox', { name: /^Deposit amount/ }).fill(DEPOSIT_AMOUNT);
 
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
