@@ -364,9 +364,6 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             <FormPage
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
-                intro={isClear
-                    ? `Clear any standing delegation of your ${tick} voting weight.`
-                    : `Delegate your ${tick} voting weight to ${delegateTo.slice(0, 16)}…`}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}

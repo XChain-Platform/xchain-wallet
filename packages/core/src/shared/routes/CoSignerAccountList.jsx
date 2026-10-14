@@ -67,17 +67,19 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
 
     return wrap(
         <ListPage
-            intro={(
-                <>
-                    Agent accounts let an automated agent share a 2-of-2 address with
-                    this wallet. This wallet signs each request automatically when it
-                    fits the policy you set, and asks you to approve it.
-                </>
-            )}
             toolbar={accounts.length > 0
                 ? <Button variant="primary" onClick={onProvision}>New agent account</Button>
                 : null}
         >
+            {accounts.length > 0 ? (
+                <details>
+                    <summary>How agent accounts work</summary>
+                    <p className={styles.hint}>
+                        An automated agent shares a 2-of-2 address with this wallet. Requests that fit your policy
+                        are signed after your approval. Agent accounts support Bitcoin networks.
+                    </p>
+                </details>
+            ) : null}
             {accounts.length === 0 ? (
                 <EmptyState
                     title="No agent accounts yet"

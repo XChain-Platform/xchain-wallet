@@ -532,20 +532,6 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         <FormPage
             label={verb}
             onSubmit={handleReview}
-            intro={(
-                <>
-                    {isDelegate
-                        ? 'Delegating lets the selected Ed25519 key sign hub actions for this address without moving its stake.'
-                        : 'Revoking stops the selected Ed25519 key from signing hub actions for this address.'}
-                    {isDelegate
-                        ? ' Use Revoke delegation from the staking details to remove the key later.'
-                        : ''}
-                    {' '}You will review the source address, signing key, and fee before signing.
-                    {isWatcherMode
-                        ? ' Watch-only mode creates an unsigned transaction here and cannot sign it.'
-                        : ''}
-                </>
-            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -560,6 +546,15 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 </Button>
             )}
         >
+            <details>
+                <summary>How signing-key delegation works</summary>
+                <p className={styles.hint}>
+                    {isDelegate
+                        ? 'The selected Ed25519 key can sign hub actions for this address without moving its stake. Revoke it later from staking details.'
+                        : 'Revoking stops the selected Ed25519 key from signing hub actions for this address.'}
+                    {isWatcherMode ? ' Watch-only mode creates an unsigned transaction and cannot sign it.' : ''}
+                </p>
+            </details>
             {fromAddress ? (
                 <AddressField
                     label="From"

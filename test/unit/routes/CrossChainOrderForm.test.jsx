@@ -188,8 +188,9 @@ describe('CrossChainOrderForm', () => {
         expect(pickerName(utils, 'Get chain')).toBe('Get chain: Bitcoin');
         expect(utils.getByLabelText('Receive at').value).toBe(BTC_ADDRESS.address);
         expect(calls.filter((c) => c.method === 'getNewestAddress').map((c) => c.args.chainId)).toEqual([BTC]);
-        // Matching is described in plain words, not by the mechanism.
-        expect(utils.container.textContent).toMatch(/order book and fills automatically/);
+        const disclosure = utils.getByText('How orders fill').closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent(/order book and fills automatically/);
         expect(utils.container.textContent).not.toMatch(/federation|price-time/i);
 
         await fillPair(utils);

@@ -134,7 +134,6 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
             <FormPage
                 label="Add account"
                 onSubmit={handleSubmit}
-                intro="A new set of derived addresses under the same recovery phrase."
                 actions={actions}
             >
                 <SignerSelectForm
@@ -155,6 +154,7 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
                     autoComplete="off"
                     disabled={busy}
                     error={error || undefined}
+                    hint="Names a separate set of addresses derived from this wallet's recovery phrase."
                 />
             </FormPage>
         </Screen>

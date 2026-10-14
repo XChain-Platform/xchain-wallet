@@ -452,7 +452,6 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             <FormPage
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
-                intro={`${verb} ${actionParams.QUANTITY} ${actionParams.TICK} ${preposition} contract #${actionParams.CONTRACT_ACTION_INDEX}.`}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}

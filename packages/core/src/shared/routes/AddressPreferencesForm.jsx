@@ -373,12 +373,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             label="On-chain preferences"
             onSubmit={handleReview}
             sectioned
-            intro={(
-                <>
-                On-chain preferences apply to <AddressText address={address} /> itself
-                and are visible to the whole network once written.
-                </>
-            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -386,6 +380,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 <Button type="submit" variant="primary">Review</Button>
             )}
         >
+            <details>
+                <summary>Who can see these preferences?</summary>
+                <p className={styles.hint}>
+                    They apply to <AddressText address={address} /> and are visible to the whole network once written.
+                </p>
+            </details>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
                     <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
