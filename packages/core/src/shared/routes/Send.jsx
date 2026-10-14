@@ -2879,7 +2879,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 <AddressText address={txid} className={styles.txid} size="sm" />
                                 <CopyButton
                                     value={txid}
-                                    label={t('send.success.copy')}
+                                    label={t('common.copy')}
                                     ariaLabel={t('common.copyTransactionId')}
                                 />
                             </div>

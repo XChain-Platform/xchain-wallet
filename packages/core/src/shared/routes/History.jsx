@@ -3014,7 +3014,7 @@ function PendingOutputLine({ text, destination }) {
             <HistoryCopyButton
                 value={destination}
                 label={t('history.copy.walletAddress')}
-                visibleLabel={t('history.copy.short')}
+                visibleLabel={t('common.copy')}
             />
         </span>
     );
@@ -3253,7 +3253,7 @@ function CopyableValue({ display, fullValue, ariaLabel }) {
             <span className={styles.copyableText}>
                 {identifier ? <AddressText address={full} size="md" /> : display}
             </span>
-            <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('history.copy.short')} />
+            <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('common.copy')} />
         </span>
     );
 }
