@@ -1254,18 +1254,6 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
  */
 function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
-    // CopyButton flips its own label; this status line is the announced
-    // confirmation and clears on the same 1.5 s beat.
-    const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
-    const copyResetRef = useRef(null);
-
-    useEffect(() => () => clearTimeout(copyResetRef.current), []);
-
-    const onTxidCopied = () => {
-        clearTimeout(copyResetRef.current);
-        setCopyStatus('Copied');
-        copyResetRef.current = setTimeout(() => setCopyStatus(null), 1500);
-    };
     // Say "published" only for a broadcast that returned a txid; a transient
     // failure resolves queued, with the signed bytes in the broadcast queue.
     if (!txid) {
@@ -1297,10 +1285,9 @@ function PublishLabelsReport({ result, onDone }) {
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '-'}</dd>
             </dl>
             <div className={styles.actions}>
-                <CopyButton value={txid} label="Copy txid" onCopied={onTxidCopied} />
+                <CopyButton value={txid} label="Copy txid" />
                 <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
             </div>
-            {copyStatus ? <StatusMessage variant="success">{copyStatus}</StatusMessage> : null}
         </FormSection>
     );
 }

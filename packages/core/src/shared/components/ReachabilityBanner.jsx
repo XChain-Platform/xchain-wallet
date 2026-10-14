@@ -53,16 +53,18 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
 
     return (
         <div
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
             className={`${styles.banner} ${overall === 'offline' ? styles.offline : styles.degraded}`}
         >
             <span className={styles.icon} aria-hidden="true">
                 {overall === 'offline' ? '⛔' : '⚠'}
             </span>
             <div className={styles.body}>
-                <div className={styles.title}>
+                <div
+                    className={styles.title}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                >
                     {overall === 'offline'
                         ? 'Wallet is offline'
                         : 'Some wallet information is unavailable'}

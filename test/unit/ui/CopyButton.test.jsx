@@ -15,14 +15,9 @@ const haptic = vi.hoisted(() => ({
     tap: vi.fn(),
     error: vi.fn(),
 }));
-const liveRegion = vi.hoisted(() => ({ announce: vi.fn() }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     useHapticFeedback: () => haptic,
-}));
-
-vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
-    useToast: () => liveRegion,
 }));
 
 import { CopyButton } from '../../../packages/core/src/ui/CopyButton.jsx';
@@ -66,7 +61,10 @@ describe('<CopyButton>', () => {
             });
             expect(haptic.tap).toHaveBeenCalledOnce();
             expect(haptic.error).not.toHaveBeenCalled();
-            expect(liveRegion.announce).toHaveBeenCalledWith('Copied');
+            const announcement = screen.getByRole('status');
+            expect(announcement).toHaveTextContent('Copied');
+            expect(announcement).toHaveAttribute('aria-live', 'polite');
+            expect(announcement).toHaveAttribute('aria-atomic', 'true');
             expect(screen.getByRole('button')).not.toHaveAttribute('aria-live');
             act(() => {
                 vi.advanceTimersByTime(101);
@@ -85,8 +83,8 @@ describe('<CopyButton>', () => {
         );
         fireEvent.click(screen.getByRole('button'));
         await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
-        expect(liveRegion.announce).not.toHaveBeenCalled();
         expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByRole('status')).toHaveTextContent('Copied');
     });
 
     it('names clipboard unavailability when every copy path is refused', async () => {
@@ -99,6 +97,29 @@ describe('<CopyButton>', () => {
         expect(clipboard.writeText).toHaveBeenCalled();
         expect(haptic.error).toHaveBeenCalledOnce();
         expect(haptic.tap).not.toHaveBeenCalled();
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveAttribute('aria-live', 'assertive');
+        expect(alert).toHaveAttribute('aria-atomic', 'true');
+        expect(alert).toHaveTextContent('Copy failed: the clipboard is unavailable.');
+    });
+
+    it('announces each copy once while ordinary rerenders leave the announcement intact', async () => {
+        const view = render(<CopyButton value="x" />);
+        const button = screen.getByRole('button');
+        button.focus();
+        fireEvent.click(button);
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Copied'));
+        const first = screen.getByRole('status');
+        expect(first).toHaveTextContent('Copied');
+        expect(button).toHaveFocus();
+
+        view.rerender(<CopyButton value="x" />);
+        expect(screen.getByRole('status')).toBe(first);
+
+        fireEvent.click(button);
+        await waitFor(() => expect(screen.getByRole('status')).not.toBe(first));
+        expect(screen.getAllByText('Copied')).toHaveLength(2);
+        expect(button).toHaveFocus();
     });
 
     it('uses ariaLabel when provided, otherwise falls back to the visible label', () => {
