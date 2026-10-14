@@ -74,6 +74,16 @@ describe('RBF plan validation edges', () => {
         expect(() => plan({ conflict })).toThrow(/replacement fee consumes every input/);
     });
 
+    it('raises the effective rate by at least the incremental relay minimum', () => {
+        const transactionBytes = 250;
+        const originalRate = 1_000 / transactionBytes;
+        const result = plan({ feeRate: '4.5', transactionBytes });
+        const replacementRate = Number(result.replacementFeeSats) / transactionBytes;
+
+        expect(replacementRate).toBeGreaterThanOrEqual(originalRate + 1);
+        expect(result.encoderOpts.customOutputs).toEqual([{ address: DESTINATION, value: 7_000 }]);
+    });
+
     it.each([
         [{ feeRate: 0, transactionBytes: 100 }, /positive satoshi-per-vbyte/],
         [{ feeRate: 20 }, /transactionBytes is required/],
@@ -132,9 +142,12 @@ describe('RBF history eligibility guards', () => {
         [entry({ txHash: '' }), { descriptor }, /hash/i],
         [entry({ blockIndex: 1 }), { descriptor }, /confirmed/i],
         [entry({ pending: { rbf: true, chainConfirmed: true } }), { descriptor }, /confirmed/i],
+        [entry({ action: 'SWEEP' }), { descriptor }, /SWEEP/],
         [entry({ action: 'MINT' }), { descriptor }, /MINT/],
         [entry(), { descriptor: null }, /isn't supported/i],
         [entry({ pending: {} }), { descriptor }, /did not allow/i],
+        [entry({ pending: { rbf: true, failed: true } }), { descriptor }, /did not allow/i],
+        [entry({ pending: { rbf: true, replaced: true } }), { descriptor }, /did not allow/i],
     ])('refuses an ineligible entry %#', (candidate, options, reason) => {
         const result = isEntryReplaceable(candidate, options);
         expect(result.ok).toBe(false);

@@ -55,13 +55,18 @@ assert.equal(
     isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: null } }, btc).ok,
     false,
 );
+assert.equal(
+    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true, failed: true } }, btc).ok,
+    false,
+);
 
-// All replaceable kinds
-for (const action of ['SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']) {
+// Fee bump is offered only for sends; other action transactions may have
+// signing semantics that a rate-only replacement must not reinterpret.
+for (const action of ['SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']) {
     assert.equal(
         isEntryReplaceable({ blockIndex: 0, action, txHash: 'abc', pending: { rbf: true } }, btc).ok,
-        true,
-        `${action} is replaceable`,
+        false,
+        `${action} is not offered replacement`,
     );
 }
 
