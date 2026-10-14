@@ -5403,6 +5403,18 @@ export class PasswordChangeUnavailableError extends Error {
 }
 
 /**
+ * A wallet record changed while a password change was being prepared (a
+ * rename, an imported key or a new wallet from another window, or a second
+ * change). Nothing was written; the person can simply try again.
+ */
+export class PasswordChangeConflictError extends Error {
+    constructor() {
+        super('Your wallets changed while the password was being changed. Your password has not been changed; try again.');
+        this.name = 'PasswordChangeConflictError';
+    }
+}
+
+/**
  * Change the password every seal the current password made: the target
  * wallet's, any other wallet sealed under the same password, and the vault
  * document's own key when the current password is the unlock password.
@@ -5481,6 +5493,13 @@ export async function changeWalletPassword(req, deps, operations = {}) {
         // The target first, so its own failure is the one reported. Another
         // wallet the old password does not open was sealed under a different
         // password and keeps it.
+        // The records every replacement is prepared from. The vault write below
+        // refuses unless these are still the stored records, so a wallet write
+        // that lands during the derivations is never overwritten or left on
+        // the old password. The target was read before the verification
+        // unlock, so it must still be the stored one too.
+        const stored = await deps.vault.wallets.list();
+        if (!stored.includes(wallet)) throw new PasswordChangeConflictError();
         const target = detachedWalletCopy(wallet);
         const sealOpts = (candidate) => ({
             walletPassword: currentPassword,
@@ -5491,7 +5510,7 @@ export async function changeWalletPassword(req, deps, operations = {}) {
             throw new Error('This wallet has no password-protected key material.');
         }
         const candidates = [target];
-        for (const other of await deps.vault.wallets.list()) {
+        for (const other of stored) {
             if (other.id === walletId) continue;
             const candidate = detachedWalletCopy(other);
             try {
@@ -5502,10 +5521,16 @@ export async function changeWalletPassword(req, deps, operations = {}) {
         }
 
         if (vaultRekeyed) newVaultKey = await deriveKey(newPassword, vaultKdfParams);
-        await deps.vault.rekey({
-            ...(newVaultKey ? { masterKey: newVaultKey } : {}),
-            wallets: candidates,
-        });
+        try {
+            await deps.vault.rekey({
+                ...(newVaultKey ? { masterKey: newVaultKey } : {}),
+                wallets: candidates,
+                readWallets: stored,
+            });
+        } catch (err) {
+            if (/** @type {any} */ (err)?.name === 'VaultConflictError') throw new PasswordChangeConflictError();
+            throw err;
+        }
 
         // Committed. The shell's caches follow the vault key: a stale session
         // key would reopen nothing after a worker restart or relaunch, and a

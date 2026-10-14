@@ -30,6 +30,8 @@ import { loadSigningCredentials, saveSigningSecret } from '../../../packages/ext
 import { storage as storageLib, crypto as cryptoLib, signers as signersLib } from '../../../packages/core/src/index.js';
 import { encryptWalletSeed, decryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
 import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
+import { rekeyWalletRecord as realRekeyWalletRecord } from '../../../packages/core/src/flows/backupFile.js';
+import { unlockWallet as realUnlockWallet } from '../../../packages/core/src/flows/unlockWallet.js';
 
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
@@ -243,6 +245,80 @@ describe('wallet.changePassword, then wallet.unlock', () => {
         expect(await unlockOutcome(env, OLD)).toBe('opened; signers for [w1]');
         const creds = await loadSigningCredentials(env.signingSecretBackend);
         expect(creds?.password === OLD).toBe(true);
+    });
+
+    // Each re-seal costs an Argon2id derivation, so a change takes seconds, and
+    // another window can write a wallet record meanwhile. Overwriting that
+    // write loses it (an imported key would be gone); keeping it beside a
+    // re-sealed vault leaves that record on the old password. Either way the
+    // change must refuse and write nothing.
+    it('refuses, writing nothing, when another wallet is renamed during the re-seal', async () => {
+        const env = await onboardedVault([
+            { id: 'w1', mnemonic: MNEMONIC_A, password: OLD, kdfParams: VAULT_KDF },
+            { id: 'w2', mnemonic: MNEMONIC_B, password: OLD, kdfParams: OTHER_KDF },
+        ]);
+        let renamed = false;
+        const rekeyWalletRecord = async (candidate, opts) => {
+            if (!renamed) {
+                renamed = true;
+                await env.vault.wallets.put({ ...(await env.vault.wallets.get('w2')), name: 'Renamed meanwhile' });
+            }
+            return realRekeyWalletRecord(candidate, opts);
+        };
+
+        await expect(changeWalletPassword(
+            { walletId: 'w1', currentPassword: OLD, newPassword: NEW }, hostDeps(env), { rekeyWalletRecord },
+        )).rejects.toMatchObject({ name: 'PasswordChangeConflictError' });
+
+        expect(await unlockOutcome(env, OLD)).toBe('opened; signers for [w1, w2]');
+        expect(await unlockOutcome(env, NEW)).toBe('refused: InvalidPasswordError');
+        expect((await env.vault.wallets.get('w2')).name).toBe('Renamed meanwhile');
+        const creds = await loadSigningCredentials(env.signingSecretBackend);
+        expect(creds?.password === OLD).toBe(true);
+
+        // Nothing is wedged: the same change goes through on the next try.
+        await changeWalletPassword({ walletId: 'w1', currentPassword: OLD, newPassword: NEW }, hostDeps(env));
+        expect(await unlockOutcome(env, NEW)).toBe('opened; signers for [w1, w2]');
+        expect((await env.vault.wallets.get('w2')).name).toBe('Renamed meanwhile');
+    });
+
+    it('refuses when the target itself is rewritten during the verification unlock', async () => {
+        const env = await onboardedVault([{ id: 'w1', mnemonic: MNEMONIC_A, password: OLD, kdfParams: VAULT_KDF }]);
+        const unlockWallet = async (opts) => {
+            await env.vault.wallets.put({ ...(await env.vault.wallets.get('w1')), name: 'Renamed meanwhile' });
+            return realUnlockWallet(opts);
+        };
+
+        await expect(changeWalletPassword(
+            { walletId: 'w1', currentPassword: OLD, newPassword: NEW }, hostDeps(env), { unlockWallet },
+        )).rejects.toMatchObject({ name: 'PasswordChangeConflictError' });
+
+        expect(await unlockOutcome(env, OLD)).toBe('opened; signers for [w1]');
+        expect((await env.vault.wallets.get('w1')).name).toBe('Renamed meanwhile');
+    });
+
+    it('two changes started together: one wins, the other refuses, and the caches follow the winner', async () => {
+        const env = await onboardedVault([{ id: 'w1', mnemonic: MNEMONIC_A, password: OLD, kdfParams: VAULT_KDF }]);
+        const SECOND = 'second-new-password';
+        const results = await Promise.allSettled([
+            changeWalletPassword({ walletId: 'w1', currentPassword: OLD, newPassword: NEW }, hostDeps(env)),
+            changeWalletPassword({ walletId: 'w1', currentPassword: OLD, newPassword: SECOND }, hostDeps(env)),
+        ]);
+        const won = results.findIndex((r) => r.status === 'fulfilled');
+        expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+        expect(results[1 - won]).toMatchObject({ status: 'rejected', reason: { name: 'PasswordChangeConflictError' } });
+
+        const winner = won === 0 ? NEW : SECOND;
+        const loser = won === 0 ? SECOND : NEW;
+        expect(await unlockOutcome(env, winner)).toBe('opened; signers for [w1]');
+        expect(await unlockOutcome(env, loser)).toBe('refused: InvalidPasswordError');
+        expect(await unlockOutcome(env, OLD)).toBe('refused: InvalidPasswordError');
+        const cachedKey = await env.sessionBackend.load();
+        const v = new storageLib.Vault({ backend: env.storageBackend, masterKey: cachedKey });
+        await expect(v.open()).resolves.toBeUndefined();
+        v.close();
+        const creds = await loadSigningCredentials(env.signingSecretBackend);
+        expect(creds?.password === winner).toBe(true);
     });
 
     it('refuses before any write when the shell gives no way to move the vault key', async () => {

@@ -88,6 +88,16 @@ export class VaultValidationError extends Error {
     }
 }
 
+/** A guarded write found the records it was prepared from already replaced. */
+export class VaultConflictError extends Error {
+    /** @param {string} collection */
+    constructor(collection) {
+        super(`Vault: ${collection} changed while this write was being prepared`);
+        this.name = 'VaultConflictError';
+        this.collection = collection;
+    }
+}
+
 /**
  * @typedef {Object} VaultOpts
  * @property {import('./backend.js').StorageBackend} backend
@@ -293,12 +303,23 @@ export class Vault {
      *
      * The caller keeps ownership of `masterKey`; the vault takes a copy.
      *
+     * The replacements are prepared from records read seconds earlier (an
+     * Argon2id derivation per wallet). Any wallet write that lands in that
+     * window (a rename, an imported key, a passphrase capture, a new wallet)
+     * would be overwritten here, or would leave a record still sealed under
+     * the old password beside a vault sealed under the new one. `readWallets`
+     * is the list the caller prepared from; the write refuses with
+     * VaultConflictError unless the stored wallets are still exactly those
+     * records. Reads keep record identity (migration returns a current record
+     * as is), so an identity comparison is exact.
+     *
      * @param {Object} opts
      * @param {Uint8Array} [opts.masterKey]   the new 32-byte key; omitted keeps the current one
      * @param {Array<import('../schemas/wallet.js').Wallet>} [opts.wallets]   replacements for existing records, matched by id
+     * @param {Array<import('../schemas/wallet.js').Wallet>} [opts.readWallets]   the records the replacements were prepared from, as `wallets.list()` returned them
      * @returns {Promise<void>}
      */
-    async rekey({ masterKey, wallets = [] } = {}) {
+    async rekey({ masterKey, wallets = [], readWallets } = {}) {
         this._assertOpen();
         if (masterKey !== undefined && (!(masterKey instanceof Uint8Array) || masterKey.length !== 32)) {
             throw new Error('Vault.rekey: masterKey must be a 32-byte Uint8Array');
@@ -313,6 +334,13 @@ export class Vault {
         return this._enqueueWrite(async () => {
             this._assertOpen();
             const previous = this._doc;
+            if (readWallets !== undefined && (
+                !Array.isArray(readWallets)
+                || readWallets.length !== previous.wallets.length
+                || previous.wallets.some((stored, i) => stored !== readWallets[i])
+            )) {
+                throw new VaultConflictError('wallets');
+            }
             const arr = [...previous.wallets];
             for (const record of wallets) {
                 const idx = arr.findIndex((r) => r.id === record.id);

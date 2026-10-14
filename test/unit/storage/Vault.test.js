@@ -242,4 +242,37 @@ describe('storage/Vault rekey (password change)', () => {
         expect(saveSpy).not.toHaveBeenCalled();
         expect(vault.keyMatches(KEY)).toBe(true);
     });
+
+    it('writes when the wallets are still the records the replacements were prepared from', async () => {
+        const { vault } = await opened();
+        const read = await vault.wallets.list();
+        const replaced = { ...read[0], encryptedSeed: 'c2VhbGVkLW5ldw==' };
+        await vault.rekey({ masterKey: NEXT, wallets: [replaced], readWallets: read });
+        expect(vault.keyMatches(NEXT)).toBe(true);
+    });
+
+    it('refuses, writing nothing, when a wallet changed or appeared after the read', async () => {
+        const { vault, backend } = await opened();
+        const read = await vault.wallets.list();
+        const replaced = { ...read[0], encryptedSeed: 'c2VhbGVkLW5ldw==' };
+
+        // A rename of another wallet lands while the replacements are prepared.
+        await vault.wallets.put({ ...read[1], name: 'Renamed meanwhile' });
+        const saveSpy = vi.spyOn(backend, 'save');
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [replaced], readWallets: read }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(vault.keyMatches(KEY)).toBe(true);
+        expect((await vault.wallets.get('w2')).name).toBe('Renamed meanwhile');
+        expect((await vault.wallets.get('w1')).encryptedSeed).toBe('c2VhbGVkLW9sZA==');
+
+        // A wallet added after the read is refused the same way.
+        const reread = await vault.wallets.list();
+        await vault.wallets.put(walletRecord('w3', 'dGhpcmQ='));
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [], readWallets: reread }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+        // The one save is the w3 put itself; the refused rekey added none.
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        expect(vault.keyMatches(KEY)).toBe(true);
+    });
 });
