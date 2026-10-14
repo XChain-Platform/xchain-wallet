@@ -44,20 +44,17 @@ describe('route page-top ownership', () => {
         expect(form).toMatch(/padding:\s*0/);
     });
 
-    it('uses the responsive gutter for reachability notices and releases the landscape scrollbar gutter', () => {
+    it('lets the route body gutter place reachability notices and releases the landscape scrollbar gutter', () => {
         const banner = read('packages/core/src/shared/components/ReachabilityBanner.module.css');
         const screen = read('packages/core/src/ui/Screen.module.css');
-        // The shell owns the tier values, so the notice reads its inset.
         const shell = read('packages/core/src/shared/components/LeftNav.module.css');
-        // The notice inset adds the route body's scrollbar lane, so notices
-        // line up with route content beside a classic scrollbar.
-        expect(shell).toMatch(/\.notices\s*\{[^}]*padding-inline:\s*calc\(var\(--xc-notice-inset,\s*var\(--xc-space-3\)\) \+ var\(--xc-scrollbar-lane,\s*0px\)\)/);
-        // A phone-width query may compact the banner, but never sets its inset.
+        // Notices render inside Screen's body, so the body's page gutter is
+        // their inset at every tier and nothing adds a second one.
+        expect(screen).toMatch(/\.notices\s*\{/);
+        expect(shell).not.toMatch(/--xc-notice-inset|--xc-scrollbar-lane/);
         for (const [, block] of banner.matchAll(/@media \([^)]*width[^)]*\)\s*\{([\s\S]*?)\n\}/g)) {
             expect(block).not.toMatch(/margin/);
         }
-        expect(shell).toMatch(/data-xc-tier='rail'\] \.notices\s*\{[^}]*--xc-notice-inset:\s*var\(--xc-space-4\)/);
-        expect(shell).toMatch(/data-xc-tier='full'\] \.notices\s*\{[^}]*--xc-notice-inset:\s*var\(--xc-space-6\)/);
         expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.body\s*\{[^}]*scrollbar-gutter:\s*auto/);
     });
 });

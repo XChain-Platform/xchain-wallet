@@ -105,6 +105,10 @@ test.describe('real wallet', () => {
         // appears once its startup grace ends.
         const message = page.getByRole('status').filter({ hasText: 'Some balances may be out of date' });
         await expect(message).toBeVisible({ timeout: 90_000 });
+        // Notices are page content, never toolbar content: the notice is in
+        // the route's main region.
+        await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Some balances may be out of date' }))
+            .toBeVisible();
         const notice = message.locator('xpath=../..');
         await notice.getByRole('button', { name: 'Details' }).click();
         const panelId = await notice.getByRole('button', { name: 'Details' }).getAttribute('aria-controls');
@@ -151,5 +155,18 @@ test.describe('real wallet', () => {
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
         await gotoSection(page, 'History');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        // On a route with a page header the notice opens the scrolling
+        // content below that header, never between the two toolbars.
+        const placement = await message.evaluate((node) => {
+            const main = node.closest('main');
+            const pageHeader = main?.previousElementSibling;
+            return {
+                inMain: Boolean(main),
+                firstInMain: Boolean(main?.firstElementChild?.contains(node)),
+                belowPageHeader: pageHeader?.tagName === 'HEADER'
+                    && pageHeader.getBoundingClientRect().bottom <= node.getBoundingClientRect().top + 1,
+            };
+        });
+        expect(placement).toEqual({ inMain: true, firstInMain: true, belowPageHeader: true });
     });
 });

@@ -148,3 +148,9 @@
         max-height: min(40vh, 160px);
     }
 }
+
+/* Slot for the shell's notices: the first row of the scrolling body, at
+   the content's full width inside the page gutter. */
+.notices {
+    min-width: 0;
+}

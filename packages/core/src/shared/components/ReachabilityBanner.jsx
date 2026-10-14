@@ -10,14 +10,14 @@
 
 // ReachabilityBanner: §49.1 / §49.2 / G152.
 //
-// The compact notice sits below persistent app chrome and reports only the
-// user-facing consequence. Its Details disclosure identifies affected coins
+// The compact notice is the first row of the page content, below the page
+// header, and reports only the user-facing consequence. Its Details disclosure identifies affected coins
 // and when they were last checked, without service names or network kinds.
 
 import { useContext, useEffect, useId, useState } from 'react';
 import { useReachability } from '../hooks/useReachability.js';
 import { branding as brandingLib, registry as registryLib } from '../../index.js';
-import { NoticesRouteContext } from './noticesRoute.js';
+import { NoticesRouteContext, ReachabilityNoticeHiddenContext } from './noticesRoute.js';
 import styles from './ReachabilityBanner.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -41,7 +41,11 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     // Details belong to the screen they were opened on.
     const routeKey = useContext(NoticesRouteContext);
     useEffect(() => { setDetailsOpen(false); }, [routeKey]);
+    // A screen that already says its balances could not be checked takes
+    // the place of this notice; the probe keeps running underneath.
+    const hiddenByScreen = useContext(ReachabilityNoticeHiddenContext);
 
+    if (hiddenByScreen) return null;
     if (overall !== 'degraded' && overall !== 'offline') return null;
 
     const coins = affectedCoins(perChain);
@@ -52,8 +56,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     const hasDetails = coins.length > 0 || Boolean(staleness);
 
     // The Details panel is a row in the notice's own flow, so it pushes route
-    // content down instead of floating over the header or scrolling inside
-    // the notices strip.
+    // content down instead of floating over it or scrolling inside the notice.
     return (
         <div className={`${styles.notice} ${overall === 'offline' ? styles.offline : styles.degraded}`}>
             <div className={styles.banner}>

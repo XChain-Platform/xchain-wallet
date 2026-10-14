@@ -16,6 +16,7 @@ import {
     useMemo,
     useRef,
 } from 'react';
+import { NoticesClaimedContext, ShellNoticesContext } from '../shared/components/noticesRoute.js';
 import styles from './Screen.module.css';
 
 const MAIN_ID = 'xc-main';
@@ -55,6 +56,11 @@ export function ScrollRestoration({ routeKey, children }) {
  * so screen readers can navigate by landmark instead of having to walk
  * the entire DOM each screen.
  *
+ * Inside the unlocked shell the outermost Screen also shows the shell's
+ * notices (stale balances, queued broadcasts, update notices) as the first
+ * thing in its scrolling body, below the page header: notices are page
+ * content, never part of the app or page header.
+ *
  * @param {object} props
  * @param {import('react').ReactNode} [props.header]
  * @param {import('react').ReactNode} [props.footer]
@@ -80,6 +86,10 @@ export function Screen({
     const screenRef = useRef(null);
     const mainRef = useRef(null);
     const restoration = useContext(ScrollRestorationContext);
+    const shellNotices = useContext(ShellNoticesContext);
+    const noticesClaimed = useContext(NoticesClaimedContext);
+    const ownsNotices = Boolean(shellNotices) && !noticesClaimed;
+    const noticesSlotRef = useRef(null);
     const routeKey = restoration?.routeKey;
     const positions = restoration?.positions;
     const positionKey = scrollKey == null ? routeKey : JSON.stringify([routeKey, scrollKey]);
@@ -88,6 +98,12 @@ export function Screen({
         if (typeof rootRef === 'function') rootRef(node);
         else if (rootRef) rootRef.current = node;
     }, [rootRef]);
+
+    useLayoutEffect(() => {
+        const slot = noticesSlotRef.current;
+        if (!ownsNotices || !slot) return undefined;
+        return shellNotices.claim(slot);
+    }, [ownsNotices, shellNotices]);
 
     useLayoutEffect(() => {
         const main = mainRef.current;
@@ -149,7 +165,7 @@ export function Screen({
     }, []);
 
     const className = `${styles.screen} ${styles[variant]}`;
-    return (
+    const screen = (
         <div ref={setScreenRef} className={className}>
             {header ? <header className={styles.header}>{header}</header> : null}
             <Body
@@ -159,9 +175,14 @@ export function Screen({
                 className={styles.body}
                 aria-labelledby={bodyLabelledBy}
             >
+                {ownsNotices ? <div ref={noticesSlotRef} className={styles.notices} /> : null}
                 {children}
             </Body>
             {footer ? <footer className={styles.footer}>{footer}</footer> : null}
         </div>
     );
+    // A Screen nested in this one (a subpage, a picker) leaves the notices here.
+    return ownsNotices
+        ? <NoticesClaimedContext.Provider value>{screen}</NoticesClaimedContext.Provider>
+        : screen;
 }
