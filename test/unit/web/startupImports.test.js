@@ -152,6 +152,33 @@ describe('web startup imports', () => {
         );
     });
 
+    it.each([
+        'packages/core/src/shared/routes/Locked.jsx',
+        'packages/core/src/shared/routes/Onboarding.jsx',
+        'packages/core/src/shared/hooks/useCoinpayObligations.js',
+        'packages/core/src/shared/hooks/useReachability.js',
+        'packages/core/src/shared/hooks/useBtcAddressesPresent.js',
+        'packages/core/src/shared/components/ReachabilityBanner.jsx',
+        'packages/core/src/shared/components/QueuedBroadcastBanner.jsx',
+        'packages/desktop/renderer/deepLinkRoute.js',
+        'packages/web/src/storage/nativeKdfProvider.js',
+    ])('keeps the first-paint module %s off the core and flows barrels', (path) => {
+        // One barrel import from any first-paint module puts every flow, the
+        // SDK clients and the demo fixtures back in the startup bundle.
+        const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+        expect(source).not.toMatch(/from '@xchain-wallet\/core(\/flows)?'/);
+        expect(source).not.toMatch(/from '(\.\.\/)+(flows\/)?index\.js'/);
+    });
+
+    it('loads the demo fixtures only when a demo wallet is entered', () => {
+        const onboardingSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/routes/Onboarding.jsx'),
+            'utf8',
+        );
+        expect(onboardingSource).toContain("await import('../../flows/demoFixtures.js')");
+        expect(onboardingSource).not.toMatch(/from '\.\.\/\.\.\/flows\/demoFixtures\.js'/);
+    });
+
     it('keeps the native boot check off the aggregate core barrel', () => {
         expect(nativeVaultSource).not.toContain("from '@xchain-wallet/core'");
         expect(nativeVaultSource).toContain("from '../../../core/src/storage/backend.js'");
