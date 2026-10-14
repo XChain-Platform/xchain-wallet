@@ -187,9 +187,10 @@ export function LanguageRegionSection() {
                     <span style={ROW_VALUE}>Fiat currency</span>
                     <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
                     {unsupportedFiatCurrency ? (
-                        <span role="status" style={ROW_HINT}>
-                            {unsupportedFiatCurrency} is not supported. Values are shown in USD.
-                        </span>
+                        <Status
+                            text={`${unsupportedFiatCurrency} is not supported. Values are shown in USD.`}
+                            tone="warning"
+                        />
                     ) : null}
                 </div>
                 <div style={CONTROLS}>

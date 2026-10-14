@@ -144,9 +144,7 @@ export function PrivacySection() {
 
 function PrivacySaveError({ visible }) {
     return visible ? (
-        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-            Could not save this privacy setting. Try again.
-        </span>
+        <Status text="Could not save this privacy setting. Try again." tone="error" />
     ) : null;
 }
 

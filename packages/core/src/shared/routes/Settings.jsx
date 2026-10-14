@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -869,6 +869,9 @@ function desktopUpdaterBridge() {
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+/** How each update-check result reads as an inline message. */
+const UPDATE_CHECK_VARIANT = { checking: 'status', current: 'success', available: 'info', error: 'error' };
+
 /**
  * Check for updates. Runs the same visible check as the app menu item (main's
  * 'check' action) and shows its outcome. Every sentence is a constant; the
@@ -929,13 +932,11 @@ function UpdateCheckPanel() {
     }[state];
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
             <Button variant="ghost" size="sm" onClick={check} disabled={state === 'checking'}>
                 Check for updates
             </Button>
-            <span role="status" aria-live="polite" style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                {message || ''}
-            </span>
+            <StatusMessage variant={UPDATE_CHECK_VARIANT[state] || 'status'}>{message}</StatusMessage>
         </div>
     );
 }
