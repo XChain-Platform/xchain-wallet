@@ -22,6 +22,7 @@ import {
     NATIVE_FEE_UNVERIFIED_NOTICE,
 } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -78,7 +79,10 @@ function abiArgumentError(param, value) {
         try {
             JSON.parse(text);
         } catch (err) {
-            return `${name} contains invalid JSON: ${err?.message || String(err)}`;
+            return userFacingMessage(
+                err,
+                `${name} contains invalid JSON. Check the syntax and try again.`,
+            );
         }
     }
     return null;
@@ -188,7 +192,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -433,7 +437,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: err?.message || 'Contract call failed.',
+                fallback: 'Contract call failed.',
             }));
         }
     }
@@ -642,7 +646,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'Contract call failed.',
+                        fallback: 'Contract call failed.',
                     }),
             );
             setStage('review');

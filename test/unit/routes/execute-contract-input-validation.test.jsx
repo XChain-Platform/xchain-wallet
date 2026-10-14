@@ -107,7 +107,9 @@ describe('ExecuteContractForm argument validation', () => {
         const input = await screen.findByLabelText('config (json)');
         fireEvent.change(input, { target: { value: '{"missing":' } });
 
-        expect(await screen.findByText(/config contains invalid JSON:/)).toBeInTheDocument();
+        expect(await screen.findByText('config contains invalid JSON. Check the syntax and try again.'))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/position|unexpected token|JSON\.parse/i)).toBeNull();
         expect(screen.getByRole('button', { name: 'Call contract' })).toBeDisabled();
     });
 

@@ -152,14 +152,15 @@ describe('staking route request safety', () => {
     it('surfaces an unexpected fan-out rejection instead of leaving the list loading', async () => {
         const messaging = methods({
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
-            getContractStakesForAddress: vi.fn(() => { throw new Error('contract query crashed'); }),
+            getContractStakesForAddress: vi.fn(() => { throw new TypeError('Cannot read properties of undefined'); }),
         });
         render(app(
             <StakingList walletId="w" onOpenStake={() => {}} onNewStake={() => {}} onBack={() => {}} />,
             messaging,
         ));
 
-        expect(await screen.findByText(/contract query crashed/)).toBeInTheDocument();
+        expect(await screen.findByText(/Failed to load staking positions\./)).toBeInTheDocument();
+        expect(screen.queryByText(/Cannot read properties/)).toBeNull();
         expect(screen.queryByLabelText('Loading staking positions')).toBeNull();
     });
 });

@@ -33,7 +33,7 @@ function proxy(target) {
 function operatorMessaging() {
     const getStakesForAddress = vi.fn()
         .mockResolvedValueOnce([{ amount: '12.5', activation_block: 100, status: 'valid' }])
-        .mockRejectedValueOnce(new Error('Indexer unavailable'));
+        .mockRejectedValueOnce(new TypeError('Cannot read properties of undefined'));
     return proxy({
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getStakesForAddress,
@@ -94,7 +94,8 @@ describe('operator and oracle dashboard audit', () => {
         expect(screen.getByText(/Format version: 2/)).toHaveTextContent('published value: 42000; published at block: 107');
 
         fireEvent.click(screen.getByRole('button', { name: 'Refresh metrics' }));
-        expect(await screen.findByText(/Couldn't refresh this section: Indexer unavailable/)).toBeTruthy();
+        expect(await screen.findByText("Couldn't refresh this section: Please try again.")).toBeTruthy();
+        expect(screen.queryByText(/Cannot read properties/)).toBeNull();
         expect(screen.getByText('Total amount staked: 12.5 XCP')).toBeTruthy();
     });
 

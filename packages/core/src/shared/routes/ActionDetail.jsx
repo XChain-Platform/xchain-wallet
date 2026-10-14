@@ -20,6 +20,7 @@ import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -129,7 +130,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     [pKey]: {
                         loading: false,
                         action: null,
-                        error: err?.message || String(err),
+                        error: userFacingMessage(err, 'Could not load the linked action. Try again.'),
                     },
                 });
             });
