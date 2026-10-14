@@ -23,6 +23,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { AddressText, Button, FeeSelector, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -59,6 +60,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function AddressPreferencesForm({ walletId, chainId: initialChainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const {
@@ -316,6 +318,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         const rows = writtenRows(actionParams, reviewBaseline);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review preferences"
                 onSubmit={handleSubmit}
                 status={submitError ? (
@@ -370,6 +373,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="On-chain preferences"
             onSubmit={handleReview}
             sectioned
