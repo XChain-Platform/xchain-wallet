@@ -31,7 +31,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.tick
  * @param {string} [props.label]    optional header above the chip (e.g. "Token")
  */
-export function LockedTokenContext({ chainId, tick, label = t('components.lockedTokenContext.token') }) {
+export function LockedTokenContext({ chainId, tick, label = t('send.fields.token') }) {
     const descriptor = chainRegistry.get(chainId);
     return (
         <div className={styles.wrap}>

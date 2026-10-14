@@ -122,7 +122,7 @@ export function HwSignBlock({
                             onClick={refresh}
                             className={styles.refresh}
                         >
-                            {t('components.listPickerScreen.retry')}
+                            {t('home.retryBalances')}
                         </button>
                     ) : null}
                 </div>

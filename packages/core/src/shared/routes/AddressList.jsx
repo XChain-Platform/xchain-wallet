@@ -770,7 +770,7 @@ export function AddressList({
                     />
                     {advancedDescriptor ? (
                         <Select
-                            label={t('routes.addressList.addressType')}
+                            label={t('receive.addressType')}
                             value={effectiveAdvancedAddressType}
                             onChange={(e) => {
                                 setAdvancedAddressType(e.target.value);
@@ -842,12 +842,12 @@ export function AddressList({
                             loading={wifBusy}
                             disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
                         >
-                            {t('routes.addressList.import')}
+                            {t('importWallet.import')}
                         </Button>
                     )}
                 >
                         <ChainPicker
-                            label={t('routes.addressList.chain')}
+                            label={t('send.fields.chain')}
                             value={wifChainId}
                             onChange={(cid) => {
                                 setWifChainId(cid);
@@ -865,7 +865,7 @@ export function AddressList({
                         />
                         {wifChainId ? (
                             <Select
-                                label={t('routes.addressList.addressType')}
+                                label={t('receive.addressType')}
                                 value={effectiveWifAddressType}
                                 onChange={(e) => setWifAddressType(e.target.value)}
                                 disabled={wifBusy}
@@ -882,7 +882,7 @@ export function AddressList({
                             </Select>
                         ) : null}
                         <Input
-                            label={t('routes.addressList.wifPrivateKey')}
+                            label={t('importWallet.wif.key')}
                             type={wifRevealed ? 'text' : 'password'}
                             value={wifInput}
                             onChange={(e) => {
@@ -917,7 +917,7 @@ export function AddressList({
                         {signerReady ? null : (
                         <Input
                             type="password"
-                            label={t('routes.addressList.walletPassword')}
+                            label={t('send.gated.passwordLabel')}
                             hint={t('routes.addressList.requiredEvenWhileUnlockedYour')}
                             value={wifPassword}
                             onChange={(e) => {
@@ -950,7 +950,7 @@ export function AddressList({
     const header = (
         <PageHeader
             onBack={onBack}
-            title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('routes.addressList.addresses'))}
+            title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
             titleIcon={<Icon.ScanIcon />}
             trailing={(
                 <div className={local.addMenuWrap} ref={addMenuRef}>
@@ -1245,17 +1245,17 @@ export function AddressList({
                 <ListPage>
                     <div className={local.detailTop}>
                     <div className={local.detailLabelRow}>
-                        <span className={local.detailLabel}>{t('routes.addressList.address')}</span>
+                        <span className={local.detailLabel}>{t('verifySignature.address')}</span>
                         {isActiveRow(selected) ? (
-                            <span className={local.addrActive}>{t('routes.addressList.active')}</span>
+                            <span className={local.addrActive}>{t('settings.developer.active')}</span>
                         ) : null}
                     </div>
                     <div className={local.detailAddr}>
                         <AddressText address={selected.address} truncate={false} />
-                        <span title={addrCopied ? t('routes.addressList.copied') : t('routes.addressList.copyAddress')}>
+                        <span title={addrCopied ? t('history.copy.copied') : t('history.copy.walletAddress')}>
                             <CopyButton
                                 value={selected.address}
-                                label={addrCopied ? t('routes.addressList.copied') : t('routes.addressList.copyAddress')}
+                                label={addrCopied ? t('history.copy.copied') : t('history.copy.walletAddress')}
                                 onCopied={() => {
                                     setAddrCopied(true);
                                     setTimeout(() => setAddrCopied(false), 1200);
@@ -1270,8 +1270,8 @@ export function AddressList({
                                 label=""
                                 value={labelDraft}
                                 onChange={(e) => setLabelDraft(e.target.value)}
-                                placeholder={t('routes.addressList.addALabel')}
-                                aria-label={t('routes.addressList.addressLabel')}
+                                placeholder={t('receive.addALabel')}
+                                aria-label={t('receive.addressLabel')}
                                 autoComplete="off"
                             />
                             <Button
@@ -1281,7 +1281,7 @@ export function AddressList({
                                 disabled={labelDraft.trim() === (selected.label || '')}
                                 onClick={saveLabel}
                             >
-                                {t('routes.addressList.save')}
+                                {t('history.contact.save')}
                             </Button>
                         </div>
                     ) : (
@@ -1302,7 +1302,7 @@ export function AddressList({
                             title={isActiveRow(selected) ? t('routes.addressList.thisIsTheActiveAddress') : t('routes.addressList.makeThisTheActiveAddress')}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                            <span>{detailAction === 'use' ? t('routes.addressList.switching') : t('routes.addressList.use')}</span>
+                            <span>{detailAction === 'use' ? t('routes.addressList.switching') : t('settings.biometric.use')}</span>
                         </Button>
                     ) : null}
                     {selected.record?.id && typeof messaging.setAddressHidden === 'function' ? (
@@ -1315,7 +1315,7 @@ export function AddressList({
                             <span className={local.quickActionIcon} aria-hidden="true">
                                 {selected.record.hidden ? <Icon.EyeIcon /> : <Icon.EyeOffIcon />}
                             </span>
-                            <span>{selected.record.hidden ? t('routes.addressList.unhide') : t('routes.addressList.hide')}</span>
+                            <span>{selected.record.hidden ? t('settings.display.unhide2') : t('settings.developer.hide')}</span>
                         </Button>
                     ) : null}
                     {canSecret ? (
@@ -1349,7 +1349,7 @@ export function AddressList({
                             aria-busy={detailAction === 'delete'}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                            <span>{detailAction === 'delete' ? t('routes.addressList.deleting') : t('routes.addressList.delete')}</span>
+                            <span>{detailAction === 'delete' ? t('routes.addressList.deleting') : t('settings.notifications.delete')}</span>
                         </Button>
                     ) : null}
                     </div>
@@ -1399,7 +1399,7 @@ export function AddressList({
                         {chainPrefs ? (
                             <>
                                 <div className={local.detailField}>
-                                    <div className={local.detailLabel}>{t('routes.addressList.protocolFee')}</div>
+                                    <div className={local.detailLabel}>{t('execute.protocolFee')}</div>
                                     <div className={local.detailValue}>{feePreferenceLabel(chainPrefs.feePreference)}</div>
                                 </div>
                                 <div className={local.detailField}>
@@ -1445,9 +1445,9 @@ export function AddressList({
         return wrap(
             <ListPage>
                 <EmptyState
-                    title={t('routes.addressList.noAddressesYet')}
+                    title={t('history.empty.noAddressesTitle')}
                     body={t('routes.addressList.generateAReceiveAddressTo')}
-                    actionLabel={onReceive ? t('routes.addressList.receive') : undefined}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
                     onAction={onReceive}
                     actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
                 />
@@ -1529,7 +1529,7 @@ export function AddressList({
             ) : (
             <>
             {/* The kit has no list container, so native list semantics expose the address rows. */}
-            <ul className={local.addrList} aria-label={t('routes.addressList.addresses')}>
+            <ul className={local.addrList} aria-label={t('home.addresses')}>
                 {renderedAddressRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     return (
@@ -1550,7 +1550,7 @@ export function AddressList({
                                                 <span className={local.addrLabel}>{row.label || ''}</span>
                                                 <span className={local.addrBadges}>
                                                     {isActiveRow(row) ? (
-                                                        <span className={local.addrActive}>{t('routes.addressList.active')}</span>
+                                                        <span className={local.addrActive}>{t('settings.developer.active')}</span>
                                                     ) : null}
                                                     {row.record?.hidden ? (
                                                         <span className={local.addrHidden}>{t('routes.addressList.hidden')}</span>

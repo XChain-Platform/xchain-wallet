@@ -95,7 +95,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                         if (d.isFee && d.feeUnknown && d.before === '') {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta} data-fee-unknown="true">
-                                    <span className={styles.deltaTick}>{d.feeLabel || t('components.placeOrderPanel.networkFee')}</span>
+                                    <span className={styles.deltaTick}>{d.feeLabel || t('send.networkFee')}</span>
                                     <span className={styles.deltaValues}>{t('components.balanceChanges.unknown')}</span>
                                 </div>
                             );
@@ -113,7 +113,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             if (!d.isProtocolFee) return null;
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta}>
-                                    <span className={styles.deltaTick}>{d.feeLabel || t('routes.addressList.protocolFee')}</span>
+                                    <span className={styles.deltaTick}>{d.feeLabel || t('execute.protocolFee')}</span>
                                     <span className={styles.deltaValues}>
                                         {formatDisplayAmount(d.feeAmount)} {d.tick}
                                     </span>

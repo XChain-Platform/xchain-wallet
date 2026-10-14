@@ -263,7 +263,7 @@ export function LogConsole() {
                     title={t('components.logConsole.copyFilteredLogEntriesPlus')}
                 >
                     {copyState === 'copied'
-                        ? t('routes.addressList.copied')
+                        ? t('history.copy.copied')
                         : copyState === 'failed'
                             ? t('components.logConsole.copyFailedClipboardUnavailable')
                             : t('components.logConsole.copyAll')}
@@ -275,7 +275,7 @@ export function LogConsole() {
             <div style={LIST} role="log" aria-label={t('components.logConsole.recentConsoleEntries')} aria-live="polite">
                 {copyState !== 'idle' ? (
                     <span style={SR_ONLY}>
-                        {copyState === 'copied' ? t('routes.addressList.copied') : t('components.logConsole.copyFailedClipboardUnavailable')}
+                        {copyState === 'copied' ? t('history.copy.copied') : t('components.logConsole.copyFailedClipboardUnavailable')}
                     </span>
                 ) : null}
                 {filtered.length === 0 ? (

@@ -49,7 +49,7 @@ import { t } from '../../i18n/index.js';
 export function CollectiblesView({
     rows,
     demo = false,
-    emptyTitle = t('components.collectiblesView.noCollectiblesYet'),
+    emptyTitle = t('home.tabs.noCollectiblesYet'),
     emptyBody = t('components.collectiblesView.collectiblesAppearHereAfterThis'),
     onReceive,
     onSelectToken,
@@ -67,7 +67,7 @@ export function CollectiblesView({
             <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
-                actionLabel={onReceive ? t('routes.addressList.receive') : undefined}
+                actionLabel={onReceive ? t('home.receive') : undefined}
                 onAction={onReceive}
                 actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
@@ -243,8 +243,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     variant={pinned ? 'primary' : 'secondary'}
                     icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
-                    aria-label={pinned ? t('components.collectiblesView.unpin', { tick: row.tick }) : t('components.collectiblesView.pin', { tick: row.tick })}
-                    title={pinned ? t('components.collectiblesView.unpin2') : t('components.collectiblesView.pinToTop')}
+                    aria-label={pinned ? t('balances.unpin', { tick: row.tick }) : t('balances.pin', { tick: row.tick })}
+                    title={pinned ? t('balances.unpin2') : t('balances.pinToTop')}
                     onClick={() => onTogglePin(key, !pinned)}
                     className={styles.pinBtn}
                 />
@@ -255,8 +255,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     variant={hidden ? 'primary' : 'secondary'}
                     icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
                     aria-pressed={hidden}
-                    aria-label={hidden ? t('components.collectiblesView.unhide', { tick: row.tick }) : t('components.collectiblesView.hide', { tick: row.tick })}
-                    title={hidden ? t('routes.addressList.unhide') : t('routes.addressList.hide')}
+                    aria-label={hidden ? t('balances.unhide', { tick: row.tick }) : t('balances.hide', { tick: row.tick })}
+                    title={hidden ? t('settings.display.unhide2') : t('settings.developer.hide')}
                     onClick={() => onToggleHide(key, !hidden)}
                     className={styles.hideBtn}
                 />

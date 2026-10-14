@@ -640,8 +640,8 @@ function PermissionsSummary({ permissions }) {
     const actions = permissions.canSignAction || {};
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
-            <PermRow label={t('settings.connectedSites.chains')} text={chains.length === 0 ? t('settings.connectedSites.none') : chains.join(', ')} />
-            <PermRow label={t('settings.connectedSites.accounts')} text={accounts.length === 0 ? t('settings.connectedSites.none') : accounts.join(', ')} />
+            <PermRow label={t('extension.connect.chains')} text={chains.length === 0 ? t('send.advanced.none') : chains.join(', ')} />
+            <PermRow label={t('accountPicker.title')} text={accounts.length === 0 ? t('send.advanced.none') : accounts.join(', ')} />
             <PermRow
                 label={t('settings.connectedSites.signMessages')}
                 text={permissions.canSignMessage ? t('settings.connectedSites.alwaysAllow') : t('settings.connectedSites.askEveryTime')}

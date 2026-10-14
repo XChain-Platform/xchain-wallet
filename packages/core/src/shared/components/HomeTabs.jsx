@@ -520,7 +520,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             }}
                         >
                             <option value="value">{t('home.tabs.value')}</option>
-                            <option value="name">{t('home.tabs.name')}</option>
+                            <option value="name">{t('walletDetails.name')}</option>
                             <option value="change">{t('home.tabs.24hChange')}</option>
                         </select>
                     </label>
@@ -549,7 +549,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                                         disabled={hasAddresses ? !onReceive : !onAddAddress}
                                         icon={hasAddresses ? <Icon.ReceiveIcon /> : <Icon.PlusIcon />}
                                     >
-                                        {hasAddresses ? t('receive.receive') : t('receive.generateAnAddress')}
+                                        {hasAddresses ? t('home.receive') : t('receive.generateAnAddress')}
                                     </Button>
                                     {onBuy ? (
                                         <Button
@@ -1044,7 +1044,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
     }, [entries]);
 
     if (entries.length === 0) {
-        return <Placeholder title={t('home.tabs.noActivityYet')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
+        return <Placeholder title={t('history.empty.noActivityTitle')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
     }
     return (
         <ul className={styles.demoList}>

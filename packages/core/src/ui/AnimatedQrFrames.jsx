@@ -216,7 +216,7 @@ export function AnimatedQrFrames({
                                 onClick={() => step(1)}
                                 style={controlStyle}
                             >
-                                {t('ui.animatedQrFrames.next')}
+                                {t('onboarding.carousel.next')}
                             </button>
                         </>
                     ) : null}

@@ -65,7 +65,7 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
                             aria-label={t('components.resumeConfirmCard.discardUnfinished', { label: info.label })}
                             data-testid={`discard-confirm-${info.id}`}
                         >
-                            {t('components.resumeConfirmCard.discard')}
+                            {t('send.draft.discard')}
                         </button>
                     </div>
                 );

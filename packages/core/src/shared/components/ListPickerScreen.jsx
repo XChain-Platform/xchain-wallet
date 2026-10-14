@@ -175,7 +175,7 @@ export function ListPickerScreen({
                 <ListPage>
                     <StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage>
                     <Button variant="secondary" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
-                        {t('components.listPickerScreen.retry')}
+                        {t('home.retryBalances')}
                     </Button>
                 </ListPage>
             </Screen>

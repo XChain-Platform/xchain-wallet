@@ -162,7 +162,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-fee-unknown="true"
                 data-coin={delta.isCoin ? 'true' : undefined}
             >
-                <dt className={styles.tick}>{delta.feeLabel || t('components.placeOrderPanel.networkFee')}</dt>
+                <dt className={styles.tick}>{delta.feeLabel || t('send.networkFee')}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
                         signed="− unknown"
@@ -192,7 +192,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-direction="flat"
                 data-before-unknown="true"
             >
-                <dt className={styles.tick}>{t('components.balanceChanges.your')} {delta.tick}</dt>
+                <dt className={styles.tick}>{t('receive.your')} {delta.tick}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <span className={styles.feeNote} style={balanceLineStyle}>
                         <span className={styles.before}>{t('components.balanceChanges.balanceUnknown')}</span>
@@ -213,7 +213,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-direction="flat"
                 data-after-unknown="true"
             >
-                <dt className={styles.tick}>{t('components.balanceChanges.your')} {delta.tick}</dt>
+                <dt className={styles.tick}>{t('receive.your')} {delta.tick}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
                         signed="− unknown"
@@ -248,7 +248,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-protocol-fee={delta.isProtocolFee ? 'true' : undefined}
                 data-coin={delta.isCoin ? 'true' : undefined}
             >
-                <dt className={styles.tick}>{delta.feeLabel || t('components.placeOrderPanel.networkFee')}</dt>
+                <dt className={styles.tick}>{delta.feeLabel || t('send.networkFee')}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
                         signed={signedFee(delta.tick, delta.feeAmount)}
@@ -277,7 +277,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
             data-coin={delta.isCoin ? 'true' : undefined}
             data-direction={direction}
         >
-            <dt className={styles.tick}>{t('components.balanceChanges.your')} {delta.tick}</dt>
+            <dt className={styles.tick}>{t('receive.your')} {delta.tick}</dt>
             <dd className={styles.amount} style={amountStyle}>
                 <ChangeLine
                     signed={signedChange(delta.before, delta.after)}

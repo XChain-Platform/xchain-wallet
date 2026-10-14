@@ -61,20 +61,20 @@ import { t } from '../../i18n/index.js';
  */
 
 const PRIMARY_TABS = [
-    { id: 'home', get label() { return t('nav.home'); }, Icon: Icon.HomeIcon },
-    { id: 'history', get label() { return t('nav.history'); }, Icon: Icon.HistoryIcon },
+    { id: 'home', get label() { return t('home.title'); }, Icon: Icon.HomeIcon },
+    { id: 'history', get label() { return t('history.title'); }, Icon: Icon.HistoryIcon },
     // `spendable` marks the two rows signer mode promises are gone.
-    { id: 'send', get label() { return t('nav.send'); }, Icon: Icon.SendIcon, spendable: true },
-    { id: 'scan', get label() { return t('nav.scan'); }, Icon: Icon.ScanIcon },
+    { id: 'send', get label() { return t('send.title'); }, Icon: Icon.SendIcon, spendable: true },
+    { id: 'scan', get label() { return t('scan.title'); }, Icon: Icon.ScanIcon },
 ];
 
 const SHEET_PRIMARY = [
-    { id: 'receive', get label() { return t('nav.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
     { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
-    { id: 'dispensers-list', get label() { return t('nav.dispensers'); }, Icon: Icon.DollarIcon },
-    { id: 'contracts-list', get label() { return t('nav.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
-    { id: 'messaging', get label() { return t('nav.messaging'); }, Icon: Icon.MessageIcon },
-    { id: 'contacts', get label() { return t('nav.contacts'); }, Icon: Icon.UsersIcon },
+    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
+    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
+    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
     { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; a pending count also dots the More tab.
     { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon, group: ['obligations'] },
@@ -244,7 +244,7 @@ export function BottomTabBar({
                             <span className={styles.tabDot} aria-hidden="true" />
                         ) : null}
                     </span>
-                    <span className={styles.tabLabel}>{t('routes.manageToken.more')}</span>
+                    <span className={styles.tabLabel}>{t('history.detail.more')}</span>
                 </button>
             </nav>
 
@@ -253,7 +253,7 @@ export function BottomTabBar({
                     variant="sheet"
                     surfaceRef={sheetRef}
                     id="xc-bottom-sheet"
-                    title={<h2 className={styles.sheetTitle}>{t('routes.manageToken.more')}</h2>}
+                    title={<h2 className={styles.sheetTitle}>{t('history.detail.more')}</h2>}
                     titleId="xc-bottom-sheet-dialog-title"
                     aria-labelledby="xc-bottom-sheet-dialog-title"
                     closeLabel="Close more navigation"
@@ -348,7 +348,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.GearIcon />
                                             </span>
-                                            <span>{t('components.leftNav.settings')}</span>
+                                            <span>{t('home.settings')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -367,7 +367,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.LockIcon />
                                             </span>
-                                            <span>{t('components.bottomTabBar.lockWallet')}</span>
+                                            <span>{t('home.lockWallet')}</span>
                                         </button>
                                     </li>
                                 ) : null}

@@ -87,7 +87,7 @@ export function WatcherResultPanel({
                         </div>
                         {result.fromAddress ? (
                             <div className={styles.successRow}>
-                                <dt>{t('components.placeOrderPanel.from')}</dt>
+                                <dt>{t('send.fields.from')}</dt>
                                 <dd className={styles.successMono}>
                                     <AddressText address={result.fromAddress} size="sm" />
                                 </dd>

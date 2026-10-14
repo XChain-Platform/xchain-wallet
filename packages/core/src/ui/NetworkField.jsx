@@ -43,7 +43,7 @@ export function NetworkField({
     onChange,
     chainIds,
     chainRegistry,
-    label = t('ui.networkField.network'),
+    label = t('settings.network.label'),
     disabled,
     size = 'md',
 }) {

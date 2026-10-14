@@ -637,7 +637,7 @@ export function ManageToken({
                     <div className={styles.statsStrip}>
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>
-                                {assetInfo ? t('routes.manageToken.supply', { value: locked ? 'Locked' : 'Unlocked' }) : t('routes.manageToken.supply2')}
+                                {assetInfo ? t('routes.manageToken.supply', { value: locked ? 'Locked' : 'Unlocked' }) : t('issue.supply')}
                             </span>
                             <span className={styles.statValue}>
                                 {totalSupply != null ? formatTokenQuantity(totalSupply, divisibility) : '-'}
@@ -771,7 +771,7 @@ export function ManageToken({
                                 aria-expanded={moreOpen}
                                 onClick={() => setMoreOpen((o) => !o)}
                             >
-                                {t('routes.manageToken.more')}
+                                {t('history.detail.more')}
                             </Button>
                             {moreOpen ? (
                                 <div className={styles.manageMoreMenu} role="menu">
@@ -874,7 +874,7 @@ export function ManageToken({
                                 ) : null}
                                 {genesisInfo.blockIndex ? (
                                     <>
-                                        <dt>{t('routes.manageToken.block')}</dt>
+                                        <dt>{t('settings.connectedSites.block')}</dt>
                                         <dd>{Number(genesisInfo.blockIndex).toLocaleString('en-US')}</dd>
                                     </>
                                 ) : null}
@@ -1070,7 +1070,7 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
         </div>
     );
     if (holders.length === 0) return (
-        <EmptyState title={t('routes.manageToken.noHoldersYet')} body={t('routes.manageToken.holdersAppearHereAfterSupply')} titleAs="p" />
+        <EmptyState title={t('history.recipients.noHoldersFound')} body={t('routes.manageToken.holdersAppearHereAfterSupply')} titleAs="p" />
     );
     return (
         <>
@@ -1078,7 +1078,7 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
                 <caption className={tableStyles.visuallyHiddenCaption}>{t('routes.manageToken.topHolderBalances')}</caption>
                 <thead>
                     <tr>
-                        <th className={tableStyles.headerCell} scope="col">{t('routes.addressList.address')}</th>
+                        <th className={tableStyles.headerCell} scope="col">{t('verifySignature.address')}</th>
                         <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('routes.manageToken.balance')}</th>
                     </tr>
                 </thead>
@@ -1127,7 +1127,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
         </div>
     );
     if (activity.length === 0) return (
-        <EmptyState title={t('routes.manageToken.noActivityYet')} body={t('routes.manageToken.indexedActivityForAppearsHere', { tick })} titleAs="p" />
+        <EmptyState title={t('history.empty.noActivityTitle')} body={t('routes.manageToken.indexedActivityForAppearsHere', { tick })} titleAs="p" />
     );
     return (
         <>
@@ -1215,7 +1215,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
             ) : null}
             <span className={styles.histMeta}>
                 {blockNum != null && Number.isFinite(blockNum) && blockNum > 0 ? (
-                    <span>{t('routes.manageToken.block')} {blockNum.toLocaleString('en-US')}</span>
+                    <span>{t('settings.connectedSites.block')} {blockNum.toLocaleString('en-US')}</span>
                 ) : (
                     <span>{t('routes.manageToken.unconfirmed')}</span>
                 )}

@@ -698,7 +698,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     <dd style={ddStyle}>{price} {tick2}/{tick1}</dd>
                     <dt style={dtStyle}>{t('components.placeOrderPanel.expiration')}</dt>
                     <dd style={ddStyle}>{expirationLabel}</dd>
-                    <dt style={dtStyle}>{t('components.placeOrderPanel.from')}</dt>
+                    <dt style={dtStyle}>{t('send.fields.from')}</dt>
                     <dd style={{ ...ddStyle, wordBreak: 'break-all' }}>
                         {fromAddress?.address ?? '-'}
                     </dd>
@@ -706,7 +706,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     <dd style={{ ...ddStyle, wordBreak: 'break-all' }}>
                         {fromAddress?.address ?? '-'}
                     </dd>
-                    <dt style={dtStyle}>{t('components.placeOrderPanel.networkFee')}</dt>
+                    <dt style={dtStyle}>{t('send.networkFee')}</dt>
                     <dd style={ddStyle}>{feeDisplay}</dd>
                 </dl>
                 {payFeeInNativeCoin ? (
@@ -756,7 +756,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? t('components.placeOrderPanel.networkFeeAmount', { amount: feeEstimate.coinAmount, ticker: coinTicker }).trim()
+                    ? t('send.networkFeeValue', { amount: feeEstimate.coinAmount, ticker: coinTicker }).trim()
                     : undefined}
                 signerReady={signerReady}
                 password={password}

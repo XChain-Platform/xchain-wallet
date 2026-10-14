@@ -839,7 +839,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         <PageHeader
             onBack={onBack}
             backLabel={t('common.backToHome')}
-            title={t('receive.receive')}
+            title={t('home.receive')}
             titleIcon={<Icon.ReceiveIcon />}
         />
     );
@@ -966,7 +966,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {noAddresses ? (
                 <EmptyState
-                    title={t('receive.noAddressesYet')}
+                    title={t('history.empty.noAddressesTitle')}
                     body={t('receive.generateAnAddressToStart')}
                     actionLabel={t('receive.generateAnAddress')}
                     onAction={() => setAddAddressOpen(true)}
@@ -1022,7 +1022,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         // The visible label is the accessible name; the hint says a tap
                         // copies the address. A name about a payment link went stale when
                         // the tap stopped copying one.
-                        label={address.label || t('receive.address')}
+                        label={address.label || t('verifySignature.address')}
                         icon="addresses"
                         value={address.address}
                         readOnly

@@ -446,7 +446,7 @@ export function DisplaySection() {
                             setWatching(false);
                             setWatchTicker(event.target.value);
                         }}
-                        placeholder={t('settings.display.ticker')}
+                        placeholder={t('issue.ticker')}
                         autoComplete="off"
                     />
                     <Button type="submit" size="md" variant="secondary" icon={null} disabled={watching}>
@@ -467,7 +467,7 @@ export function DisplaySection() {
                             onClick={() => removeWatchedToken(storedKey)}
                             aria-label={t('settings.display.removeWatchedToken', { key })}
                         >
-                            {t('settings.developer.remove')}
+                            {t('send.recipient.remove')}
                         </Button>
                     </div>
                 );

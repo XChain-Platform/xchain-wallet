@@ -135,7 +135,7 @@ export function ToastHost({ children }) {
                 <div
                     className={styles.viewport}
                     role="status"
-                    aria-label={t('components.toastHost.notifications')}
+                    aria-label={t('alerts.notificationsTitle')}
                     aria-live="polite"
                     aria-atomic="false"
                     aria-relevant="additions text"

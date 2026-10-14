@@ -118,11 +118,11 @@ export function HeaderActionMenu({
         ? cloneElement(settingsControl, { onNavigate: close })
         : settingsControl;
     const rows = [
-        { id: 'search', label: t('shell.headerMenu.search'), Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
-        { id: 'scan', label: t('nav.scan'), Icon: Icon.ScanIcon, handler: onScan },
+        { id: 'search', label: t('routes.addressList.search'), Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
+        { id: 'scan', label: t('scan.title'), Icon: Icon.ScanIcon, handler: onScan },
         { id: 'manage-addresses', label: t('shell.headerMenu.manageAddresses'), Icon: Icon.AddressIcon, handler: onManageAddresses },
-        { id: 'view-address', label: t('shell.headerMenu.viewAddress'), Icon: Icon.EyeIcon, handler: onViewAddress },
-        { id: 'pop-out', label: t('shell.headerMenu.openInNewWindow'), Icon: Icon.ExternalLinkIcon, handler: popOut },
+        { id: 'view-address', label: t('routes.addressList.viewAddress'), Icon: Icon.EyeIcon, handler: onViewAddress },
+        { id: 'pop-out', label: t('history.detail.openNewWindow'), Icon: Icon.ExternalLinkIcon, handler: popOut },
         { id: 'more', label: t('shell.headerMenu.moreWalletActions'), Icon: Icon.MoreIcon, handler: onMore },
     ].filter((row) => typeof row.handler === 'function');
     // A menu holding only Search repeats the rail's Search button; the layout

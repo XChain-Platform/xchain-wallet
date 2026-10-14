@@ -292,7 +292,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                     : t('components.queuedBroadcastBanner.sendNow', { summary: entry.summary })}
                             >
                                 {busyId === entry.id
-                                    ? t('components.queuedBroadcastBanner.sending2')
+                                    ? t('settings.developer.sending')
                                     : (entry.resumedClaim ? t('components.queuedBroadcastBanner.trySendingAgain') : t('components.queuedBroadcastBanner.sendNow2'))}
                             </button>
                             <button
@@ -304,7 +304,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                     ? t('components.queuedBroadcastBanner.removingFromQueue', { summary: entry.summary })
                                     : t('components.queuedBroadcastBanner.removeFromQueue', { summary: entry.summary })}
                             >
-                                {busyId === entry.id && busyKind === 'remove' ? t('components.queuedBroadcastBanner.removing') : t('components.queuedBroadcastBanner.remove')}
+                                {busyId === entry.id && busyKind === 'remove' ? t('settings.thisWallet.removing') : t('send.recipient.remove')}
                             </button>
                         </div>
                     </li>

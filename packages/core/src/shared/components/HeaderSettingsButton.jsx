@@ -186,7 +186,7 @@ export function HeaderSettingsButton({
                                 <Icon.GearIcon />
                                 {anyNonDefault ? <span className={styles.dot} /> : null}
                             </span>
-                            <span className={menuStyles.rowLabel}>{t('settings.page.settings')}</span>
+                            <span className={menuStyles.rowLabel}>{t('home.settings')}</span>
                             <span className={menuStyles.rowIcon} aria-hidden="true"><Icon.ForwardIcon /></span>
                         </button>
                     ) : (
@@ -201,8 +201,8 @@ export function HeaderSettingsButton({
                             onClick={() => setOpen((v) => !v)}
                             aria-haspopup="dialog"
                             aria-expanded={open ? 'true' : 'false'}
-                            aria-label={t('settings.page.settings')}
-                            title={t('settings.page.settings')}
+                            aria-label={t('home.settings')}
+                            title={t('home.settings')}
                             data-active={anyNonDefault ? 'true' : undefined}
                         />
                     )}
@@ -251,7 +251,7 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {showActiveNetwork ? (
-                        <Section title={t('shell.settingsButton.network')}>
+                        <Section title={t('settings.network.label')}>
                             <select
                                 className={styles.networkSelect}
                                 value={currentNetwork}

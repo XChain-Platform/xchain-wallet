@@ -258,7 +258,7 @@ export function ContactsSection() {
                         onClick={onExport}
                         disabled={count === 0}
                     >
-                        {t('settings.backup.export')}
+                        {t('history.export.open')}
                     </Button>
                     <Button
                         type="button"

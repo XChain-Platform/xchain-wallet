@@ -304,7 +304,7 @@ export function AboutSection() {
                         loading={busy}
                         disabled={busy}
                     >
-                        {status ? t('settings.about.copied') : t('settings.about.copyDiagnostics')}
+                        {status ? t('history.copy.copied') : t('settings.about.copyDiagnostics')}
                     </Button>
                 </div>
             </Row>

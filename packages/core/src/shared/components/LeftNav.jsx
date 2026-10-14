@@ -83,18 +83,18 @@ export function LeftNav({
 }) {
     const activeItem = activeLeftNavItem(currentView);
     const primary = [
-        { id: 'home', label: t('nav.home'), Icon: Icon.HomeIcon },
-        { id: 'history', label: t('nav.history'), Icon: Icon.HistoryIcon },
+        { id: 'home', label: t('home.title'), Icon: Icon.HomeIcon },
+        { id: 'history', label: t('history.title'), Icon: Icon.HistoryIcon },
         // Signer mode's own hint promises "Send / receive screens
         // are hidden; this wallet does not broadcast". Absent, not disabled,
         // for the reason the DEX row below is absent: a greyed Send row still
         // reads as a capability the device has, and the whole value of the
         // mode is that an air-gapped user can believe the removal.
         ...(isSignerMode ? [] : [
-            { id: 'send', label: t('nav.send'), Icon: Icon.SendIcon },
-            { id: 'receive', label: t('nav.receive'), Icon: Icon.ReceiveIcon },
+            { id: 'send', label: t('send.title'), Icon: Icon.SendIcon },
+            { id: 'receive', label: t('home.receive'), Icon: Icon.ReceiveIcon },
         ]),
-        { id: 'scan', label: t('nav.scan'), Icon: Icon.ScanIcon },
+        { id: 'scan', label: t('scan.title'), Icon: Icon.ScanIcon },
         // Absent, not greyed, when the build has no DEX surface: the store
         // build compiles those routes out, so the destination does
         // not exist, and a visibly disabled exchange tab asks an app reviewer
@@ -105,17 +105,17 @@ export function LeftNav({
                 { id: 'market-activity', label: t('nav.marketplace'), Icon: Icon.LineChartIcon },
             ]
             : []),
-        { id: 'dispensers-list', label: t('nav.dispensers'), Icon: Icon.DollarIcon },
+        { id: 'dispensers-list', label: t('routes.addressList.dispensers'), Icon: Icon.DollarIcon },
         // Gate Contracts on a VM address, matching Home and the command
         // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
         ...(hasVmAddress
-            ? [{ id: 'contracts-list', label: t('nav.contracts'), Icon: Icon.ContractIcon }]
+            ? [{ id: 'contracts-list', label: t('home.contracts'), Icon: Icon.ContractIcon }]
             : []),
-        { id: 'messaging', label: t('nav.messaging'), Icon: Icon.MessageIcon },
+        { id: 'messaging', label: t('home.messaging'), Icon: Icon.MessageIcon },
     ];
 
     const secondary = [
-        { id: 'contacts', label: t('nav.contacts'), Icon: Icon.UsersIcon },
+        { id: 'contacts', label: t('components.contactsPickerScreen.contacts'), Icon: Icon.UsersIcon },
         { id: 'lists', label: t('nav.lists'), Icon: Icon.TokenListIcon },
         // PC-15: COINPAY obligations queue; badge = payable pending count.
         { id: 'obligations', label: t('nav.paymentsDue'), Icon: Icon.ClockIcon },
@@ -229,13 +229,13 @@ export function LeftNav({
                         type="button"
                         className={`${styles.item} ${activeItem === 'settings' ? styles.itemActive : ''}`}
                         aria-current={activeItem === 'settings' ? 'page' : undefined}
-                        title={t('components.leftNav.settings')}
+                        title={t('home.settings')}
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">
                             <Icon.GearIcon />
                         </span>
-                        <span className={styles.label}>{t('components.leftNav.settings')}</span>
+                        <span className={styles.label}>{t('home.settings')}</span>
                     </button>
                 ) : null}
                 {onLock ? (

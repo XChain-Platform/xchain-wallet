@@ -237,7 +237,7 @@ function FormDraftTtlRow({ settings, update }) {
                 <option value={FORM_DRAFT_TTL_OFF}>{t('settings.privacy.off')}</option>
                 <option value={FORM_DRAFT_TTL_1H}>{t('settings.developer.1Hour')}</option>
                 <option value={FORM_DRAFT_TTL_24H}>{t('settings.privacy.24Hours')}</option>
-                <option value={FORM_DRAFT_TTL_7D}>{t('settings.privacy.7Days')}</option>
+                <option value={FORM_DRAFT_TTL_7D}>{t('history.filters.last7Days')}</option>
             </select>
             <PrivacySaveError visible={saveError} />
         </div>

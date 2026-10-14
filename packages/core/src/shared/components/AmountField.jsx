@@ -53,7 +53,7 @@ import { t } from '../../i18n/index.js';
  */
 export function AmountField({
     id,
-    label = t('components.amountField.amount'),
+    label = t('send.fields.amount'),
     amount,
     size = 'md',
     fiatAmount = '',

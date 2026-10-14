@@ -194,7 +194,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                 <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.placeOrderPanel.price')}</th>
                                 <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.openOrdersPanel.size')}{tick1})</th>
                                 <th className={tableStyles.headerCell} scope="col">{t('components.placeOrderPanel.side')}</th>
-                                <th className={tableStyles.headerCell} scope="col">{t('routes.addressList.address')}</th>
+                                <th className={tableStyles.headerCell} scope="col">{t('verifySignature.address')}</th>
                             </tr>
                         </thead>
                         <tbody>

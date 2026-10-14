@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -378,10 +379,10 @@ describe('trade form style guide primitives', () => {
             process.cwd(),
             'packages/core/src/shared/routes/SwapForm.jsx',
         ), 'utf8');
-        const placeOrder = readFileSync(resolve(
+        const placeOrder = withEnglishCopy(readFileSync(resolve(
             process.cwd(),
             'packages/core/src/shared/components/PlaceOrderPanel.jsx',
-        ), 'utf8');
+        ), 'utf8'));
 
         expect(createOrder).toMatch(/<AddressField\s+label="Receive at \(optional\)"/);
         expect(dispenser).toMatch(/<Select[\s\S]*label="Priced in fiat \(optional\)"/);

@@ -480,14 +480,14 @@ function QuietHoursRow({ settings, update }) {
                     <div style={ALERT_ROW}>
                         <Input
                             id="quiet-hours-start"
-                            label={t('settings.notifications.from')}
+                            label={t('send.fields.from')}
                             type="time"
                             value={qh.start}
                             onChange={(e) => onTimeChange('start', e.target.value)}
                         />
                         <Input
                             id="quiet-hours-end"
-                            label={t('settings.notifications.to')}
+                            label={t('send.fields.to')}
                             type="time"
                             value={qh.end}
                             onChange={(e) => onTimeChange('end', e.target.value)}

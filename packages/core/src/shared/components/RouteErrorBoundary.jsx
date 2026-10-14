@@ -67,7 +67,7 @@ export class RouteErrorBoundary extends Component {
 
         if (this.props.variant === 'compact') {
             return (
-                <StatusMessage variant="error" recovery={{ label: t('components.listPickerScreen.retry'), onAction: this.retry }}>
+                <StatusMessage variant="error" recovery={{ label: t('home.retryBalances'), onAction: this.retry }}>
                     {t('components.routeErrorBoundary.couldNotLoadThisSection')}
                 </StatusMessage>
             );

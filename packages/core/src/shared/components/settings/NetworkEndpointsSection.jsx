@@ -374,7 +374,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 ) : null}
                 {dirty || editing ? (
                     <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
-                        {saving ? t('settings.endpoints.saving') : t('settings.duress.save')}
+                        {saving ? t('send.saveRecipient.saving') : t('history.contact.save')}
                     </Button>
                 ) : null}
             </div>

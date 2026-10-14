@@ -318,9 +318,9 @@ export function Settings({
         }
     }, [messaging, reload]);
 
-    const walletLabel = activeWallet?.name || t('settings.page.noWallet');
+    const walletLabel = activeWallet?.name || t('shell.settingsButton.noWallet');
     const accountLabel = activeAccount?.name
-        || (Number.isInteger(activeAccount?.index) ? t('settings.page.accountNumber', { number: activeAccount.index + 1 }) : t('settings.page.accountNumber', { number: 1 }));
+        || (Number.isInteger(activeAccount?.index) ? t('accountPicker.defaultName', { number: activeAccount.index + 1 }) : t('accountPicker.defaultName', { number: 1 }));
 
     const sections = useMemo(() => /** @type {SectionDef[]} */ ([
         {
@@ -431,7 +431,7 @@ export function Settings({
         },
         {
             id: 'network',
-            title: t('settings.page.network'),
+            title: t('settings.network.label'),
             // Optional-chained: settings is null until the async read lands,
             // and the section list renders during that window.
             description: settings?.developerMode === true
@@ -472,7 +472,7 @@ export function Settings({
         },
         {
             id: 'notifications',
-            title: t('settings.page.notifications'),
+            title: t('alerts.notificationsTitle'),
             description: t('settings.page.chooseWhichWalletEventsTrigger'),
             keywords: 'notifications desktop permission transaction confirmations incoming receipts pending payments messages governance polls deadlines dispenser running low fills order price alerts sounds quiet hours do not disturb',
             kind: 'panel',
@@ -481,7 +481,7 @@ export function Settings({
         },
         {
             id: 'connected-sites',
-            title: t('settings.page.connectedSites'),
+            title: t('settings.connectedSites.connectedSites'),
             description: t('settings.page.reviewDappConnectionsAndControl'),
             keywords: 'connected sites website dapp connections permissions chains accounts sign messages actions origin disconnect block unblock blocked mutations throttle burst window',
             searchTerms: siteSearchTerms,
@@ -491,7 +491,7 @@ export function Settings({
         },
         {
             id: 'contacts',
-            title: t('nav.contacts'),
+            title: t('components.contactsPickerScreen.contacts'),
             description: t('settings.page.exportOrImportTheAddress'),
             keywords: 'contacts address book export import json file drop private encrypted',
             kind: 'panel',
@@ -526,7 +526,7 @@ export function Settings({
         }] : []),
         {
             id: 'about',
-            title: t('settings.page.about'),
+            title: t('routes.addressList.about'),
             description: t('settings.page.viewVersionLicenseBuildVerification'),
             keywords: 'about version update channel check new versions license notice repro reproducible build verify verification release signatures gpg fingerprint disclosure policy security diagnostics copy preview',
             kind: 'internal-drill',
@@ -569,7 +569,7 @@ export function Settings({
                 <PageHeader
                     onBack={closeSubpage}
                     backDisabled={section.id === 'this-wallet' && walletManagementBusy}
-                    backLabel={t('settings.page.backToSettings')}
+                    backLabel={t('shell.settings.back')}
                     title={section.title}
                     trailing={section.id === 'backup' && onOpenBackupInTab ? (
                         <Button
@@ -577,8 +577,8 @@ export function Settings({
                             size="sm"
                             icon={<Icon.ExternalLinkIcon />}
                             onClick={onOpenBackupInTab}
-                            aria-label={t('settings.page.openInTab')}
-                            title={t('settings.page.openInTab')}
+                            aria-label={t('importWallet.openInTab')}
+                            title={t('importWallet.openInTab')}
                         />
                     ) : null}
                 />
@@ -607,7 +607,7 @@ export function Settings({
 
     // ─── List view ────────────────────────────────────────────────
 
-    const header = <PageHeader onBack={onBack} title={t('settings.page.settings')} />;
+    const header = <PageHeader onBack={onBack} title={t('home.settings')} />;
 
     return (
         <Screen variant={variant} header={header} scrollKey="list">
@@ -1004,13 +1004,13 @@ function displaySummary(settings) {
 function keyboardSummary(settings) {
     if (!settings) return '-';
     const n = resolveBindings(settings.keyboard?.bindings).filter((shortcut) => shortcut.overridden).length;
-    return n === 0 ? t('settings.page.defaults') : t('settings.page.customShortcuts', { count: n });
+    return n === 0 ? t('settings.display.defaults') : t('settings.page.customShortcuts', { count: n });
 }
 
 function walletModeSummary(settings) {
     if (!settings) return '-';
     const mode = settings.walletMode || WALLET_MODE_DEFAULT;
-    if (mode === 'full') return t('settings.page.modeNormal');
+    if (mode === 'full') return t('ui.feeSelector.normal');
     if (mode === 'watcher') return t('settings.page.modeWatcher');
     if (mode === 'signer') return t('settings.page.modeSigner');
     return mode;
@@ -1037,7 +1037,7 @@ function endpointsSummary(settings) {
 
 function adsSummary(settings) {
     if (!settings) return '-';
-    if (!settings.ads?.enabled) return t('settings.page.off');
+    if (!settings.ads?.enabled) return t('settings.privacy.off');
     const total = Object.values(settings.ads.perChain || {})
         .reduce((s, c) => s + (Number(c?.lifetimeDonatedSats) || 0), 0);
     if (total === 0) return t('settings.page.donatedZero');
@@ -1045,12 +1045,12 @@ function adsSummary(settings) {
 }
 
 function developerSummary(settings) {
-    if (!settings) return t('settings.page.off');
-    return settings.developerMode ? t('settings.page.on') : t('settings.page.off');
+    if (!settings) return t('settings.privacy.off');
+    return settings.developerMode ? t('settings.page.on') : t('settings.privacy.off');
 }
 
 function connectedSitesSummary(siteCount) {
     if (siteCount === null) return '-';
-    if (siteCount === 0) return t('settings.page.none');
+    if (siteCount === 0) return t('send.advanced.none');
     return t('settings.page.siteCount', { count: siteCount });
 }

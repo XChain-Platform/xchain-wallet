@@ -244,7 +244,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
     if (loading && !report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite" aria-busy="true">
-                <Spinner size="sm" label={t('components.preflightPanel.checking')} className={styles.spinner} />
+                <Spinner size="sm" label={t('settings.backup.checking')} className={styles.spinner} />
             </div>
         );
     }

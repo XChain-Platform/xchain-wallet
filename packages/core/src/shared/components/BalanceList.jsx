@@ -105,7 +105,7 @@ export const BalanceList = memo(function BalanceList({
             <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
-                actionLabel={hasEmptyAction ? emptyActionLabel : (onReceive ? t('receive.receive') : undefined)}
+                actionLabel={hasEmptyAction ? emptyActionLabel : (onReceive ? t('home.receive') : undefined)}
                 onAction={hasEmptyAction ? onEmptyAction : onReceive}
                 actionIcon={!hasEmptyAction && onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
@@ -379,7 +379,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                                 : (
                                     <FitAmount title={quantityLabel}>
                                         {quantityLabel}
-                                        {hasPending ? <span className={styles.subtitle}> {t('balances.confirmed')}</span> : null}
+                                        {hasPending ? <span className={styles.subtitle}> {t('pending.row.confirmed')}</span> : null}
                                     </FitAmount>
                                 )}
                     </span>

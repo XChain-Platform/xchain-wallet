@@ -43,7 +43,7 @@ import { t } from '../../i18n/index.js';
  * @param {string} [props.id]
  */
 export function TokenField({
-    label = t('components.lockedTokenContext.token'),
+    label = t('send.fields.token'),
     size = 'md',
     value = null,
     onOpenPicker,

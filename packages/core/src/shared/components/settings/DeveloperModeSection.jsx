@@ -81,6 +81,9 @@ const chainRegistry = registryLib.defaultRegistry();
 // Cluster Q FOLLOWUP 3: labels for the localhost auto-sign timeout options.
 // Values come from the schema so the UI can never offer a timeout the
 // validator would reject.
+// Technical JSON sample shown in the paste box; code, not translatable copy.
+const CHAIN_DESCRIPTOR_SAMPLE = '{\n  "id": "my-fork-regtest",\n  "coin": "myfork",\n  "networkKind": "regtest",\n  ...\n}';
+
 // Built per call so a locale switch applies.
 const autoSignLabels = () => ({
     [schemas.settings.AUTO_SIGN_LOCALHOST_OFF]: t('settings.developer.offAlwaysPrompt'),
@@ -405,7 +408,7 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
                             enterKeyHint="go"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder={t('settings.backup.walletPassword')}
+                            placeholder={t('send.gated.passwordLabel')}
                             autoComplete="current-password"
                             disabled={busy}
                             aria-label={t('settings.developer.activationPassword', { displayName: descriptor.displayName })}
@@ -739,7 +742,7 @@ function CustomChainsRow({ developerMode }) {
                                             disabled={!developerMode || busy}
                                             aria-label={t('settings.developer.removeCustomChain', { value: d?.id })}
                                         >
-                                            {t('settings.developer.remove')}
+                                            {t('send.recipient.remove')}
                                         </Button>
                                     )}
                                 />
@@ -756,7 +759,7 @@ function CustomChainsRow({ developerMode }) {
                         hint={t('settings.developer.pasteAFullChaindescriptorJson')}
                         value={pasted}
                         onChange={(e) => setPasted(e.target.value)}
-                        placeholder={t('settings.developer.text')}
+                        placeholder={CHAIN_DESCRIPTOR_SAMPLE}
                         rows={8}
                         spellCheck={false}
                         disabled={busy}

@@ -473,7 +473,7 @@ export function BackupSection({ activeWallet }) {
                     label={t('settings.backup.exportEncryptedBackup')}
                     /* Spec §19.4 */
                     hint={t('settings.backup.saveTheWalletAddressesLabels')}
-                    actionLabel={t('settings.backup.export')}
+                    actionLabel={t('history.export.open')}
                     disabled={!activeWallet}
                     onClick={() => { setPendingPassword(''); setExportError(null); setExportResult(null); }}
                 />
@@ -613,7 +613,7 @@ function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
         >
             <div className={styles.actions}>
                 <Button variant="ghost" size="sm" onClick={onDismiss}>
-                    {t('settings.backup.notNow')}
+                    {t('extensionBanner.notNow')}
                 </Button>
                 <Button
                     size="sm"
@@ -653,12 +653,12 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
         <FormSection title={label} description={hint} className={styles.formSection}>
             <Input
                 type="password"
-                placeholder={t('settings.backup.walletPassword')}
+                placeholder={t('send.gated.passwordLabel')}
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
-                aria-label={t('settings.backup.walletPassword')}
+                aria-label={t('send.gated.passwordLabel')}
             />
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>
@@ -870,7 +870,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     value={passphrase}
                     onChange={(e) => setPassphrase(e.target.value)}
                     autoComplete="off"
-                    aria-label={t('settings.backup.bip39Passphrase')}
+                    aria-label={t('importWallet.passphrase.label')}
                 />
             ) : null}
             {!gapLimitValid ? (
@@ -989,7 +989,7 @@ function DryRunChainReport({ chain }) {
                 </ul>
             ) : null}
             <DiagnosticDetails
-                summary={t('settings.backup.technicalDetails')}
+                summary={t('pending.detail.technicalDetails')}
                 items={differences.map((difference) => difference.detail)}
             />
         </div>
@@ -1021,7 +1021,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
             />
             <Input
                 type="password"
-                placeholder={t('settings.backup.confirmPassword')}
+                placeholder={t('importWallet.confirmPassword')}
                 value={pw2}
                 onChange={(e) => setPw2(e.target.value)}
                 autoComplete="new-password"
@@ -1054,7 +1054,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                     onClick={() => onSubmit(pw1)}
                     disabled={!canSubmit}
                 >
-                    {busy ? t('settings.backup.exporting') : t('settings.backup.export2')}
+                    {busy ? t('settings.backup.exporting') : t('history.export.confirm')}
                 </Button>
             </div>
         </FormSection>
@@ -1219,7 +1219,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                 />
             ) : (
                 <Select
-                    label={t('settings.backup.chain')}
+                    label={t('send.fields.chain')}
                     value={chainId}
                     onChange={(e) => setChainId(e.target.value)}
                     aria-label={t('settings.backup.publishChain')}
@@ -1232,12 +1232,12 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             )}
             <Input
                 type="password"
-                placeholder={t('settings.backup.walletPassword')}
+                placeholder={t('send.gated.passwordLabel')}
                 value={password}
                 onChange={(e) => onPasswordChange(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
-                aria-label={t('settings.backup.walletPassword')}
+                aria-label={t('send.gated.passwordLabel')}
             />
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>
@@ -1247,7 +1247,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                     onClick={() => onSubmit({ chainId, password })}
                     disabled={!canSubmit}
                 >
-                    {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('settings.backup.publish2')}
+                    {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('gatedPublish.review.summary.beforeFile')}
                 </Button>
             </div>
         </FormSection>
@@ -1282,9 +1282,9 @@ function PublishLabelsReport({ result, onDone }) {
     return (
         <FormSection title={t('settings.backup.labelsPublished')} className={styles.formSection}>
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
-                <dt style={ROW_HINT}>{t('settings.backup.transactionId')}</dt>
+                <dt style={ROW_HINT}>{t('send.txid')}</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
-                <dt style={ROW_HINT}>{t('settings.backup.chain')}</dt>
+                <dt style={ROW_HINT}>{t('send.fields.chain')}</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
                     {chainDisplayName(result?.chainId) || '-'}
                 </dd>
@@ -1356,7 +1356,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                 />
             ) : (
                 <Select
-                    label={t('settings.backup.chain')}
+                    label={t('send.fields.chain')}
                     value={chainId}
                     onChange={(e) => setChainId(e.target.value)}
                     aria-label={t('settings.backup.restoreChain')}
@@ -1369,12 +1369,12 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             )}
             <Input
                 type="password"
-                placeholder={t('settings.backup.walletPassword')}
+                placeholder={t('send.gated.passwordLabel')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
-                aria-label={t('settings.backup.walletPassword')}
+                aria-label={t('send.gated.passwordLabel')}
             />
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>

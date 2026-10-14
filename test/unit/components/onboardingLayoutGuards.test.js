@@ -9,12 +9,15 @@ import balanceSource from '../../../packages/core/src/shared/components/BalanceL
 import homeTabsSource from '../../../packages/core/src/shared/components/HomeTabs.jsx?raw';
 import homeSource from '../../../packages/core/src/shared/routes/Home.jsx?raw';
 import lockedSource from '../../../packages/core/src/shared/routes/Locked.jsx?raw';
-import createWalletSource from '../../../packages/core/src/shared/routes/CreateWallet.jsx?raw';
+import createWalletRawSource from '../../../packages/core/src/shared/routes/CreateWallet.jsx?raw';
 import importWalletSource from '../../../packages/core/src/shared/routes/ImportWallet.jsx?raw';
-import onboardingSource from '../../../packages/core/src/shared/routes/Onboarding.jsx?raw';
+import onboardingRawSource from '../../../packages/core/src/shared/routes/Onboarding.jsx?raw';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import carouselSource from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx?raw';
 import resumeSource from '../../../packages/core/src/shared/routes/ResumeConfirm.jsx?raw';
 
+const onboardingSource = withEnglishCopy(onboardingRawSource);
+const createWalletSource = withEnglishCopy(createWalletRawSource);
 const balanceCss = readFileSync(
     'packages/core/src/shared/components/BalanceList.module.css',
     'utf8',

@@ -185,7 +185,7 @@ export function ThisWalletSection({
             {/* Offer the upgrade only to the older 12-word format; a standard wallet has nothing to upgrade. */}
             {activeWallet.format === 'counterwallet-legacy' ? (
                 <Row
-                    label={t('settings.thisWallet.upgradeRecoveryPhrase')}
+                    label={t('walletDetails.upgradeRecovery')}
                     hint={t('settings.thisWallet.thisWalletUsesAnOlder')}
                     actionLabel={onOpenWalletPicker ? t('settings.thisWallet.openWallets') : null}
                     onClick={onOpenWalletPicker}
@@ -201,7 +201,7 @@ export function ThisWalletSection({
                 <Row
                     label={t('settings.thisWallet.extendedPublicKeys')}
                     hint={t('settings.thisWallet.exportAccountLevelPublicKeys')}
-                    actionLabel={t('settings.backup.export')}
+                    actionLabel={t('history.export.open')}
                     onClick={() => { setExportStage('password'); setExportError(null); }}
                 />
             ) : (
@@ -344,7 +344,7 @@ function ChangePasswordRow({ walletId, disabled }) {
     if (!open) {
         return (
             <Row
-                label={t('settings.backup.walletPassword')}
+                label={t('send.gated.passwordLabel')}
                 hint={t('settings.thisWallet.changeThePasswordThatProtects')}
                 actionLabel={t('settings.thisWallet.change')}
                 onClick={() => setOpen(true)}
@@ -435,7 +435,7 @@ function PublicKeyExport({
                         label={t('settings.thisWallet.confirmWalletPassword')}
                         value={password}
                         onChange={(event) => onPasswordChange(event.target.value)}
-                        placeholder={t('settings.backup.walletPassword')}
+                        placeholder={t('send.gated.passwordLabel')}
                         autoComplete="current-password"
                         autoFocus
                         disabled={busy}

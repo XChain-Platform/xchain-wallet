@@ -12,6 +12,7 @@ import { useEffect, useId, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
 import { t } from '../../i18n/index.js';
+import { LAYOUT_MODE_STORAGE_KEY } from '../utils/layoutModeStorageKey.js';
 
 /**
  * Settings tile in the pancake drawer that lets the user pick how
@@ -33,7 +34,6 @@ import { t } from '../../i18n/index.js';
  * the worker's storage listener applies it to the action button
  * the next time the user clicks.
  */
-const STORAGE_KEY = 'xchain.layoutMode';
 
 function isExtensionContext() {
     return typeof chrome !== 'undefined'
@@ -55,15 +55,15 @@ export function LayoutModeToggle() {
         setAvailable(true);
         const onChanged = (changes, area) => {
             if (area !== 'local') return;
-            if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) return;
+            if (!Object.prototype.hasOwnProperty.call(changes, LAYOUT_MODE_STORAGE_KEY)) return;
             storageChanged = true;
-            const next = changes[STORAGE_KEY]?.newValue;
+            const next = changes[LAYOUT_MODE_STORAGE_KEY]?.newValue;
             if (active && (next === 'popup' || next === 'sidepanel')) setMode(next);
         };
         chrome.storage.onChanged.addListener(onChanged);
-        chrome.storage.local.get(STORAGE_KEY, (items) => {
+        chrome.storage.local.get(LAYOUT_MODE_STORAGE_KEY, (items) => {
             if (!active || storageChanged) return;
-            const v = items?.[STORAGE_KEY];
+            const v = items?.[LAYOUT_MODE_STORAGE_KEY];
             if (v === 'popup' || v === 'sidepanel') setMode(v);
         });
         return () => {
@@ -78,7 +78,7 @@ export function LayoutModeToggle() {
         if (next === mode) return;
         setMode(next);
         try {
-            const pending = chrome.storage.local.set({ [STORAGE_KEY]: next });
+            const pending = chrome.storage.local.set({ [LAYOUT_MODE_STORAGE_KEY]: next });
             if (typeof pending?.catch === 'function') void pending.catch(() => {});
         } catch {
             // Extension reloads can invalidate the storage context between render and click.

@@ -189,7 +189,7 @@ export function DuressPassphraseRow() {
                         icon={null}
                         disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
                     >
-                        {busy ? t('settings.duress.verifying') : t('settings.duress.save')}
+                        {busy ? t('verifySignature.verifying') : t('history.contact.save')}
                     </Button>
                 </div>
             </form>

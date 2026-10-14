@@ -576,7 +576,7 @@ export function Locked({ onUnlocked }) {
                                 variant="danger"
                                 onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
                             >
-                                {t('locked.exitDemoWipe')}
+                                {t('walletDetails.exitDemo')}
                             </Button>
                             {demoWipeError && !demoConfirmOpen ? (
                                 <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>
@@ -647,7 +647,7 @@ export function Locked({ onUnlocked }) {
                                             </p>
                                             <Input
                                                 type="text"
-                                                label={t('locked.typeWipeToConfirm')}
+                                                label={t('vaultUnavailable.wipeConfirm')}
                                                 value={wipeConfirmText}
                                                 onChange={(e) => setWipeConfirmText(e.target.value)}
                                                 autoComplete="off"
@@ -739,7 +739,7 @@ export function Locked({ onUnlocked }) {
                         onClick={handleCaptureSkip}
                         disabled={busy}
                     >
-                        {t('settings.backup.notNow')}
+                        {t('extensionBanner.notNow')}
                     </Button>
                     <Button
                         type="submit"
@@ -747,7 +747,7 @@ export function Locked({ onUnlocked }) {
                         loading={busy}
                         disabled={captureValue.length === 0}
                     >
-                        {t('locked.continue')}
+                        {t('adsNotice.continue')}
                     </Button>
                 </>
             )}

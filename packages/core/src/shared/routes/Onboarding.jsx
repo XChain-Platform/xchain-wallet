@@ -375,7 +375,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         <PageHeader
             onBack={onBack}
             backLabel={t('onboarding.backToWallets')}
-            title={mustGraduate ? t('onboarding.leaveTheDemo') : t('onboarding.addWallet')}
+            title={mustGraduate ? t('onboarding.leaveTheDemo') : t('walletPicker.add')}
         />
     ) : null;
 
@@ -583,7 +583,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                             disabled={!onImport}
                             icon={<Icon.KeyIcon />}
                         >
-                            {t('onboarding.importWallet')}
+                            {t('importWallet.title')}
                         </Button>
                         <Button
                             variant="ghost"

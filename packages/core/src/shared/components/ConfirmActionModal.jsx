@@ -410,7 +410,7 @@ export function ConfirmActionModal({
                 disabled={exitsLocked}
                 data-testid="confirm-reject"
             >
-                {t('components.confirmActionModal.reject')}
+                {t('extension.approval.reject')}
             </Button>
             <Button
                 variant="success"
@@ -449,7 +449,7 @@ export function ConfirmActionModal({
                     <WalletIdentity wallet={resolvedSigningWallet} label={t('components.confirmActionModal.signingWith')} />
                     <OriginIdentity
                         origin={requestOrigin}
-                        label={t('components.confirmActionModal.requestingSite')}
+                        label={t('extension.approval.requestingSite')}
                         testId="confirm-request-origin"
                     />
 
@@ -489,7 +489,7 @@ export function ConfirmActionModal({
                     {(variant === 'action' || variant === 'message') && sourceAddress ? (
                         <dl className={styles.sourceRow} data-testid="confirm-source">
                             <dt className={styles.sourceLabel}>
-                                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('components.placeOrderPanel.from')}
+                                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('send.fields.from')}
                             </dt>
                             <dd className={styles.sourceValue}>
                                 {sourceName ? (

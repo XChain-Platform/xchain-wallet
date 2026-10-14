@@ -80,17 +80,17 @@ export function DerivationPathCrossCheck({
         <section className={styles.root} aria-label={t('components.derivationPathCrossCheck.hardwareSignerVerification')}>
             <p className={styles.title}>{t('components.derivationPathCrossCheck.signingWithHardwareDevice')}</p>
             <dl className={styles.grid}>
-                <dt className={styles.label}>{t('components.derivationPathCrossCheck.signer')}</dt>
+                <dt className={styles.label}>{t('signerSelect.title')}</dt>
                 <dd className={styles.value}>{signerName}</dd>
                 <dt className={styles.label}>
-                    {t('components.derivationPathCrossCheck.derivationPath')}
+                    {t('multisig.share.derivationPath')}
                     <InfoTip
-                        aria={t('components.derivationPathCrossCheck.derivationPathHelp')}
+                        aria={t('components.derivationPathCrossCheck.derivationPathHelpLabel')}
                         label={t('components.derivationPathCrossCheck.locatesThisAccountWithinYour')}
                     />
                 </dt>
                 <dd className={styles.value}><code className={styles.path}>{path}</code></dd>
-                <dt className={styles.label}>{t('routes.addressList.address')}</dt>
+                <dt className={styles.label}>{t('verifySignature.address')}</dt>
                 <dd className={styles.value}><AddressText address={address} /></dd>
             </dl>
             <p className={styles.instruction}>

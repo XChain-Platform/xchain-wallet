@@ -62,7 +62,7 @@ export function StatusMessage({ variant = 'status', id, children, className, det
                 <span>{children}</span>
                 {details ? (
                     <details className={styles.details}>
-                        <summary>{t('components.psbtIntentPanel.technicalDetails')}</summary>
+                        <summary>{t('pending.detail.technicalDetails')}</summary>
                         <code>{details}</code>
                     </details>
                 ) : null}

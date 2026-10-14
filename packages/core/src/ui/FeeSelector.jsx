@@ -111,7 +111,7 @@ export function FeeSelector({
                 <span className={styles.label}>
                     {label}
                     <InfoTip
-                        aria={t('ui.feeSelector.feePriorityHelp')}
+                        aria={t('ui.feeSelector.feePriorityHelpLabel')}
                         label={t('ui.feeSelector.pickHowFastThisTransaction')}
                     />
                 </span>
@@ -298,7 +298,7 @@ export function FeeSelector({
                     onChange={(e) => onSliderChange(e.target.value)}
                     onKeyDown={onSliderKeyDown}
                     disabled={disabled}
-                    aria-label={t('components.placeOrderPanel.networkFee')}
+                    aria-label={t('send.networkFee')}
                     aria-valuetext={isCustom
                         ? t('ui.feeSelector.customValueText', {
                             rate: Number.isFinite(value?.customRate) ? formatWithThousands(value.customRate) : '',

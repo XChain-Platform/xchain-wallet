@@ -28,7 +28,7 @@ export function DemoExitConfirm({ busy, error, onConfirm, onCancel, message = DE
         <ConfirmModal
             title={t('components.demoExitConfirm.exitDemoAndDeleteIts')}
             message={message}
-            confirmLabel={t('components.demoExitConfirm.exitDemoWipe')}
+            confirmLabel={t('walletDetails.exitDemo')}
             danger
             busy={busy}
             error={error}

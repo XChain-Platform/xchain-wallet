@@ -82,7 +82,7 @@ function originIdentityDetails(origin) {
  */
 export function OriginIdentity({
     origin,
-    label = t('components.confirmActionModal.requestingSite'),
+    label = t('extension.approval.requestingSite'),
     testId,
     headingClassName = '',
     originClassName = '',

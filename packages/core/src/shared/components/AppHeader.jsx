@@ -115,8 +115,8 @@ export function AppHeader({
                         icon={<Icon.LockIcon />}
                         onClick={onLock}
                         disabled={locking}
-                        aria-label={t('shell.header.lockWallet')}
-                        title={t('shell.header.lockWallet')}
+                        aria-label={t('home.lockWallet')}
+                        title={t('home.lockWallet')}
                         data-header-control
                     />
                 ) : null}

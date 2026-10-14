@@ -45,14 +45,14 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                     aria-expanded={revealed}
                     onClick={() => setRevealedKey(revealed ? null : mnemonicKey)}
                 >
-                    {revealed ? t('components.mnemonicGrid.hideRecoveryPhrase') : t('components.mnemonicGrid.revealRecoveryPhrase')}
+                    {revealed ? t('settings.backup.hideRecoveryPhrase') : t('settings.backup.revealRecoveryPhrase')}
                 </Button>
             </div>
             <div id={contentId}>
                 {revealed ? (
                     <ol
                         className={gridClass}
-                        aria-label={t('components.mnemonicGrid.recoveryPhrase')}
+                        aria-label={t('importWallet.recoveryPhrase')}
                         onCopy={(event) => event.preventDefault()}
                     >
                         {words.map((word, i) => (

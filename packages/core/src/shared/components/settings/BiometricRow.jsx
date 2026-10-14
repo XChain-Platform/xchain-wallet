@@ -203,9 +203,9 @@ export function BiometricRow() {
                     enterKeyHint="go"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    placeholder={t('settings.backup.walletPassword')}
+                    placeholder={t('send.gated.passwordLabel')}
                     autoComplete="current-password"
-                    aria-label={t('settings.backup.walletPassword')}
+                    aria-label={t('send.gated.passwordLabel')}
                 />
                 {error ? (
                     <StatusMessage

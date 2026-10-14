@@ -130,7 +130,7 @@ export function SignCredentials({
                             color: 'var(--xc-text-muted)',
                         }}
                     >
-                        <span aria-hidden="true">🔓</span> {t('components.messageConfirmScreen.walletUnlockedNoPasswordNeeded')}
+                        <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                     </p>
                 </SigningReadyNote>
                 {submitError ? (

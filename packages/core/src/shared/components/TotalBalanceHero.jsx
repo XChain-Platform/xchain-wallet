@@ -302,7 +302,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                 </span>
                 <div
                     className={`${styles.amount} ${balanceIsMessage ? styles.amountMessage : ''}`}
-                    aria-label={hidden ? t('components.totalBalanceHero.balanceHidden') : balanceSpeech}
+                    aria-label={hidden ? t('balances.balanceHidden') : balanceSpeech}
                 >
                     {hidden ? (
                         <span className={styles.hidden}>•••••</span>

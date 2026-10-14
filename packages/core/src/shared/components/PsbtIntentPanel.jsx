@@ -127,7 +127,7 @@ export function PsbtIntentPanel({
                     {/* The raw decoder code stays available for support, but
                         outside the alert so a signer reads only plain words. */}
                     <details className={styles.details} data-testid="psbt-action-undecoded-details">
-                        <summary>{t('components.psbtIntentPanel.technicalDetails')}</summary>
+                        <summary>{t('pending.detail.technicalDetails')}</summary>
                         <code>{decodeError}</code>
                     </details>
                 </>
@@ -205,7 +205,7 @@ export function PsbtIntentPanel({
                 <dd className={styles.totalsValue}>
                     {totalOut != null ? amountLabel(totalOut, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
                 </dd>
-                <dt className={styles.totalsLabel}>{t('components.placeOrderPanel.networkFee')}</dt>
+                <dt className={styles.totalsLabel}>{t('send.networkFee')}</dt>
                 <dd className={styles.totalsValue}>
                     {fee != null ? amountLabel(fee, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
                 </dd>

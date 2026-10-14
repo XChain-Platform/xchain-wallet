@@ -110,8 +110,8 @@ export function renderDexRoute(unlockedView, ctx) {
             <ReceivePicker
                 walletId={activeWalletId}
                 accountId={activeAccountId || undefined}
-                title={t('shell.dex.selectCoinOrToken')}
-                backLabel={t('shell.dex.backToMarkets')}
+                title={t('shell.markets.selectAsset')}
+                backLabel={t('shell.markets.back')}
                 hideOwnFilter
                 onBack={() => setUnlockedView('markets')}
                 onSelect={(sel) => {

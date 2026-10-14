@@ -317,7 +317,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         <span style={NUMERIC_CELL_STYLE}>{t('components.placeOrderPanel.price')}</span>
                         <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.size')}{tick1})</span>
                         <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.filled')}</span>
-                        <span style={{ textAlign: 'right' }}>{t('components.openOrdersPanel.action')}</span>
+                        <span style={{ textAlign: 'right' }}>{t('actionDetail.title')}</span>
                     </div>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '28rem' }}>
                         {rows.map((r, index) => (

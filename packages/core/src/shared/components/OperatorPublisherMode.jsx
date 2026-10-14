@@ -263,7 +263,7 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
                 spellCheck={false}
             />
             <Input
-                label={t('components.operatorPublisherMode.value')}
+                label={t('home.tabs.value')}
                 hint={t('components.operatorPublisherMode.theFeedValueToPublish')}
                 value={value}
                 onChange={(event) => onValue(event.target.value)}
@@ -281,7 +281,7 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
         <>
             {fee.tiers ? (
                 <FeeSelector
-                    label={t('components.placeOrderPanel.networkFee')}
+                    label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={fee.tiers}
                     value={fee.pick}

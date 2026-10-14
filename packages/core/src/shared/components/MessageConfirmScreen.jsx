@@ -81,7 +81,7 @@ export function MessageConfirmScreen({
                         // a freeze is on.
                         <SigningReadyNote>
                             <p className={hintClassName}>
-                                <span aria-hidden="true">🔓</span> {t('components.messageConfirmScreen.walletUnlockedNoPasswordNeeded')}
+                                <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                             </p>
                         </SigningReadyNote>
                     ) : (

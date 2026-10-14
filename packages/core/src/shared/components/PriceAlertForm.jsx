@@ -145,8 +145,8 @@ export function PriceAlertForm({
                     onChange={(e) => updateInput(setDirection, e.target.value, direction)}
                 >
                     {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="above">{t('components.priceAlertForm.risesAbove')}</option>
-                    <option value="below">{t('components.priceAlertForm.fallsBelow')}</option>
+                    <option value="above">{t('settings.notifications.risesAbove')}</option>
+                    <option value="below">{t('settings.notifications.fallsBelow')}</option>
                 </Select>
                 <span aria-hidden="true">{symbol}</span>
                 <Input
@@ -176,7 +176,7 @@ export function PriceAlertForm({
                     size="md"
                     variant="primary"
                 >
-                    {busy ? t('components.priceAlertForm.saving') : editing ? t('components.priceAlertForm.saveChanges') : t('components.priceAlertForm.addAlert')}
+                    {busy ? t('send.saveRecipient.saving') : editing ? t('components.priceAlertForm.saveChanges') : t('components.priceAlertForm.addAlert')}
                 </Button>
                 {onCancel ? (
                     <Button

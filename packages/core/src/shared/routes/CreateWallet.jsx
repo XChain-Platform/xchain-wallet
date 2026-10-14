@@ -344,7 +344,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
     const screenHeader = (
         <PageHeader
             onBack={stage === 'verify' ? undefined : handleBack}
-            backLabel={stage === 'password' ? t('createWallet.backToWalletSetup') : t('createWallet.backToPreviousStep')}
+            backLabel={stage === 'password' ? t('importWallet.backToSetup') : t('createWallet.backToPreviousStep')}
             backDisabled={stage === 'persisting' || stage === 'ads-notice'}
             title={headerTitle}
             titleRef={headingRef}
@@ -363,7 +363,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage ref={stageFormRef} label={t('settings.ads.automaticDonationSystem')}>
+                <FormPage ref={stageFormRef} label={t('adsNotice.title')}>
                     {noticeBody}
                 </FormPage>
             </Screen>
@@ -467,7 +467,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         const mnemonicBody = (
             <FormPage
                 ref={stageFormRef}
-                label={t('createWallet.recoveryPhrase')}
+                label={t('importWallet.recoveryPhrase')}
                 description={isFull
                     ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. ${RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.`
                     : `Write these ${wordCount} words on paper and store your recovery phrase safely. ${RECOVERY_PHRASE_WARNING}`}
@@ -559,12 +559,12 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                     aria-describedby={passwordStepDisabledReason ? 'create-wallet-disabled-reason' : undefined}
                     icon={<Icon.MigrateIcon />}
                 >
-                    {t('createWallet.next')}
+                    {t('onboarding.carousel.next')}
                 </Button>
             )}
         >
             <Input
-                label={t('createWallet.walletName')}
+                label={t('renameWallet.name')}
                 value={name}
                 onChange={(e) => {
                     nameEditedRef.current = true;
@@ -588,7 +588,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             <Input
                 id="create-confirm"
                 type="password"
-                label={isFull ? t('settings.backup.confirmPassword') : t('common.confirm')}
+                label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -629,7 +629,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                         }}
                     />
                     <InfoTip
-                        aria={t('createWallet.bip39PassphraseHelp')}
+                        aria={t('importWallet.passphrase.help')}
                         label={t('createWallet.thisExtraSecretCombinesWith')}
                     />
                 </div>
@@ -641,7 +641,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                         <Input
                             id="create-bip39-passphrase"
                             type="password"
-                            label={t('settings.backup.bip39Passphrase')}
+                            label={t('importWallet.passphrase.label')}
                             hint={t('createWallet.requiredWhenEnabledCapitalizationAnd')}
                             value={bip39Passphrase}
                             onChange={(e) => {

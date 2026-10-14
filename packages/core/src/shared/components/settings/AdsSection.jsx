@@ -102,7 +102,7 @@ export function AdsSection() {
     return (
         <div style={STACK}>
             <ToggleRow
-                label={t('settings.ads.automaticDonationSystem')}
+                label={t('adsNotice.title')}
                 hint={t('settings.ads.itSetsAsideASmall')}
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}
@@ -179,7 +179,7 @@ export function AdsSection() {
                                     {t('settings.ads.sendDonationWhenPendingReaches')}
                                     {triggerIsDefault ? t('settings.ads.default') : t('settings.ads.custom')}
                                     <InfoTip
-                                        aria={t('settings.ads.triggerThresholdHelp')}
+                                        aria={t('settings.ads.triggerThresholdHelpLabel')}
                                         label={t('settings.ads.aSatIsTheSmallest')}
                                     />
                                 </span>
