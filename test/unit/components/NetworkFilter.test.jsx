@@ -180,6 +180,23 @@ describe('NetworkFilter keyboard navigation', () => {
         fireEvent.keyDown(search, { key: 'ArrowDown' });
         expect(screen.getByRole('option', { name: /^All networks/ })).toHaveFocus();
     });
+
+    it('selects with Enter and closes on Tab without trapping focus', () => {
+        const { props } = mount();
+        const { trigger } = openList();
+        const bitcoin = screen.getByRole('option', { name: /^Bitcoin/ });
+        bitcoin.focus();
+        fireEvent.keyDown(bitcoin, { key: 'Enter' });
+        expect(props.onChange).toHaveBeenCalledWith('bitcoin');
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.click(trigger);
+        const selected = screen.getByRole('option', { name: /^All networks/ });
+        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        fireEvent(selected, event);
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(event.defaultPrevented).toBe(false);
+    });
 });
 
 describe('NetworkFilter search', () => {
