@@ -27,6 +27,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -110,6 +111,7 @@ function withFormattedExpiration(confirmAction) {
  */
 export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, initialGiveOwnership }) {
     const { messaging, shell } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -379,6 +381,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        if (!networkAvailable) return;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -431,6 +434,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // and are only reachable after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
+        if (!networkAvailable) return;
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
             return;
@@ -454,6 +458,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     async function handleSubmit(event) {
         event.preventDefault();
+        if (!networkAvailable) return;
         if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
         if (validationError || expError) return;
@@ -538,6 +543,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
+            {!networkAvailable ? (
+                <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
+            ) : null}
             {children}
         </Screen>
     );
@@ -840,7 +848,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || !networkAvailable}
+                    title={!networkAvailable ? 'Swapping needs a network connection' : undefined}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
