@@ -21,22 +21,53 @@ function isNonFiniteNumber(value) {
 
 function localeNumberSeparators(locale) {
     try {
-        const parts = new Intl.NumberFormat(getFormatLocale(locale)).formatToParts(1234567890123.6);
+        const formatLocale = getFormatLocale(locale);
+        const parts = new Intl.NumberFormat(formatLocale).formatToParts(1234567890123.6);
         const integerGroups = parts
             .filter((part) => part.type === 'integer')
             .map((part) => part.value.length);
         const primary = integerGroups.at(-1) || 3;
+        const digitFormatter = new Intl.NumberFormat(formatLocale, { useGrouping: false });
         return {
             decimal: parts.find((part) => part.type === 'decimal')?.value || '.',
             group: parts.find((part) => part.type === 'group')?.value || ',',
+            digits: Array.from(
+                { length: 10 },
+                (_, digit) => digitFormatter.format(digit),
+            ),
             grouping: {
                 primary,
                 secondary: integerGroups.at(-2) || primary,
             },
         };
     } catch {
-        return { decimal: '.', group: ',', grouping: { primary: 3, secondary: 3 } };
+        return {
+            decimal: '.',
+            group: ',',
+            digits: Array.from({ length: 10 }, (_, digit) => String(digit)),
+            grouping: { primary: 3, secondary: 3 },
+        };
     }
+}
+
+function normalizeLocaleNumberCharacters(value, syntax) {
+    let normalized = value;
+    syntax.digits.forEach((digit, index) => {
+        if (digit !== String(index)) normalized = normalized.split(digit).join(String(index));
+    });
+    const decimal = syntax.decimal === '.' || syntax.decimal === ','
+        ? syntax.decimal
+        : '.';
+    const group = syntax.group === '.' || syntax.group === ','
+        ? syntax.group
+        : /\s/u.test(syntax.group) ? ' ' : ',';
+    if (syntax.decimal !== decimal) normalized = normalized.split(syntax.decimal).join(decimal);
+    if (syntax.group !== group) normalized = normalized.split(syntax.group).join(group);
+    return { normalized, decimal, group };
+}
+
+function localizeDigits(value, digits) {
+    return value.replace(/\d/g, (digit) => digits[Number(digit)]);
 }
 
 // Western groups of three and Indian lakh/crore groups (2s then a final 3)
@@ -78,12 +109,13 @@ export function normalizeLocalizedDecimal(value, locale) {
     if (value === null || value === undefined) return null;
     let raw = String(value).trim();
     if (raw === '') return '';
+    const syntax = localeNumberSeparators(locale);
+    const localized = normalizeLocaleNumberCharacters(raw, syntax);
+    raw = localized.normalized;
     if (!/^[\d., \t\u00a0\u202f]+$/.test(raw)) return null;
-    const {
-        decimal: localeDecimal,
-        group: localeGroup,
-        grouping: localeGrouping,
-    } = localeNumberSeparators(locale);
+    const localeDecimal = localized.decimal;
+    const localeGroup = localized.group;
+    const localeGrouping = syntax.grouping;
     raw = raw.replace(/[ \t\u00a0\u202f]+/g, ' ');
     if (raw === '') return null;
 
@@ -204,6 +236,7 @@ export function formatWithThousands(value, locale) {
     const {
         decimal,
         group,
+        digits,
         grouping: { primary: primaryGroupSize, secondary: secondaryGroupSize },
     } = localeNumberSeparators(locale);
     const groupedParts = [];
@@ -217,7 +250,7 @@ export function formatWithThousands(value, locale) {
     groupedParts.unshift(intPart.slice(0, groupEnd));
     const grouped = groupedParts.join(group);
     const localizedFraction = fracPart ? `${decimal}${fracPart.slice(1)}` : '';
-    return `${negative ? '-' : ''}${grouped}${localizedFraction}`;
+    return `${negative ? '-' : ''}${localizeDigits(grouped, digits)}${localizeDigits(localizedFraction, digits)}`;
 }
 
 // (a): strip the zero tail a DECIMAL sum leaves behind

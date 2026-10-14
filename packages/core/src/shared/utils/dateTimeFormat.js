@@ -33,7 +33,7 @@ export function formatRelativeDateTime(timestamp, now = Date.now(), locale) {
     const date = dateFromTimestamp(timestamp);
     if (!date) return '';
     const diffSeconds = Math.floor((date.getTime() - now) / 1000);
-    if (Math.abs(diffSeconds) < 5) return 'just now';
+    const isCurrent = Math.abs(diffSeconds) < 5;
     const ranges = [
         ['year', 365 * 86400],
         ['month', 30 * 86400],
@@ -42,14 +42,23 @@ export function formatRelativeDateTime(timestamp, now = Date.now(), locale) {
         ['minute', 60],
         ['second', 1],
     ];
-    const [unit, seconds] = ranges.find(([, size]) => Math.abs(diffSeconds) >= size);
-    const amount = diffSeconds < 0
-        ? Math.ceil(diffSeconds / seconds)
-        : Math.floor(diffSeconds / seconds);
+    const [unit, seconds] = isCurrent
+        ? ['second', 1]
+        : ranges.find(([, size]) => Math.abs(diffSeconds) >= size);
+    const amount = isCurrent
+        ? 0
+        : diffSeconds < 0
+            ? Math.ceil(diffSeconds / seconds)
+            : Math.floor(diffSeconds / seconds);
     try {
-        return new Intl.RelativeTimeFormat(getFormatLocale(locale), { numeric: 'always' })
+        const formatLocale = getFormatLocale(locale);
+        if (isCurrent && formatLocale.split('-')[0].toLowerCase() === 'en') return 'just now';
+        return new Intl.RelativeTimeFormat(formatLocale, {
+            numeric: isCurrent ? 'auto' : 'always',
+        })
             .format(amount, unit);
     } catch {
+        if (isCurrent) return 'just now';
         const absolute = Math.abs(amount);
         const label = `${unit}${absolute === 1 ? '' : 's'}`;
         return amount < 0 ? `${absolute} ${label} ago` : `in ${absolute} ${label}`;

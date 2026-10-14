@@ -31,7 +31,9 @@ import {
 } from '../../../packages/core/src/shared/utils/dateTimeFormat.js';
 
 beforeAll(() => {
-    registerLocale('de-DE', {});
+    for (const locale of ['en-US', 'de-DE', 'fr-FR', 'ar-EG']) {
+        registerLocale(locale, {});
+    }
 });
 
 afterEach(async () => {
@@ -39,6 +41,28 @@ afterEach(async () => {
 });
 
 describe('locale-aware exact amount formatting', () => {
+    it.each([
+        ['en-US', '1,234,567.89', '1,234,567.80', '1,234,567.89'],
+        ['de-DE', '1.234.567,89', '1.234.567,80', '1.234.567,89'],
+        ['fr-FR', '1\u202f234\u202f567,89', '1\u202f234\u202f567,80', '1\u202f234\u202f567,89'],
+        ['ar-EG', '١٬٢٣٤٬٥٦٧٫٨٩', '١٬٢٣٤٬٥٦٧٫٨٠', '١٬٢٣٤٬٥٦٧٫٨٩'],
+    ])('keeps amount, fee, and input syntax aligned for %s', async (
+        locale,
+        amount,
+        fee,
+        localizedInput,
+    ) => {
+        await setLocale(locale);
+
+        expect(formatWithThousands('1234567.89')).toBe(amount);
+        expect(formatDecimalAmount('1234567.80')).toBe(fee);
+        expect(normalizeLocalizedDecimal(localizedInput)).toBe('1234567.89');
+    });
+
+    it('rejects malformed Arabic grouping instead of changing its value', () => {
+        expect(normalizeLocalizedDecimal('١٬٢٣٤٬٥٦', 'ar-EG')).toBeNull();
+    });
+
     it('groups atomic and decimal strings without losing digits', () => {
         expect(formatAtomicAmount('1234567890123456789012', 2, 'en-US'))
             .toBe('12,345,678,901,234,567,890.12');
@@ -74,6 +98,16 @@ describe('locale-aware exact amount formatting', () => {
 });
 
 describe('locale-aware exact fiat formatting', () => {
+    it.each([
+        ['en-US', '€1,234,567.80'],
+        ['de-DE', '1.234.567,80\u00a0€'],
+        ['fr-FR', '1\u202f234\u202f567,80\u00a0€'],
+        ['ar-EG', '\u200f١٬٢٣٤٬٥٦٧٫٨٠\u00a0€'],
+    ])('uses one active number system for fiat in %s', async (locale, expected) => {
+        await setLocale(locale);
+        expect(formatFiatAmount('1234567.8', 'EUR')).toBe(expected);
+    });
+
     it.each([
         {
             label: 'pads a normal USD value',
@@ -146,6 +180,30 @@ describe('locale-aware exact fiat formatting', () => {
 
 describe('local History date formatting', () => {
     const timestampSeconds = Date.parse('2024-01-15T20:30:00Z') / 1000;
+
+    it.each([
+        ['en-US', '3 minutes ago'],
+        ['de-DE', 'vor 3 Minuten'],
+        ['fr-FR', 'il y a 3 minutes'],
+        ['ar-EG', 'قبل ٣ دقائق'],
+    ])('keeps dates and relative time in the active %s language', async (locale, relative) => {
+        await setLocale(locale);
+        const date = new Date(timestampSeconds * 1000);
+        const now = date.getTime() + 3 * 60 * 1000;
+        const expectedDate = new Intl.DateTimeFormat(locale, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        }).format(date);
+        const expectedZoned = date.toLocaleString(locale, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+        });
+
+        expect(formatLocalDateTime(timestampSeconds)).toBe(expectedDate);
+        expect(formatZonedDateTime(timestampSeconds)).toBe(expectedZoned);
+        expect(formatRelativeDateTime(timestampSeconds, now)).toBe(relative);
+        expect(formatRelativeTime(timestampSeconds, now)).toBe(relative);
+    });
 
     it('renders seconds and milliseconds in the device time zone', () => {
         const expected = new Intl.DateTimeFormat('en-US', {
