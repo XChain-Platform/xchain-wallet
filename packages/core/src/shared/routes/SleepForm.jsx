@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -24,7 +24,7 @@ import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
@@ -462,14 +462,18 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     >
                         {isWatcherMode ? `Create unsigned transaction: ${titleNoun.toLowerCase()}`
                             : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${titleNoun.toLowerCase()}`
-                                : (descriptor ? `${titleNoun} on ${descriptor.displayName}` : titleNoun)}
+                                : titleNoun}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <DetailRow label="Wake condition" value={wakeCondition} />
@@ -602,12 +606,12 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             )}
         >
             {!isTick ? (
-                <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]} chainRegistry={chainRegistry} />
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]} chainRegistry={chainRegistry} hideNetworkKind />
             ) : null}
 
             {isTick ? (
                 <>
-                    {lockedToken && chainId ? <LockedTokenContext chainId={chainId} tick={ticker} /> : null}
+                    {lockedToken && chainId ? <TickerIcon chainId={chainId} tick={ticker} size={32} /> : null}
                     <p className={styles.hint}>
                         Pausing a token rejects new XChain actions involving it. Already-open orders,
                         swaps, and dispensers can still settle. The token owner can resume it early.
@@ -673,7 +677,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 {' '}{isTick ? 'Pause indefinitely' : 'Lock indefinitely (permanent)'}
             </label>
             {currentHeight != null ? (
-                <p className={styles.hint}>Duration starts from current block {currentHeight.toLocaleString('en-US')} on {descriptor?.displayName || chainId}.</p>
+                <p className={styles.hint}>Duration starts from current block {currentHeight.toLocaleString('en-US')}.</p>
             ) : null}
 
             <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />

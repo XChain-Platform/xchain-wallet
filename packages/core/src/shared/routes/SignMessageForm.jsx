@@ -293,7 +293,7 @@ export function SignMessageForm({ walletId, onBack }) {
                             id crashed this screen on every successful signing. */}
                         {chainRegistry.get(signedResult.chainId)
                             ? <ChainBadge descriptor={chainRegistry.get(signedResult.chainId)} size="sm" />
-                            : <span>{signedResult.chainId}</span>}
+                            : null}
                         <AddressText address={signedResult.address} />
                     </div>
                 </div>
@@ -407,6 +407,7 @@ export function SignMessageForm({ walletId, onBack }) {
                         if (error) setError(null);
                     }}
                     label="Chain"
+                    hideNetworkKind
                 />
             </div>
             <Select
