@@ -18,6 +18,9 @@ const chainRegistry = registryLib.defaultRegistry();
 // Rendered pixel width per avatar context, mirroring --xc-avatar-size-* in
 // tokens.css, so the srcset picks the smallest candidate that stays sharp.
 const AVATAR_PIXELS = Object.freeze({ header: 28, list: 40, hero: 88 });
+// Chain pip pixel width per context, mirroring --xc-avatar-pip-*. Sizing
+// attributes take plain numbers; the CSS tokens still size the pip.
+const PIP_PIXELS = Object.freeze({ header: 14, list: 20, hero: 32 });
 
 /**
  * Chain-aware ticker icon. For a native ticker (BTC/LTC/DOGE) renders
@@ -88,8 +91,8 @@ export function TickerIcon({ chainId, tick, size, context }) {
             {!isNative && chainPipUrl && failedImageUrl !== chainPipUrl ? (
                 <img
                     src={chainPipUrl}
-                    width={pipSize}
-                    height={pipSize}
+                    width={PIP_PIXELS[avatarContext]}
+                    height={PIP_PIXELS[avatarContext]}
                     alt=""
                     aria-hidden="true"
                     title={descriptor?.displayName}
