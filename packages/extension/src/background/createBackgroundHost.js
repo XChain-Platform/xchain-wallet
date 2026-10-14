@@ -310,6 +310,7 @@ const {
     listBlockedOrigins,
     addBlockedOrigin,
     removeBlockedOrigin,
+    isOriginBlocked,
     listBlocklistAuditLog,
     clearBlocklistAuditLog,
     refreshChainRegistry,
@@ -865,6 +866,16 @@ function assertReplacementPsbt({ replacement, plan, actionString, decodeActionSt
             throw new Error('tx.replace: encoder changed the replacement action');
         }
     }
+}
+
+async function cancelMatchingApprovals(approvals, matches) {
+    if (typeof approvals?.cancelOriginsMatching !== 'function') return 0;
+    return approvals.cancelOriginsMatching(matches);
+}
+
+async function emitSiteDisconnect(bridgeEvents, origin, reason = 'user-requested') {
+    if (typeof bridgeEvents?.disconnect !== 'function') return;
+    await bridgeEvents.disconnect(origin, reason);
 }
 
 /**
@@ -2088,8 +2099,8 @@ export function createBackgroundHost(deps) {
         return result;
     });
 
-    // §35.1 + §43 connected-sites maintenance. List/delete; the
-    // approval-flow record creation lives in bridge/handlers.js.
+    // §35.1 + §43 connected-sites maintenance. The approval-flow record
+    // creation lives in bridge/handlers.js.
     host.register('sites.list', async (_req, { vault }) => {
         const sites = await vault.connectedSites.list();
         return [...sites].sort((a, b) => (b.lastUsedAt || '').localeCompare(a.lastUsedAt || ''));
@@ -2099,10 +2110,21 @@ export function createBackgroundHost(deps) {
         if (typeof id !== 'string' || !id) {
             throw new Error('sites.delete: id is required');
         }
-        const site = await vault.connectedSites.get(id);
+        let site = null;
+        if (typeof vault.connectedSites.get === 'function') {
+            site = await vault.connectedSites.get(id);
+        } else if (typeof vault.connectedSites.list === 'function') {
+            site = (await vault.connectedSites.list()).find((candidate) => candidate.id === id);
+        }
+        const cancellation = site
+            ? cancelMatchingApprovals(approvals, (origin) => origin === site.origin)
+            : Promise.resolve(0);
         await vault.connectedSites.delete(id);
-        if (site?.origin && typeof bridgeEvents?.disconnect === 'function') {
-            await bridgeEvents.disconnect(site.origin, 'user-revoked');
+        if (site) {
+            await Promise.all([
+                cancellation,
+                emitSiteDisconnect(bridgeEvents, site.origin, 'user-revoked'),
+            ]);
         }
         return { ok: true };
     });
@@ -2125,6 +2147,10 @@ export function createBackgroundHost(deps) {
         if (typeof site.origin !== 'string' || !site.origin) {
             throw new Error('sites.restore: site.origin is required');
         }
+        const settings = await vault.settings.get().catch(() => null);
+        if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
+            throw new Error('sites.restore: origin is blocked');
+        }
         await vault.connectedSites.put(site);
         return { ok: true };
     });
@@ -2141,16 +2167,34 @@ export function createBackgroundHost(deps) {
         if (typeof origin !== 'string' || !origin) {
             throw new Error('sites.block: origin is required');
         }
-        const sites = await vault.connectedSites.list();
+        const cancelPending = () => cancelMatchingApprovals(
+            approvals,
+            (candidate) => typeof candidate === 'string'
+                && isOriginBlocked([origin], candidate),
+        );
+        const initialCancellation = cancelPending();
+        const sitesBeforeBlock = typeof vault.connectedSites.list === 'function'
+            ? await vault.connectedSites.list()
+            : [];
         const result = await addBlockedOrigin({ vault, origin });
-        if (typeof bridgeEvents?.disconnect === 'function') {
-            const evicted = new Set(result.evictedSiteIds);
-            for (const site of sites) {
-                if (evicted.has(site.id) && site.origin) {
-                    await bridgeEvents.disconnect(site.origin, 'blocked-by-user');
-                }
-            }
+        const evictedIds = new Set(result.evictedSiteIds);
+        let evictedOrigins = [...new Set(
+            sitesBeforeBlock
+                .filter((site) => evictedIds.has(site.id))
+                .map((site) => site.origin),
+        )];
+        if (evictedOrigins.length === 0
+            && evictedIds.size > 0
+            && !result.blocked.startsWith('*.')) {
+            evictedOrigins = [result.blocked];
         }
+        await Promise.all([
+            initialCancellation,
+            cancelPending(),
+            ...evictedOrigins.map((evictedOrigin) => (
+                emitSiteDisconnect(bridgeEvents, evictedOrigin, 'blocked-by-user')
+            )),
+        ]);
         return result;
     });
     host.register('sites.unblock', async (req, { vault }) => {
