@@ -121,7 +121,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 setLoadError(null);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(readFailureMessage(err, 'load your wallet addresses'));
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);

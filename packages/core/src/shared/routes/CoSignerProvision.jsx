@@ -135,7 +135,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             })
             .catch((err) => {
                 if (!cancelled && requestRef.current === request) {
-                    setLoadError(userFacingMessage(err, 'Failed to load wallet addresses.'));
+                    setLoadError(userFacingMessage(err, 'Failed to load your addresses.'));
                 }
             });
         return () => {

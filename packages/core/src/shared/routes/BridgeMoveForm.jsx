@@ -161,7 +161,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 setSourceChainId((current) => (current && chains.includes(current) ? current : chains[0]));
             })
             .catch(() => {
-                if (!cancelled) setLoadError('Could not load wallet addresses. Try again.');
+                if (!cancelled) setLoadError('Could not load your addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging]);

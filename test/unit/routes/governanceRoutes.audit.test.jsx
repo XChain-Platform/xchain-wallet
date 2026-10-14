@@ -456,7 +456,7 @@ describe('governance route audit', () => {
         }, messagingWith({ getAddressesByChain: vi.fn().mockRejectedValue(internal) }));
 
         const alert = await screen.findByRole('alert');
-        expect(alert).toHaveTextContent("Couldn't load your wallet addresses. Something went wrong. Try again.");
+        expect(alert).toHaveTextContent("Couldn't load your addresses. Something went wrong. Try again.");
         expect(alert).not.toHaveTextContent('wallet.invalid');
     });
 
