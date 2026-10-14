@@ -33,6 +33,17 @@ function overlaps(a, b) {
 }
 
 /**
+ * The resting corner for a toast stack: bottom-centre above the phone tab bar
+ * while it is mounted (it publishes --xc-bottom-bar-h), bottom-end otherwise.
+ *
+ * @returns {'center' | 'end'}
+ */
+export function restingPlacement() {
+    if (typeof document === 'undefined') return 'center';
+    return document.documentElement.style.getPropertyValue('--xc-bottom-bar-h').trim() !== '' ? 'center' : 'end';
+}
+
+/**
  * How far (px) to move the stack up from its CSS resting place (negative
  * moves it down, never past the content area's bottom edge).
  *
@@ -87,8 +98,7 @@ export function toastLift({ stack, content, focused, windowHeight }) {
 export function placeToastStack(stackEl) {
     if (!stackEl || typeof document === 'undefined') return;
     const root = document.documentElement;
-    const barMounted = root.style.getPropertyValue('--xc-bottom-bar-h').trim() !== '';
-    stackEl.dataset.placement = barMounted ? 'center' : 'end';
+    stackEl.dataset.placement = restingPlacement();
     stackEl.style.setProperty('--xc-toast-lift', '0px');
     const stack = stackEl.getBoundingClientRect();
     if (stack.height <= 0) {
