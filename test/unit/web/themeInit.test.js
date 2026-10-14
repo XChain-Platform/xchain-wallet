@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// @vitest-environment node
+
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
@@ -15,6 +17,19 @@ function runStartupTheme({ storedTheme, osDark = false, storageError = false } =
     const attrs = new Map([['data-xc-theme', 'stale']]);
     const themeColor = { setAttribute: vi.fn() };
     const setStyle = vi.fn(() => Promise.resolve());
+    const mediaListeners = new Set();
+    const pageListeners = new Map();
+    let savedTheme = storedTheme;
+    let systemDark = osDark;
+    const mediaQuery = {
+        get matches() { return systemDark; },
+        addEventListener: vi.fn((type, listener) => {
+            if (type === 'change') mediaListeners.add(listener);
+        }),
+        removeEventListener: vi.fn((type, listener) => {
+            if (type === 'change') mediaListeners.delete(listener);
+        }),
+    };
     const context = {
         document: {
             documentElement: {
@@ -26,17 +41,32 @@ function runStartupTheme({ storedTheme, osDark = false, storageError = false } =
         localStorage: {
             getItem() {
                 if (storageError) throw new Error('blocked');
-                return storedTheme === undefined
+                return savedTheme === undefined
                     ? null
-                    : JSON.stringify({ theme: storedTheme });
+                    : JSON.stringify({ theme: savedTheme });
             },
         },
-        matchMedia: vi.fn(() => ({ matches: osDark })),
+        matchMedia: vi.fn(() => mediaQuery),
+        addEventListener: vi.fn((type, listener) => pageListeners.set(type, listener)),
+        removeEventListener: vi.fn((type, listener) => {
+            if (pageListeners.get(type) === listener) pageListeners.delete(type);
+        }),
         Capacitor: { Plugins: { SystemBars: { setStyle } } },
     };
     context.window = context;
     vm.runInNewContext(webScript, context);
-    return { attrs, setStyle, themeColor };
+    return {
+        attrs,
+        mediaQuery,
+        setStyle,
+        themeColor,
+        setStoredTheme(theme) { savedTheme = theme; },
+        setSystemDark(matches) {
+            systemDark = matches;
+            for (const listener of [...mediaListeners]) listener({ matches });
+        },
+        pagehide() { pageListeners.get('pagehide')?.(); },
+    };
 }
 
 describe('startup theme', () => {
@@ -59,6 +89,56 @@ describe('startup theme', () => {
         expect(result.attrs.has('data-xc-theme')).toBe(false);
         expect(result.themeColor.setAttribute).toHaveBeenCalledWith('content', '#0B0F17');
         expect(result.setStyle).toHaveBeenCalledWith({ style: 'DARK' });
+    });
+
+    it('follows system theme changes live, re-reads preference changes, and cleans up', () => {
+        const result = runStartupTheme({ storedTheme: 'system', osDark: false });
+
+        result.setSystemDark(true);
+        expect(result.attrs.has('data-xc-theme')).toBe(false);
+        expect(result.themeColor.setAttribute).toHaveBeenLastCalledWith('content', '#0B0F17');
+        expect(result.setStyle).toHaveBeenLastCalledWith({ style: 'DARK' });
+
+        result.setStoredTheme('light');
+        result.setSystemDark(true);
+        expect(result.attrs.get('data-xc-theme')).toBe('light');
+        expect(result.themeColor.setAttribute).toHaveBeenLastCalledWith('content', '#FFFFFF');
+
+        const callsBeforeCleanup = result.themeColor.setAttribute.mock.calls.length;
+        result.pagehide();
+        expect(result.mediaQuery.removeEventListener).toHaveBeenCalledWith(
+            'change',
+            expect.any(Function),
+        );
+        result.setSystemDark(false);
+        expect(result.themeColor.setAttribute).toHaveBeenCalledTimes(callsBeforeCleanup);
+    });
+
+    it('injects the startup theme before every extension surface module', async () => {
+        const { default: config } = await import('../../../packages/extension/vite.config.js');
+        const plugin = config.plugins.find(({ name }) => name === 'xchain-startup-theme');
+        expect(plugin).toBeTruthy();
+
+        const tags = plugin.transformIndexHtml.handler();
+        const startupScript = tags.find(({ tag }) => tag === 'script');
+        const startupStyle = tags.find(({ tag }) => tag === 'style');
+        expect(startupScript).toEqual({
+            tag: 'script',
+            attrs: { src: '/theme-init.js' },
+            injectTo: 'head-prepend',
+        });
+        expect(startupStyle.children).toContain('html[data-xc-theme="dark"]');
+
+        expect(Object.keys(config.build.rollupOptions.input)).toEqual(
+            expect.arrayContaining(['popup', 'approval', 'sidepanel']),
+        );
+        const emitted = [];
+        await plugin.buildStart.call({ emitFile: (asset) => emitted.push(asset) });
+        expect(emitted).toEqual([{
+            type: 'asset',
+            fileName: 'theme-init.js',
+            source: webScript,
+        }]);
     });
 
     it('declares install metadata and theme colors for both browser palettes', () => {
