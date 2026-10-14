@@ -871,7 +871,14 @@ const ActivityRow = memo(function ActivityRow({ entry, walletAddresses, assetLoo
         <li>
             <button
                 type="button"
-                onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry(entry) : undefined}
+                onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry({
+                    ...entry,
+                    detailContext: {
+                        chainTip: chainTip ?? null,
+                        indexerWatermark: null,
+                        walletAddresses: [...walletAddresses],
+                    },
+                }) : undefined}
                 className={styles.demoRowButton}
             >
                 <div className={balanceStyles.iconWrap}>
