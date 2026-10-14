@@ -94,7 +94,7 @@
     font-size: var(--xc-text-xs);
 }
 
-@media (max-width: 599px) {
+@media not all and (min-width: 600px) {
     .banner {
         box-sizing: border-box;
         display: grid;

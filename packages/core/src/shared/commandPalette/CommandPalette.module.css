@@ -67,13 +67,14 @@
 .handle {
     position: absolute;
     top: var(--xc-space-2);
-    left: 50%;
+    /* Equal logical insets plus auto margins centre the handle in either direction. */
+    inset-inline: 0;
     display: none;
     width: 2.25rem;
     height: 4px;
+    margin-inline: auto;
     border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
-    transform: translateX(-50%);
 }
 
 .searchRow {

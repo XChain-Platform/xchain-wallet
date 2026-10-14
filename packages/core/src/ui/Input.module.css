@@ -119,8 +119,7 @@
         content: '';
         position: absolute;
         top: 50%;
-        left: 0;
-        width: 100%;
+        inset-inline: 0;
         height: max(100%, var(--xc-control-hit-min, 24px));
         transform: translateY(-50%);
     }
