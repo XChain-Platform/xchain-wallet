@@ -10,6 +10,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// A native select cannot middle-truncate, and a full address ran under the
+// chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -669,7 +672,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 onChange={(e) => onChange({ fromAddressId: e.target.value })}
             >
                 {addrs.map((a) => (
-                    <option key={a.id} value={a.id}>{a.address}</option>
+                    <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
                 ))}
             </Select>
 
