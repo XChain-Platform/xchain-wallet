@@ -33,6 +33,7 @@ import {
 } from '../../flows/stakingDashboard.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakingList.module.css';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -132,7 +133,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 setAddressesByChain(byChain || {});
             })
             .catch((err) => {
-                if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setAddressesError(readFailureMessage(err, 'load your staking addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId, addressesReload]);
@@ -205,6 +206,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     delegations: [],
                     rewards: [],
                     rewardClaims: [],
+                    rewardClaimsKnown: true,
                     contractStakes: [],
                     contractUnstakes: [],
                     errors: /** @type {string[]} */ ([]),
@@ -218,13 +220,13 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     ...(isValidatorChain ? [
                         messaging.getStakesForAddress({ chainId: cid, address: addr })
                             .then((r) => { out.stakes = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
-                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                            .catch((e) => { out.errors.push(readFailureMessage(e, 'load validator stakes')); }),
                         messaging.getDelegationsForAddress({ chainId: cid, address: addr })
                             .then((r) => { out.delegations = extractRows(r); })
-                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                            .catch((e) => { out.errors.push(readFailureMessage(e, 'load delegations')); }),
                         messaging.getRewardsForAddress({ chainId: cid, address: addr })
                             .then((r) => { out.rewards = extractRows(r); })
-                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                            .catch((e) => { out.errors.push(readFailureMessage(e, 'load staking rewards')); }),
                         // PC-47: the claim side of the unclaimed sum. Best-effort:
                         // a build without the route degrades to "nothing claimed
                         // yet", which OVERSTATES what is claimable, so the header
@@ -234,7 +236,10 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                             ? messaging.getRewardClaimsForAddress({ chainId: cid, address: addr })
                             : Promise.resolve(null))
                             .then((r) => { out.rewardClaims = extractRows(r); })
-                            .catch(() => {}),
+                            .catch((e) => {
+                                out.rewardClaimsKnown = false;
+                                out.errors.push(readFailureMessage(e, 'load claimed staking rewards'));
+                            }),
                     ] : []),
                     // Contract lane: runs on EVERY staking chain.
                     // Endpoints are a Phase 7 follow-up and throw for live
@@ -246,6 +251,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         .then((r) => { out.contractUnstakes = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
                         .catch(() => {}),
                 ]);
+                if (!out.rewardClaimsKnown) out.rewards = [];
                 return out;
             });
             Promise.all(perAddress)
@@ -286,7 +292,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                             rows: [],
                             rewards: [],
                             rewardClaims: [],
-                            error: err?.message || 'Failed to load staking positions.',
+                            error: readFailureMessage(err, 'load staking positions'),
                         },
                     }));
                 });

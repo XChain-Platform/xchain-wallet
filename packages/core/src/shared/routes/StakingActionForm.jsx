@@ -172,7 +172,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your staking addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -230,7 +230,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     const [r, c] = await Promise.all([
                         messaging.getRewardsForAddress({ chainId, address }),
                         typeof messaging.getRewardClaimsForAddress === 'function'
-                            ? messaging.getRewardClaimsForAddress({ chainId, address }).catch(() => null)
+                            ? messaging.getRewardClaimsForAddress({ chainId, address })
                             : Promise.resolve(null),
                     ]);
                     rewards = extractRows(r);
@@ -481,6 +481,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRateValid = feePick.mode !== 'custom'
+        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     // The legacy absent-AMOUNT bytes mean "everything", so they are sent only
     // when the entered amount EQUALS a known total. Any other valid amount is
@@ -513,12 +515,28 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             return;
         }
         const normalized = normalizedAmount;
-        if (!amountValid) {
-            setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
+        if (!normalized) {
+            setFormError('Enter an amount.');
+            return;
+        }
+        if (!/^[0-9]+(\.[0-9]+)?$/.test(normalized)) {
+            setFormError('Amount must be a positive number.');
+            return;
+        }
+        if (compareAmounts(normalized, '0') !== 1) {
+            setFormError('Amount must be greater than zero.');
+            return;
+        }
+        if ((normalized.split('.')[1] || '').length > 8 || !amountValid) {
+            setFormError('Amount can have at most 8 decimal places.');
             return;
         }
         if (availableAmt != null && compareAmounts(normalized, availableAmt) === 1) {
             setFormError(`Amount exceeds the ${formatWithThousands(String(availableAmt))} XCHAIN available.`);
+            return;
+        }
+        if (!customFeeRateValid) {
+            setFormError('Enter a custom network fee rate greater than zero.');
             return;
         }
         setFormError(null);
