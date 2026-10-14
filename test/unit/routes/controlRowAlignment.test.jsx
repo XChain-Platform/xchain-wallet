@@ -11,8 +11,6 @@ import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleCo
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
-import networkFilterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
-import networkFilterDropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -75,7 +73,7 @@ describe('route control row alignment', () => {
         expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.md);
     });
 
-    it('keeps staking search and network filter on the md size', async () => {
+    it('keeps staking search on the md size without a network filter', async () => {
         mount(
             <StakingList
                 walletId="wallet-1"
@@ -88,9 +86,8 @@ describe('route control row alignment', () => {
         );
 
         expectMediumInput(await screen.findByLabelText('Search staking positions'));
-        const networkFilter = screen.getByRole('button', { name: 'Filter by network' });
-        expect(networkFilter.parentElement).toHaveClass(networkFilterStyles.md);
-        expect(networkFilter.parentElement?.parentElement).toHaveClass(networkFilterDropdownStyles.md);
+        // Operator ruling: no network filter on the staking list.
+        expect(screen.queryByRole('button', { name: 'Filter by network' })).toBeNull();
     });
 
     it('keeps oracle action buttons and outcome chips on the md size', async () => {

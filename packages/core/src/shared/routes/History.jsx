@@ -3764,6 +3764,8 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
     );
     const contextLabel = contractRowLabel(entry)
         || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '')
+        // A row names its counterparty, so a send shows where it went.
+        || peerAddressOfEntry(entry)
         || entry.source
         || '';
     const linkedTo = entry.link

@@ -75,7 +75,7 @@ describe('shared settings row semantics', () => {
         const thresholdCopy = screen.getByText('Small-balance threshold').parentElement;
         // The threshold row is a grid that collapses to one column on phones
         // (Settings widths ruling), so the wrap guarantee lives in the CSS module.
-        expect(thresholdCopy.parentElement.style.flexWrap).toBe('');
+        expect(thresholdCopy.parentElement.style.display).toBe('grid');
         const displayCss = readFileSync(
             'packages/core/src/shared/components/settings/DisplaySection.module.css',
             'utf8',

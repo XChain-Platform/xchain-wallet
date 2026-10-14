@@ -63,13 +63,13 @@ describe('K51 small-screen UI', () => {
         expect(onBack).toHaveBeenCalledOnce();
     });
 
-    it('separates later Display headings with the shared section gap', () => {
+    it('separates later Display headings with shared form sections', () => {
         const display = source('packages/core/src/shared/components/settings/DisplaySection.jsx');
-        const displayCss = source('packages/core/src/shared/components/settings/DisplaySection.module.css');
 
-        expect(display.match(/className=\{layoutStyles\.sectionHeader\}/g)).toHaveLength(6);
-        expect(rule(displayCss, '.sectionHeader'))
-            .toMatch(/margin-block-start:\s*calc\(var\(--xc-section-gap\) - var\(--xc-space-1\)\)/);
-        expect(display).toContain('<SectionHeader as="h3" title="Balance display" />');
+        // Each Display group is its own FormSection card, which owns the gap
+        // between groups, so no ad hoc section header margins remain.
+        expect(display.match(/<FormSection\b/g)).toHaveLength(7);
+        expect(display).not.toMatch(/SectionHeader/);
+        expect(display).toContain('<FormSection title="Balance display">');
     });
 });

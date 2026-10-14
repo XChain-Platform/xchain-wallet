@@ -185,7 +185,7 @@ describe('Receive keyboard operation', () => {
                 screen.getByRole('link', { name: 'View address in block explorer' }),
                 screen.getByRole('button', { name: 'Generate new address' }),
                 screen.getByRole('textbox', { name: 'Address label' }),
-                screen.getByRole('button', { name: /^Token:/ }),
+                screen.getByRole('button', { name: /^Change asset/ }),
                 screen.getByRole('textbox', { name: 'Amount (BTC)' }),
             ];
 

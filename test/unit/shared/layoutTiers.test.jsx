@@ -232,7 +232,9 @@ describe('layout tiers', () => {
 
             const ancestors = [];
             for (let el = popover.parentElement; el; el = el.parentElement) ancestors.push(el);
-            expect(ancestors.some((el) => el.classList.contains(layoutStyles.header))).toBe(true);
+            // The popover portals to the document body so no scrolling layout
+            // region (menu, notices or content) can clip it on iOS.
+            expect(container.contains(popover)).toBe(false);
             expect(ancestors.some((el) => el.classList.contains(layoutStyles.notices))).toBe(false);
             expect(screen.getByTestId('notice').closest(`.${layoutStyles.notices}`)).not.toBeNull();
         });

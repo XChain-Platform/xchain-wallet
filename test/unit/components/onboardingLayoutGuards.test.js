@@ -109,7 +109,8 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingCss).not.toMatch(/\.licenseAck\s*\{[^}]*display:\s*flex;/s);
         expect(onboardingCss).toMatch(/\.licenseAck\s*\{[^}]*white-space:\s*nowrap;/s);
         expect(onboardingSource).toMatch(
-            /actions=\{\(\s*<div className=\{styles\.licenseActions\}>\s*<Button/s,
+            // The disabled reason sits beside Accept for screen readers.
+            /actions=\{\(\s*<div className=\{styles\.licenseActions\}>\s*(?:\{licenseDisabledReason \? \([\s\S]*?\) : null\}\s*)?<Button/s,
         );
         expect(onboardingSource).not.toMatch(
             /<Button\s+variant="primary"\s+block\s+onClick=\{handleAcceptLicense\}/,

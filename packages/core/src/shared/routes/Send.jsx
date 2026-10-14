@@ -3777,15 +3777,14 @@ function AssetIconPicker({ chainId, tick, label, onOpen, error }) {
     const accessibleName = tick ? `${label}: ${tick}. Change asset` : `${label}: Choose asset`;
     return (
         <div className={styles.assetPickerControl}>
-            <button
-                type="button"
+            <Button
+                variant="ghost"
                 className={styles.assetPickerButton}
                 onClick={onOpen}
                 aria-label={accessibleName}
                 aria-invalid={error ? 'true' : undefined}
-            >
-                {chainId && tick ? <TickerIcon chainId={chainId} tick={tick} size={40} /> : <Icon.TokenIcon />}
-            </button>
+                icon={chainId && tick ? <TickerIcon chainId={chainId} tick={tick} size={40} /> : <Icon.TokenIcon />}
+            />
             {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
         </div>
     );

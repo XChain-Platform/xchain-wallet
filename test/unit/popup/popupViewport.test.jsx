@@ -210,7 +210,9 @@ describe('extension popup main screens at 360x600', () => {
 
         expect(appWrapper).not.toContain('<ReachabilityBanner');
         expect(popupApp).toMatch(
-            /notices=\{\([\s\S]*?<ReachabilityBanner\s*\/>[\s\S]*?\)\}/,
+            // The network and demo banners are gone by ruling; the reachability
+            // notice is the only one left in the layout's notice slot.
+            /notices=\{<ReachabilityBanner\s*\/>\}/,
         );
         expect(css.popup).toMatch(
             /html\.xchain-toolbar-popup\s*\{[^}]*height:\s*600px;[^}]*overflow:\s*hidden;/,

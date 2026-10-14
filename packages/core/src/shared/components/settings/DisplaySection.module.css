@@ -1,7 +1,3 @@
-.sectionHeader {
-    margin-block-start: calc(var(--xc-section-gap) - var(--xc-space-1));
-}
-
 .fieldRow {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 2fr);

@@ -11,6 +11,7 @@ import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/fl
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { ActionIntentSummary } from '../../../packages/core/src/shared/components/ActionIntentSummary.jsx';
+import { ActivityRow } from '../../../packages/core/src/shared/components/ActivityRow.jsx';
 import { AdsNotice } from '../../../packages/core/src/shared/components/AdsNotice.jsx';
 import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
@@ -111,6 +112,23 @@ const fixtures = [
             decoded={decoded}
             simulation={{ deltas: [{ tick: 'BTC', before: '2', after: '1' }] }}
         />
+    )],
+    ['ActivityRow', () => (
+        <ul>
+            <li>
+                <ActivityRow
+                    chainId="bitcoin-mainnet"
+                    tick="BTC"
+                    isNative
+                    label="Sent"
+                    context="bc1qexampleexampleexampleexampleexample0"
+                    amount="-0.01 BTC"
+                    status="confirmed"
+                    timestamp={1700000000}
+                    onClick={noop}
+                />
+            </li>
+        </ul>
     )],
     ['AdsNotice', () => <AdsNotice onContinue={noop} isFull />],
     ['AlertsOverlay', () => (
