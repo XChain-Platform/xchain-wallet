@@ -19,6 +19,7 @@ import {
     sortByChainThenAsset,
     coinFromChainId,
 } from '../components/BalanceList.jsx';
+import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -254,6 +255,17 @@ export function TokenPicker({
         }
         return synthesized.length > 0 ? [...rowsFromBalances, ...synthesized] : rowsFromBalances;
     }, [balances, addressesByChain, isReceive]);
+
+    const coinFamilies = useMemo(() => {
+        const seen = new Set();
+        for (const r of allRows) {
+            const coin = coinFromChainId(r.chainId);
+            if (coin) seen.add(coin);
+        }
+        const ordered = ['bitcoin', 'litecoin', 'dogecoin'].filter((c) => seen.has(c));
+        for (const c of seen) if (!ordered.includes(c)) ordered.push(c);
+        return ordered;
+    }, [allRows]);
 
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
@@ -542,6 +554,14 @@ export function TokenPicker({
                         <Icon.XIcon />
                     </Button>
                 ) : null}
+            </div>
+            <div className={styles.networkFilter}>
+                <NetworkFilter
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies}
+                    value={networkFilter}
+                    onChange={setNetworkFilter}
+                />
             </div>
             {/* A caller that pins `kindFilter` is stating a
                 protocol constraint, not a default. Rendering the segments

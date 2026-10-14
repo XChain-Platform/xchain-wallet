@@ -1085,7 +1085,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         type="button"
                         className={styles.assetCard}
                         onClick={onChangeAsset || onBack}
-                        aria-label={`Change asset (currently ${selectedTick})`}
+                        // Icon-only control: the accessible name carries the chain the icon overlay shows.
+                        aria-label={`Change asset (currently ${selectedTick} on ${descriptor.displayName})`}
                     >
                         <TickerIcon chainId={descriptor.id} tick={selectedTick} size={48} />
                     </button>
