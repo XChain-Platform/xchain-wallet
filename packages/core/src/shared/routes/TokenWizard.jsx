@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FormPage, FormSection, Input, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FormPage, FormSection, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1121,24 +1121,16 @@ function renderTemplateStage({ onPick }) {
                 {TEMPLATES.map((t) => (
                     // Native list items preserve list semantics because the UI kit has no list-item primitive.
                     <li key={t.id}>
-                        <Button
+                        <ListRow
                             type="button"
-                            variant="secondary"
-                            block
-                            icon={null}
+                            className={styles.templateCard}
+                            title={t.name}
+                            subtitle={t.tagline}
                             onClick={() => t.interactive && onPick(t.id)}
                             disabled={!t.interactive}
                             aria-disabled={!t.interactive}
-                            title={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
-                        >
-                            <span className={styles.templateContent}>
-                                <span className={styles.templateName}>{t.name}</span>
-                                <span className={styles.templateTag}>{t.tagline}</span>
-                                {!t.interactive ? (
-                                    <span className={styles.templateSoon}>Use the Custom template for now</span>
-                                ) : null}
-                            </span>
-                        </Button>
+                            tooltip={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
+                        />
                     </li>
                 ))}
             </ul>

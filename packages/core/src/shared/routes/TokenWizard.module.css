@@ -60,32 +60,10 @@
     }
 }
 
-.templateContent {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
-    width: 100%;
-    text-align: start;
-}
-
-.templateName {
-    font-weight: 700;
-    font-size: var(--xc-text-md);
-}
-
-.templateTag {
-    font-size: var(--xc-text-sm);
-    color: inherit;
-    opacity: 0.85;
-    line-height: 1.3;
-}
-
-.templateSoon {
-    font-size: var(--xc-text-xs);
-    color: inherit;
-    opacity: 0.85;
-    font-style: italic;
+.templateCard {
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    background: var(--xc-surface);
 }
 
 .summary {
