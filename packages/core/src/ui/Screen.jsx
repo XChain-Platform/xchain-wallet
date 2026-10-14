@@ -181,8 +181,11 @@ export function Screen({
             {footer ? <footer className={styles.footer}>{footer}</footer> : null}
         </div>
     );
-    // A Screen nested in this one (a subpage, a picker) leaves the notices here.
-    return ownsNotices
-        ? <NoticesClaimedContext.Provider value>{screen}</NoticesClaimedContext.Provider>
-        : screen;
+    // A Screen nested in this one (a subpage, a picker) leaves the notices
+    // here. Always wrapped, so a change of owner never remounts the route.
+    return (
+        <NoticesClaimedContext.Provider value={noticesClaimed || ownsNotices}>
+            {screen}
+        </NoticesClaimedContext.Provider>
+    );
 }
