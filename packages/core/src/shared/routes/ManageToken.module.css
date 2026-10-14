@@ -129,6 +129,14 @@
     .statsStrip {
         grid-template-columns: repeat(2, 1fr);
     }
+
+    /* Supply and holding are full token quantities (up to 19 digits plus
+       separators and decimals). Half a phone row is narrower than that, so
+       the value broke mid-number; each takes a whole row instead, and the
+       two small counts share the row below. */
+    .stat:nth-child(-n + 2) {
+        grid-column: 1 / -1;
+    }
 }
 
 .stat {
