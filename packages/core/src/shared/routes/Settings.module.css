@@ -2,9 +2,11 @@
     min-width: 0;
     /* One gap between every stacked settings row, whether it is a drill-in
        row on the page or a field row inside a section, so the list reads as
-       one evenly spaced column. */
+       one evenly spaced column. Subpage sections built on FormSection take
+       the same gap between their heading and rows and between the rows. */
     --xc-settings-row-gap: var(--xc-space-2);
     --xc-section-gap: var(--xc-settings-row-gap);
+    --xc-form-gap: var(--xc-settings-row-gap);
 }
 
 .searchField {
