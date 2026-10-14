@@ -60,8 +60,12 @@
 
 .rowName {
     min-width: 0;
+    /* Clipping for the ellipsis also cuts the 4px active-identity ring on every
+       side, so pad it back in and cancel the padding with the same margin. */
     padding-block: var(--xc-space-1);
+    padding-inline: var(--xc-space-1);
     margin-block: calc(0px - var(--xc-space-1));
+    margin-inline: calc(var(--xc-space-1) * -1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

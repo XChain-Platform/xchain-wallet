@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { copyText } from '../../clipboard.js';
+import { nativePlatformName } from '../../nativeShell.js';
 import {
     LICENSE_FILE,
     LICENSE_NAME,
@@ -185,7 +186,7 @@ export function AboutSection() {
             </Row>
             <Row label="Platform">
                 <span style={ROW_VALUE}>
-                    {diagnosticMeta?.platform || (shell === 'popup' ? 'extension' : shell)}
+                    {diagnosticMeta?.platform || platformLabel(shell)}
                 </span>
             </Row>
             <Row label="Update channel">
@@ -398,12 +399,17 @@ function DocLink({ path, label }) {
     );
 }
 
+/** Shell name for display; a Capacitor build reports its OS, not the "web" shell it wraps. */
+function platformLabel(shell) {
+    return nativePlatformName() || (shell === 'popup' ? 'extension' : shell);
+}
+
 function prepareDiagnosticDump(dump, shell) {
     const sanitized = sanitizeDiagnosticValue(dump);
     const report = sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
         ? sanitized
         : {};
-    const platform = shell === 'popup' ? 'extension' : shell;
+    const platform = platformLabel(shell);
     const wallet = report.wallet && typeof report.wallet === 'object' ? report.wallet : {};
     const build = report.build && typeof report.build === 'object' ? report.build : {};
     const buildId = build.buildId || runtimeBuildHash();
