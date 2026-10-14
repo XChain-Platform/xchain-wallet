@@ -19,7 +19,8 @@ function rule(css, selector) {
 const surfaces = [
     ['command palette', 'packages/core/src/shared/commandPalette/CommandPalette.module.css', '.list'],
     ['alerts drawer', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.body'],
-    ['bottom sheet', 'packages/core/src/shared/components/BottomTabBar.module.css', '.sheetBody'],
+    // The More sheet renders through the shared OverlaySurface.
+    ['bottom sheet', 'packages/core/src/shared/components/OverlaySurface.module.css', '.body'],
     ['file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.body'],
     ['network picker', 'packages/core/src/shared/components/NetworkFilter.module.css', '.list'],
     ['shortcut help', 'packages/core/src/shared/keyboard/ShortcutHelp.module.css', '.body'],

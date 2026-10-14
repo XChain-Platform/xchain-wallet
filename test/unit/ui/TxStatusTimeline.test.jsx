@@ -164,7 +164,8 @@ describe('<TxStatusTimeline>', () => {
         const heroCss = componentCss('TotalBalanceHero');
         const undoToastCss = componentCss('UndoSendToast');
 
-        expect(routeErrorCss).toContain('padding: var(--xc-page-top) var(--xc-page-gutter);');
+        // A top-level failure supplies its own inset; only Screen uses the page gutter.
+        expect(routeErrorCss).toContain('padding: var(--xc-space-4);');
         expect(toastCss).toContain('transform: translateY(var(--xc-space-2));');
         expect(toastCss).not.toContain('translateY(8px)');
         expect(tokenFieldCss).toContain('--token-field-control-height: var(--xc-control-h-md);');

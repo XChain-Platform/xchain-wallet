@@ -146,7 +146,7 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         expect(screen.getByRole('button', { name: 'Exit demo and wipe' })).toBeVisible();
         expect(document.getElementById(toggle.getAttribute('aria-controls'))).toHaveAttribute('hidden');
 
-        const phoneRules = bannerCssSource.slice(bannerCssSource.indexOf('@media (max-width: 599px)'));
+        const phoneRules = bannerCssSource.slice(bannerCssSource.indexOf('@media not all and (min-width: 600px)'));
         expect(phoneRules).toMatch(
             /\.banner:not\(\.expanded\)\s*\{[\s\S]*?max-height:\s*var\(--xc-control-h-sm\)/,
         );
