@@ -21,6 +21,19 @@ const messagingSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/messaging.js'),
     'utf8',
 );
+const dexSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/surfaces/dex.jsx'),
+    'utf8',
+);
+const marketChartSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/components/MarketChart.jsx'),
+    'utf8',
+);
+const webMainSource = readFileSync(resolve(process.cwd(), 'packages/web/src/main.jsx'), 'utf8');
+const styleGuideMainSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/style-guide/main.jsx'),
+    'utf8',
+);
 
 const deferredRoutes = [
     'Home',
@@ -43,6 +56,13 @@ const deferredRoutes = [
     'RenameAccountForm',
     'MenuRoute',
     'AlertsRoute',
+    'ScanRoute',
+    'ContractsList',
+    'ContractDetail',
+    'ContractStakeForm',
+    'DeployContractForm',
+    'ExecuteContractForm',
+    'ContractFundsForm',
 ];
 
 describe('web startup imports', () => {
@@ -87,6 +107,21 @@ describe('web startup imports', () => {
         expect(appSource).not.toContain(
             "import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';",
         );
+    });
+
+    it('keeps charts, markets, and the style guide outside the initial web graph', () => {
+        for (const routeName of ['MarketsList', 'MarketView', 'MarketActivity']) {
+            expect(dexSource).toContain(
+                `const ${routeName} = lazyRoute(() => import('@xchain-wallet/core/shared/routes/${routeName}.jsx'), '${routeName}');`,
+            );
+            expect(dexSource).not.toContain(
+                `import { ${routeName} } from '@xchain-wallet/core/shared/routes/${routeName}.jsx';`,
+            );
+        }
+        expect(marketChartSource).toContain("await import('lightweight-charts')");
+        expect(marketChartSource).not.toMatch(/import .* from ['"]lightweight-charts['"]/);
+        expect(webMainSource).not.toContain('StyleGuidePage');
+        expect(styleGuideMainSource).toContain("import { StyleGuidePage } from './StyleGuidePage.jsx';");
     });
 
     it('loads the in-page background host through one cached dynamic import', () => {
