@@ -928,7 +928,18 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 ) : null}
                 actions={(
                     <>
-                        <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={submitting}>Back</Button>
+                        {/* preventDefault: the edit form reuses this button node as its
+                            submit button, so letting the click's default action run
+                            after the re-render would submit the edit form straight
+                            back into review. */}
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={(event) => { event.preventDefault(); setStage('compose'); }}
+                            disabled={submitting}
+                        >
+                            Back
+                        </Button>
                         <Button
                             type="submit"
                             variant="primary"
