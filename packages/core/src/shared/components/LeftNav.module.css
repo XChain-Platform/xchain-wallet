@@ -99,7 +99,7 @@
     /* Each tier publishes a notice inset beside its page gutter, so stacked
        notices line up with route content; compact keeps the base gutter. */
     padding-block: var(--xc-space-2);
-    padding-inline: var(--xc-notice-inset, var(--xc-space-3));
+    padding-inline: calc(var(--xc-notice-inset, var(--xc-space-3)) + var(--xc-scrollbar-lane, 0px));
 }
 
 .notices > * {

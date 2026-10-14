@@ -55,17 +55,19 @@
     display: contents !important;
 }
 
+/* Paste sits inside the field box: inset from the field's end edge and
+   vertically, at the field's inner height, so it never meets the border. */
 .pasteAction button {
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: 0;
-    top: calc(20px + var(--xc-space-1));
+    inset-inline-end: var(--xc-space-1);
+    top: calc(20px + var(--xc-space-2));
     flex: none;
     width: auto;
     min-width: max-content;
     max-width: none;
-    height: var(--address-control-height);
-    min-height: var(--address-control-height);
+    height: calc(var(--address-control-height) - var(--xc-space-2));
+    min-height: calc(var(--address-control-height) - var(--xc-space-2));
     gap: var(--xc-space-1);
     padding-inline: calc(var(--xc-space-1) / 2);
     white-space: nowrap;
@@ -90,7 +92,7 @@
 }
 
 .noLabel .pasteAction button {
-    top: 0;
+    top: var(--xc-space-1);
 }
 
 .iconButton:hover:not(:disabled) {

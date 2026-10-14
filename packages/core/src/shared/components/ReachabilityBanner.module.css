@@ -12,7 +12,9 @@
     font-size: var(--xc-text-xs);
     line-height: 1.2;
     white-space: nowrap;
-    margin-inline: var(--xc-notice-inset, var(--xc-space-3));
+    /* The notices slot owns the inset, so the strip lines up with route
+       content on every screen. */
+    margin-inline: 0;
 }
 
 .degraded {

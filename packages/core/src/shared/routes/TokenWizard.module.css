@@ -11,10 +11,15 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+/* The step caption owns a full row above the step content, clear of the
+   cards below it. */
 .progress {
+    display: block;
+    flex: none;
+    width: 100%;
     /* The fixed measure keeps the step label readable without a matching size token. */
     max-width: 560px;
-    margin: var(--xc-space-3) auto 0;
+    margin: var(--xc-space-3) auto var(--xc-space-3);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     font-weight: 600;

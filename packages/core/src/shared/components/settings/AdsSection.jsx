@@ -20,7 +20,7 @@
 // sentinel; the panel surfaces that fact rather than displaying the
 // sentinel as if it were a real address.
 
-import { registry as registryLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { InfoTip, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
@@ -77,7 +77,10 @@ export function AdsSection() {
     const chainIds = Object.keys(settings.ads.perChain).filter((cid) => {
         const d = chainRegistry.get(cid);
         if (!d) return true; // surface stale entries so they can be edited away
-        return registryLib.isChainVisibleToUser(d, settings);
+        // Chains are named without their network kind, so only the active
+        // network's chains are listed and each chain appears once.
+        return registryLib.isChainVisibleToUser(d, settings)
+            && flowsLib.filterChainIdsByActiveNetwork([cid], settings, chainRegistry).length > 0;
     }).sort();
 
     const onToggleEnabled = async (next) => {

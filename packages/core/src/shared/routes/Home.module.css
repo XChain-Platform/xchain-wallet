@@ -165,8 +165,18 @@
     margin-top: var(--xc-space-4);
 }
 
+/* Labels wrap only between whole words; a narrower inline padding leaves
+   the eight-column row room for its longest single word. */
 .actionsFull > button {
     width: 100%;
+    padding-inline: var(--xc-space-1);
+}
+
+.actionsFull > button,
+.actionsFull > button > span {
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: none;
 }
 
 @media (min-width: 1024px) {

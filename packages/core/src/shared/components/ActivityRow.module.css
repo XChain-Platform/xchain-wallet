@@ -3,10 +3,18 @@
     min-width: 0;
     min-height: var(--xc-control-h-lg);
     box-sizing: border-box;
+    position: relative;
     display: grid;
-    grid-template-columns: auto minmax(44px, auto) minmax(0, 1fr) auto auto auto;
+    /* Two lines: the title and amount on top, the context, status and time
+       below. The title owns the flexible column, so the context and amount
+       give way first and the title is never cut to a few letters. */
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+        "mark label primary primary trailing"
+        "mark label status time trailing";
     align-items: center;
-    gap: var(--xc-space-2);
+    column-gap: var(--xc-space-2);
+    row-gap: var(--xc-space-1);
     padding: var(--xc-space-2) var(--xc-space-3);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
@@ -33,6 +41,10 @@
     background: var(--xc-bg-muted);
 }
 
+.mark {
+    grid-area: mark;
+}
+
 .labelCell,
 .primary {
     min-width: 0;
@@ -44,14 +56,15 @@
 }
 
 .labelCell {
-    display: inline-flex;
-    align-items: center;
+    grid-area: label;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     gap: var(--xc-space-1);
 }
 
 .label {
-    flex: 0 1 auto;
-    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: var(--xc-text-sm);
@@ -61,6 +74,7 @@
 /* The row is a button, which the tokens make unselectable; addresses and
    amounts inside it stay selectable for copying. */
 .context {
+    max-width: 100%;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -71,12 +85,15 @@
 }
 
 .primary {
+    grid-area: primary;
     font-size: var(--xc-text-sm);
     font-weight: 700;
     text-align: end;
 }
 
 .status {
+    grid-area: status;
+    justify-self: end;
     display: inline-flex;
     align-items: center;
     padding: 0 var(--xc-space-2);
@@ -104,15 +121,15 @@
 }
 
 .time {
-    max-width: 7rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    grid-area: time;
+    justify-self: end;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
     font-weight: 400;
 }
 
 .trailing {
+    grid-area: trailing;
     --xc-icon-size: var(--xc-icon-sm);
     display: inline-flex;
     align-items: center;
@@ -121,19 +138,13 @@
 
 @media (max-width: 400px) {
     .row {
-        grid-template-columns: auto minmax(38px, auto) minmax(0, 1fr) auto minmax(28px, 44px) auto;
-        gap: var(--xc-space-1);
+        column-gap: var(--xc-space-1);
         padding: var(--xc-space-2);
     }
 
-    .label,
     .primary,
     .time {
         font-size: var(--xc-text-xs);
-    }
-
-    .context {
-        display: none;
     }
 
     .status {

@@ -46,6 +46,7 @@ export function ActivityRow({
                 tick={tick}
                 imageUrl={imageUrl}
                 isNative={isNative}
+                className={styles.mark}
             />
             <span className={styles.labelCell}>
                 <span className={styles.label}>{label}</span>
@@ -56,9 +57,9 @@ export function ActivityRow({
                 <span className={`${styles.status} ${styles[status]}`} title={statusLabel}>
                     {statusLabel}
                 </span>
-            ) : <span />}
-            {timestamp ? <RelativeTime className={styles.time} timestamp={timestamp} /> : <span />}
-            {trailing ? <span className={styles.trailing} aria-hidden="true">{trailing}</span> : <span />}
+            ) : <span className={styles.status} />}
+            {timestamp ? <RelativeTime className={styles.time} timestamp={timestamp} /> : <span className={styles.time} />}
+            {trailing ? <span className={styles.trailing} aria-hidden="true">{trailing}</span> : <span className={styles.trailing} />}
         </button>
     );
 }

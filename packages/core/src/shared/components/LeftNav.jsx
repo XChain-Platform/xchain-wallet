@@ -310,6 +310,20 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     const sidebar = showsSidebar(tier) ? nav : null;
     const bar = showsBottomBar(tier) ? bottomBar : null;
 
+    // Route bodies reserve a scrollbar lane on both inline edges; notices
+    // above them sit outside that scroller, so they read the lane width here
+    // to keep the same inset as route content.
+    useEffect(() => {
+        const root = document.documentElement;
+        if (!globalThis.CSS?.supports?.('scrollbar-gutter: stable')) return;
+        const probe = document.createElement('div');
+        probe.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden';
+        document.body.appendChild(probe);
+        const lane = probe.offsetWidth - probe.clientWidth;
+        probe.remove();
+        root.style.setProperty('--xc-scrollbar-lane', `${Math.max(0, lane)}px`);
+    }, []);
+
     useEffect(() => {
         if (previousRouteKeyRef.current === routeKey) return;
         previousRouteKeyRef.current = routeKey;

@@ -23,7 +23,7 @@
 //   - RBF-by-default toggle.
 
 import { useState } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { resolveFeeConfig } from '../../../schemas/settings.js';
 import {
     defaultCustomSettingsRate,
@@ -79,7 +79,13 @@ export function FeesSection() {
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
-    const chainIds = Object.keys(settings.fees).sort();
+    // Chains are named without their network kind, so only the active
+    // network's chains are listed and each chain appears once.
+    const chainIds = flowsLib.filterChainIdsByActiveNetwork(
+        Object.keys(settings.fees),
+        settings,
+        chainRegistry,
+    ).sort();
     if (chainIds.length === 0) {
         return (
             <Status

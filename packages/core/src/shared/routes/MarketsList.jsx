@@ -301,11 +301,11 @@ export function MarketsList({
                                     isNative={!isTokenSelection}
                                 />
                             ) : null}
-                            {isTokenSelection ? (
-                                <span className={marketsStyles.assetText}>
-                                    <span className={marketsStyles.assetName}>{assetName}</span>
-                                </span>
-                            ) : null}
+                            {/* The card names the selection: the chain for a native coin
+                                (without its network kind), the token name otherwise. */}
+                            <span className={marketsStyles.assetText}>
+                                <span className={marketsStyles.assetName}>{assetName}</span>
+                            </span>
                             <span className={marketsStyles.assetChevron} aria-hidden="true">›</span>
                         </Button>
 

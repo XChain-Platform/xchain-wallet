@@ -94,6 +94,21 @@
     justify-content: center;
 }
 
+/* A window no larger than the frame (a 360 by 600 capture, or a real
+   popup-sized viewport) shows the frame edge to edge; the preview margin
+   would otherwise push its bottom actions and end edge out of view. */
+@media (max-height: 648px) {
+    .extensionPage {
+        padding-block: 0;
+    }
+}
+
+@media (max-width: 384px) {
+    .extensionPage {
+        padding-inline: 0;
+    }
+}
+
 .extensionFrame {
     width: 360px;
     height: 600px;

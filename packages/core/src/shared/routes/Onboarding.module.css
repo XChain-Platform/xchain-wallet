@@ -99,7 +99,11 @@
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
+    /* Padding and border sit inside the full width, so the terms never push
+       the page sideways. */
+    box-sizing: border-box;
     width: 100%;
+    min-width: 0;
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
     line-height: 1.45;
@@ -148,12 +152,14 @@
     white-space: nowrap;
 }
 
+/* Sized rules target the button: the visually hidden disabled reason beside
+   it must keep its one-pixel box, or it widens the page sideways. */
 .licenseActions {
     display: flex;
     width: 100%;
 }
 
-.licenseActions > * {
+.licenseActions > button {
     width: 100%;
 }
 
@@ -162,7 +168,7 @@
         justify-content: flex-end;
     }
 
-    .licenseActions > * {
+    .licenseActions > button {
         width: auto;
     }
 }
