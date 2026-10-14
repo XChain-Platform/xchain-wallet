@@ -3347,12 +3347,13 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
             />
         )]);
     }
-    // Split chainId (e.g. 'bitcoin-regtest') into two rows so the
-    // chain family and network kind read separately.
+    // The chain family reads from the chainId (e.g. 'bitcoin-regtest').
+    // The network kind is not printed: the wallet never labels it (the
+    // network is a Settings choice), so a "Network: Regtest" row was the one
+    // place the detail page did.
     if (entry.chainId) {
-        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
+        const [coin = ''] = String(entry.chainId).split('-');
         if (coin) rows.push(['Chain', capitalize(coin)]);
-        rows.push(['Network', capitalize(network)]);
     }
     if (txHash) {
         rows.push(['Transaction ID', (
