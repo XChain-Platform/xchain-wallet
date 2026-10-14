@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -286,8 +286,8 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     const actionLabel = clickable && typeof getActionLabel === 'function'
         ? getActionLabel(row)
         : `Open ${row.displayName || row.tick} details`;
-    const handleClick = clickable
-        ? () => onSelect({
+    const handleClickCallback = useCallback(() => {
+        onSelect({
             chainId: row.chainId,
             tick: row.tick,
             kind: row.kind,
@@ -297,10 +297,25 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
             fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
             imageUrl: tokenImageUrl,
-        })
-        : undefined;
+        });
+    }, [clickable, onSelect, row.chainId, row.tick, row.kind, row.displayName,
+        row.divisibility, row.fiatRate, row.fiatRateSource, row.quantity, tokenImageUrl]);
+    const handleClick = clickable ? handleClickCallback : undefined;
+    const handleImageError = useCallback((event) => {
+        event.currentTarget.style.display = 'none';
+    }, []);
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
+    const handleTogglePin = useCallback((event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onTogglePin(pinKey, !pinned);
+    }, [onTogglePin, pinKey, pinned]);
+    const handleToggleHide = useCallback((event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onToggleHide(pinKey, !hidden);
+    }, [onToggleHide, pinKey, hidden]);
     const roving = typeof getTabIndex === 'function';
     const quantityLabel = formatAmount(row.quantity, row.divisibility, numberFormat);
     const escrowLabel = row.escrowed ? escrowLine(row) : null;
@@ -349,7 +364,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                             loading="lazy"
                             decoding="async"
                             style={{ position: 'absolute', inset: 0 }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            onError={handleImageError}
                         />
                     ) : tokenImageUrl ? (
                         <img
@@ -360,9 +375,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                             loading="lazy"
                             decoding="async"
                             style={{ position: 'absolute', inset: 0 }}
-                            onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                            }}
+                            onError={handleImageError}
                         />
                     ) : null}
                     {!isNative && chainIconUrl ? (
@@ -454,11 +467,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     aria-pressed={pinned}
                     aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
                     title={pinned ? 'Unpin' : 'Pin to top'}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onTogglePin(pinKey, !pinned);
-                    }}
+                    onClick={handleTogglePin}
                 >
                     {pinned ? '★' : '☆'}
                 </button>
@@ -470,18 +479,36 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     aria-pressed={hidden}
                     aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
                     title={hidden ? 'Unhide' : 'Hide'}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onToggleHide(pinKey, !hidden);
-                    }}
+                    onClick={handleToggleHide}
                 >
                     {hidden ? '⊕' : '⊘'}
                 </button>
             ) : null}
         </div>
     );
-});
+}, balanceRowPropsEqual);
+
+function balanceRowPropsEqual(previous, next) {
+    const previousKeys = Object.keys(previous);
+    const nextKeys = Object.keys(next);
+    if (previousKeys.length !== nextKeys.length) return false;
+    for (const key of previousKeys) {
+        if (key === 'row') continue;
+        if (!Object.hasOwn(next, key)) return false;
+        if (!Object.is(previous[key], next[key])) return false;
+    }
+    return shallowEqualRow(previous.row, next.row);
+}
+
+function shallowEqualRow(previous, next) {
+    if (Object.is(previous, next)) return true;
+    if (!previous || !next) return false;
+    const previousKeys = Object.keys(previous);
+    const nextKeys = Object.keys(next);
+    if (previousKeys.length !== nextKeys.length) return false;
+    return previousKeys.every((key) => Object.hasOwn(next, key)
+        && Object.is(previous[key], next[key]));
+}
 
 function FitAmount({ children, title }) {
     const containerRef = useRef(null);
