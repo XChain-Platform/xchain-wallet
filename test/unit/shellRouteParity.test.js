@@ -11,6 +11,10 @@ import desktopAppSource from '../../packages/desktop/renderer/App.jsx?raw';
 import desktopMessagingSource from '../../packages/desktop/renderer/messaging.js?raw';
 import extensionAppSource from '../../packages/extension/src/popup/App.jsx?raw';
 import extensionMessagingSource from '../../packages/extension/src/popup/messaging.js?raw';
+import {
+    defaultDexAssetForNetwork,
+    syncDexAssetToNetwork,
+} from '../../packages/core/src/shared/chainSelection.js';
 
 const SHELLS = {
     web: {
@@ -102,6 +106,38 @@ function componentProps(source, component) {
 }
 
 describe('shell route parity', () => {
+    it.each([
+        ['mainnet', 'bitcoin-mainnet'],
+        ['testnet', 'bitcoin-testnet'],
+        ['regtest', 'bitcoin-regtest'],
+    ])('opens the DEX Bitcoin asset on %s', (network, chainId) => {
+        expect(defaultDexAssetForNetwork(network)).toEqual({ chainId, tick: 'BTC', kind: 'native' });
+    });
+
+    it('keeps a selected asset on the active network and replaces one from another network', () => {
+        const selected = { chainId: 'dogecoin-testnet', tick: 'DOGE', kind: 'native' };
+        expect(syncDexAssetToNetwork(selected, 'testnet')).toBe(selected);
+        expect(syncDexAssetToNetwork(selected, 'regtest')).toEqual({
+            chainId: 'bitcoin-regtest',
+            tick: 'BTC',
+            kind: 'native',
+        });
+    });
+
+    it('keeps every DEX shell subscribed to active-network changes', () => {
+        for (const [shellName, shell] of Object.entries(SHELLS)) {
+            expect(shell.app, `${shellName} sync`).toContain(
+                'setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));',
+            );
+            expect(shell.app, `${shellName} exchange`).toContain(
+                'setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));',
+            );
+            expect(shell.app, `${shellName} hard-coded mainnet`).not.toContain(
+                "setMarketsAsset({ chainId: 'bitcoin-mainnet'",
+            );
+        }
+    });
+
     it('keeps reachable unlocked views aligned or explicitly shell-only', () => {
         const routes = Object.fromEntries(Object.entries(SHELLS).map(([name, shell]) => [
             name,
