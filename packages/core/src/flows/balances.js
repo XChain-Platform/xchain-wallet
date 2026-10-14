@@ -26,6 +26,7 @@
 // not survive. Both are plain JSON values, so they do.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 
 /**
@@ -193,16 +194,16 @@ export function tokensFromBalances(balResp) {
         .filter((t) => t.tick);
 }
 
-// Human-scale decimal string -> atomic-unit integer string, BigInt-exact
-// (same conversion nativeFromAddress applies at fixed 8-decimal scale).
-// Fractional digits beyond `decimals` are truncated; anything that isn't a
-// plain non-negative decimal returns null so the caller can fall back.
+// Human-scale decimal string -> atomic-unit integer string, BigInt-exact.
+// Explorer aggregates can carry more fractional places than the asset allows,
+// so the boundary rounds half away from zero before applying the atomic scale.
 function atomicFromHumanAmount(amount, decimals) {
-    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(amount).trim());
-    if (!m) return null;
-    const d = Number.isFinite(decimals) && decimals > 0 ? Math.floor(decimals) : 0;
-    const frac = (m[2] || '').slice(0, d).padEnd(d, '0');
-    return (BigInt(m[1]) * 10n ** BigInt(d) + BigInt(frac || '0')).toString();
+    const scale = Number(decimals);
+    if (!Number.isInteger(scale) || scale < 0 || scale > 100) return null;
+    const rounded = roundDecimalString(amount, scale);
+    if (rounded === null) return null;
+    const atomic = decimalToBaseUnits(rounded, scale);
+    return atomic === null ? null : atomic.toString();
 }
 
 // D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger

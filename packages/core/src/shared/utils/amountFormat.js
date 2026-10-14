@@ -506,9 +506,16 @@ export function decimalQuotientFloor(a, b) {
 
 /** Convert a non-negative decimal amount to exact base units. */
 export function decimalToBaseUnits(value, decimals = 8) {
+    const scale = Number(decimals);
     const parsed = parseDecimal(value);
-    if (!parsed || parsed.units < 0n || parsed.scale > decimals) return null;
-    return parsed.units * (10n ** BigInt(decimals - parsed.scale));
+    if (!parsed || parsed.units < 0n || !Number.isInteger(scale) || scale < 0 || scale > 100) {
+        return null;
+    }
+    if (parsed.scale > scale) {
+        const divisor = 10n ** BigInt(parsed.scale - scale);
+        return parsed.units % divisor === 0n ? parsed.units / divisor : null;
+    }
+    return parsed.units * (10n ** BigInt(scale - parsed.scale));
 }
 
 /** Convert an integer quantity and divisibility into a decimal amount. */
