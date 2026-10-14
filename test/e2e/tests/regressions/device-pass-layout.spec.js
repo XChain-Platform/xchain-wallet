@@ -157,7 +157,9 @@ test.describe('real wallet', () => {
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         // On a route with a page header the notice opens the scrolling
         // content below that header, never between the two toolbars.
-        const placement = await message.evaluate((node) => {
+        // History loads lazily; until its Screen mounts, the notice waits in
+        // the route area's fallback slot, so poll for the settled placement.
+        const placement = () => message.evaluate((node) => {
             const main = node.closest('main');
             const pageHeader = main?.previousElementSibling;
             return {
@@ -167,6 +169,7 @@ test.describe('real wallet', () => {
                     && pageHeader.getBoundingClientRect().bottom <= node.getBoundingClientRect().top + 1,
             };
         });
-        expect(placement).toEqual({ inMain: true, firstInMain: true, belowPageHeader: true });
+        await expect.poll(placement, { timeout: 15_000 })
+            .toEqual({ inMain: true, firstInMain: true, belowPageHeader: true });
     });
 });
