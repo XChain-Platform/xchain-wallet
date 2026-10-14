@@ -15,7 +15,7 @@
 // has its own preferences about how to bundle/polyfill it. Shells pass
 // in an SDKFactory; core just calls it.
 
-import { installExplorerRateLimit, sharedExplorerLimiter } from './explorerRateLimit.js';
+import { installSdkNetworkPolicy, sharedExplorerLimiter } from './explorerRateLimit.js';
 
 /**
  * @typedef {Object} SDKConstructorOpts
@@ -25,7 +25,7 @@ import { installExplorerRateLimit, sharedExplorerLimiter } from './explorerRateL
  * @property {string} hubUrl
  * @property {number} [timeout] per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
  * @property {{ maxRetries: number, baseDelay: number, maxDelay: number,
- *              retryAfterMaxDelay: number }} [retry]
+ *              retryAfterMaxDelay: number, maxRateLimitRetries: number }} [retry]
  */
 
 /**
@@ -85,20 +85,15 @@ const ENDPOINT_FIELDS = Object.freeze([
  * fail loudly in seconds; callers that genuinely need more patience can
  * override via the `networkOptions` constructor opt.
  *
- * ONE EXCEPTION, and it is deliberate (rate-limits spec, M4): a 429 whose
- * `Retry-After` the origin actually named is waited out up to
- * `retryAfterMaxDelay`, not clamped to `maxDelay`. The 2 s cap made the
- * wallet's single retry worthless against a rate limit - it re-asked while the
- * bucket was still empty, spent its one retry, and surfaced the failure anyway,
- * which is a request the limiter counts for nothing. So a 429 may now hold ONE
- * request for up to 60 s (the SDK retries a rate limit once), while every other
- * retryable failure, 5xx included, keeps the 2 s backoff cap and the fast, loud
- * failure this block exists for.
+ * The process-wide host gate applies this budget only to idempotent reads and
+ * handles the jitter. Every 4xx is final for its call. A 429 may pause later
+ * calls through Retry-After, but it never replays the request that received it.
  */
 export const DEFAULT_SDK_NETWORK_OPTIONS = Object.freeze({
     timeout: 10_000,
     retry: Object.freeze({
         maxRetries: 1, baseDelay: 500, maxDelay: 2_000, retryAfterMaxDelay: 60_000,
+        maxRateLimitRetries: 0,
     }),
 });
 
@@ -117,10 +112,11 @@ export class SDKRegistry {
      * @param {SDKFactory} opts.sdkFactory
      * @param {Record<string, EndpointOverride>} [opts.endpointOverrides]
      * @param {{ timeout?: number, retry?: { maxRetries?: number, baseDelay?: number,
-     *           maxDelay?: number, retryAfterMaxDelay?: number } }} [opts.networkOptions]
+     *           maxDelay?: number, retryAfterMaxDelay?: number,
+     *           maxRateLimitRetries?: number } }} [opts.networkOptions]
      *        overrides for DEFAULT_SDK_NETWORK_OPTIONS (merged shallowly)
      * @param {import('./explorerRateLimit.js').HostRateLimiter|null} [opts.rateLimiter]
-     *        explorer request gate; the process-wide one by default, null turns it off
+     *        SDK request gate; the process-wide one by default, null turns it off
      */
     constructor({
         chainRegistry, sdkFactory, endpointOverrides = {}, networkOptions = {},
@@ -262,8 +258,8 @@ export class SDKRegistry {
             retry: this._networkOptions.retry,
             ...(this._networkOptions.pool ? { pool: this._networkOptions.pool } : {}),
         });
-        // Every chain's explorer traffic shares one per-host gate (429 waits, pacing, coalescing).
-        return this._rateLimiter ? installExplorerRateLimit(sdk, this._rateLimiter) : sdk;
+        // Every chain's SDK traffic shares one per-host gate for retries and pacing.
+        return this._rateLimiter ? installSdkNetworkPolicy(sdk, this._rateLimiter) : sdk;
     }
 
     /**
