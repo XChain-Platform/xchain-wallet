@@ -849,6 +849,7 @@ function decodeLink(p, chainSuffix) {
 function decodeSleep(p, chainSuffix) {
     const resumeBlock = str(p.RESUME_BLOCK);
     const tick = str(p.TICK);
+    const memo = str(p.MEMO);
     const isAddress = str(p.VERSION) === '0';
     const until = resumeBlock === '-1' ? ' indefinitely' : ` until block ${resumeBlock || '?'}`;
     let summary;
@@ -860,6 +861,7 @@ function decodeSleep(p, chainSuffix) {
         details: [
             ...(tick ? [{ label: 'Token', value: tick }] : []),
             { label: 'Resume block', value: resumeBlock },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
             ...(resumeBlock === '0' ? []

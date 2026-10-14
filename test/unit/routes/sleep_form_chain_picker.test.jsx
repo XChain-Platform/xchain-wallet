@@ -82,6 +82,7 @@ describe('SleepForm address lock chain selection', () => {
         expect(await screen.findByText(/Duration starts from current block 10,000/)).toBeInTheDocument();
         expect(screen.getByText(/native coins are not locked/i)).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Duration (blocks)'), { target: { value: '12' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'wake after audit' } });
         expect(screen.getByText(/Wake block: 10,012/)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
@@ -89,27 +90,98 @@ describe('SleepForm address lock chain selection', () => {
         expect(await screen.findByText(/until block 10012/)).toBeInTheDocument();
         expect(screen.getByText('Automatically at block 10,012. The address cannot wake itself early.')).toBeInTheDocument();
         expect(screen.getByText('12 blocks')).toBeInTheDocument();
+        expect(screen.getByText('wake after audit')).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
         fireEvent.click(screen.getByRole('button', { name: /Lock address on/ }));
 
         await waitFor(() => {
             expect(messaging.sleepAction).toHaveBeenCalledWith(expect.objectContaining({
-                params: { VERSION: '0', RESUME_BLOCK: '10012' },
+                params: { VERSION: '0', RESUME_BLOCK: '10012', MEMO: 'wake after audit' },
             }));
         });
     });
 
-    it('explains invalid and unavailable duration errors in user-facing terms', async () => {
-        mountSleepForm({ getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }) });
+    it('explains every invalid duration shape in user-facing terms', async () => {
+        mountSleepForm();
 
         const duration = await screen.findByLabelText('Duration (blocks)');
-        fireEvent.change(duration, { target: { value: '0' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        expect(await screen.findByText('Duration must be at least 1 block.')).toBeInTheDocument();
+        for (const [value, message] of [
+            ['', 'Enter a duration in blocks.'],
+            ['0', 'Duration must be at least 1 block.'],
+            ['-1', 'Duration must be a whole number of blocks.'],
+            ['1.5', 'Duration must be a whole number of blocks.'],
+            ['9007199254740992', 'Duration is too large. Enter fewer blocks.'],
+        ]) {
+            fireEvent.change(duration, { target: { value } });
+            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+            expect(await screen.findByText(message)).toBeInTheDocument();
+        }
+    });
 
+    it('refuses an unavailable fresh height before review', async () => {
+        const watermark = vi.fn()
+            .mockResolvedValueOnce({ watermark: 10_000 })
+            .mockResolvedValueOnce({ watermark: null });
+        mountSleepForm({ getIndexerWatermark: watermark });
+
+        const duration = await screen.findByLabelText('Duration (blocks)');
         fireEvent.change(duration, { target: { value: '12' } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        expect(await screen.findByText(/current block is unavailable/)).toBeInTheDocument();
+        expect(await screen.findByText(/current block could not be refreshed/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Lock address' })).toBeInTheDocument();
+    });
+
+    it('refreshes the height for review and refuses an expired snapshot', async () => {
+        const watermark = vi.fn()
+            .mockResolvedValueOnce({ watermark: 10_000 })
+            .mockResolvedValueOnce({ watermark: 10_005 })
+            .mockResolvedValueOnce({ watermark: 10_017 });
+        const messaging = mountSleepForm({ getIndexerWatermark: watermark });
+
+        const duration = await screen.findByLabelText('Duration (blocks)');
+        fireEvent.change(duration, { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByText(/until block 10017/)).toBeInTheDocument();
+        expect(screen.getByText('10017')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
+        fireEvent.click(screen.getByRole('button', { name: /Lock address on/ }));
+
+        expect(await screen.findByText('Wake block 10,017 has passed. Go back and choose a new duration.')).toBeInTheDocument();
+        expect(messaging.sleepAction).not.toHaveBeenCalled();
+    });
+
+    it('refuses malformed source data and an overlong memo before review', async () => {
+        const badAddress = address('bad', 'not-an-address', 0);
+        mountSleepForm({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BITCOIN]: [badAddress] }),
+        });
+
+        await screen.findByLabelText('Address to lock');
+        fireEvent.click(screen.getByRole('radio', { name: 'Lock indefinitely (permanent)' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText(/selected source address is not valid/i)).toBeInTheDocument();
+
+        cleanup();
+        mountSleepForm();
+        await screen.findByLabelText('Address to lock');
+        fireEvent.click(screen.getByRole('radio', { name: 'Lock indefinitely (permanent)' }));
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText('Memo is 251 bytes; the network accepts at most 250 bytes.')).toBeInTheDocument();
+    });
+
+    it('does not review an empty custom network fee rate', async () => {
+        mountSleepForm();
+
+        await screen.findByLabelText('Address to lock');
+        fireEvent.click(screen.getByRole('radio', { name: 'Lock indefinitely (permanent)' }));
+        fireEvent.keyDown(screen.getByRole('slider', { name: 'Network fee' }), { key: 'End' });
+        fireEvent.change(await screen.findByLabelText(/Custom fee rate/), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Lock address' })).toBeInTheDocument();
     });
 
     it('requires a fresh typed confirmation each time address-lock review opens', async () => {
@@ -118,9 +190,12 @@ describe('SleepForm address lock chain selection', () => {
         const duration = await screen.findByLabelText('Duration (blocks)');
         await screen.findByText(/Duration starts from current block 10,000/);
         fireEvent.change(duration, { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'keep me' } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(screen.getByLabelText('Duration (blocks)')).toHaveValue('1');
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('keep me');
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
