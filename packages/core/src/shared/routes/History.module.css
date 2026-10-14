@@ -202,22 +202,22 @@
     color: var(--xc-accent-text);
 }
 
-/* Bottom row of the filter card. Additional details disclosure on
-   the left, Grouped / Flat seg group anchored to the right. */
+/* The toolbar keeps every control intact as the row wraps. */
 .filterFooter {
     display: flex;
-    /* Wraps, so the Grouped / Flat switch drops to its own line instead of
-       being clipped to "Fl" at 360px (2026-10-12). */
     flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
 }
 
-/* The first footer control is the kit Button that opens the extra filters;
-   it takes the spare room beside the other footer controls. */
-.filterFooter > :first-child {
-    flex: 1 1 auto;
-    width: auto;
+.toolbarControl {
+    flex: 0 0 auto;
+    height: var(--xc-control-h-md);
+    min-height: var(--xc-control-h-md);
+}
+
+.toolbarControl svg {
+    flex: 0 0 auto;
 }
 
 /* Advanced filter panel: fieldsets stacked, each with a small label
@@ -920,18 +920,6 @@
     justify-content: flex-end;
 }
 
-.exportControls {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.exportDisabledReason {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
 .error {
     color: var(--xc-danger-fg);
     font-size: var(--xc-text-sm);
@@ -1238,17 +1226,6 @@
         display: none;
     }
 
-    .filterFooter {
-        align-items: stretch;
-    }
-
-    .filterFooter > :first-child {
-        flex: 1 1 100%;
-        width: 100%;
-        min-width: 0;
-        box-sizing: border-box;
-    }
-
     .rowHeader,
     .rowMeta {
         flex-wrap: wrap;
@@ -1304,8 +1281,4 @@
         align-items: stretch;
     }
 
-    .exportControls {
-        flex-direction: column;
-        align-items: stretch;
-    }
 }
