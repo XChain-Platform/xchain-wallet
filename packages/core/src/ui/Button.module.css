@@ -57,6 +57,12 @@
     cursor: not-allowed;
 }
 
+.btn:disabled:not(.link) {
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+}
+
 .btn:active:not(:disabled) {
     background: var(--xc-button-hover-bg);
     border-color: var(--xc-button-hover-border);
