@@ -1203,7 +1203,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
-                    : 'Create Dispenser'}
+                    : 'Create dispenser'}
         />
     );
     const wrap = (children) => (
