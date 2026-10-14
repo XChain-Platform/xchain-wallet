@@ -188,9 +188,9 @@ export const en = {
     'signerSelect.choose': 'Choose signer',
     'signerSelect.title': 'Signer',
     'signerSelect.intro':
-        "Choose where this operation derives its keys. This choice doesn't share recovery words or hardware secrets.",
+        "Choose where this operation gets its keys. This choice doesn't share your recovery phrase or private keys.",
     'signerSelect.watcherNote':
-        "Watch-only mode remains active. Selecting a key source here doesn't enable local transaction signing.",
+        "Watch-only mode stays active. Choosing a key source here doesn't let this wallet sign transactions.",
 
     // --- rename forms -------------------------------------------
     'renameAccount.name': 'Account name',
@@ -238,7 +238,7 @@ export const en = {
     'walletDetails.name': 'Name',
     'walletDetails.type': 'Type',
     'walletDetails.origin': 'Origin',
-    'walletDetails.passphrase': '25th-word passphrase',
+    'walletDetails.passphrase': 'BIP39 passphrase status',
     'walletDetails.created': 'Created',
     'walletDetails.demoWallet': 'Demo wallet (throwaway)',
     'walletDetails.id': 'ID',
@@ -511,8 +511,8 @@ export const en = {
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
-    'send.empty.title': 'This wallet has no coins to send yet.',
-    'send.empty.body': 'Receive funds on this chain before creating a send.',
+    'send.empty.title': 'Nothing to send yet',
+    'send.empty.body': 'Receive coins or tokens on this chain before creating a payment.',
     'send.review': 'Review and send',
     'send.backToEdit': 'Edit payment',
     'send.memoForbiddenChars': "A memo can't include a vertical bar (|) or semicolon (;).",
@@ -553,7 +553,7 @@ export const en = {
     'send.advanced.notAllowed': 'Not allowed',
     'send.advanced.coinControl': 'Coin control',
     'send.advanced.coinControlEnabled': 'Coin control enabled',
-    'send.advanced.coinControlReady': 'Choose exactly which unspent outputs fund this transaction.',
+    'send.advanced.coinControlReady': 'Choose exactly which coins fund this transaction.',
     'send.advanced.coinControlUnavailable': "Coin control is unavailable while spendable inputs can't be loaded.",
     'send.advanced.loadingInputs': 'Loading spendable inputs…',
     'send.advanced.inputs': 'Inputs',
@@ -575,7 +575,7 @@ export const en = {
     'send.device.trezor': 'Trezor',
     'send.device.ledger': 'Ledger',
     'send.watcherMode':
-        'Watch-only mode creates a transaction without signing or sending it. Move the result to your signer wallet to sign and send it.',
+        'Watch-only mode creates a transaction without signing or sending it. Move it to your signer wallet to sign, then to a normal wallet to send.',
     'send.watcherHardware':
         "This address is paired with {device}, but a watch-only wallet can't sign. Pair the same {device} with your signer wallet to sign the transaction.",
     'send.walletUnlocked': 'Wallet unlocked. No password needed.',
@@ -597,7 +597,7 @@ export const en = {
     'send.saveRecipient.save': 'Save contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
-    'send.token.hint': "Choose the asset to send. The network's own coin is selected by default.",
+    'send.token.hint': "Choose the coin or token to send. The network's own coin is selected by default.",
     'send.balance.unavailable': 'Balance unavailable ({error})',
     'send.balance.available': '{amount} {ticker} available',
     'send.recipient.heading': 'Recipient {number}',
@@ -714,21 +714,21 @@ export const en = {
     'scan.classifyPaste': 'Use pasted text',
     'scan.error.pasteEmpty': 'Paste something first.',
     'scan.error.unknownXchainIntent':
-        'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
+        "This XChain link isn't supported. Check the link and try again.",
     'scan.error.paymentRequest':
         "This payment request doesn't match a supported chain or valid address. Check the request and scan again, or paste the address instead.",
     'scan.error.wif':
-        'This is a private key (WIF). In XChain Platform, open Import wallet and choose Import WIF.',
+        'This is a private key. Open Import wallet, choose Private key, and scan it there.',
     'scan.error.mnemonic':
-        'This is a recovery phrase. In XChain Platform, open Import wallet and choose Recovery phrase.',
+        'This is a recovery phrase. Open Import wallet, choose Recovery phrase, and scan it there.',
     'scan.error.xcwChunk':
         'Part {n} of {total} of a multi-frame QR code was scanned. Open the screen that asked for this code and capture every frame there.',
     'scan.error.transactionHex':
-        "A signed transaction was scanned. This screen can't broadcast raw transaction hex. Use a compatible broadcasting tool.",
+        'This is a signed transaction. Open Broadcast transaction and scan or paste it there.',
     'scan.error.backupPointer':
-        'This is a backup pointer. In XChain Platform, open Import wallet, choose Encrypted backup, and scan it there.',
+        'This is an encrypted-backup code. Open Import wallet, choose Encrypted backup, and scan it there.',
     'scan.error.pairingCode':
-        'This is a wallet pairing code. In XChain Platform, open Pair a watcher or signer and scan it there.',
+        'This is a wallet pairing code. Open Pair a watcher or signer and scan it there.',
     'scan.error.unknown':
         "This QR code contains text the wallet doesn't know how to use. Scan a supported payment or transaction code, or paste it below instead.",
 
