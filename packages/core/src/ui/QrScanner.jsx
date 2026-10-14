@@ -16,6 +16,40 @@ export const MAX_SCANNED_QR_CHARS = 8 * 1024;
 
 const MALFORMED_QR_TEXT = 'That QR code could not be read. Try another code, or paste it instead.';
 const OVERSIZED_QR_TEXT = 'That QR code is too large to read safely. Try another code, or paste it instead.';
+const CAMERA_FAILURE_KEY = 'xchain.qr-camera-failure';
+
+function terminalCameraFailure(e) {
+    const name = e?.name || '';
+    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+        return 'denied';
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError' || name === 'DevicesNotFoundError') {
+        return 'unavailable';
+    }
+    return null;
+}
+
+function rememberedCameraFailure() {
+    try {
+        const failure = globalThis.sessionStorage?.getItem(CAMERA_FAILURE_KEY);
+        if (failure === 'denied') return { name: 'NotAllowedError' };
+        if (failure === 'unavailable') return { name: 'NotFoundError' };
+    } catch {
+        // Storage can be unavailable in privacy-restricted or opaque contexts.
+    }
+    return null;
+}
+
+function rememberCameraFailure(e) {
+    const failure = terminalCameraFailure(e);
+    if (!failure) return false;
+    try {
+        globalThis.sessionStorage?.setItem(CAMERA_FAILURE_KEY, failure);
+    } catch {
+        // The current scanner still shows the failure when storage is unavailable.
+    }
+    return true;
+}
 
 /**
  * Validate camera input before a format-specific parser receives it.
@@ -75,6 +109,9 @@ function deliverFrame(text, onFrame, setError) {
  *   - then, on mount (or `autoStart=true`): getUserMedia → attach
  *     to video → start `requestAnimationFrame` loop that runs
  *     `detector.detect(video)` on each frame.
+ *   - a denied or absent camera stays remembered for the browsing session,
+ *     so returning to a scanner shows the paste guidance without prompting.
+ *   - an ended camera track stops the loop and becomes the same plain error.
  *   - on unmount: stop every track + cancel the RAF loop.
  *
  * Lifecycle (native path): nothing opens until the button is pressed,
@@ -280,10 +317,16 @@ export function QrScanner({
     const onFrameRef = useRef(onFrameHandler);
     onFrameRef.current = onFrameHandler;
     const onFrame = useRef((value) => onFrameRef.current(value)).current;
+    const rememberedFailureRef = useRef(previewState ? null : rememberedCameraFailure());
+    const terminalFailureRef = useRef(Boolean(rememberedFailureRef.current));
     const [running, setRunning] = useState(false);
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [error, setError] = useState(
+        /** @type {string | null} */ (
+            rememberedFailureRef.current ? cameraErrorText(rememberedFailureRef.current) : null
+        ),
+    );
     const [cameraRationaleAccepted, setCameraRationaleAccepted] = useState(
-        () => Boolean(previewState) || !isNativeApp(),
+        () => Boolean(previewState) || terminalFailureRef.current || !isNativeApp(),
     );
     const hasBarcodeDetector = previewState === 'denied'
         || (previewState !== 'unsupported'
@@ -301,7 +344,9 @@ export function QrScanner({
         && isSecureContext;
 
     useEffect(() => {
-        if (!supported || !autoStart || !cameraRationaleAccepted) return undefined;
+        if (!supported || !autoStart || !cameraRationaleAccepted || terminalFailureRef.current) {
+            return undefined;
+        }
         if (previewState === 'denied') {
             setError(cameraErrorText({ name: 'NotAllowedError' }));
             return undefined;
@@ -313,6 +358,34 @@ export function QrScanner({
         let rafId = null;
         /** @type {any} */
         let detector = null;
+
+        function stopBrowserCamera() {
+            if (rafId !== null) {
+                window.cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach((track) => {
+                    track.removeEventListener?.('ended', handleTrackEnded);
+                    track.stop();
+                });
+                stream = null;
+            }
+            const video = videoRef.current;
+            if (video) video.srcObject = null;
+            setRunning(false);
+        }
+
+        function showCameraFailure(e) {
+            if (cancelled) return;
+            terminalFailureRef.current = rememberCameraFailure(e);
+            stopBrowserCamera();
+            setError(cameraErrorText(e));
+        }
+
+        function handleTrackEnded() {
+            showCameraFailure({ name: 'NotAllowedError' });
+        }
 
         async function start() {
             try {
@@ -349,7 +422,7 @@ export function QrScanner({
                     video: { facingMode: 'environment' },
                 });
             } catch (e) {
-                if (!cancelled) setError(cameraErrorText(e));
+                showCameraFailure(e);
                 return;
             }
 
@@ -359,13 +432,13 @@ export function QrScanner({
                 return;
             }
             video.srcObject = stream;
+            stream.getTracks().forEach((track) => {
+                track.addEventListener?.('ended', handleTrackEnded, { once: true });
+            });
             try {
                 await video.play();
             } catch (e) {
-                stream.getTracks().forEach((t) => t.stop());
-                stream = null;
-                video.srcObject = null;
-                if (!cancelled) setError(cameraErrorText(e));
+                showCameraFailure(e);
                 return;
             }
             if (cancelled) return;
@@ -382,7 +455,7 @@ export function QrScanner({
                                 setError(inputError);
                             } else {
                                 try {
-                                    onFrame(r.rawValue);
+                                    onFrameRef.current(r.rawValue);
                                     setError(null);
                                 } catch {
                                     setError(MALFORMED_QR_TEXT);
@@ -405,11 +478,7 @@ export function QrScanner({
 
         return () => {
             cancelled = true;
-            if (rafId !== null) window.cancelAnimationFrame(rafId);
-            if (stream) stream.getTracks().forEach((t) => t.stop());
-            const video = videoRef.current;
-            if (video) video.srcObject = null;
-            setRunning(false);
+            stopBrowserCamera();
         };
     }, [supported, autoStart, previewState, cameraRationaleAccepted]);
 

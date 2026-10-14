@@ -132,16 +132,11 @@
 // The main renderer CSP (renderer/index.html) admits no remote origin:
 // `script-src 'self'` and `frame-src 'none'`.
 //
-// Outside `hid` the two generic callbacks take opposite answers, on
-// purpose. The check handler returns `true` for every other permission,
-// to every origin and frame in the session: an unconditional grant on the
-// check path, which the shared UI's clipboard writes and its
-// `Notification.permission` read rely on. The request handler refuses
-// every other permission, so anything that has to PROMPT is off in this
-// shell, including the QR scanner's camera (`media`) and
-// `Notification.requestPermission()`. Narrowing the check side is its own
-// change, verified against a live Electron session, not a side effect of
-// the WebHID gate.
+// Outside `hid`, the app's top-level renderer may request its video camera
+// for QR scanning and its sanitized clipboard write. Other prompting
+// permissions stay refused. The check handler applies the same app-origin
+// gate to `media`, while permissions without a request allowance cannot
+// reach a prompt.
 
 import { isRemoteFrameUrl } from './security.js';
 
@@ -294,13 +289,19 @@ export function attachHidPermissions(session, opts) {
             callback(!isRemoteFrameUrl(url, appRoot));
             return;
         }
+        if (permission === 'media') {
+            callback(isAppCameraRequest(webContents, details, appRoot));
+            return;
+        }
         callback(false);
     });
 
     session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-        // `hid` is the one permission this module owns. Everything else is
-        // granted on this path; the request handler above still refuses
-        // anything that must prompt (see the header).
+        if (permission === 'media') {
+            return isAppHidCheck(details, requestingOrigin, appRoot);
+        }
+        // The request handler still refuses prompting permissions that are
+        // not explicitly allowed above.
         if (permission !== 'hid') return true;
         return isAppHidCheck(details, requestingOrigin, appRoot);
     });
@@ -424,6 +425,22 @@ function requestingFrameUrl(webContents, details) {
     const frameUrl = details?.requestingUrl;
     if (typeof frameUrl === 'string' && frameUrl.length > 0) return frameUrl;
     return webContents?.getURL?.();
+}
+
+/**
+ * True for the app's top-level, video-only QR camera request.
+ *
+ * @param {{ getURL?: () => string } | null | undefined} webContents
+ * @param {{ isMainFrame?: boolean, frame?: { parent?: unknown }, mediaTypes?: string[], requestingUrl?: string } | undefined} details
+ * @param {string} appRoot
+ * @returns {boolean}
+ */
+export function isAppCameraRequest(webContents, details, appRoot) {
+    if (details?.isMainFrame === false || isSubframe(details?.frame)) return false;
+    if (!Array.isArray(details?.mediaTypes)
+        || details.mediaTypes.length !== 1
+        || details.mediaTypes[0] !== 'video') return false;
+    return !isRemoteFrameUrl(requestingFrameUrl(webContents, details), appRoot);
 }
 
 /**
