@@ -74,7 +74,7 @@ for (const [size, inset] of Object.entries({ sm: '-6px 0', md: '-2px 0', lg: '0'
     const insetRule = new RegExp(`\\.${size}\\s*\\{[^}]*--xc-control-hit-inset:\\s*${inset}`);
     assert.match(iconSelectCss, insetRule, `IconSelect ${size} reaches a 44px coarse-pointer area`);
 }
-assert.match(inputCss, /\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height,\s*36px\)/s,
+assert.match(inputCss, /\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height\)/s,
     'Input and Select render the selected height token');
 assert.match(inputCss, /\.input\s*\{[^}]*font-size:\s*var\(--xc-control-font-size,\s*14px\)/s,
     'Input, Select, and Textarea use the control font token');
