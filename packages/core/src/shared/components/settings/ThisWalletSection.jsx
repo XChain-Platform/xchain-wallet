@@ -12,6 +12,7 @@
 // watch-only export, recovery-format upgrade and removal controls.
 
 import { useEffect, useState } from 'react';
+import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import {
     Button,
     CopyButton,
@@ -357,7 +358,7 @@ function ChangePasswordRow({ walletId, disabled }) {
     };
 
     return (
-        <form onSubmit={submit} aria-busy={busy}>
+        <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} aria-busy={busy}>
             <FormSection
                 title="Change wallet password"
                 description={`Use at least ${MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger. Keep it safe because it cannot be recovered.`}

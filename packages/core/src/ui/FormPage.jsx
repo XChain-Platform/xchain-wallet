@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { forwardRef } from 'react';
+import { submitOnlyFromLastField } from './formEnter.js';
 import styles from './FormPage.module.css';
 
 /**
@@ -74,6 +75,7 @@ export const FormPage = forwardRef(function FormPage(
         as: Root = 'form',
         className,
         children,
+        onKeyDown,
         ...rest
     },
     ref,
@@ -88,6 +90,10 @@ export const FormPage = forwardRef(function FormPage(
     const semanticProps = Root === 'form'
         ? { onSubmit, noValidate, 'aria-label': label }
         : { role: 'group', 'aria-label': label };
+    const handleKeyDown = (event) => {
+        onKeyDown?.(event);
+        if (Root === 'form') submitOnlyFromLastField(event);
+    };
     const hasHeader = title != null || description != null || visual != null;
     const actionClassName = [
         styles.actions,
@@ -99,6 +105,7 @@ export const FormPage = forwardRef(function FormPage(
             className={classNames}
             {...semanticProps}
             {...rest}
+            onKeyDown={handleKeyDown}
         >
             {intro ? <p className={styles.intro}>{intro}</p> : null}
             {progress != null || topAction != null ? (

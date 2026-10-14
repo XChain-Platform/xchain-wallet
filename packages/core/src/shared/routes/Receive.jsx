@@ -1208,7 +1208,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     return (
         <Screen variant={variant} header={header}>
-            <FormPage label="Receive payment" onSubmit={(event) => event.preventDefault()}>
+            <FormPage
+                label="Receive payment"
+                onSubmit={(event) => event.preventDefault()}
+                // The form has no submit button, so Enter in the amount, its last
+                // field, commits the request explicitly; other fields never submit.
+                onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || event.target !== amountInputRef.current) return;
+                    event.preventDefault();
+                    event.currentTarget.requestSubmit();
+                }}
+            >
                 {body}
             </FormPage>
         </Screen>
