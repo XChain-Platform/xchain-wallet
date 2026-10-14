@@ -520,22 +520,19 @@ export function Locked({ onUnlocked }) {
         </div>
     );
 
+    // The shared warning notice, not a box of its own inside the form card.
+    // The notice reads whole when it appears; the countdown ticks silently
+    // inside it so a screen reader does not repeat the sentence every second.
     const lockoutBanner = isLockedOut ? (
-        <div
-            className={styles.lockoutBanner}
-            role="status"
-            aria-live="polite"
-        >
-            <span>
-                {/* The device scope and network guidance distinguish this
-                    local counter from a network-level restriction. */}
-                Too many incorrect passwords on this device. Wait{' '}
-                <span className={styles.lockoutCountdown}>
-                    {formatCountdown(remainingMs)}
-                </span>
-                {' '}before trying again. Changing networks will not skip the wait.
+        <StatusMessage variant="warning" className={styles.lockoutBanner}>
+            {/* The device scope and network guidance distinguish this
+                local counter from a network-level restriction. */}
+            Too many incorrect passwords on this device. Wait{' '}
+            <span className={styles.lockoutCountdown} aria-live="off">
+                {formatCountdown(remainingMs)}
             </span>
-        </div>
+            {' '}before trying again. Changing networks will not skip the wait.
+        </StatusMessage>
     ) : null;
 
     const form = (

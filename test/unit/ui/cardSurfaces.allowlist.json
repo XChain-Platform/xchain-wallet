@@ -69,7 +69,6 @@
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .picker": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .warnings": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
-        "packages/core/src/shared/routes/Locked.module.css | .lockoutBanner": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/ManageToken.module.css | .ownerWarning": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/ManageToken.module.css | .manageMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/ManageToken.module.css | .officialBanner": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",

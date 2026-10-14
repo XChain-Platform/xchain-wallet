@@ -108,8 +108,9 @@ assert.doesNotMatch(
 
 // --- banner aria + countdown formatting -------------------------------
 
-assert.match(lockedSrc, /role="status"/, 'banner uses status role');
-assert.match(lockedSrc, /aria-live="polite"/, 'banner is aria-live polite');
+// The shared warning notice carries role="status" and aria-live="polite".
+assert.match(lockedSrc, /<StatusMessage variant="warning" className=\{styles\.lockoutBanner\}>/, 'banner is the shared warning notice');
+assert.match(lockedSrc, /className=\{styles\.lockoutCountdown\} aria-live="off"/, 'the countdown ticks without re-announcing the notice');
 assert.match(lockedSrc, /Too many incorrect passwords/, 'banner copy present');
 
 assert.match(
