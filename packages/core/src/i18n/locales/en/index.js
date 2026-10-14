@@ -264,6 +264,7 @@ export const en = {
     'home.offline.empty': 'You are offline. Connect to load balances and use network actions.',
     'home.updatingBalances': 'Updating balances…',
     'home.loadingBalances': 'Loading balances',
+    'home.retryBalances': 'Retry',
     'home.pendingAirdrops': 'Pending airdrops',
     'home.resumeAirdrop': 'Resume airdrop: {amount} {token} × {count}',
     'home.airdrop.waitingIndex': 'Recipient list sent, waiting to be indexed',
