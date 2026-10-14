@@ -80,7 +80,8 @@ describe('<Tabs>', () => {
         const css = readFileSync('packages/core/src/ui/Tabs.module.css', 'utf8');
 
         expect(css).toMatch(/\.tabs\s*\{[^}]*height:\s*var\(--xc-control-h-md\)/s);
-        expect(css).toMatch(/\.tab\s*\{[^}]*min-height:\s*var\(--xc-tap-min\)/s);
+        // Each tab is at least a default control tall, which is 44px on touch.
+        expect(css).toMatch(/\.tab\s*\{[^}]*min-height:\s*var\(--xc-control-h-md\)/s);
         expect(css).toMatch(/\.tabs\s*\{[^}]*border-bottom:\s*1px solid var\(--xc-control-border\)/s);
         expect(css).toMatch(/\.tabs\s*\{[^}]*overflow-x:\s*auto/s);
         expect(css).toMatch(/\.tabs::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);

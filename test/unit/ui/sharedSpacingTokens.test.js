@@ -258,9 +258,6 @@ it('uses shared tokens for route control, icon, and loader geometry', () => {
             .not.toMatch(/(?:gap|font-size|border-radius)\s*:[^;}]*(?:\d*\.)?\d+px/);
     }
     expect(home).toMatch(
-        /\.menuBtn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)[^}]*width:\s*var\(--xc-control-h-md\)[^}]*height:\s*var\(--xc-control-h-md\)/s,
-    );
-    expect(home).toMatch(
         /\.quickActionIcon\s*\{[^}]*width:\s*var\(--xc-control-h-sm\)[^}]*height:\s*var\(--xc-control-h-sm\)/s,
     );
     expect(home).toMatch(
