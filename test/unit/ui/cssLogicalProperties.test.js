@@ -90,7 +90,7 @@ const ltrIslands = [
     'packages/core/src/shared/routes/ContractScreens.module.css|.monospaceInput,.monospaceValue,.codeSource',
     'packages/core/src/shared/routes/DispenserDetail.module.css|.dispenseAmount,.dispensePaid,.remainingPill,.buyerAddressSelect',
     'packages/core/src/shared/routes/DispenserExplorer.module.css|.numericValue',
-    'packages/core/src/shared/routes/History.module.css|.dateRow input,.paginationCount,.rowSourceAddress,.confirmationsPill,.copyableText,.pendingSegments,.pendingAmount',
+    'packages/core/src/shared/routes/History.module.css|.dateRow input,.paginationCount,.confirmationsPill,.copyableText,.pendingSegments,.pendingAmount',
     'packages/core/src/shared/routes/IssueTokenForm.module.css|.txid',
     'packages/core/src/shared/routes/Locked.module.css|.lockoutCountdown',
     'packages/core/src/shared/routes/ManageToken.module.css|.heroOwner',
