@@ -29,7 +29,6 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { preferredSourceId } from '../addressSelection.js';
 import { listFormatSupport } from '../../flows/listFormatSupport.js';
 import {
     isShareConfirmed,
@@ -100,10 +99,6 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
-    const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, any> | null} */ (null),
-    );
-    const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [detail, setDetail] = useState(/** @type {any | null} */ (null));
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [sharedRows, setSharedRows] = useState(/** @type {any[] | null} */ (null));
@@ -117,15 +112,9 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
 
     useEffect(() => {
         let cancelled = false;
-        Promise.all([
-            messaging.getAddressesByChain(walletId),
-            typeof messaging.getActiveAddresses === 'function'
-                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
-                : Promise.resolve({}),
-        ]).then(([byChain, active]) => {
+        messaging.getAddressesByChain(walletId).then((byChain) => {
             if (cancelled) return;
             setAddressesByChain(byChain || {});
-            setActiveByChain(active || {});
             if (!(byChain?.[chainId] || []).length) {
                 setLoadError('No address on this chain yet. Use Receive to generate one first.');
             }
@@ -180,23 +169,6 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         return (addressesByChain[chainId] || []).find((record) => record.address === owner) || null;
     }, [owner, addressesByChain, chainId]);
 
-    useEffect(() => {
-        if (!addressesByChain || !activeByChain || fromAddressId) return;
-        const all = addressesByChain[chainId] || [];
-        const funding = all.filter((record) => record.role !== 'dispenser');
-        const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
-        if (picked) setFromAddressId(picked);
-    }, [addressesByChain, activeByChain, chainId, fromAddressId]);
-
-    useEffect(() => {
-        if (ownerRecord) setFromAddressId(ownerRecord.id);
-    }, [ownerRecord]);
-
-    const fromAddress = useMemo(() => {
-        if (!fromAddressId || !addressesByChain) return null;
-        return (addressesByChain[chainId] || []).find((record) => record.id === fromAddressId) || null;
-    }, [fromAddressId, addressesByChain, chainId]);
-
     const alreadyShared = useMemo(() => (
         (sharedRows || []).some((row) => isHomeRowForList(
             row, listActionIndex, descriptor, chainId,
@@ -214,7 +186,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         messaging,
         walletId,
         chainId,
-        owner: fromAddress,
+        owner: ownerRecord,
         software: 'createList',
         hardware: 'createListHw',
     });
@@ -223,7 +195,12 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
         if (!eligibility.ok) { setFormError(eligibility.reasons[0].text); return false; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (!ownerRecord) {
+            setFormError(owner
+                ? 'This list is owned by an address that is not in this wallet, so this wallet cannot share it.'
+                : 'The current owner could not be verified, so this wallet cannot share this list.');
+            return false;
+        }
         if (!typedConfirmOk) { setFormError('Type SHARE exactly to confirm.'); return false; }
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
         const memoTooLong = memoLengthError(trimmedMemo);
@@ -326,8 +303,12 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         );
     }
 
-    const missingOwner = owner && !ownerRecord;
-    const formDisabled = sdkSupported !== true || !eligibility.ok;
+    const ownershipReason = !owner
+        ? 'The current owner could not be verified, so this wallet cannot share this list.'
+        : !ownerRecord
+            ? `The current owner, ${shortAddress(owner)}, is not an address in this wallet. A share signed by another address will be refused by the network, so this wallet cannot share it.`
+            : null;
+    const formDisabled = sdkSupported !== true || !eligibility.ok || Boolean(ownershipReason);
     return wrap(
         <FormPage
             label="Share list"
@@ -343,7 +324,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                     type="submit"
                     variant="danger"
                     loading={lane.composing}
-                    disabled={formDisabled || !typedConfirmOk || !fromAddress || lane.composing}
+                    disabled={formDisabled || !typedConfirmOk || !ownerRecord || lane.composing}
                 >
                     {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
                 </Button>
@@ -366,16 +347,13 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 <dd className={styles.detailsValue}>{eligibility.countKnown ? memberCount : 'Unavailable'}</dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
-                    {fromAddress ? <AddressText address={fromAddress.address} /> : 'Unavailable'}
+                    {ownerRecord ? <AddressText address={ownerRecord.address} /> : 'Unavailable'}
                 </dd>
             </dl>
 
-            {missingOwner ? (
+            {ownershipReason ? (
                 <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        The current owner, {shortAddress(owner)}, is not an address in this wallet.
-                        A share signed by another address will be refused by the network.
-                    </p>
+                    <p className={styles.warning}>{ownershipReason}</p>
                 </div>
             ) : null}
 
