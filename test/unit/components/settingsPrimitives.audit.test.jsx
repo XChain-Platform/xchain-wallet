@@ -114,8 +114,9 @@ describe('shared settings row semantics', () => {
         const motion = screen.getByRole('combobox', { name: 'Reduced motion' });
         expect(describedText(theme)).toMatch(/follow your device setting/i);
         expect(describedText(motion)).toMatch(/device accessibility setting/i);
-        expect(theme.closest('div').style.flexWrap).toBe('wrap');
-        expect(motion.closest('div').style.flexWrap).toBe('wrap');
+        // The control sits in the row's end slot; the row itself wraps.
+        expect(theme.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');
+        expect(motion.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');
     });
 
     it('keeps the saved appearance value and reports a failed update', async () => {

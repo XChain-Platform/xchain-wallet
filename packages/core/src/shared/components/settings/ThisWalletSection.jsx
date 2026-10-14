@@ -18,7 +18,6 @@ import {
     CopyButton,
     FormSection,
     Input,
-    SectionHeader,
 } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { KeyQR } from '../KeyQR.jsx';
@@ -27,7 +26,7 @@ import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
-import { Status } from './_settingsPrimitives.jsx';
+import { SettingsActionRow, Status } from './_settingsPrimitives.jsx';
 import styles from './ThisWalletSection.module.css';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
@@ -226,22 +225,19 @@ export function ThisWalletSection({
                     onConfirm={onConfirmRemove}
                 />
             ) : (
-                <section className={styles.row}>
-                    <SectionHeader
-                        title="Remove wallet"
-                        description="Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery."
-                        trailing={(
-                            <Button
-                                variant="danger"
-                                size="sm"
-                                icon={null}
-                                onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
-                            >
-                                Remove…
-                            </Button>
-                        )}
-                    />
-                </section>
+                <SettingsActionRow
+                    label="Remove wallet"
+                    hint="Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery."
+                >
+                    <Button
+                        variant="danger"
+                        size="sm"
+                        icon={null}
+                        onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
+                    >
+                        Remove…
+                    </Button>
+                </SettingsActionRow>
             )}
         </div>
     );
@@ -485,24 +481,20 @@ function PublicKeyExport({
 
 function Row({ label, hint, actionLabel, onClick, disabled = false }) {
     return (
-        <section className={styles.row}>
-            <SectionHeader
-                title={label}
-                description={hint}
-                trailing={actionLabel && onClick ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        icon={null}
-                        onClick={onClick}
-                        disabled={disabled}
-                    >
-                        {actionLabel}
-                    </Button>
-                ) : null}
-            />
-        </section>
+        <SettingsActionRow label={label} hint={hint}>
+            {actionLabel && onClick ? (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
+                    onClick={onClick}
+                    disabled={disabled}
+                >
+                    {actionLabel}
+                </Button>
+            ) : null}
+        </SettingsActionRow>
     );
 }
 
