@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -53,6 +53,10 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const closePopover = useCallback(() => {
+        setOpen(false);
+        triggerRef.current?.focus();
+    }, []);
     const state = overall === 'degraded' || overall === 'offline' || overall === 'normal'
         ? overall
         : 'unknown';
@@ -71,28 +75,16 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
             ? `${label}: no selected chain is reachable`
             : label;
 
-    useBackHandler(open ? () => {
-        setOpen(false);
-        triggerRef.current?.focus();
-    } : undefined);
+    useBackHandler(open ? closePopover : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onPointerDown = (event) => {
-            if (!wrapRef.current?.contains(event.target)) setOpen(false);
-        };
-        const onKeyDown = (event) => {
-            if (event.key !== 'Escape') return;
-            setOpen(false);
-            triggerRef.current?.focus();
+            if (!wrapRef.current?.contains(event.target)) closePopover();
         };
         window.addEventListener('mousedown', onPointerDown);
-        window.addEventListener('keydown', onKeyDown);
-        return () => {
-            window.removeEventListener('mousedown', onPointerDown);
-            window.removeEventListener('keydown', onKeyDown);
-        };
-    }, [open]);
+        return () => window.removeEventListener('mousedown', onPointerDown);
+    }, [closePopover, open]);
 
     return (
         <div
@@ -133,7 +125,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                 <button
                     type="button"
                     className={styles.settings}
-                    onClick={() => { setOpen(false); onOpenNetworkSettings(); }}
+                    onClick={() => { closePopover(); onOpenNetworkSettings(); }}
                 >
                     Network settings
                 </button>

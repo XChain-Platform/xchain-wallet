@@ -23,7 +23,7 @@
 // of the pickers or a complete network filter, so shells that supply
 // none of them keep the old minimal bar.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Button, Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
@@ -207,29 +207,23 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     const triggerRef = useRef(null);
     const menuRef = useRef(null);
     const focusOnOpenRef = useRef('first');
-    const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus();
+    const closeMenu = useCallback(() => {
+        setOpen(false);
+        triggerRef.current?.querySelector('button')?.focus();
+    }, []);
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); focusTrigger(); } : undefined);
+    useBackHandler(open ? closeMenu : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            setOpen(false);
-            focusTrigger();
+            closeMenu();
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
+        return () => window.removeEventListener('mousedown', onClick);
+    }, [closeMenu, open]);
 
     useEffect(() => {
         if (!open) return;
@@ -317,7 +311,7 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
                             type="button"
                             role="menuitem"
                             className={styles.scanItem}
-                            onClick={() => { setOpen(false); handler(); }}
+                            onClick={() => { closeMenu(); handler(); }}
                             title={label}
                         >
                             <span className={styles.scanItemIcon} aria-hidden="true">
