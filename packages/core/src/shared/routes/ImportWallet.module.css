@@ -7,20 +7,6 @@
     margin-bottom: var(--xc-space-5);
 }
 
-.titlePopup {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-1);
-    color: var(--xc-text);
-}
-
-.titleFull {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-2);
-    color: var(--xc-text);
-}
-
 .subtitlePopup {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

@@ -97,18 +97,6 @@
     word-break: normal;
 }
 
-/* Scrim + bottom sheet. The sheet sits above the bar so its safe-area
-   padding stacks correctly. */
-
-.scrim {
-    position: fixed;
-    inset: 0;
-    /* safe-area-backdrop: this layer only paints and catches outside taps;
-       the adjacent sheet owns the content insets. */
-    background: var(--xc-overlay, rgba(0, 0, 0, 0.45));
-    z-index: var(--xc-z-overlay);
-}
-
 .sheet {
     box-sizing: border-box;
     position: fixed;
@@ -134,16 +122,6 @@
     box-shadow: var(--xc-shadow-bottom-sheet);
 }
 
-.sheetHeader {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: var(--xc-space-2);
-    padding: 0 var(--xc-space-2) var(--xc-space-2);
-    flex: 0 0 auto;
-}
-
 .handle {
     grid-column: 1 / -1;
     width: 36px;
@@ -151,19 +129,6 @@
     margin: 0 auto var(--xc-space-1);
     border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
-}
-
-.sheetClose {
-    display: inline-flex;
-    width: var(--xc-control-h-md);
-    height: var(--xc-control-h-md);
-}
-
-.sheetBody {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
 }
 
 .sheetTitle {

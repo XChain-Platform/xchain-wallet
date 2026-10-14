@@ -21,6 +21,7 @@ const DYNAMIC_CLASS_PREFIXES = new Map([
     ['shared/components/ToastHost.module.css', ['variant_']],
     ['shared/routes/DispensersList.module.css', ['status_']],
     ['shared/routes/StakingList.module.css', ['status_']],
+    ['ui/Button.module.css', ['spinner_']],
 ]);
 
 function findCoreSource() {
@@ -57,6 +58,11 @@ it('has no literal CSS module class without a source reference', () => {
     const source = files
         .filter((file) => !file.relativePath.endsWith('.module.css'))
         .map((file) => file.source)
+        // A class another rule composes is referenced through CSS, not JS.
+        .concat(files
+            .filter((file) => file.relativePath.endsWith('.module.css'))
+            .flatMap((file) => [...file.source.matchAll(/composes:\s*([^;]+?)(?:\s+from\s+[^;]+)?;/g)]
+                .map((match) => match[1].trim().split(/\s+/).map((name) => `.${name}`).join(' '))))
         .join('\n');
     const orphaned = [];
     const modules = [];

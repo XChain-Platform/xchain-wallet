@@ -142,30 +142,6 @@
     gap: var(--xc-space-2);
 }
 
-.forgotLink {
-    align-self: center;
-    background: none;
-    border: none;
-    padding: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    text-decoration: underline;
-    /* The underline needs a text-specific offset below the spacing scale. */
-    text-underline-offset: 3px;
-    font-family: inherit;
-}
-
-.forgotLink:hover {
-    color: var(--xc-text);
-}
-
-.forgotLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
-}
-
 .wipeConfirm {
     display: flex;
     flex-direction: column;
