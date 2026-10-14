@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import styles from './TxStatusTimeline.module.css';
+import { t } from '../../i18n/index.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 
@@ -185,8 +186,8 @@ export function TxStatusTimeline({
         : '';
     const confirmedSub = confirmations > 0
         ? (confirmedSubBase === ''
-            ? `${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`
-            : `${confirmedSubBase} · ${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`)
+            ? t('transactionStatus.confirmations', { count: confirmations })
+            : `${confirmedSubBase} · ${t('transactionStatus.confirmations', { count: confirmations })}`)
         : confirmedSubBase;
 
     // The mempool stage in three situations: an in-flight transaction (the

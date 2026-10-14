@@ -6,6 +6,14 @@
 import { getFormatLocale } from '../../i18n/index.js';
 
 const MILLISECOND_TIMESTAMP_FLOOR = 1e11;
+const FALLBACK_UNIT_LABELS = {
+    year: { one: 'year', other: 'years' },
+    month: { one: 'month', other: 'months' },
+    day: { one: 'day', other: 'days' },
+    hour: { one: 'hour', other: 'hours' },
+    minute: { one: 'minute', other: 'minutes' },
+    second: { one: 'second', other: 'seconds' },
+};
 
 function dateFromTimestamp(timestamp) {
     const numeric = Number(timestamp);
@@ -51,7 +59,9 @@ export function formatRelativeDateTime(timestamp, now = Date.now(), locale) {
             .format(amount, unit);
     } catch {
         const absolute = Math.abs(amount);
-        const label = `${unit}${absolute === 1 ? '' : 's'}`;
+        const category = new Intl.PluralRules('en').select(absolute);
+        const labels = FALLBACK_UNIT_LABELS[unit];
+        const label = labels[category] ?? labels.other;
         return amount < 0 ? `${absolute} ${label} ago` : `in ${absolute} ${label}`;
     }
 }
