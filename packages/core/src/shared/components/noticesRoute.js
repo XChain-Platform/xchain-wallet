@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-import { createContext, useContext, useLayoutEffect } from 'react';
+import { createContext } from 'react';
 
 /**
  * The current route key, provided around the layout's notices so a notice
@@ -38,31 +38,3 @@ export const NoticesClaimedContext = createContext(false);
 
 /** True while the current screen states the reachability problem itself. */
 export const ReachabilityNoticeHiddenContext = createContext(false);
-
-/**
- * Hides the shell's reachability notice while `active`, for a screen whose
- * own content already says its balances could not be checked, so the page
- * never carries the same message twice.
- *
- * @param {boolean} active
- */
-export function useHideReachabilityNotice(active) {
-    const shellNotices = useContext(ShellNoticesContext);
-    const setHidden = shellNotices?.setReachabilityHidden;
-    useLayoutEffect(() => {
-        if (!active || !setHidden) return undefined;
-        setHidden((count) => count + 1);
-        return () => setHidden((count) => count - 1);
-    }, [active, setHidden]);
-}
-
-/**
- * Component form of useHideReachabilityNotice, for a screen that decides
- * after its early returns, where a hook call is not allowed.
- *
- * @param {{ active?: boolean }} props
- */
-export function HideReachabilityNotice({ active = true }) {
-    useHideReachabilityNotice(active);
-    return null;
-}

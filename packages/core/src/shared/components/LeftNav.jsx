@@ -321,35 +321,34 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     const bar = showsBottomBar(tier) ? bottomBar : null;
 
     const [noticesHost] = useState(() => {
-        if (typeof document === 'undefined') return null;
         const host = document.createElement('div');
         host.className = styles.notices;
-        host.setAttribute('data-xc-notices', '');
         return host;
     });
     const noticesFallbackRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const noticeSlotsRef = useRef(/** @type {HTMLElement[]} */ ([]));
     const [reachabilityHidden, setReachabilityHidden] = useState(0);
-    const hasNotices = Boolean(notices) && Boolean(noticesHost);
+    const hasNotices = Boolean(notices);
+    // The newest claiming Screen shows the notices; with none, the fallback slot.
+    const placeNotices = () => {
+        (noticeSlotsRef.current.at(-1) ?? noticesFallbackRef.current)?.appendChild(noticesHost);
+    };
     const shellNotices = useMemo(() => (hasNotices ? {
         claim(slot) {
             noticeSlotsRef.current.push(slot);
-            slot.appendChild(noticesHost);
+            placeNotices();
             return () => {
                 noticeSlotsRef.current = noticeSlotsRef.current.filter((s) => s !== slot);
-                const next = noticeSlotsRef.current.at(-1) ?? noticesFallbackRef.current;
-                if (next) next.appendChild(noticesHost);
-                else noticesHost.remove();
+                placeNotices();
             };
         },
         setReachabilityHidden,
-    } : null), [hasNotices, noticesHost]);
+    } : null), [hasNotices]);
 
     // Child Screens claim the host in their own layout effects, which run
     // before this one; anything left unclaimed goes to the fallback slot.
     useLayoutEffect(() => {
-        if (!hasNotices || noticesHost.parentNode) return;
-        noticesFallbackRef.current?.appendChild(noticesHost);
+        if (hasNotices && !noticesHost.parentNode) placeNotices();
     });
 
     useEffect(() => {

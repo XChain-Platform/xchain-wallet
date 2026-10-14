@@ -17,7 +17,12 @@
 import { EmptyState, Icon } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useReachability } from '../hooks/useReachability.js';
-import { useHideReachabilityNotice } from './noticesRoute.js';
+import { useHideReachabilityNotice } from './hideReachabilityNotice.js';
+
+// Plain literals, like the token pickers' copy: the English catalogue loads
+// with the shell, and this state only ships with the screens that show it.
+const UNCHECKED_TITLE = "Balances couldn't be checked";
+const UNCHECKED_BODY = 'Your balance may be out of date. Try again to refresh it.';
 
 /**
  * Whether balances could not be checked, and the retry that rechecks them.
@@ -49,9 +54,9 @@ export function BalancesUncheckedState({ onRetry, checking = false, onReceive, p
             plain={plain}
             titleAs={titleAs}
             icon={<Icon.InfoIcon />}
-            title={t('balances.unchecked.title')}
-            body={t('balances.unchecked.body')}
-            actionLabel={checking ? t('common.checking') : t('common.tryAgain')}
+            title={UNCHECKED_TITLE}
+            body={UNCHECKED_BODY}
+            actionLabel={checking ? 'Checking…' : t('common.tryAgain')}
             // A press while checking joins the check already in flight.
             onAction={onRetry}
             actionIcon={<Icon.RefreshIcon />}

@@ -149,12 +149,6 @@
     }
 }
 
-/* Slot for the shell's notices: the first row of the scrolling body, at
-   the content's full width inside the page gutter. */
-.notices {
-    min-width: 0;
-}
-
 /* The shell's fallback notices slot, for a route with no Screen, takes the
    same page gutter as the body. */
 .noticesFallback {

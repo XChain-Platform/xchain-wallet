@@ -50,7 +50,6 @@ describe('route page-top ownership', () => {
         const shell = read('packages/core/src/shared/components/LeftNav.module.css');
         // Notices render inside Screen's body, so the body's page gutter is
         // their inset at every tier and nothing adds a second one.
-        expect(screen).toMatch(/\.notices\s*\{/);
         expect(shell).not.toMatch(/--xc-notice-inset|--xc-scrollbar-lane/);
         for (const [, block] of banner.matchAll(/@media \([^)]*width[^)]*\)\s*\{([\s\S]*?)\n\}/g)) {
             expect(block).not.toMatch(/margin/);

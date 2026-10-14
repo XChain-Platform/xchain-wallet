@@ -84,9 +84,16 @@ function isDocumentHidden() {
 // ReachabilityBanner and QueuedBroadcastBanner use the same host transport.
 // Their matching probes share one request and reuse its answer for the
 // documented interval, so mounting both banners does not double the traffic.
+//
+// The entry also holds the published verdict. The shell's notice and a
+// screen that words its own empty state from the same verdict (Send, Home,
+// the token pickers) must agree, or the page says "Some balances may be out
+// of date" beside "Nothing to send yet". A hook mounting later starts from the
+// last published verdict instead of its own silent cold start, and every hook
+// on the same chain set hears a new verdict at once.
 const readsByMessaging = new WeakMap();
 
-function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, force }) {
+function readEntry(messaging, chainIdsKey) {
     let reads = readsByMessaging.get(messaging);
     if (!reads) {
         reads = new Map();
@@ -94,9 +101,14 @@ function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, 
     }
     let read = reads.get(chainIdsKey);
     if (!read) {
-        read = { lastStartedAt: null, inFlight: null, result: null };
+        read = { lastStartedAt: null, inFlight: null, result: null, published: null, listeners: new Set() };
         reads.set(chainIdsKey, read);
     }
+    return read;
+}
+
+function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, force }) {
+    const read = readEntry(messaging, chainIdsKey);
     if (read.inFlight) return read.inFlight;
     const now = Date.now();
     const age = read.lastStartedAt === null ? Infinity : now - read.lastStartedAt;
@@ -118,28 +130,6 @@ function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, 
         });
     read.inFlight = inFlight;
     return inFlight;
-}
-
-// The published verdict per transport and chain set. The shell's notice
-// and a screen that words its own empty state from the same verdict (Send,
-// Home, the token pickers) must agree, or the page says "Some balances may be
-// out of date" beside "Nothing to send yet". A hook mounting later starts
-// from the last published verdict instead of its own silent cold start, and
-// every hook on the same chain set hears a new verdict at once.
-const verdictsByMessaging = new WeakMap();
-
-function verdictEntry(messaging, chainIdsKey) {
-    let verdicts = verdictsByMessaging.get(messaging);
-    if (!verdicts) {
-        verdicts = new Map();
-        verdictsByMessaging.set(messaging, verdicts);
-    }
-    let entry = verdicts.get(chainIdsKey);
-    if (!entry) {
-        entry = { published: null, listeners: new Set() };
-        verdicts.set(chainIdsKey, entry);
-    }
-    return entry;
 }
 
 /**
@@ -211,22 +201,18 @@ export function useReachability(opts = {}) {
     const failuresRef = useRef(0);
     const probeRef = useRef(/** @type {null | (() => void)} */ (null));
     // Shares a verdict with every other hook on this transport and chain set.
-    const sharedEntry = messaging && chainIdsKey ? verdictEntry(messaging, chainIdsKey) : null;
-    const listenerRef = useRef(/** @type {null | ((published: any) => void)} */ (null));
-    // `rows` undefined keeps the per-chain rows already on screen.
+    const sharedEntry = messaging && chainIdsKey ? readEntry(messaging, chainIdsKey) : null;
+    // Every hook on the chain set, this one included, takes the new verdict.
+    // A probe only runs with a transport and a chain set, so the entry
+    // exists here.
     const publish = useCallback((nextOverall, rows, checkedAt) => {
-        setOverall(nextOverall);
-        if (rows !== undefined) setPerChain(rows);
-        if (!sharedEntry) return;
         const published = {
             overall: nextOverall,
-            perChain: rows ?? sharedEntry.published?.perChain ?? [],
+            perChain: rows || [],
             lastChecked: checkedAt,
         };
         sharedEntry.published = published;
-        for (const listener of sharedEntry.listeners) {
-            if (listener !== listenerRef.current) listener(published);
-        }
+        sharedEntry.listeners.forEach((listener) => listener(published));
     }, [sharedEntry]);
     // A non-normal verdict seen once but not yet corroborated. Held here
     // instead of on screen until a second probe returns the same answer.
@@ -359,16 +345,12 @@ export function useReachability(opts = {}) {
             provisionalRef.current = null;
             setOverall(published.overall);
             setPerChain(published.perChain);
-            if (published.lastChecked) setLastChecked(published.lastChecked);
+            setLastChecked(published.lastChecked);
         };
-        if (sharedEntry.published && browserOnline) adopt(sharedEntry.published);
-        listenerRef.current = adopt;
+        if (sharedEntry.published) adopt(sharedEntry.published);
         sharedEntry.listeners.add(adopt);
-        return () => {
-            sharedEntry.listeners.delete(adopt);
-            if (listenerRef.current === adopt) listenerRef.current = null;
-        };
-    }, [sharedEntry, browserOnline]);
+        return () => sharedEntry.listeners.delete(adopt);
+    }, [sharedEntry]);
 
     useEffect(() => {
         mountedRef.current = true;

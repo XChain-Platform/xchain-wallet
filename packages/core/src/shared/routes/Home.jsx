@@ -18,7 +18,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useReachability } from '../hooks/useReachability.js';
-import { HideReachabilityNotice } from '../components/noticesRoute.js';
+import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';

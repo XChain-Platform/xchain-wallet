@@ -175,7 +175,7 @@ export function Screen({
                 className={styles.body}
                 aria-labelledby={bodyLabelledBy}
             >
-                {ownsNotices ? <div ref={noticesSlotRef} className={styles.notices} /> : null}
+                {ownsNotices ? <div ref={noticesSlotRef} /> : null}
                 {children}
             </Body>
             {footer ? <footer className={styles.footer}>{footer}</footer> : null}
@@ -184,7 +184,7 @@ export function Screen({
     // A Screen nested in this one (a subpage, a picker) leaves the notices
     // here. Always wrapped, so a change of owner never remounts the route.
     return (
-        <NoticesClaimedContext.Provider value={noticesClaimed || ownsNotices}>
+        <NoticesClaimedContext.Provider value={noticesClaimed || Boolean(shellNotices)}>
             {screen}
         </NoticesClaimedContext.Provider>
     );

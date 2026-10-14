@@ -16,10 +16,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useContext, useState } from 'react';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
-import {
-    HideReachabilityNotice,
-    ReachabilityNoticeHiddenContext,
-} from '../../../packages/core/src/shared/components/noticesRoute.js';
+import { ReachabilityNoticeHiddenContext } from '../../../packages/core/src/shared/components/noticesRoute.js';
+import { HideReachabilityNotice } from '../../../packages/core/src/shared/components/hideReachabilityNotice.js';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
 
 afterEach(cleanup);
