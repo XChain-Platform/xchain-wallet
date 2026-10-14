@@ -13,7 +13,8 @@ import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen,
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
+import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { dispenserRateLabel } from '../utils/dispenserPricing.js';
@@ -68,8 +69,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
     const [addressesReload, setAddressesReload] = useState(0);
     const [dispensersReload, setDispensersReload] = useState(0);
-    // Keep the in-page search independent of the active network selected in Settings.
+    // In-page filters: free-text search + network dropdown, mirroring the
+    // contacts / messaging toolbars.
     const [query, setQuery] = useState('');
+    const [network, setNetwork] = useState('all');
     // Cancel block times of closing dispensers, keyed `chainId:actionIndex`.
     const [cancelTimes, setCancelTimes] = useState(/** @type {Record<string, number>} */ ({}));
     const [nowMs, setNowMs] = useState(() => Date.now());
@@ -281,6 +284,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
         return allRows.filter((row) => {
+            if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
             if (!q) return true;
             const label = row.address ? dispenserLabels[row.address] : undefined;
             return [
@@ -289,7 +293,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 String(row.action_index ?? ''),
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
-    }, [allRows, query, dispenserLabels]);
+    }, [allRows, query, network, dispenserLabels]);
 
         const header = (
         <PageHeader
@@ -375,6 +379,13 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             aria-label="Search dispensers"
                         />
                     </div>
+                    <div className={local.searchField}>
+                        <NetworkFilterDropdown
+                            value={network}
+                            onChange={setNetwork}
+                            announceNetworkCount
+                        />
+                    </div>
                 </div>
             )}
         >
@@ -414,6 +425,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         actionLabel="Reset filters"
                         onAction={() => {
                             setQuery('');
+                            setNetwork('all');
                         }}
                     />
                 )
