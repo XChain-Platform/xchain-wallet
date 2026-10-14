@@ -374,7 +374,7 @@ describe('Settings account picker navigation', () => {
 
         const webApp = readFileSync('packages/web/src/App.jsx', 'utf8');
         expect(webApp).toContain(
-            "backLabel={accountPickerBackTo === 'settings' ? 'Back to settings' : undefined}",
+            "backLabel={accountPickerBackTo === 'settings' ? t('shell.settings.back') : undefined}",
         );
     });
 });

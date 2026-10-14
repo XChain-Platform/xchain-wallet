@@ -2715,7 +2715,7 @@ function AppInner() {
                             setUnlockedView('account-rename');
                         }}
                         onBack={() => setUnlockedView(accountPickerBackTo)}
-                        backLabel={accountPickerBackTo === 'settings' ? 'Back to settings' : undefined}
+                        backLabel={accountPickerBackTo === 'settings' ? t('shell.settings.back') : undefined}
                     />
                 );
             }

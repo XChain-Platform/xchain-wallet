@@ -650,6 +650,7 @@ export const en = {
     // --- shell ---------------------------------------------------
     'shell.markets.selectAsset': 'Select coin or token',
     'shell.markets.back': 'Back to markets',
+    'shell.settings.back': 'Back to settings',
     'shell.privateKeyQr': 'Private key QR',
     'shell.messageSent': 'Message sent',
     'shell.cannotOpenLink': "Can't open link",
