@@ -129,7 +129,7 @@ afterEach(() => {
 });
 
 describe('web add-wallet activation flow', () => {
-    it('keeps the first wallet active, switches to the new wallet, and restores it after remount', async () => {
+    it('activates the new wallet and restores it after remount', async () => {
         const firstMount = render(<App />);
         await screen.findAllByRole('button', { name: 'Settings' });
 
@@ -142,17 +142,10 @@ describe('web add-wallet activation flow', () => {
             origin: 'created',
         }));
         await openWalletPicker();
-        expect(walletRow('First Wallet')).toHaveAttribute('aria-current', 'true');
+        expect(walletRow('First Wallet')).not.toHaveAttribute('aria-current');
         const second = walletRow('Second Wallet');
-        expect(second).not.toHaveAttribute('aria-current');
-
-        fireEvent.click(second);
-        // The selection is stored with its name so a locked tab can label it;
-        // readActiveWallet is the reader every shell uses for either shape.
+        expect(second).toHaveAttribute('aria-current', 'true');
         await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
-
-        await openWalletPicker();
-        expect(walletRow('Second Wallet')).toHaveAttribute('aria-current', 'true');
 
         firstMount.unmount();
         render(<App />);

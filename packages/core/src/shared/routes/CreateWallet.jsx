@@ -20,6 +20,7 @@ import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -149,7 +150,12 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             return;
         }
         if (stage === 'mnemonic') {
-            clearWalletSecrets();
+            clearEntrySecrets();
+            setSaved(false);
+            setQuizPositions([]);
+            setQuizAnswers({});
+            setQuizError(null);
+            setQuizErrorPosition(null);
             setPersistError(null);
             setStage('password');
             return;
@@ -168,7 +174,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     function handlePasswordSubmit(event) {
         event.preventDefault();
-        if (stage !== 'password' || phraseGeneratedRef.current) return;
+        if (stage !== 'password' || (phraseGeneratedRef.current && !mnemonic)) return;
         setValidationAttempt((attempt) => attempt + 1);
         if (password.length < MIN_PASSWORD_LENGTH) {
             setPasswordError(
@@ -191,9 +197,14 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             return;
         }
         setPasswordError(null);
+        const requestedWordCount = wordCount === 24 ? 24 : 12;
+        if (mnemonic?.trim().split(/\s+/).length === requestedWordCount) {
+            setStage('mnemonic');
+            return;
+        }
         phraseGeneratedRef.current = true;
         try {
-            setMnemonic(cryptoLib.generateBip39Mnemonic(wordCount === 24 ? 256 : 128));
+            setMnemonic(cryptoLib.generateBip39Mnemonic(requestedWordCount === 24 ? 256 : 128));
         } catch (err) {
             phraseGeneratedRef.current = false;
             setPasswordError(userFacingMessage(err, 'Failed to generate a recovery phrase. Try again.'));
@@ -271,6 +282,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             // not to nag them.
             if (createdWalletId) {
                 try { flowsLib.markBackupVerified(createdWalletId); } catch { /* best-effort */ }
+                writeActiveWallet(createdWalletId, name);
             }
             // §36.1: end onboarding on the ADS notice (AdsNotice.jsx).
             clearWalletSecrets();
