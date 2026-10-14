@@ -131,6 +131,13 @@ const runtime = vi.hoisted(() => ({
     wipeRuntimeStores: vi.fn(),
 }));
 
+const updater = vi.hoisted(() => ({
+    attachUpdater: vi.fn(),
+    checkForUpdates: vi.fn(),
+    downloadAndInstall: vi.fn(),
+    restartAndInstall: vi.fn(),
+}));
+
 // Pass-through fs whose synchronous write the bounds tests can watch and fail.
 const fsControl = vi.hoisted(() => ({ failSyncWrite: false, writeFileSync: null }));
 vi.mock('node:fs', async (importOriginal) => {
@@ -182,11 +189,7 @@ vi.mock('../../../packages/desktop/main/signerBridgeListener.js', () => ({
     attachSignerBridgeListener: vi.fn(),
 }));
 vi.mock('../../../packages/desktop/main/updater.js', () => ({
-    attachUpdater: vi.fn(async () => ({
-        checkForUpdates: vi.fn(),
-        downloadAndInstall: vi.fn(),
-        isActive: false,
-    })),
+    attachUpdater: updater.attachUpdater,
 }));
 vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn() }));
 vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
@@ -222,6 +225,12 @@ beforeEach(() => {
     runtime.createRuntime.mockReturnValue(runtime.instance);
     runtime.enforceLaunchAutoLock.mockResolvedValue({ locked: false });
     runtime.enforceSystemAutoLock.mockResolvedValue({ locked: true, reason: 'system-event' });
+    updater.attachUpdater.mockResolvedValue({
+        checkForUpdates: updater.checkForUpdates,
+        downloadUpdate: updater.downloadAndInstall,
+        restartAndInstall: updater.restartAndInstall,
+        isActive: false,
+    });
     vi.resetModules();
 });
 
@@ -355,6 +364,49 @@ describe('desktop main entry point', () => {
         expect(protocol.deepLinkSlot.take).not.toHaveBeenCalled();
         await expect(invokeFrom(selected)).resolves.toEqual(link);
         expect(protocol.deepLinkSlot.take).toHaveBeenCalledOnce();
+    });
+
+    it('returns no pending deep link when claiming the slot throws', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const sender = electron.BrowserWindow.instances[0];
+        protocol.deepLinkSlot.take.mockImplementationOnce(() => {
+            throw new Error('private link payload');
+        });
+        const takePending = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain:deep-link-take')[1];
+
+        await expect(takePending({
+            sender: sender.webContents,
+            senderFrame: { url: appIndex },
+        })).resolves.toBeNull();
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] deep-link IPC action failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain('private link payload');
+        error.mockRestore();
+    });
+
+    it('registers plain updater fallbacks when updater wiring rejects', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        updater.attachUpdater.mockRejectedValueOnce(new Error('private updater path'));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const handlers = new Map(electron.ipcMain.handle.mock.calls);
+        const event = {
+            sender: electron.BrowserWindow.instances[0].webContents,
+            senderFrame: { url: appIndex },
+        };
+
+        await expect(handlers.get('xchain:updater-state')(event)).resolves.toBeNull();
+        await expect(handlers.get('xchain:updater-install')(event, 'check')).resolves.toEqual({
+            ok: false,
+            reason: 'desktop: updater unavailable',
+        });
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] updater wiring failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain('private updater path');
+        error.mockRestore();
     });
 
     it('returns a committed message result when a sibling closes during notification', async () => {
