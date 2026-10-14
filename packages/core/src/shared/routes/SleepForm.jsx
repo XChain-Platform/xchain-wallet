@@ -44,6 +44,9 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -52,6 +55,13 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+function resumeBlockFor(height, duration) {
+    if (!Number.isSafeInteger(height) || height < 0) return null;
+    if (!Number.isSafeInteger(duration) || duration <= 0) return null;
+    const target = height + duration;
+    return Number.isSafeInteger(target) ? target : null;
+}
 
 /**
  * SLEEP form (PC-05). Two modes:
@@ -181,7 +191,11 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [reviewedParams, setReviewedParams] = useState(/** @type {Record<string, string> | null} */ (null));
+    const [refreshingHeight, setRefreshingHeight] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const chainIdRef = useRef(chainId);
+    chainIdRef.current = chainId;
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
@@ -196,12 +210,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     const durationBlocks = String(durationBlocksInput).trim();
     const durationBlockCount = /^\d+$/.test(durationBlocks) ? Number(durationBlocks) : null;
-    const calculatedResumeBlock = Number.isSafeInteger(currentHeight)
-        && Number.isSafeInteger(durationBlockCount)
-        && durationBlockCount > 0
-        && Number.isSafeInteger(currentHeight + durationBlockCount)
-        ? currentHeight + durationBlockCount
-        : null;
+    const calculatedResumeBlock = resumeBlockFor(currentHeight, durationBlockCount);
 
     // The duration stays a display convenience; the protocol receives its absolute block height.
     const resumeBlockValue = resumeMode === 'indefinite' ? '-1'
@@ -212,15 +221,20 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         currentHeight,
         targetBlock: calculatedResumeBlock,
     });
+    const reviewedResumeBlock = reviewedParams && Number(reviewedParams.RESUME_BLOCK);
+    const displayedResumeBlock = (stage === 'review' || stage === 'submitting')
+        && Number.isSafeInteger(reviewedResumeBlock) && reviewedResumeBlock > 0
+        ? reviewedResumeBlock
+        : calculatedResumeBlock;
     const wakeCondition = resumeMode === 'resume'
         ? 'Immediately.'
         : resumeMode === 'indefinite'
             ? (isTick ? 'Only when the token owner resumes it.' : 'Never. An indefinite address lock is permanent.')
-            : calculatedResumeBlock == null
+            : displayedResumeBlock == null
                 ? 'Enter a valid duration to calculate the wake block.'
                 : isTick
-                    ? `At block ${calculatedResumeBlock.toLocaleString('en-US')}, or earlier if the token owner resumes it.`
-                    : `Automatically at block ${calculatedResumeBlock.toLocaleString('en-US')}. The address cannot wake itself early.`;
+                    ? `At block ${displayedResumeBlock.toLocaleString('en-US')}, or earlier if the token owner resumes it.`
+                    : `Automatically at block ${displayedResumeBlock.toLocaleString('en-US')}. The address cannot wake itself early.`;
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -241,33 +255,80 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         // depended on form state.
         if (stage !== 'review' && stage !== 'submitting') return null;
         return decoderLib.decodeAction({
-            action: 'SLEEP', params: actionParams, chainId: chainId || undefined, chainRegistry,
+            action: 'SLEEP', params: reviewedParams || actionParams, chainId: chainId || undefined, chainRegistry,
         });
-    }, [stage, confirmModalOpen, actionParams, chainId]);
+    }, [stage, confirmModalOpen, reviewedParams, actionParams, chainId]);
 
-    function guardBeforeSign() {
-        if (!chainId || !fromAddress) { setFormError('Pick a source address first.'); return false; }
-        if (isTick && !ticker) { setFormError('No token selected.'); return false; }
-        if (isTick && sleepLocked) { setFormError(`Pausing and resuming are permanently locked for ${ticker}.`); return false; }
+    function validationError(height, { requireHeight = true } = {}) {
+        if (!chainId || !fromAddress) return 'Pick a source address first.';
+        if (isTick) {
+            const tickerError = tickerReferenceError(ticker, { noun: 'Token', allowRef: true });
+            if (tickerError) return tickerError;
+        }
+        if (descriptor?.coin && descriptor?.networkKind && !isValidAddressForChain(
+            fromAddress.address,
+            descriptor.coin,
+            descriptor.networkKind,
+        )) return `The selected source address is not valid for ${descriptor.displayName || 'this network'}.`;
+        if (!fromAddress.derivationPath && !fromAddress.id) return 'The selected source address is missing its wallet identifier.';
+        if (isTick && sleepLocked) return `Pausing and resuming are permanently locked for ${ticker}.`;
         if (resumeMode === 'until') {
-            if (!/^\d+$/.test(durationBlocks)) {
-                setFormError(`Enter the ${isTick ? 'pause' : 'lock'} duration as a whole number of blocks.`);
-                return false;
+            if (!durationBlocks) return 'Enter a duration in blocks.';
+            if (!/^\d+$/.test(durationBlocks)) return 'Duration must be a whole number of blocks.';
+            if (durationBlockCount === 0) return 'Duration must be at least 1 block.';
+            if (!Number.isSafeInteger(durationBlockCount)) return 'Duration is too large. Enter fewer blocks.';
+            if (requireHeight && resumeBlockFor(height, durationBlockCount) == null) {
+                if (!Number.isSafeInteger(height) || height < 0) {
+                    return 'The current block is unavailable, so the wake block cannot be calculated. Try again when the network is available.';
+                }
+                return 'Duration is too large. Enter fewer blocks.';
             }
-            if (durationBlockCount === 0) { setFormError('Duration must be at least 1 block.'); return false; }
-            if (!Number.isSafeInteger(durationBlockCount)) { setFormError('Duration is too large. Enter fewer blocks.'); return false; }
-            if (!Number.isSafeInteger(currentHeight)) {
-                setFormError('The current block is unavailable, so the wake block cannot be calculated. Try again when the network is available.');
-                return false;
-            }
-            if (calculatedResumeBlock == null) { setFormError('Duration is too large. Enter fewer blocks.'); return false; }
         }
         const m = memo.trim();
-        if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
-        return true;
+        if (m.includes('|') || m.includes(';')) return 'Memo cannot contain "|" or ";".';
+        const tooLong = memoLengthError(m);
+        if (tooLong) return tooLong;
+        if (feePick.mode === 'custom'
+            && (!Number.isFinite(feePick.customRate) || Number(feePick.customRate) <= 0)) {
+            return 'Enter a custom network fee rate greater than zero.';
+        }
+        return null;
     }
 
-    async function openConfirmModal() {
+    async function refreshHeight() {
+        if (flowsLib.isDemoWallet(walletId) || typeof messaging?.getIndexerWatermark !== 'function') {
+            throw new Error('The current block could not be refreshed. Check your connection and try again.');
+        }
+        const requestedChainId = chainId;
+        try {
+            const response = await messaging.getIndexerWatermark({ chainId: requestedChainId });
+            const value = response?.watermark;
+            const height = value == null ? null : Number(value);
+            if (!Number.isSafeInteger(height) || height < 0) throw new Error('invalid height');
+            if (chainIdRef.current !== requestedChainId) throw new Error('network changed');
+            setCurrentHeight(height);
+            return height;
+        } catch {
+            throw new Error('The current block could not be refreshed. Check your connection and try again.');
+        }
+    }
+
+    async function wakeBlockFreshnessError(params) {
+        const wakeBlock = Number(params?.RESUME_BLOCK);
+        if (!Number.isSafeInteger(wakeBlock) || wakeBlock <= 0) return null;
+        let height;
+        try {
+            height = await refreshHeight();
+        } catch (err) {
+            return err.message;
+        }
+        if (height >= wakeBlock) {
+            return `Wake block ${wakeBlock.toLocaleString('en-US')} has passed. Go back and choose a new duration.`;
+        }
+        return null;
+    }
+
+    async function openConfirmModal(params) {
         const from = buildFrom();
         if (!chainId || !from) return;
         setSubmitError(null);
@@ -278,7 +339,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 preflightOpts: { mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report' },
                 compose: () => messaging.composeForConfirm({
                     walletId, chainId, from,
-                    actionData: { action: 'SLEEP', params: actionParams },
+                    actionData: { action: 'SLEEP', params },
                     // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
                     // output sits inside the PSBT the user approves.
                     encoderOpts: {
@@ -305,16 +366,20 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
-                onApprove: (_creds, composed) => submit({
-                    params: actionParams,
-                    password: passwordValueRef.current,
-                    extraBase: {
-                        payFeeInNativeCoin: nativeFee.flag,
-                        ...(feePerKb != null ? { feePerKb } : {}),
-                        // The shared mapping, envelope and deferred outputs included.
-                        prebuiltPsbt: prebuiltPsbtFromComposed(composed),
-                    },
-                }),
+                onApprove: async (_creds, composed) => {
+                    const staleError = await wakeBlockFreshnessError(params);
+                    if (staleError) throw new Error(staleError);
+                    return submit({
+                        params,
+                        password: passwordValueRef.current,
+                        extraBase: {
+                            payFeeInNativeCoin: nativeFee.flag,
+                            ...(feePerKb != null ? { feePerKb } : {}),
+                            // The shared mapping, envelope and deferred outputs included.
+                            prebuiltPsbt: prebuiltPsbtFromComposed(composed),
+                        },
+                    });
+                },
             });
             setResult(res);
             setPassword('');
@@ -331,14 +396,33 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         }
     }
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
-        if (!guardBeforeSign()) return;
+        const initialError = validationError(currentHeight, { requireHeight: false });
+        if (initialError) { setFormError(initialError); return; }
+        let height = currentHeight;
+        if (resumeMode === 'until') {
+            setRefreshingHeight(true);
+            try {
+                height = await refreshHeight();
+            } catch (err) {
+                setFormError(err.message);
+                return;
+            } finally {
+                setRefreshingHeight(false);
+            }
+        }
+        const freshError = validationError(height);
+        if (freshError) { setFormError(freshError); return; }
+        const params = resumeMode === 'until'
+            ? { ...actionParams, RESUME_BLOCK: String(resumeBlockFor(height, durationBlockCount)) }
+            : actionParams;
+        setReviewedParams(params);
         setFormError(null);
         if (!isTick) setTypedConfirm('');
         // Address self-lock always uses the legacy review stage so the typed
         // confirm + irreversibility warning sit in front of the signature.
-        if (!isWatcherMode && isTick) { openConfirmModal(); return; }
+        if (!isWatcherMode && isTick) { openConfirmModal(params); return; }
         setStage('review');
     }
 
@@ -352,9 +436,16 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         if (!typedConfirmOk) return;
         setStage('submitting');
         setSubmitError(null);
+        const params = reviewedParams || actionParams;
+        const staleError = await wakeBlockFreshnessError(params);
+        if (staleError) {
+            setSubmitError(staleError);
+            setStage('review');
+            return;
+        }
         try {
             const res = await submit({
-                params: actionParams,
+                params,
                 password,
                 extraBase: {
                     payFeeInNativeCoin: nativeFee.flag,
@@ -381,13 +472,13 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         }
     }
 
-    function handleBuildAnother() { setResult(null); setSubmitError(null); setStage('form'); }
+    function handleBuildAnother() { setResult(null); setSubmitError(null); setReviewedParams(null); setStage('form'); }
 
     const titleNoun = isTick ? (resumeMode === 'resume' ? 'Resume token' : 'Pause token') : 'Lock address';
     const header = (
         <PageHeader
             onBack={stage === 'review'
-                ? () => { setSubmitError(null); setStage('form'); }
+                ? () => { setSubmitError(null); setReviewedParams(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? `Review ${titleNoun.toLowerCase()}` : titleNoun}
@@ -476,6 +567,9 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
+                    {isTick ? <DetailRow label="Token" value={reviewedParams?.TICK || ticker} /> : null}
+                    <DetailRow label="Resume block" value={reviewedParams?.RESUME_BLOCK || resumeBlockValue} />
+                    {reviewedParams?.MEMO ? <DetailRow label="Memo" value={reviewedParams.MEMO} /> : null}
                     <DetailRow label="Wake condition" value={wakeCondition} />
                     {resumeMode === 'until' ? (
                         <DetailRow label="Duration" value={`${Number(durationBlocks).toLocaleString('en-US')} blocks`} />
@@ -558,6 +652,11 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                         <p className={styles.hint}>
                             <strong>Wake condition:</strong> {wakeCondition}
                         </p>
+                        {reviewedParams?.MEMO ? (
+                            <p className={styles.hint}>
+                                <strong>Memo:</strong> {reviewedParams.MEMO}
+                            </p>
+                        ) : null}
                         <p className={styles.hint}>
                             Pausing {ticker} rejects new XChain actions involving it. Already-open orders,
                             swaps, and dispensers can still settle.
@@ -598,8 +697,8 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={confirmAction.composing}
-                    disabled={!fromAddress || (isTick && sleepLocked) || (resumeMode === 'until' && !durationBlocksInput) || confirmAction.composing}
+                    loading={refreshingHeight || confirmAction.composing}
+                    disabled={!fromAddress || (isTick && sleepLocked) || refreshingHeight || confirmAction.composing}
                 >
                     {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
                 </Button>
