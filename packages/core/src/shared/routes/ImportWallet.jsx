@@ -718,6 +718,13 @@ export function ImportWallet({
         ? 0
         : normalizedMnemonic.split(' ').length;
     const detectedPhraseFormat = phraseFormat(normalizedMnemonic);
+    const phraseHint = isFreeWallet
+        ? (isFull
+            ? t('importWallet.freeWallet.fullSubtitle')
+            : t('importWallet.freeWallet.subtitle'))
+        : (isFull
+            ? t('importWallet.phrase.fullSubtitle')
+            : t('importWallet.phrase.subtitle'));
     const activeWord = wordRangeAt(mnemonic, mnemonicCursor);
     const wordSuggestions = activeWord.prefix.length < 2 || BIP39_WORDS.has(activeWord.prefix)
         ? []
@@ -881,28 +888,6 @@ export function ImportWallet({
                                 ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
                             : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'))}
                 </h1>
-                <p className={subtitleClass}>
-                    {isFreeWallet
-                        ? (isFull
-                            ? t('importWallet.freeWallet.fullSubtitle')
-                            : t('importWallet.freeWallet.subtitle'))
-                        : lane === 'backup'
-                            ? (isFull
-                                ? (mode === 'add'
-                                    ? t('importWallet.backup.addFullSubtitle')
-                                    // It used to say "the password",
-                                    // singular, one line above three password
-                                    // boxes.
-                                    : t('importWallet.backup.replaceFullSubtitle'))
-                                : (mode === 'add'
-                                    ? t('importWallet.backup.addSubtitle')
-                                    : t('importWallet.backup.replaceSubtitle')))
-                            : lane === 'wif'
-                                ? t('importWallet.wif.subtitle')
-                            : (isFull
-                                ? t('importWallet.phrase.fullSubtitle')
-                                : t('importWallet.phrase.subtitle'))}
-                </p>
             </header>
             {laneSwitcher}
             {lane === 'backup' ? (
@@ -1108,6 +1093,7 @@ export function ImportWallet({
                 onDrop={handleFileDrop}
             >
                 <Textarea
+                    hint={phraseHint}
                     id="xc-mnemonic"
                     ref={textareaRef}
                     size={isFull ? 'lg' : 'md'}
@@ -1245,6 +1231,7 @@ export function ImportWallet({
                     <Input
                         type="password"
                         label={t('importWallet.wif.key')}
+                        hint={t('importWallet.wif.subtitle')}
                         value={wif}
                         onChange={(e) => {
                             setWif(e.target.value);

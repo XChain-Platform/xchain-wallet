@@ -1503,11 +1503,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <FormPage
                 label="Refill dispenser"
                 onSubmit={handleRefill}
-                intro={(
-                    <>
-                    Refill dispenser #{actionIndex}: add {giveTick} to escrow.
-                    </>
-                )}
                 status={refillError ? <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage> : null}
                 actions={(
                     <Button
@@ -1537,6 +1532,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )}
                 <AmountField
                     label="Refill amount"
+                    hint={`Amount of ${giveTick} to add to escrow.`}
                     amount={refillAmount}
                     tick={giveTick || ''}
                     onAmountFieldChange={(rawValue) => {
@@ -1626,12 +1622,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <FormPage
                 label="Edit dispenser"
                 onSubmit={handleEdit}
-                intro={(
-                    <>
-                    Edit dispenser #{actionIndex}: reschedule its close time or update its
-                    allow/block lists. Leave a field blank to keep it unchanged.
-                    </>
-                )}
                 status={editError ? <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage> : null}
                 actions={(
                     <Button
@@ -1648,8 +1638,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     type="datetime-local"
                     label="New expiration"
                     hint={currentExpiration
-                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close.`
-                        : 'No expiration set. Enter a date to schedule an automatic close.'}
+                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close, or leave blank to keep it.`
+                        : 'No expiration set. Enter a date to schedule an automatic close, or leave blank to keep none.'}
                     value={editExpiration}
                     onChange={(e) => { setEditExpiration(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1657,7 +1647,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Allow list"
                     inputMode="numeric"
-                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser.`}
+                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser, or leave blank to keep it.`}
                     value={editAllowList}
                     onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1670,7 +1660,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Block list"
                     inputMode="numeric"
-                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it.`}
+                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it, or leave blank to keep it.`}
                     value={editBlockList}
                     onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"

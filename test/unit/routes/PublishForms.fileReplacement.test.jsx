@@ -79,6 +79,7 @@ describe('publish forms replace file state safely', () => {
     it('exposes gated metadata through the shared field roles and counters', async () => {
         mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
 
+        const file = await screen.findByLabelText('File to publish');
         const title = await screen.findByRole('textbox', { name: 'Title' });
         const memo = screen.getByRole('textbox', { name: 'Memo' });
         fireEvent.change(title, { target: { value: 'Member brief' } });
@@ -86,6 +87,7 @@ describe('publish forms replace file state safely', () => {
 
         expect(title).toHaveValue('Member brief');
         expect(memo).toHaveValue('October');
+        expect(file).toHaveAccessibleDescription(/Publish a file that only holders of GATE can read/);
         expect(screen.getByText('12 / 120')).toBeInTheDocument();
         expect(screen.getByText('7 / 120')).toBeInTheDocument();
     });

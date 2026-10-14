@@ -86,8 +86,8 @@ assert.ok(
     'explorer validates token input shape through the shared reference grammar',
 );
 assert.ok(
-    /Search by token ticker to find open dispensers/.test(explorerSrc),
-    'explorer renders empty-state wording before the first search',
+    !/Search by token ticker to find open dispensers/.test(explorerSrc),
+    'explorer does not repeat the search controls before the first search',
 );
 
 // --- 3. Search routing -------------------------------------------------

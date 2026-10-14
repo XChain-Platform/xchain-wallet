@@ -372,12 +372,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     onRetry={runSearch}
                     onReset={resetFilters}
                 />
-            ) : (
-                <p className={styles.entryDescription}>
-                    Search by token ticker to find open dispensers, or by address to find
-                    a specific creator's or dispenser's listings.
-                </p>
-            )}
+            ) : null}
             </ListPage>
         </Screen>
     );
