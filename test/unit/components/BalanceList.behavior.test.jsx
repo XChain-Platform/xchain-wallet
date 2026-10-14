@@ -184,6 +184,27 @@ describe('BalanceList ordering and visibility', () => {
         expect(screen.queryByText(/regtest/i)).toBeNull();
     });
 
+    it('does not repeat a native coin name its row title already shows', () => {
+        render(
+            <BalanceList rows={[
+                row('BTC', { kind: 'native', displayName: 'Bitcoin', chainDisplayName: 'Bitcoin' }),
+                row('LTC', {
+                    kind: 'native',
+                    chainId: 'litecoin-mainnet',
+                    coin: 'litecoin',
+                    displayName: 'Litecoin',
+                    chainDisplayName: 'Litecoin',
+                }),
+                row('XCHAIN', { chainDisplayName: 'Bitcoin' }),
+            ]} />,
+        );
+
+        expect(screen.queryByText('BTC · Bitcoin')).toBeNull();
+        expect(screen.queryByText('LTC · Litecoin')).toBeNull();
+        expect(screen.getByText('BTC', { selector: '[title="BTC"]' })).toBeInTheDocument();
+        expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
+    });
+
     it('keeps identical tickers keyed and selectable by chain', () => {
         const onSelectToken = vi.fn();
         render(

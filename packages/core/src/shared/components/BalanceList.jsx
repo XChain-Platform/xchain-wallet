@@ -268,8 +268,10 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     // cross-chain list opt into naming the chain.
     //
     // The active network is never repeated on a row: the wallet runs on one
-    // network at a time and Settings is where it is chosen.
-    const subtitle = showChain && row.chainDisplayName
+    // network at a time and Settings is where it is chosen. Nor is a chain
+    // name the row's title already says: a native coin row reads "Bitcoin"
+    // over "BTC", not "BTC · Bitcoin".
+    const subtitle = showChain && row.chainDisplayName && row.chainDisplayName !== row.displayName
         ? `${row.tick} · ${row.chainDisplayName}`
         : row.tick;
     const fiat = useMemo(

@@ -192,7 +192,7 @@ describe('Home keeps balance loading, failure, and loaded-zero states distinct',
         mountHome(messaging);
         await settle();
 
-        expect(onScreen()).toContain('LTC · Litecoin');
+        expect(onScreen()).toContain('Litecoin');
         expect(onScreen()).toContain('Showing saved balances from the last successful sync.');
         expect(onScreen()).not.toContain('Fund your wallet');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
