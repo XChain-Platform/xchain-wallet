@@ -88,8 +88,7 @@ describe('IndexedDBStorageBackend transaction edges', () => {
         expect(fake.open).toHaveBeenCalledWith('', 1);
     });
 
-    // Bug: a failed IndexedDB open remains cached and prevents a later retry.
-    it.skip('retries opening after a transient open failure', async () => {
+    it('retries opening after a transient open failure', async () => {
         let calls = 0;
         const healthy = transactionFactory('success').indexedDB;
         globalThis.indexedDB = {
