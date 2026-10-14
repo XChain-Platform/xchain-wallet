@@ -135,13 +135,15 @@ describe('web create-wallet flow', () => {
         background.getWalletBalances.mockImplementation(() => new Promise(() => {}));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-        // Home is keyed by wallet and account, so it mounts once wallet-wide and
-        // again when the first account is selected. Query afresh each time
-        // rather than holding a heading from the first mount.
+        // Home renders at once with its balance skeleton; query the heading afresh
+        // rather than holding one from an earlier mount.
         await waitFor(
             () => expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument(),
             { timeout: 10_000 },
         );
-        expect(background.getSessionStatus).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('status', { name: 'Loading balances' })).toHaveAttribute('aria-busy', 'true');
+        await waitFor(() => expect(background.getWalletBalances).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(background.getAddressesByChain).toHaveBeenCalled());
+        expect(background.getSessionStatus).toHaveBeenCalledTimes(1);
     });
 });

@@ -64,7 +64,7 @@ describe('async route parameter races', () => {
             newRequest.resolve([{ id: 'new', chainId: CHAIN, tick1: 'BTC', tick2: 'NEW' }]);
             await newRequest.promise;
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Watchlist' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }));
         expect(await screen.findByText('NEW')).toBeInTheDocument();
 
         await act(async () => {
