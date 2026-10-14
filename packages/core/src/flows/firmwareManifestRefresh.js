@@ -51,6 +51,7 @@ import {
     FIRMWARE_MANIFEST_TTL_MS,
 } from '../buildInfo.js';
 import { FIRMWARE_MANIFEST } from '../signers/firmware-manifest.js';
+import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 
 const SCHEMA_ID = 'firmware-manifest/1';
 const CACHE_KEY = 'xc.firmwareManifest';
@@ -103,7 +104,7 @@ export async function refreshFirmwareManifest(deps) {
     }
     let envelope;
     try {
-        const resp = await fetchImpl(url, {
+        const resp = await fetchWithRetry(fetchImpl, url, {
             method: 'GET',
             headers: { Accept: 'application/json' },
         });
@@ -116,7 +117,10 @@ export async function refreshFirmwareManifest(deps) {
         }
         envelope = await resp.json();
     } catch (err) {
-        return { ok: false, reason: 'network', error: err };
+        const error = Number.isInteger(err?.status)
+            ? new Error(`firmware manifest fetch failed: HTTP ${err.status}`, { cause: err })
+            : err;
+        return { ok: false, reason: 'network', error };
     }
     if (!envelope || typeof envelope !== 'object'
         || !envelope.manifest || typeof envelope.manifest !== 'object'
