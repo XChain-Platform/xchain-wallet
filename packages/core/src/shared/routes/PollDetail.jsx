@@ -500,7 +500,15 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     }
 
     const header = <PageHeader onBack={onBack} title={`Poll #${String(pollIndex)}`} />;
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
+    );
 
     if (loadError) {
         return wrap(

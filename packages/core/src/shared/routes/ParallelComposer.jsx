@@ -313,7 +313,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'review'}>
             {children}
         </Screen>
     );

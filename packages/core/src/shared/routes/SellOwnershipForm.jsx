@@ -430,7 +430,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
         </Screen>
     );

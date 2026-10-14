@@ -982,7 +982,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
         </Screen>
     );

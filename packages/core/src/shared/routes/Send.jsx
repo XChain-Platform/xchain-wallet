@@ -2473,7 +2473,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     );
 
     const wrap = (children, footer = null) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
             {footer}
             {leaveGuard.confirmation}
