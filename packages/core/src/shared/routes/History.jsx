@@ -52,7 +52,10 @@ import {
     tickerForDescriptor,
     transactionExplorerLinks,
 } from '../../registry/coinTicker.js';
-import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import {
+    groupHistoryEntries,
+    groupHistoryItemsByLocalDay,
+} from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
     compareMergedEntries,
@@ -523,6 +526,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [groupingMode, setGroupingModeState] = useState(
         /** @type {'grouped' | 'flat'} */ (() => readPersistedGroupingMode(walletId)),
     );
+    const [dayGroupingNowMs, setDayGroupingNowMs] = useState(Date.now);
     const setGroupingMode = (mode) => {
         setGroupingModeState(mode);
         writePersistedGroupingMode(walletId, mode);
@@ -1412,6 +1416,30 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [visibleEntries, groupingMode],
     );
 
+    useEffect(() => {
+        let timer = null;
+        const schedule = () => {
+            const now = Date.now();
+            const nextDay = new Date(now);
+            nextDay.setHours(24, 0, 0, 0);
+            timer = setTimeout(() => {
+                setDayGroupingNowMs(Date.now());
+                schedule();
+            }, Math.max(1_000, nextDay.getTime() - now));
+        };
+        const refresh = () => {
+            clearTimeout(timer);
+            setDayGroupingNowMs(Date.now());
+            schedule();
+        };
+        schedule();
+        globalThis.addEventListener?.('focus', refresh);
+        return () => {
+            clearTimeout(timer);
+            globalThis.removeEventListener?.('focus', refresh);
+        };
+    }, []);
+
     // Filtering and grouping still run over the complete result set, while the
     // DOM grows in bounded steps. This keeps exports and group membership exact
     // without making the browser lay out thousands of row buttons at once.
@@ -1440,6 +1468,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         ? listWindow.count
         : HISTORY_PAGE_SIZE;
     const renderedItems = groupedItems.slice(0, visibleItemCount);
+    const renderedTimelineItems = useMemo(
+        () => groupHistoryItemsByLocalDay(renderedItems, dayGroupingNowMs)
+            .flatMap((dayGroup) => [
+                { kind: 'day', key: `day-heading:${dayGroup.key}`, label: dayGroup.label },
+                ...dayGroup.items,
+            ]),
+        [renderedItems, dayGroupingNowMs],
+    );
 
     useEffect(() => {
         setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
@@ -2087,7 +2123,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 aria-label={t('history.title')}
                 onKeyDown={onTimelineKeyDown}
             >
-                {renderedItems.map((item) => {
+                {renderedTimelineItems.map((item) => {
+                    if (item.kind === 'day') {
+                        return <li key={item.key}><SectionHeader as="h2" title={item.label} /></li>;
+                    }
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
                         const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
