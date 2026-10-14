@@ -207,9 +207,12 @@
     margin-top: var(--xc-space-2);
 }
 
+/* One row of tiles at every width down to a 360 px phone: five tiles fit
+   at 56 px, and a narrower screen wraps them evenly instead of leaving the
+   fifth alone under a fixed four-column grid. */
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
     gap: var(--xc-space-2);
 }
 
@@ -282,6 +285,15 @@
     font-weight: 600;
     min-height: 72px;
     text-align: center;
+}
+
+/* Icon above label, as on the View address tiles: side by side, the label
+   had too little room and broke mid-word ("Messa ge"). */
+.quickAction > span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
 }
 
 .quickAction:hover:not(:disabled) {

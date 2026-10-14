@@ -38,3 +38,9 @@ describe('View address copy row', () => {
         expect(rule('.detailAddr > :first-child')).toMatch(/min-width:\s*0/);
     });
 });
+
+describe('View address quick actions', () => {
+    it('keeps up to five tiles on one row at a 360 px phone', () => {
+        expect(rule('.quickActions')).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(56px,\s*1fr\)\)/);
+    });
+});

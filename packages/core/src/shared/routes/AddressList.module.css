@@ -383,9 +383,9 @@
     margin-bottom: 0;
 }
 
-/* Size the Save button to at least one quick-action column (the four-up
-   grid below uses the same gap), so it matches the Delete button where the
-   column is wide enough. On a phone a column is narrower than the icon and
+/* Size the Save button to at least a quarter of the row (one tile of the
+   four-up quick actions below, same gap), so it matches the Delete button
+   where that is wide enough. On a phone a column is narrower than the icon and
    label, so the button grows to fit them instead of breaking "Save" onto one
    letter per line. */
 .labelRow > :last-child {
@@ -398,10 +398,11 @@
     white-space: nowrap;
 }
 
-/* Four-up action row under the detail card, mirroring the contacts detail. */
+/* Action row under the detail card, mirroring the contacts detail: up to
+   five tiles stay on one row at a 360 px phone. */
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-2);
 }
