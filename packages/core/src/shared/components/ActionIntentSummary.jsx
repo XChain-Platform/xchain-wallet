@@ -18,12 +18,33 @@
 // (via txSimulator.simulateAction fed parse() output) and passes them in,
 // keeping this component pure and trivially testable.
 
+import { AddressText } from '@xchain-wallet/core/ui';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
 
 function reviewDetailValue(detail) {
     if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return detail?.value;
     return formatDisplayAmount(detail?.value);
+}
+
+function reviewSummary(decoded) {
+    const summary = String(decoded?.summary || '');
+    const destination = decoded?.details?.find((detail) => (
+        /^(?:To(?:\s|$)|Destination|Receive address|Dispenser address|Delegate to|Recipient(?:\s|$))/i
+            .test(String(detail?.label || ''))
+        && typeof detail?.value === 'string'
+        && summary.includes(detail.value)
+    ))?.value;
+    if (!destination) return summary;
+
+    const start = summary.indexOf(destination);
+    return (
+        <>
+            {summary.slice(0, start)}
+            <AddressText address={destination} />
+            {summary.slice(start + destination.length)}
+        </>
+    );
 }
 
 /**
@@ -34,7 +55,7 @@ function reviewDetailValue(detail) {
 export function ActionIntentSummary({ decoded, simulation }) {
     return (
         <div className={styles.intent} data-testid="action-intent">
-            <p className={styles.summary}>{decoded.summary}</p>
+            <p className={styles.summary}>{reviewSummary(decoded)}</p>
 
             {decoded.warnings.length > 0 ? (
                 <ul className={styles.warnings}>
