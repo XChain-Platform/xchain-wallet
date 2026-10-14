@@ -338,16 +338,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // applyNativeFeePreflight.
     const nativeFee = useNativeFee(coinTicker);
 
-    // Current on-chain lock state, read via the same useTokenInfo hook
-    // ManageToken uses. Shared by `'mint-settings'` (PC-01, four of the
-    // seven flags gate its own fields) and `'lock'` (PC-02, all seven
-    // drive the lock matrix below). `'mint-settings'` is only ever
-    // launched from ManageToken with a concrete (chainId, tick) pair
-    // (lockedToken is always true for that mode), so `ticker` is stable
-    // for the life of the form; `'lock'` can also be reached from the
-    // free Actions menu, where `ticker` changes as the owner picks a
-    // token and this hook simply refetches.
-    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' && mode !== 'bridge-settings' });
+    // Every mode edits issuer-controlled token state, so each one reads the
+    // current owner before it can compose. The same record supplies lock state
+    // for the modes that need it. This keeps direct Actions-menu routes behind
+    // the same owner boundary as Manage Token instead of relying on a later
+    // protocol rejection that still spends the action fee.
+    const assetInfo = useTokenInfo({ chainId, tick: ticker });
     const callbackTickKey = callbackTick.trim().toUpperCase();
     const callbackTokenInfo = useTokenInfo({
         chainId,
@@ -360,7 +356,31 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         && Number.isInteger(callbackTokenInfo?.divisibility)
         ? callbackTokenInfo.divisibility
         : null;
-    const tokenLocks = assetInfo?.locks || {};
+    const assetInfoMatchesSelection = !assetInfo || (
+        (!assetInfo.chainId || assetInfo.chainId === chainId)
+        && (!assetInfo.tick || String(assetInfo.tick).toUpperCase() === ticker.trim().toUpperCase())
+    );
+    const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
+    const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
+    const tokenLocks = currentAssetInfo?.locks || {};
+    const tokenOwner = currentAssetInfo?.creator || null;
+    const walletOwnsToken = tokenOwner && addressesByChain && chainId
+        ? (addressesByChain[chainId] || []).some((address) => (
+            String(address?.address || '').toLowerCase() === String(tokenOwner).toLowerCase()
+        ))
+        : null;
+    const selectedSourceOwnsToken = !tokenOwner || !fromAddress
+        ? null
+        : String(fromAddress.address || '').toLowerCase() === String(tokenOwner).toLowerCase();
+    const ownershipError = walletOwnsToken === false
+        ? `This wallet does not own ${ticker}. Only the current owner can make this change.`
+        : selectedSourceOwnsToken === false
+            ? `The selected source address does not own ${ticker}. Choose the current owner address.`
+            : null;
+    const descriptionLocked = mode === 'description' && !!tokenLocks.description;
+    const eligibilityError = descriptionLocked
+        ? `The description for ${ticker} is permanently locked and cannot be updated.`
+        : ownershipError;
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
     // undistributed (issue.js). LOCK_CALLBACK reads straight off the lock
@@ -657,6 +677,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         const tickerError = tickerReferenceError(ticker);
         if (tickerError) {
             setFormError(tickerError);
+            return;
+        }
+        if (tokenInfoPending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            return;
+        }
+        if (eligibilityError) {
+            setFormError(eligibilityError);
             return;
         }
         if (mode === 'description' && !description.trim()) {
@@ -1086,6 +1114,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         ))}
                     </div>
                 ) : null}
+                {mode === 'transfer' ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            Transferring ownership cannot be undone. After confirmation,
+                            only the new owner can administer this token.
+                        </p>
+                    </div>
+                ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction.
@@ -1140,6 +1176,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                extraCredentials={mode === 'transfer' ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            Transferring ownership cannot be undone. After confirmation,
+                            only the new owner can administer this token.
+                        </p>
+                    </div>
+                ) : null}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
@@ -1256,8 +1300,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         <FormPage
             label={MODE_LABEL[mode]}
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || eligibilityError ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    {formError || eligibilityError}
+                </StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1265,6 +1311,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     variant={mode === 'lock' ? 'danger' : 'primary'}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !ticker
+                        || tokenInfoPending
+                        || !!eligibilityError
                         || (mode === 'description' && !description)
                         || (mode === 'transfer' && !transferTo)
                         || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
@@ -1321,6 +1369,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     hint="Up to 250 characters. Stored on-chain and replaces the current one."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                    disabled={descriptionLocked}
                     autoComplete="off"
                     maxLength={250}
                 />

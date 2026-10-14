@@ -485,7 +485,14 @@ export function ManageToken({
         { id: 'dispenser', label: 'Dispenser', Icon: Icon.DollarIcon, onSelect: onCreateDispenser },
         { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: blockIssuerActions ? undefined : onPayDividend },
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
-        { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: blockIssuerActions ? undefined : onUpdateDescription },
+        {
+            id: 'description',
+            label: 'Description',
+            Icon: Icon.PencilIcon,
+            onSelect: blockIssuerActions ? undefined : onUpdateDescription,
+            disabled: !!tokenLocks.description,
+            disabledReason: 'The description is permanently locked and cannot be updated.',
+        },
         { id: 'attach-content', label: 'Artwork', Icon: Icon.DocumentIcon, onSelect: blockIssuerActions ? undefined : onAttachContent },
         // PC-25: token-gated encrypted publishing. Owner-only by protocol
         // (the indexer rejects gated FILEs from non-owners, FILE.md).
