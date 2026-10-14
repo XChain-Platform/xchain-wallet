@@ -368,11 +368,12 @@ export function MultisigCreate({ walletId, onBack }) {
                 ) : null}
                 actions={(
                     <div className={styles.actions}>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
                         <Button
                             type="button"
                             variant="secondary"
                             disabled={stage === 'submitting'}
-                            onClick={() => setStage('compose')}
+                            onClick={(event) => { event.preventDefault(); setStage('compose'); }}
                         >
                             Edit
                         </Button>
