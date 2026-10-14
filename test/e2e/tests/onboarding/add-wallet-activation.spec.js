@@ -11,17 +11,14 @@
 // What "Add Wallet" actually leaves you looking at.
 //
 // After walking the whole add-wallet flow - name, password, recovery phrase,
-// the verification challenge - the app switches to the wallet just added. It
-// used to come back on the wallet you STARTED from, with the new one merely
-// present in the picker; users read that as the add having failed, so the shell
-// now activates the added wallet.
+// the verification challenge - the app switches to the wallet just added, so
+// the user sees the result of what they created rather than the wallet they
+// started from.
 //
-// This test pins that, for two reasons. First, the
-// behaviour was invisible: nothing on screen says "created", and the only
-// evidence is a wallet name in the nav that most users are not watching.
-// Second, whichever way it should behave, a silent change of mind here is
-// exactly the kind that breaks a multi-wallet flow somewhere far away - which
-// is how it was found.
+// This test pins that, for two reasons. First, the switch is the only on-screen
+// evidence that the add worked: nothing else says "created". Second, a silent
+// change here is exactly the kind that breaks a multi-wallet flow somewhere far
+// away.
 //
 // No chain, no funds, no signing: this is a shell-state question, so it runs on
 // the dev-server venue.
