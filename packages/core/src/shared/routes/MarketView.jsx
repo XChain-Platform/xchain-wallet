@@ -160,7 +160,6 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             border: '1px solid var(--xc-border)',
             borderRadius: 'var(--xc-radius-md)',
             padding: 'var(--xc-space-3)',
-            marginBottom: 'var(--xc-space-3)',
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--xc-space-2)',
@@ -247,7 +246,15 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     return wrap(
         <>
-            <div role="region" aria-label={t('market.summary')} aria-busy={summaryLoading || undefined}>
+            {/* The page's own gap spaces the summary, chart, panel tabs and
+                panel; a stale or failed-price notice under the summary card
+                takes the same gap inside this region. */}
+            <div
+                role="region"
+                aria-label={t('market.summary')}
+                aria-busy={summaryLoading || undefined}
+                style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' }}
+            >
                 {summaryLoading ? (
                     <div role="status" aria-label={t('market.loading')}>
                         <Skeleton height={159} />
@@ -285,7 +292,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 )}
             </div>
 
-            <div style={{ marginTop: 'var(--xc-space-3)' }}>
+            <div>
                 <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:chart`}>
                     <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
                 </RouteErrorBoundary>
@@ -295,7 +302,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 className={receivePickerStyles.kindSegments}
                 role="tablist"
                 aria-label={t('market.panels')}
-                style={{ width: '100%', marginTop: 'var(--xc-space-3)', marginBottom: 'var(--xc-space-3)', flexShrink: 1 }}
+                style={{ width: '100%', flexShrink: 1 }}
             >
                 {[
                     { id: 'book',    label: 'Book' },
