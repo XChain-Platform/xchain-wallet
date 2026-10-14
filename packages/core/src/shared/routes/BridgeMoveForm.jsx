@@ -30,6 +30,10 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { addressValidationError } from '../utils/addressValidation.js';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import {
@@ -119,6 +123,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [tick, setTick] = useState(initialTick || GAS_TICK);
     const [amount, setAmount] = useState('');
+    const [amountInputError, setAmountInputError] = useState(/** @type {string | null} */ (null));
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
 
@@ -155,8 +160,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 }
                 setSourceChainId((current) => (current && chains.includes(current) ? current : chains[0]));
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+            .catch(() => {
+                if (!cancelled) setLoadError('Could not load wallet addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging]);
@@ -357,16 +362,43 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         });
     }, [amount, shown.label, tick, tokenInfo?.divisibility]);
 
+    const sourceAddressError = fromAddress
+        ? addressValidationError(fromAddress.address, sourceDescriptor)
+        : sourceChainId && (addressesByChain?.[sourceChainId] || []).length > 0
+            ? 'No usable source address is available. Choose another source address.'
+            : null;
+    const destinationAddressError = destAddress
+        ? addressValidationError(destAddress, destDescriptor)
+        : null;
+    const tokenError = tick.toUpperCase() === GAS_TICK
+        ? null
+        : tickerReferenceError(tick, { noun: 'Token', allowRef: true });
+    const customFeeError = feePick.mode !== 'custom'
+        ? null
+        : feePerKb === null
+            ? Number(feePick.customRate) > 0
+                ? 'Custom fee rate can have at most 8 decimal places and must fit the supported range.'
+                : 'Enter a custom fee rate greater than zero.'
+            : null;
     const memoError = memo.includes('|') || memo.includes(';')
         ? 'Memo cannot contain "|" or ";".'
-        : null;
+        : memoLengthError(memo.trim());
 
     const feeWarning = useMemo(
         () => belowFeeWarning({ amount, fee: feeQuote, tick: shown.label }),
         [amount, feeQuote, shown.label],
     );
 
-    const blockingError = leg.reason || destinationError || amountError || overBalanceError || memoError || null;
+    const blockingError = leg.reason
+        || sourceAddressError
+        || destinationAddressError
+        || tokenError
+        || destinationError
+        || amountError
+        || overBalanceError
+        || memoError
+        || customFeeError
+        || null;
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const passwordValueRef = useRef('');
@@ -433,8 +465,15 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!fromAddress || !sourceChainId || !destChainId || !actionParams) return;
-        if (blockingError) return;
+        if (!fromAddress || !sourceChainId) {
+            setFormError('No usable source address is available. Choose another source address.');
+            return;
+        }
+        if (!destChainId || !actionParams) {
+            setFormError('Pick a destination chain for this bridge move.');
+            return;
+        }
+        if (blockingError || amountInputError) return;
         if (!destAddress) {
             setFormError(`Pick one of your own ${chainLabel(destDescriptor, destChainId)} addresses to receive the transfer.`);
             return;
@@ -447,6 +486,24 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         submitInFlightRef.current = true;
         setFormError(null);
         try {
+            if (tick.toUpperCase() !== GAS_TICK && typeof messaging.getTokenInfo === 'function') {
+                let freshTokenInfo;
+                try {
+                    freshTokenInfo = await messaging.getTokenInfo({
+                        chainId: sourceChainId,
+                        tick,
+                        demo: false,
+                    });
+                } catch {
+                    setFormError('Could not refresh this token\'s bridge settings. Check your connection and try again.');
+                    return;
+                }
+                if (bridgeSettingsSnapshot(freshTokenInfo) !== bridgeSettingsSnapshot(tokenInfo)) {
+                    invalidateTokenInfo(sourceChainId, tick);
+                    setFormError('This token\'s bridge settings changed. The form is refreshing them; review the route and try again.');
+                    return;
+                }
+            }
             if (isWatcherMode) {
                 setStage('submitting');
                 const r = await messaging.buildActionPsbtRequest({
@@ -470,7 +527,12 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             }
             await openConfirmScreen();
         } catch (err) {
-            setSubmitError(err?.message || 'Could not build the unsigned transaction.');
+            setSubmitError(submitFailureMessage(err, {
+                chainId: sourceChainId,
+                coinTicker: sourceCoin,
+                mandatory: nativeFee.mandatory,
+                fallback: 'Could not build the unsigned transaction. Review the form and try again.',
+            }));
             setStage('form');
         } finally {
             submitInFlightRef.current = false;
@@ -591,7 +653,11 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 // here would be offering an action consensus refuses.
                 kindFilter="tokens"
                 kindLocked
-                onSelect={(sel) => { setTick(String(sel.tick || '')); setTokenPickerOpen(false); }}
+                onSelect={(sel) => {
+                    setTick(String(sel.tick || ''));
+                    setAmountInputError(null);
+                    setTokenPickerOpen(false);
+                }}
                 onBack={() => setTokenPickerOpen(false)}
             />
         );
@@ -631,10 +697,9 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     loading={actionConfirm.composing || stage === 'submitting'}
                     disabled={
                         !!blockingError
+                        || !!amountInputError
                         || destinationUnavailable
                         || !fromAddress
-                        || !destAddress
-                        || !String(amount).trim()
                         || !leg.version
                         || actionConfirm.composing
                     }
@@ -651,6 +716,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     setSourceChainId(cid);
                     setTick(GAS_TICK);
                     setAmount('');
+                    setAmountInputError(null);
                     setDestChainId(null);
                     setDestAddress('');
                     setFeeQuote(null);
@@ -741,6 +807,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
                 }}
+                onValidationError={setAmountInputError}
                 onMax={balance && Number(balance) > 0 ? () => setAmount(balance) : undefined}
                 maxDisabled={!balance}
                 balanceText={balance != null
@@ -887,5 +954,12 @@ function readMinDepth(info) {
     const raw = info?.minDepth ?? info?.min_depth ?? null;
     if (raw === null || raw === undefined) return null;
     const n = Number(raw);
-    return Number.isInteger(n) && n > 0 ? n : null;
+    return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+function bridgeSettingsSnapshot(info) {
+    return JSON.stringify({
+        chains: bridgeChainsList(info?.bridgeChains ?? info?.bridge_chains ?? null),
+        minDepth: readMinDepth(info),
+    });
 }

@@ -37,6 +37,7 @@ import styles from './AmountField.module.css';
  * @param {string} [props.fiatCurrency]                      fallback fiat code when `fiatRate.fiatCurrency` is missing
  * @param {'coin' | 'fiat'} [props.amountInputMode]
  * @param {(rawValue: string, cursorPos: number | null) => void} props.onAmountFieldChange
+ * @param {(error: string | null) => void} [props.onValidationError]
  * @param {() => void} [props.toggleAmountInputMode]
  * @param {import('react').RefObject<HTMLInputElement>} [props.inputRef]
  * @param {() => void} [props.onMax]                         when omitted, the inline Max button is hidden
@@ -63,6 +64,7 @@ export function AmountField({
     error,
     divisibility,
     onAmountFieldChange,
+    onValidationError,
     toggleAmountInputMode,
     inputRef,
     onMax,
@@ -99,15 +101,20 @@ export function AmountField({
             : null;
 
         if (normalized === null) {
-            setInputError('Enter a valid decimal amount, such as 1,234.56 or 1.234,56.');
+            const message = 'Enter a valid decimal amount, such as 1,234.56 or 1.234,56.';
+            setInputError(message);
+            onValidationError?.(message);
             return;
         }
         const fraction = normalized.includes('.') ? normalized.split('.')[1] : '';
         if (decimalLimit !== null && fraction.length > decimalLimit) {
-            setInputError(`Amount can have at most ${decimalLimit} decimal places.`);
+            const message = `Amount can have at most ${decimalLimit} decimal places.`;
+            setInputError(message);
+            onValidationError?.(message);
             return;
         }
         setInputError('');
+        onValidationError?.(null);
         const usesDotDecimal = formatWithThousands('1.1').includes('.');
         onAmountFieldChange(normalized, usesDotDecimal ? normalizedCursor : null);
     };
@@ -149,6 +156,7 @@ export function AmountField({
                         icon={null}
                         onClick={() => {
                             setInputError('');
+                            onValidationError?.(null);
                             onMax();
                         }}
                         disabled={maxDisabled || maxBusy}
