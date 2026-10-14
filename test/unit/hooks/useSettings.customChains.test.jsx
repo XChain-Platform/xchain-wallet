@@ -15,7 +15,7 @@
 // surface there kept showing bundled chains only.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useSettings } from '../../../packages/core/src/shared/hooks/useSettings.js';
 import { defaultRegistry, BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
@@ -41,6 +41,28 @@ afterEach(() => {
 });
 
 describe('useSettings custom-chain hydration', () => {
+    it('uses USD for unsupported saved currencies and updates every mounted consumer', async () => {
+        const messaging = {
+            getSettings: async () => ({ fiatCurrency: 'XYZ' }),
+            updateSettings: async (patch) => patch,
+        };
+        const first = renderHook(() => useSettings(), { wrapper: wrapperFor(messaging) });
+        const second = renderHook(() => useSettings(), { wrapper: wrapperFor(messaging) });
+        await waitFor(() => expect(first.result.current.loading).toBe(false));
+        await waitFor(() => expect(second.result.current.loading).toBe(false));
+
+        expect(first.result.current.settings.fiatCurrency).toBe('USD');
+        expect(first.result.current.unsupportedFiatCurrency).toBe('XYZ');
+
+        await act(async () => {
+            await first.result.current.update({ fiatCurrency: 'EUR' });
+        });
+
+        expect(first.result.current.settings.fiatCurrency).toBe('EUR');
+        expect(second.result.current.settings.fiatCurrency).toBe('EUR');
+        expect(first.result.current.unsupportedFiatCurrency).toBeNull();
+    });
+
     it('installs settings.customChains into the realm registry on a successful read', async () => {
         const reg = defaultRegistry();
         expect(reg.has(CUSTOM_ID)).toBe(false);
