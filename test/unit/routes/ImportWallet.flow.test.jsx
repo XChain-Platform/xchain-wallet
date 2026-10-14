@@ -143,7 +143,7 @@ describe('wallet import flow', () => {
         fillPhrase(PHRASE.split(' ').slice(0, 11).join(' '));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Expected 12, 15, 18, 21, 24 words, got 11.',
+            'Expected 12, 15, 18, 21, or 24 words, got 11.',
         );
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
     });
