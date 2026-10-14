@@ -28,15 +28,13 @@ describe('NetworkBanner', () => {
         expect(screen.queryByRole('status')).toBeNull();
     });
 
-    it('is mounted in every application shell persistent header', () => {
-        const expectedWiring = new Map([
-            ['packages/web/src/App.jsx', '<NetworkBanner activeNetwork={activeNetwork} />'],
-            ['packages/desktop/renderer/App.jsx', '<NetworkBanner activeNetwork={settings?.activeNetwork} />'],
-            ['packages/extension/src/popup/App.jsx', '<NetworkBanner activeNetwork={settings?.activeNetwork} />'],
-        ]);
-
-        for (const [file, wiring] of expectedWiring) {
-            expect(readFileSync(join(process.cwd(), file), 'utf8'), file).toContain(wiring);
+    it('is absent from the web and extension application shells', () => {
+        for (const file of [
+            'packages/web/src/App.jsx',
+            'packages/extension/src/popup/App.jsx',
+        ]) {
+            const source = readFileSync(join(process.cwd(), file), 'utf8');
+            expect(source, file).not.toContain('NetworkBanner');
         }
     });
 });

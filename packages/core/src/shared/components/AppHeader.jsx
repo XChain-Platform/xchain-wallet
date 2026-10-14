@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // AppHeader: persistent top strip that stays mounted across every
-// unlocked route. Brand and wallet identity stay on the left. Network
-// status, lock, and one overflow menu stay on the right. Living in the FullLayoutWithNav
+// unlocked route. Brand and wallet identity stay on the left. Lock and
+// one overflow menu stay on the right. Living in the FullLayoutWithNav
 // header slot means TokenDetail / Send / Receive / Settings all keep the
 // wallet's top-level affordances visible without re-rendering their own
 // copy. `onMenuOpen` fires from the overflow menu's More row; the parent
@@ -22,7 +22,6 @@ import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import { HeaderActionMenu } from './HeaderActionMenu.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { WalletIdentity } from './WalletIdentity.jsx';
-import { NetworkStatusIndicator } from './NetworkStatusIndicator.jsx';
 import styles from './AppHeader.module.css';
 
 /**
@@ -51,7 +50,6 @@ import styles from './AppHeader.module.css';
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
- * @param {() => void} [props.onOpenNetworkSettings]                 opens the per-chain endpoint settings screen
  * @param {() => void} [props.onPopOut]                              opens this wallet surface in a separate browser window or extension tab
  */
 export function AppHeader({
@@ -79,7 +77,6 @@ export function AppHeader({
     developerMode = false,
     onActiveNetworkChange,
     platformCurrent,
-    onOpenNetworkSettings,
     onPopOut,
 }) {
     const networkWired = showNetworkFilter
@@ -111,14 +108,6 @@ export function AppHeader({
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
-                {onOpenNetworkSettings ? (
-                    <span className={styles.actionSlot} data-header-control>
-                        <NetworkStatusIndicator
-                            activeNetwork={activeNetwork}
-                            onOpenNetworkSettings={onOpenNetworkSettings}
-                        />
-                    </span>
-                ) : null}
                 {onLock ? (
                     <Button
                         variant="secondary"

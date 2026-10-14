@@ -2653,12 +2653,8 @@ function AppInner() {
             }
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
-                    {/* `demoBannerInHeader`: this shell mounts DemoBanner in
-                        the layout header, which already renders above Home, so Home
-                        must not mount a second one. */}
                     <Home
                     activeWalletId={activeWalletId}
-                    demoBannerInHeader
                     onLocked={refresh}
                     onSend={activeWalletId ? () => {
                         setSendPrefill(null);
@@ -2831,7 +2827,6 @@ function AppInner() {
                             isWatcherMode={isWatcherMode}
                             activeWallet={activeWalletId ? { id: activeWalletId, name: activeWalletName } : null}
                             activeNetwork={settings?.activeNetwork}
-                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                         />
                     }
                     notices={

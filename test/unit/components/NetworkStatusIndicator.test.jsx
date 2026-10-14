@@ -44,18 +44,14 @@ afterEach(() => {
 });
 
 describe('NetworkStatusIndicator', () => {
-    it('shows the connected state and links to network settings', () => {
+    it('is not rendered by AppHeader even when network settings are wired', () => {
         const onOpenNetworkSettings = vi.fn();
         render(<AppHeader onOpenNetworkSettings={onOpenNetworkSettings} />);
 
         const header = screen.getByRole('region', { name: 'App header' });
-        const trigger = screen.getByRole('button', { name: 'Mainnet. Network connected' });
-        expect(header).toContainElement(trigger);
-        expect(trigger.closest('[data-state]')).toHaveAttribute('data-state', 'normal');
-        fireEvent.click(trigger);
-        expect(screen.getByText('All selected chains are reachable.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Network settings' }));
-        expect(onOpenNetworkSettings).toHaveBeenCalledOnce();
+        expect(header.querySelector('[data-state]')).toBeNull();
+        expect(screen.queryByRole('button', { name: /Network connected/ })).toBeNull();
+        expect(onOpenNetworkSettings).not.toHaveBeenCalled();
     });
 
     it('names every affected chain in a degraded state', () => {
@@ -121,17 +117,12 @@ describe('NetworkStatusIndicator', () => {
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
-    it('is wired into every unlocked shell header', () => {
-        const shellPaths = [
-            'packages/web/src/App.jsx',
-            'packages/desktop/renderer/App.jsx',
-            'packages/extension/src/popup/App.jsx',
-        ];
-        for (const path of shellPaths) {
-            const source = readFileSync(join(process.cwd(), path), 'utf8');
-            expect(source, path).toMatch(/<AppHeader\b/);
-            expect(source, path).toMatch(/onOpenNetworkSettings=\{/);
-            expect(source, path).toContain("openSettingsSection('network-endpoints')");
-        }
+    it('is not wired into the shared application header', () => {
+        const source = readFileSync(join(
+            process.cwd(),
+            'packages/core/src/shared/components/AppHeader.jsx',
+        ), 'utf8');
+        expect(source).not.toContain('NetworkStatusIndicator');
+        expect(source).not.toContain('onOpenNetworkSettings');
     });
 });
