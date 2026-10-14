@@ -126,6 +126,32 @@ describe('transaction detail field sources', () => {
             .toHaveAttribute('href', 'https://explorer.xchain.io/BTC/action/42');
     });
 
+    it.each([
+        ['an outgoing send', entry(), 'Send #42'],
+        ['an incoming send', entry({
+            source: THEIRS,
+            raw: { source: THEIRS, destination: OURS, amount: '3.25', tick: 'WALLETCOIN' },
+        }), 'Receive #42'],
+        // Home's rows can arrive without the wallet address list; the row's
+        // own address still says the value came in.
+        ['an incoming send with no wallet address list', entry({
+            source: THEIRS,
+            raw: { source: THEIRS, destination: OURS, amount: '3.25', tick: 'WALLETCOIN' },
+            detailContext: { chainTip: 110 },
+        }), 'Receive #42'],
+        ['a pending incoming send', entry({
+            source: THEIRS,
+            actionIndex: '',
+            blockIndex: 0,
+            raw: { source: THEIRS, destination: OURS, amount: '3.25', tick: 'WALLETCOIN' },
+        }), 'Receive'],
+        ['a non-transfer action', entry({ action: 'ISSUE' }), 'Issue #42'],
+    ])('names %s by its direction in the page header', (_label, value, title) => {
+        renderDetails(value);
+
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(new RegExp(`^${title}$`));
+    });
+
     it('shows token-action amounts without inventing transfer direction or a counterparty', () => {
         renderDetails(entry({
             action: 'ISSUE',

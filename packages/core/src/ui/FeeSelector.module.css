@@ -136,6 +136,19 @@
 
 .sliderTick:disabled { cursor: not-allowed; }
 
+/* The tier label stays compact; on a touch screen a transparent layer
+   gives it a 44px target, centred on the control (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .sliderTick::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
+}
+
 .sliderTickActive {
     color: var(--xc-text);
     font-weight: 600;
