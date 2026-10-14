@@ -642,9 +642,9 @@ export function Locked({ onUnlocked }) {
                                         </>
                                     ) : (
                                         <>
-                                            <p className={styles.wipeWarning}>
+                                            <StatusMessage variant="warning" className={styles.wipeWarning}>
                                                 <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
-                                            </p>
+                                            </StatusMessage>
                                             <p className={styles.wipeNote}>
                                                 Funds on the blockchain are unaffected. Continue only if you have the {restoreLane === 'backup' ? 'encrypted backup file' : 'recovery phrase'} for every wallet you need. After erasing this vault, the app opens the {restoreLane === 'backup' ? 'backup-file restore' : 'recovery-phrase restore'} form.
                                             </p>
