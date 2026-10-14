@@ -148,6 +148,9 @@ for (const viewport of VIEWPORTS) {
         const outgoing = historyRow(page, 'bitcoin-regtest', 100002);
         await outgoing.locator('button').first().click();
         await expect(page.getByRole('heading', { name: 'Send #100,002' })).toBeVisible();
+        // The detail opens on its Status tab; the amount lives under Details.
+        await page.getByRole('tablist', { name: 'Action detail view' })
+            .getByRole('tab', { name: 'Details', exact: true }).click();
         const amountCell = page.getByRole('rowheader', { name: 'Amount' }).first()
             .locator('xpath=following-sibling::td');
         await expect(amountCell).toContainText('-5,000,000');
