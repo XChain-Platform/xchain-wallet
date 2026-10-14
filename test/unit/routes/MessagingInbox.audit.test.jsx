@@ -32,14 +32,14 @@ const REQUEST = Object.freeze({
     timestamp: 1,
 });
 
-function messagingFor({ addresses = { [CHAIN]: [OWNER] }, messages = [], ready = true } = {}) {
+function messagingFor({ addresses = { [CHAIN]: [OWNER] }, messages = [], errors = [], ready = true } = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         listContacts: vi.fn().mockResolvedValue([]),
         signerReady: vi.fn().mockResolvedValue({ ready }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: ready ? 'unlocked' : 'locked' }),
-        getMessagingInboxSweep: vi.fn().mockResolvedValue({ messages, addresses: [], errors: [] }),
+        getMessagingInboxSweep: vi.fn().mockResolvedValue({ messages, addresses: [], errors }),
     };
     return new Proxy(target, {
         get(value, prop) {
@@ -49,7 +49,7 @@ function messagingFor({ addresses = { [CHAIN]: [OWNER] }, messages = [], ready =
     });
 }
 
-function mount(messaging) {
+function mount(messaging, props = {}) {
     return render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
@@ -58,6 +58,7 @@ function mount(messaging) {
             activeAccountId: 'account-1',
             onCompose() {},
             onBack() {},
+            ...props,
         }),
     ));
 }
@@ -154,6 +155,34 @@ describe('MessagingInbox audit states', () => {
         await screen.findByText('No messages yet');
         expect(screen.queryByRole('button', { name: 'Share my key' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull();
+    });
+
+    it('shows an inbox key-share encoder failure as plain copy', async () => {
+        const failure = new Error('no spendable UTXOs found for the funding address');
+        failure.name = 'SDKEncoderError';
+        failure.code = 'ENCODER_NO_UTXOS';
+        const messaging = messagingFor({ messages: [REQUEST] });
+        messaging.composeForConfirm = vi.fn().mockRejectedValue(failure);
+        mount(messaging);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Share my key' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toMatch(/transaction service could not complete this request/i);
+        expect(alert.textContent).not.toMatch(/no spendable UTXOs/i);
+    });
+
+    it('shows partial indexer failures as plain copy instead of an empty success', async () => {
+        mount(messagingFor({
+            errors: [{
+                addressId: OWNER.id,
+                error: 'Explorer returned HTTP 502 for /BTC/api/messages?address=secret',
+            }],
+        }));
+
+        const warning = await screen.findByText(/could not be loaded from 1 address/i);
+        expect(warning.textContent).toMatch(/chain service did not answer/i);
+        expect(warning.textContent).not.toMatch(/\/api\/messages|secret|HTTP 502/i);
     });
 
     it('wraps long text, links only HTTP(S), opens links safely, and copies the message', async () => {
@@ -295,5 +324,18 @@ describe('MessagingInbox scope and thread isolation', () => {
 
         fireEvent.click(screen.getByText('message A'));
         expect(screen.getByLabelText('Message').value).toBe('draft for A');
+    });
+
+    it('shows a plain validation message for an empty quick reply', async () => {
+        const onCompose = vi.fn();
+        mount(messagingFor({ messages: [
+            incoming({ from: 'peer-a', txid: 'tx-a', text: 'message A', timestamp: 2 }),
+        ] }), { onCompose });
+
+        fireEvent.click(await screen.findByText('message A'));
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+        expect(screen.getByRole('alert').textContent).toBe('Write a message before continuing.');
+        expect(onCompose).not.toHaveBeenCalled();
     });
 });
