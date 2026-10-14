@@ -149,14 +149,28 @@ describe('settings form validation', () => {
         expect(screen.getByRole('option', { name: 'pseudo-rtl' })).toHaveValue('pseudo-rtl');
     });
 
-    it('confirms contact imports through a danger action', async () => {
+    it('presents equal secondary contact actions in one wrapping row', async () => {
         render(<ContactsSection />);
         await screen.findByText('0 contacts stored');
 
+        const exportButton = screen.getByRole('button', { name: 'Export…' });
+        const csvButton = screen.getByRole('button', { name: 'Export CSV…' });
         const importButton = screen.getByRole('button', { name: 'Import…' });
-        expect(importButton.className).toMatch(/danger/);
-        const importRow = screen.getByText('Import').parentElement.parentElement;
-        expect(importRow.style.border).toBe('1px solid var(--xc-border)');
+        const actions = importButton.parentElement;
+
+        expect(actions.style.flexWrap).toBe('wrap');
+        expect(actions.children).toEqual(expect.objectContaining({
+            0: exportButton,
+            1: csvButton,
+            2: importButton,
+        }));
+        for (const button of [exportButton, csvButton, importButton]) {
+            expect(button.className).toMatch(/secondary/);
+            expect(button.className).toMatch(/sm/);
+            expect(button.style.width).toBe('9.5rem');
+            expect(button.style.flex).toBe('0 0 9.5rem');
+            expect(button.style.whiteSpace).toBe('nowrap');
+        }
 
         const file = {
             name: 'contacts.json',

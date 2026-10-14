@@ -35,6 +35,18 @@ import {
     Status,
 } from './_settingsPrimitives.jsx';
 
+const CONTACT_ACTIONS = {
+    display: 'flex',
+    flex: '1 1 100%',
+    flexWrap: 'wrap',
+    gap: 'var(--xc-space-2)',
+};
+const CONTACT_ACTION_BUTTON = {
+    flex: '0 0 9.5rem',
+    width: '9.5rem',
+    whiteSpace: 'nowrap',
+};
+
 export function ContactsSection() {
     const { messaging } = useMessaging();
     const confirmDialog = useConfirmModal();
@@ -170,18 +182,6 @@ export function ContactsSection() {
                     </span>
                 </div>
             </div>
-            <div style={ROW}>
-                <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Export</span>
-                    <span style={ROW_HINT}>Saves plain JSON or spreadsheet-compatible CSV. Neither format is encrypted.</span>
-                </div>
-                <Button type="button" size="sm" variant="secondary" onClick={onExport} disabled={count === 0}>
-                    Export…
-                </Button>
-                <Button type="button" size="sm" variant="secondary" onClick={onExportCsv} disabled={count === 0}>
-                    Export CSV…
-                </Button>
-            </div>
             <div
                 {...importDrop.rootProps}
                 style={{
@@ -191,9 +191,10 @@ export function ContactsSection() {
                 }}
             >
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Import</span>
+                    <span style={ROW_VALUE}>Export and import</span>
                     <span style={ROW_HINT}>
-                        Reads contacts JSON or CSV, or drop one here. Existing contacts with the same id are overwritten.
+                        Saves or reads plain JSON and spreadsheet-compatible CSV. Neither format is encrypted.
+                        Choose a file or drop one here to import it. Existing contacts with the same id are overwritten.
                     </span>
                 </div>
                 <input
@@ -204,14 +205,37 @@ export function ContactsSection() {
                     aria-label="Import contacts JSON"
                     style={{ display: 'none' }}
                 />
-                <Button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    size="sm"
-                    variant="danger"
-                >
-                    Import…
-                </Button>
+                <div style={CONTACT_ACTIONS}>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        style={CONTACT_ACTION_BUTTON}
+                        onClick={onExport}
+                        disabled={count === 0}
+                    >
+                        Export…
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        style={CONTACT_ACTION_BUTTON}
+                        onClick={onExportCsv}
+                        disabled={count === 0}
+                    >
+                        Export CSV…
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        size="sm"
+                        variant="secondary"
+                        style={CONTACT_ACTION_BUTTON}
+                    >
+                        Import…
+                    </Button>
+                </div>
             </div>
             {importResult ? (
                 <>
