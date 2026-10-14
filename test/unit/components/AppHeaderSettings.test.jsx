@@ -307,6 +307,31 @@ describe('AppHeader action row', () => {
         expect(screen.queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(trigger);
     });
+
+    it('supports arrow, Enter, and Tab keys in the scan overflow menu', () => {
+        const onManageAddresses = vi.fn();
+        render(<AppHeader onScan={() => {}} onManageAddresses={onManageAddresses} onViewAddress={() => {}} />);
+        const trigger = screen.getByRole('button', { name: 'Scan and addresses' });
+
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('menuitem', { name: 'Scan' })).toHaveFocus();
+
+        fireEvent.keyDown(document.activeElement, { key: 'ArrowDown' });
+        const manage = screen.getByRole('menuitem', { name: 'Manage addresses' });
+        expect(manage).toHaveFocus();
+        fireEvent.keyDown(manage, { key: 'Enter' });
+        expect(onManageAddresses).toHaveBeenCalledOnce();
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.keyDown(trigger, { key: 'ArrowUp' });
+        const view = screen.getByRole('menuitem', { name: 'View address' });
+        expect(view).toHaveFocus();
+        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        fireEvent(view, event);
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(event.defaultPrevented).toBe(false);
+    });
 });
 
 describe('HeaderSettingsButton section gating', () => {

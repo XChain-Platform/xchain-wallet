@@ -205,6 +205,8 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const menuRef = useRef(null);
+    const focusOnOpenRef = useRef('first');
     const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus();
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
@@ -229,6 +231,13 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
         };
     }, [open]);
 
+    useEffect(() => {
+        if (!open) return;
+        const items = Array.from(menuRef.current?.querySelectorAll('[role="menuitem"]') || []);
+        const target = focusOnOpenRef.current === 'last' ? items.at(-1) : items[0];
+        target?.focus();
+    }, [open]);
+
     const items = [
         { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, handler: onScan },
         { id: 'manage', label: 'Manage addresses', Icon: Icon.AddressIcon, handler: onManageAddresses },
@@ -238,6 +247,34 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     // The clamp keeps the anchored menu reachable at phone widths.
     const clamp = useViewportClamp(open);
 
+    const openMenu = (focus = 'first') => {
+        focusOnOpenRef.current = focus;
+        setOpen(true);
+    };
+
+    const onMenuKeyDown = (e) => {
+        if (e.key === 'Tab') {
+            setOpen(false);
+            return;
+        }
+        const menuItems = Array.from(menuRef.current?.querySelectorAll('[role="menuitem"]') || []);
+        if (menuItems.length === 0) return;
+        const index = menuItems.indexOf(document.activeElement);
+        if ((e.key === 'Enter' || e.key === ' ') && index >= 0) {
+            e.preventDefault();
+            menuItems[index].click();
+            return;
+        }
+        let nextIndex = null;
+        if (e.key === 'ArrowDown') nextIndex = (index + 1) % menuItems.length;
+        if (e.key === 'ArrowUp') nextIndex = (index - 1 + menuItems.length) % menuItems.length;
+        if (e.key === 'Home') nextIndex = 0;
+        if (e.key === 'End') nextIndex = menuItems.length - 1;
+        if (nextIndex === null) return;
+        e.preventDefault();
+        menuItems[nextIndex]?.focus();
+    };
+
     if (items.length === 0) return null;
 
     return (
@@ -246,7 +283,15 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
                 <Button
                     variant="secondary"
                     icon={<Icon.ScanIcon />}
-                    onClick={() => setOpen((v) => !v)}
+                    onClick={() => {
+                        if (open) setOpen(false);
+                        else openMenu();
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+                        e.preventDefault();
+                        openMenu(e.key === 'ArrowUp' ? 'last' : 'first');
+                    }}
                     aria-haspopup="menu"
                     aria-expanded={open ? 'true' : 'false'}
                     aria-label="Scan and addresses"
@@ -254,7 +299,17 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
                 />
             </span>
             {open ? (
-                <div ref={clamp.ref} style={clamp.style} className={styles.scanMenu} role="menu" aria-label="Scan and addresses">
+                <div
+                    ref={(node) => {
+                        menuRef.current = node;
+                        clamp.ref.current = node;
+                    }}
+                    style={clamp.style}
+                    className={styles.scanMenu}
+                    role="menu"
+                    aria-label="Scan and addresses"
+                    onKeyDown={onMenuKeyDown}
+                >
                     {/* Menu rows stay native buttons to preserve menuitem and full-row semantics. */}
                     {items.map(({ id, label, Icon: ItemIcon, handler }) => (
                         <button
