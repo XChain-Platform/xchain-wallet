@@ -104,8 +104,9 @@ describe('shared components at a 320px viewport', () => {
         );
 
         expect(screen.getByText(label)).toHaveTextContent(label);
-        const narrow = mediaBlock(css.actionIntent, 'not all and (min-width: 400px)');
+        const narrow = mediaBlock(css.actionIntent, '(max-width: 480px)');
         expect(narrow).toMatch(/\.row,\s*\.delta\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+        expect(css.actionIntent).not.toMatch(/@container|container-type/);
         expect(ruleBody(css.actionIntent, '.row dt')).not.toMatch(/text-overflow|white-space:\s*nowrap/);
         expectNoFixedWidthBeyondViewport(css.actionIntent);
     });

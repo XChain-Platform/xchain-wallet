@@ -50,10 +50,24 @@ describe('Chrome 102 CSS compatibility audit', () => {
         expect(audit(css)).toEqual([]);
     });
 
-    it('keeps every Settings :has() selector behind its feature guard', () => {
-        const css = readFileSync(join(
+    it('keeps the Settings narrow fallback independent of :has()', () => {
+        const settingsCss = readFileSync(join(
             process.cwd(), 'packages', 'core', 'src', 'shared', 'routes', 'Settings.module.css',
         ), 'utf8');
+        expect(settingsCss).not.toContain(':has(');
+        expect(settingsCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.page div\s*\{[\s\S]*flex-wrap:\s*wrap !important;/);
+        expect(audit(settingsCss)).toEqual([]);
+    });
+
+    it.each([
+        'ConfirmActionModal.module.css',
+        'ActionIntentSummary.module.css',
+    ])('uses viewport reflow without container queries in %s', (file) => {
+        const css = readFileSync(join(
+            process.cwd(), 'packages', 'core', 'src', 'shared', 'components', file,
+        ), 'utf8');
+        expect(css).toContain('@media (max-width: 480px)');
+        expect(css).not.toMatch(/@container|container-type/);
         expect(audit(css)).toEqual([]);
     });
 });
