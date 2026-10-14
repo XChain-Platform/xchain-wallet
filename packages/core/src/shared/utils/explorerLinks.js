@@ -12,6 +12,7 @@ const ROUTE_SEGMENTS = Object.freeze({
     transaction: 'tx',
     action: 'action',
     address: 'address',
+    block: 'block',
     token: 'token',
     dispenser: 'dispenser',
 });
