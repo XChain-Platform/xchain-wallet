@@ -394,7 +394,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         <img
                             src={branding.logoUrl()}
                             alt={branding.PRODUCT_NAME}
-                            className={isFull ? styles.logoFull : styles.logoPopup}
+                            className={`${isFull ? styles.logoFull : styles.logoPopup} ${styles.licenseLogo}`}
                         />
                     )}
                     actions={(

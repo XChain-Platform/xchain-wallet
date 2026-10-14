@@ -646,7 +646,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                             id="create-bip39-passphrase"
                             type="password"
                             label="BIP39 passphrase"
-                            hint="Required when enabled. Capitalization and spaces matter."
+                            hint="Required when enabled."
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
