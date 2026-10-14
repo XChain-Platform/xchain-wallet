@@ -9,8 +9,9 @@
 // contact legal@dankest.llc.
 
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
+import { AssetMark } from '../../ui/AssetMark.jsx';
+export { tickerColor } from '../../ui/AssetMark.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
@@ -241,7 +242,6 @@ export const BalanceList = memo(function BalanceList({
 
 const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, getTabIndex, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
-    const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
         : null;
@@ -301,9 +301,6 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     }, [clickable, onSelect, row.chainId, row.tick, row.kind, row.displayName,
         row.divisibility, row.fiatRate, row.fiatRateSource, row.quantity, tokenImageUrl]);
     const handleClick = clickable ? handleClickCallback : undefined;
-    const handleImageError = useCallback((event) => {
-        event.currentTarget.style.display = 'none';
-    }, []);
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
     const handleTogglePin = useCallback((event) => {
@@ -347,49 +344,14 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                 aria-label={clickable ? rowAccessibleLabel : undefined}
                 tabIndex={roving ? getTabIndex(row) : undefined}
                 data-balance-option={roving ? pinKey : undefined}
-                leading={<span className={styles.iconWrap}>
-                    <span
-                        className={styles.iconLetter}
-                        style={{ background: tickerColor(row.tick) }}
-                        aria-hidden="true"
-                    >
-                        {row.tick.slice(0, 1) || '?'}
-                    </span>
-                    {isNative && chainIconUrl ? (
-                        <img
-                            src={chainIconUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.iconImg}
-                            loading="lazy"
-                            decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                            onError={handleImageError}
-                        />
-                    ) : tokenImageUrl ? (
-                        <img
-                            src={tokenImageUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.iconImg}
-                            loading="lazy"
-                            decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                            onError={handleImageError}
-                        />
-                    ) : null}
-                    {!isNative && chainIconUrl ? (
-                        <img
-                            src={chainIconUrl}
-                            alt=""
-                            aria-hidden="true"
-                            title={row.chainDisplayName}
-                            className={styles.chainOverlay}
-                            loading="lazy"
-                            decoding="async"
-                        />
-                    ) : null}
-                </span>}
+                leading={(
+                    <AssetMark
+                        chainId={row.chainId}
+                        tick={row.tick}
+                        imageUrl={tokenImageUrl}
+                        isNative={isNative}
+                    />
+                )}
                 title={(
                     <span className={styles.title}>
                         <span className={styles.name} title={row.displayName}>{row.displayName}</span>
@@ -982,19 +944,4 @@ function formatRowFiat(row, value, currency) {
     const formatted = formatFiat(value, currency);
     if (!formatted || row?.kind === 'native' || row?.fiatRateSource !== 'market') return formatted;
     return `${formatted} · DEX price`;
-}
-
-// Every chip carries white text, so each swatch is dark enough for 4.5:1
-// against #FFFFFF (the brighter Tailwind 400/500 steps measured 2.0 to 3.0).
-const PALETTE = [
-    '#1A74A8', '#7B2C8F', '#0369A1', '#047857', '#B45309',
-    '#DC2626', '#7C3AED', '#BE185D', '#0F766E', '#C2410C',
-    '#4F46E5', '#4D7C0F', '#0E7490', '#9333EA', '#BE123C',
-];
-export function tickerColor(tick) {
-    let h = 0;
-    for (let i = 0; i < tick.length; i += 1) {
-        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
-    }
-    return PALETTE[h % PALETTE.length];
 }
