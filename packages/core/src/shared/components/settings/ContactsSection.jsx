@@ -26,7 +26,14 @@ import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { contactsFromCsv, contactsToCsv } from '../../utils/contactsCsv.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
-import { ROW, ROW_HINT, ROW_VALUE, STACK, Status } from './_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_COPY,
+    ROW_HINT,
+    ROW_VALUE,
+    STACK,
+    Status,
+} from './_settingsPrimitives.jsx';
 
 export function ContactsSection() {
     const { messaging } = useMessaging();
@@ -156,7 +163,7 @@ export function ContactsSection() {
     return (
         <div style={STACK}>
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>Contacts in this wallet</span>
                     <span style={ROW_HINT}>
                         {count === null ? 'Loading…' : `${count} contact${count === 1 ? '' : 's'} stored`}
@@ -164,7 +171,7 @@ export function ContactsSection() {
                 </div>
             </div>
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>Export</span>
                     <span style={ROW_HINT}>Saves plain JSON or spreadsheet-compatible CSV. Neither format is encrypted.</span>
                 </div>
@@ -183,7 +190,7 @@ export function ContactsSection() {
                     transition: 'border-color 120ms ease',
                 }}
             >
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>Import</span>
                     <span style={ROW_HINT}>
                         Reads contacts JSON or CSV, or drop one here. Existing contacts with the same id are overwritten.
