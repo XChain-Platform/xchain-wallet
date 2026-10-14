@@ -108,7 +108,10 @@
     display: block;
 }
 
+/* Block so the ellipsis applies: on an inline span a long list name ran under
+   the status chip and off the row instead of truncating. */
 .name {
+    display: block;
     font-weight: 600;
     color: var(--xc-text);
     overflow: hidden;
