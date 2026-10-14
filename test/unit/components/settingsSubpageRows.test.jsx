@@ -16,7 +16,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
-import { ROW, SettingsActionRow, SettingsFieldRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import { ROW_LAYOUT, SettingsActionRow, SettingsFieldRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import cardStyles from '../../../packages/core/src/ui/Card.module.css';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
 const SETTINGS_DIR = join(process.cwd(), 'packages/core/src/shared');
@@ -70,8 +71,10 @@ describe('Settings action rows', () => {
             </SettingsActionRow>,
         );
         const row = container.firstElementChild;
-        expect(row.style.border).toBe(ROW.border);
-        expect(row.style.padding).toBe(ROW.padding);
+        // The row is the shared card; its inline style carries only layout.
+        expect(row).toHaveClass(cardStyles.card);
+        expect(row.style.display).toBe(ROW_LAYOUT.display);
+        expect(row.style.border).toBe('');
         expect(getByRole('heading', { name: 'Back up recovery phrase' })).toBeTruthy();
         // The label never names the button, so its accessible name stays its own text.
         expect(getByRole('button', { name: 'Show…' })).toBeTruthy();
