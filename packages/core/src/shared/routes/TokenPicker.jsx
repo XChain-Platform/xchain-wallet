@@ -20,6 +20,7 @@ import {
     coinFromChainId,
 } from '../components/BalanceList.jsx';
 import { NetworkFilter } from '../components/NetworkFilter.jsx';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -123,6 +124,7 @@ export function TokenPicker({
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
     const [balanceReload, setBalanceReload] = useState(0);
+    const { unchecked: balancesUnchecked, checking: balancesChecking, recheck: recheckBalances } = useBalancesUnchecked();
     const [balanceLoad, setBalanceLoad] = useState({
         walletId: null,
         accountId: null,
@@ -629,6 +631,17 @@ export function TokenPicker({
                             getRowTabIndex={(row) => (
                                 `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
                             )}
+                        />
+                    ) : (platformResults.length === 0 && !platformBusy && !platformError && balancesUnchecked && !tokenQueryTrim) ? (
+                        // An empty list while balances could not be checked is
+                        // not proof of an empty wallet: say that once instead.
+                        <BalancesUncheckedState
+                            plain={false}
+                            checking={balancesChecking}
+                            onRetry={() => {
+                                recheckBalances();
+                                setBalanceReload((value) => value + 1);
+                            }}
                         />
                     ) : (platformResults.length === 0 && !platformBusy && !platformError) ? (
                         <EmptyState

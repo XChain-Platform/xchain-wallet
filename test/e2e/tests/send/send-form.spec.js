@@ -212,10 +212,33 @@ test('a zero-balance wallet offers Receive instead of the Send form', async ({ p
     await createWallet(page, { password: PASSWORD });
     await gotoSection(page, 'Send');
 
-    await expect(page.getByRole('heading', { name: 'Nothing to send yet', exact: true }))
+    // The dev services are not running, so once the balance check gives up the
+    // same screen says the balances could not be checked; either way it offers
+    // Receive and no form.
+    await expect(page.getByRole('heading', { name: 'Nothing to send yet', exact: true })
+        .or(page.getByRole('heading', { name: 'Balances could not be checked', exact: true })))
         .toBeVisible();
     await expect(page.getByRole('form', { name: 'Send' })).toHaveCount(0);
 
     await mainButton(page, 'Receive').click();
     await expect(page.getByRole('heading', { name: 'Receive', exact: true })).toBeVisible();
+});
+
+test('a zero-balance wallet whose balances could not be checked says so once', async ({ page }) => {
+    test.slow();
+    await serveZeroBalances(page);
+    await createWallet(page, { password: PASSWORD });
+    // No dev services run here, so the check fails once its startup grace
+    // ends; Home's empty Coins tab is the first place that says so.
+    const unchecked = page.getByText('Balances could not be checked', { exact: true });
+    await expect(unchecked.first()).toBeVisible({ timeout: 90_000 });
+    await gotoSection(page, 'Send');
+
+    await expect(page.getByRole('heading', { name: 'Balances could not be checked', exact: true })).toBeVisible();
+    await expect(page.getByText('Your balance may be out of date. Try again to refresh it.')).toBeVisible();
+    // One message: no "Nothing to send yet" and no stale-balances notice beside it.
+    await expect(page.getByText('Nothing to send yet')).toHaveCount(0);
+    await expect(page.getByText('Some balances may be out of date')).toHaveCount(0);
+    await expect(mainButton(page, 'Try again')).toBeVisible();
+    await expect(mainButton(page, 'Receive')).toBeVisible();
 });

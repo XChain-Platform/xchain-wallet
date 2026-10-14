@@ -197,7 +197,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const browserOnline = useOnlineStatus();
-    const { overall: reachabilityOverall } = useReachability({});
+    const {
+        overall: reachabilityOverall,
+        loading: reachabilityChecking,
+        refresh: recheckReachability,
+    } = useReachability({});
     // Treat a corroborated service outage as offline even when the device
     // still has a live Wi-Fi or Ethernet interface.
     const offline = !browserOnline || reachabilityOverall === 'offline';
@@ -921,6 +925,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         () => runNetworkAction('Refreshing balances', refreshPortfolio),
         [runNetworkAction, refreshPortfolio],
     );
+    // Try again from the "Balances could not be checked" state.
+    const recheckBalances = useCallback(() => {
+        recheckReachability();
+        refreshPortfolioOnline();
+    }, [recheckReachability, refreshPortfolioOnline]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -1482,6 +1491,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         hideSmallBalances={hideSmallBalances}
                         onRefresh={refreshPortfolioOnline}
                         refreshing={portfolioRefreshing}
+                        // Offline already has its own message above; a degraded
+                        // check words the empty tabs instead.
+                        balancesUnchecked={!offline && reachabilityOverall === 'degraded'}
+                        onRecheckBalances={recheckBalances}
+                        recheckingBalances={reachabilityChecking || portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
