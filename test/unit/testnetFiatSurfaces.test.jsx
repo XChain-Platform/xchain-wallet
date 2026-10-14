@@ -216,8 +216,8 @@ describe('test-network fiat suppression', () => {
             />,
         );
 
-        expect(screen.getByText('−0.0001 BTC')).toBeInTheDocument();
-        expect(screen.getByText('− BTC 0.0001')).toBeInTheDocument();
+        // The coin delta and the fee line both read amount then ticker.
+        expect(screen.getAllByText('−0.0001 BTC')).toHaveLength(2);
         expect(document.body).not.toHaveTextContent('$');
         expect(document.body).not.toHaveTextContent('Fiat unavailable');
     });

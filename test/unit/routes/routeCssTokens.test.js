@@ -20,7 +20,7 @@ const styles = Object.fromEntries(files.map((file) => [
 
 const rawPixelExceptions = {
     'ActionsMenu.module.css': ['260px', '1px', '2px', '2px'],
-    'AddAddressModal.module.css': ['1px', '1px'],
+    'AddAddressModal.module.css': ['1px'],
     'AddressList.wif.module.css': ['1px', '1px', '2px', '1px'],
     'ContractScreens.module.css': ['200px'],
     'CreateWallet.module.css': ['96px', '2px', '1px', '1px', '1px', '520px', '64px'],
@@ -95,9 +95,9 @@ describe('route CSS design tokens (pill radii and glyphs)', () => {
         )).toHaveLength(2);
         expect(rule(routeCss.Receive, '.assetChevron'))
             .toMatch(/font-size:\s*var\(--xc-icon-lg\)/);
-        expect(rule(routeCss.Send, '.amountUnitSwap svg').match(
-            /(?:width|height):\s*var\(--xc-icon-xs\)/g,
-        )).toHaveLength(2);
+        // The amount unit swap moved into the shared kit control, so Send no
+        // longer styles its glyph.
+        expect(routeCss.Send).not.toMatch(/\.amountUnitSwap/);
     });
 
     it('does not leave token-sized raw pill radii or glyph dimensions', () => {

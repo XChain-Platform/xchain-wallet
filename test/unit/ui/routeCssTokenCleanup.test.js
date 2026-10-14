@@ -48,9 +48,9 @@ describe('route CSS token cleanup', () => {
         const carousel = routeCss['OnboardingCarousel.module.css'];
         const signer = routeCss['PairSignerForm.module.css'];
 
-        // The hero entrance and the native checkbox offset left with the FormPage header and kit
-        // Checkbox; the remaining action entrance keeps its tokenized offset.
-        expect(onboarding).toContain('transform: translateY(var(--xc-space-2));');
+        // The hero entrance, the native checkbox offset and the action entrance left with the
+        // FormPage layout and kit Checkbox, so no raw offset remains.
+        expect(onboarding).not.toMatch(/actionsEnter/);
         expect(onboarding).not.toMatch(/translateY\(\d+px\)/);
         expect(carousel).toMatch(/\.frameIcon\s*\{[^}]*width: calc\(var\(--xc-space-8\) \* 2\);[^}]*height: calc\(var\(--xc-space-8\) \* 2\);/s);
         expect(carousel).toMatch(/\.dot::before,[^}]*width: var\(--xc-space-2\);[^}]*height: var\(--xc-space-2\);/s);

@@ -380,7 +380,8 @@ describe('shared network filter surfaces', () => {
         expect(filter).toBeInTheDocument();
         expect(toolbar).toBeInTheDocument();
         expect(trigger).toHaveTextContent('All networks');
-        expect(trigger).toHaveTextContent('3 networks');
+        // The network count is announced, not drawn, so the label keeps the width.
+        expect(trigger).not.toHaveTextContent('3 networks');
         expect(dropdownRule).toMatch(/flex:\s*1 1 10rem/);
         expect(dropdownRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
         expect(filterRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
@@ -424,7 +425,8 @@ describe('shared network filter surfaces', () => {
         expect(trigger).toHaveTextContent('All networks');
         expect(trigger).not.toHaveTextContent('3 networks');
         expect(filter).toHaveClass(filterStyles.md);
-        expect(filterCss).toMatch(/\.trigger\s*\{[^}]*display:\s*flex[^}]*height:\s*var\(--network-filter-control-height/s);
+        // The kit Chip owns the trigger height; the filter only lets it fill and shrink.
+        expect(filterCss).toMatch(/\.trigger\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0/s);
         expect(filterCss).toMatch(/\.triggerLabel\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s);
         expect(contactsCss).toMatch(/\.toolbar\s*\{[^}]*flex-wrap:\s*wrap/s);
         expect(contactsSource).toMatch(/<div className=\{picker\.toolbar\}>[\s\S]*announceNetworkCount/);

@@ -39,6 +39,14 @@ const packageKeySources = import.meta.glob(
     [
         '../../packages/**/*.{js,jsx}',
         '!../../packages/core/src/i18n/locales/**',
+        // Build output holds minified copies of the same source; parsing it
+        // adds nothing and times the test out after a local build.
+        '!../../packages/**/dist/**',
+        '!../../packages/**/build/**',
+        '!../../packages/mobile/www/**',
+        '!../../packages/mobile/android/**',
+        '!../../packages/mobile/ios/**',
+        '!../../packages/**/node_modules/**',
     ],
     { query: '?raw', import: 'default', eager: true },
 );

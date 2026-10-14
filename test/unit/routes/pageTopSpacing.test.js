@@ -50,7 +50,10 @@ describe('route page-top ownership', () => {
         // The shell owns the tier values, so the notice reads its inset.
         const shell = read('packages/core/src/shared/components/LeftNav.module.css');
         expect(shell).toMatch(/\.notices\s*\{[^}]*padding-inline:\s*var\(--xc-notice-inset,\s*var\(--xc-space-3\)\)/);
-        expect(banner).not.toMatch(/@media \([^)]*width/);
+        // A phone-width query may compact the banner, but never sets its inset.
+        for (const [, block] of banner.matchAll(/@media \([^)]*width[^)]*\)\s*\{([\s\S]*?)\n\}/g)) {
+            expect(block).not.toMatch(/margin/);
+        }
         expect(shell).toMatch(/data-xc-tier='rail'\] \.notices\s*\{[^}]*--xc-notice-inset:\s*var\(--xc-space-4\)/);
         expect(shell).toMatch(/data-xc-tier='full'\] \.notices\s*\{[^}]*--xc-notice-inset:\s*var\(--xc-space-6\)/);
         expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.body\s*\{[^}]*scrollbar-gutter:\s*auto/);

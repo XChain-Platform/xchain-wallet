@@ -31,7 +31,7 @@ describe('route style tokens', () => {
 
         expect(messagingInbox).toContain('width: var(--xc-icon-sm);');
         expect(messagingInbox).toContain('font-size: var(--xc-text-xs);');
-        expect(messagingInbox).toContain('border-radius: var(--xc-control-radius)');
+        expect(messagingInbox).toContain('border-start-start-radius: var(--xc-control-radius)');
         expect(messagingInbox).toContain(
             'scroll-margin-top: calc(var(--xc-control-h-lg) + var(--xc-space-2));',
         );
@@ -93,7 +93,8 @@ describe('route styles use the shared geometry tokens (staking, settings, wizard
         const unavailable = readRouteCss('VaultUnavailable');
 
         expect(wizard).toMatch(/\/\* The fixed measure[^*]+\*\/\s*max-width:\s*560px/);
-        expect(wizard).toMatch(/\/\* The native checkbox[^*]+\*\/\s*margin-top:\s*3px/);
+        // The wizard's checkboxes are kit Checkbox controls, so no native-box offset remains.
+        expect(wizard).not.toMatch(/\.checkRow/);
         // The escape link is a kit Button now, so the route keeps no underline or focus offsets.
         expect(unavailable).not.toMatch(/text-underline-offset|outline-offset/);
     });

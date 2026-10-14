@@ -445,7 +445,7 @@ describe('History filters', () => {
             expect(ruleBody(tokenDetailCss, '.headerIcon'))
                 .toMatch(/width:\s*var\(--xc-avatar-size-header\)[\s\S]*height:\s*var\(--xc-avatar-size-header\)/);
             expect(tokenDetailSource)
-                .toMatch(/useNativePrice\(isNative && !isDemo \? chainId : null/);
+                .toMatch(/useNativePrice\(isNative && fiatSupported && !isDemo \? chainId : null/);
             expect(tokenDetailSource)
                 .toMatch(/entry: synthesizeDemoNativePrices\(\[chainId\]\)\[chainId\]/);
         } finally {

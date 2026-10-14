@@ -56,17 +56,19 @@ describe('NetworkStatusIndicator', () => {
             />,
         );
 
-        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        const trigger = screen.getByRole('button', { name: /Network connected/ });
         const popover = document.querySelector('[role="dialog"][aria-label="Network status"]');
         expect(popover).toHaveAttribute('hidden');
         expect(popover).toHaveAttribute('inert');
 
         await user.tab();
         expect(trigger).toHaveFocus();
-        await user.tab();
-        expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus();
+        // The condensed header keeps Settings inside the action menu, so the
+        // closed popover is followed by Lock and then the menu trigger.
         await user.tab();
         expect(screen.getByRole('button', { name: 'Lock wallet' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus();
 
         fireEvent.click(trigger);
         expect(popover).not.toHaveAttribute('hidden');
@@ -146,7 +148,7 @@ describe('NetworkStatusIndicator', () => {
             value: viewport,
         });
         vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
-            if (this.getAttribute('aria-label') === 'Network connected') {
+            if (this.hasAttribute('data-network-status-trigger')) {
                 return {
                     ...trigger,
                     top: 14,
@@ -186,7 +188,7 @@ describe('NetworkStatusIndicator', () => {
 
         for (const expectedLeft of [VIEWPORT_CLAMP_MARGIN, 68]) {
             const view = render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
-            fireEvent.click(screen.getByRole('button', { name: 'Network connected' }));
+            fireEvent.click(screen.getByRole('button', { name: /Network connected/ }));
             const panel = screen.getByRole('dialog', { name: 'Network status' });
             const left = Number.parseFloat(panel.style.left);
             expect(left).toBe(expectedLeft);

@@ -318,9 +318,9 @@ it('uses shared dimension tokens across the empty, gated, menu, hardware, and la
         readFileSync(join(componentsRoot, file), 'utf8'),
     ]));
 
-    expect(modules['HeaderActionMenu.module.css']).toContain(
-        'transform: translateX(var(--xc-space-5))',
-    );
+    // The slide-in offset is a spacing token that RTL negates.
+    expect(modules['HeaderActionMenu.module.css']).toContain('--xc-slide-in-offset: var(--xc-space-5)');
+    expect(modules['HeaderActionMenu.module.css']).toContain('transform: translateX(var(--xc-slide-in-offset))');
     expect(modules['HeaderActionMenu.module.css']).toMatch(
         /\.close\s*\{[^}]*width:\s*var\(--xc-control-h-sm\);[^}]*height:\s*var\(--xc-control-h-sm\)/s,
     );
@@ -431,7 +431,8 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
     }
 
     const alerts = readFileSync(join(componentsRoot, 'AlertsOverlay.module.css'), 'utf8');
-    expect(alerts).toContain('translateX(var(--xc-space-5))');
+    expect(alerts).toContain('--xc-slide-in-offset: var(--xc-space-5)');
+    expect(alerts).toContain('translateX(var(--xc-slide-in-offset))');
     expect(alerts).toMatch(/\.close\s*\{[^}]*width: var\(--xc-control-h-sm\);[^}]*height: var\(--xc-control-h-sm\)/s);
     expect(alerts).toContain('border-inline-start: var(--xc-space-1) solid');
 

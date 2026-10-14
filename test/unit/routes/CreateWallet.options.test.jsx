@@ -203,7 +203,8 @@ describe('MnemonicGrid narrow layout', () => {
         const importCss = css('packages/core/src/shared/routes/ImportWallet.module.css');
         const screenCss = css('packages/core/src/ui/Screen.module.css');
 
-        expect(onboardingCss).toMatch(/\.actionsFull\s*\{[^}]*width:\s*100%;/s);
+        // Onboarding actions live in FormPage now; the route keeps only its artwork rules.
+        expect(onboardingCss).not.toMatch(/\.actionsFull/);
         expect(onboardingCss).toMatch(/@media \(max-height:\s*520px\)/);
         // The word-count choice is the kit RadioGroup, whose option text column shrinks and wraps.
         expect(css('packages/core/src/ui/RadioGroup.module.css')).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
