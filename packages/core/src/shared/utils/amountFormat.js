@@ -19,6 +19,39 @@ function isNonFiniteNumber(value) {
     return typeof value === 'number' && !Number.isFinite(value);
 }
 
+const MAX_EXPANDED_DECIMAL_DIGITS = 10_000;
+
+/** Expand decimal exponent notation without converting through a float. */
+export function expandDecimalNotation(value) {
+    const raw = String(value).trim();
+    if (/^[+-]?\d+(?:\.\d+)?$/.test(raw)) return raw;
+    const match = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))[eE]([+-]?\d+)$/.exec(raw);
+    if (!match) return raw;
+
+    const integer = match[2] ?? '';
+    const fraction = match[2] === undefined ? match[4] : (match[3] || '');
+    const digits = `${integer}${fraction}`;
+    if (!/[1-9]/.test(digits)) return '0';
+
+    const decimalPosition = BigInt(integer.length) + BigInt(match[5]);
+    const digitCount = BigInt(digits.length);
+    const expandedLength = decimalPosition <= 0n
+        ? 2n - decimalPosition + digitCount
+        : decimalPosition >= digitCount ? decimalPosition : digitCount + 1n;
+    if (expandedLength > BigInt(MAX_EXPANDED_DECIMAL_DIGITS)) return '';
+
+    let unsigned;
+    if (decimalPosition <= 0n) {
+        unsigned = `0.${'0'.repeat(Number(-decimalPosition))}${digits}`;
+    } else if (decimalPosition >= digitCount) {
+        unsigned = `${digits}${'0'.repeat(Number(decimalPosition - digitCount))}`;
+    } else {
+        const split = Number(decimalPosition);
+        unsigned = `${digits.slice(0, split)}.${digits.slice(split)}`;
+    }
+    return `${match[1]}${unsigned}`;
+}
+
 function localeNumberSeparators(locale) {
     try {
         const parts = new Intl.NumberFormat(getFormatLocale(locale)).formatToParts(1234567890123.6);
@@ -194,7 +227,7 @@ export function normalizeAmountFieldInput(value, { unit = '', fiatCurrency = nul
 // Fractional precision and an in-progress trailing decimal mark stay intact.
 export function formatWithThousands(value, locale) {
     if (value == null || value === '' || isNonFiniteNumber(value)) return '';
-    const str = String(value);
+    const str = expandDecimalNotation(value);
     const negative = str.startsWith('-');
     const abs = negative ? str.slice(1) : str;
     const dotIdx = abs.indexOf('.');
@@ -245,7 +278,7 @@ export function trimAmountTail(value) {
 /** Group a plain decimal string for display without converting it to a float. */
 export function formatDecimalAmount(value, locale, options = {}) {
     if (value === null || value === undefined || isNonFiniteNumber(value)) return '';
-    const raw = String(value).trim();
+    const raw = expandDecimalNotation(value);
     const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
     if (!match) return raw;
     const fractionDigits = match[3]?.length || 0;
@@ -275,7 +308,7 @@ const MIN_DISPLAY_AMOUNT = '0.00000001';
  */
 export function formatDisplayAmount(value, locale) {
     if (value === null || value === undefined || isNonFiniteNumber(value)) return '';
-    const raw = String(value).trim();
+    const raw = expandDecimalNotation(value);
     const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
     if (!match) return raw;
 
@@ -315,7 +348,7 @@ export function formatHistoryAmountForSpeech(value, unit, direction, locale) {
 /** Format a token quantity already expressed in whole-token units. */
 export function formatTokenQuantity(value, divisibility = 0, locale) {
     if (value === null || value === undefined || isNonFiniteNumber(value)) return '';
-    const raw = String(value).trim();
+    const raw = expandDecimalNotation(value);
     if (divisibility === null || divisibility === '') {
         return formatDecimalAmount(trimAmountTail(raw), locale);
     }
@@ -332,7 +365,7 @@ export function formatTokenQuantity(value, divisibility = 0, locale) {
 /** Render an atomic integer at its divisibility using exact string arithmetic. */
 export function formatAtomicAmount(quantity, divisibility = 0, locale) {
     if (quantity === null || quantity === undefined || isNonFiniteNumber(quantity)) return '';
-    const raw = String(quantity).trim();
+    const raw = expandDecimalNotation(quantity);
     const scale = Number(divisibility);
     if (!/^-?\d+$/.test(raw) || !Number.isInteger(scale) || scale < 0) return raw;
     const negative = raw.startsWith('-');

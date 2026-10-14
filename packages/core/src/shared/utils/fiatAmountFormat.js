@@ -9,7 +9,11 @@
 // contact legal@dankest.llc.
 
 import { getFormatLocale } from '../../i18n/index.js';
-import { compareDecimalStrings, formatDecimalAmount } from './amountFormat.js';
+import {
+    compareDecimalStrings,
+    expandDecimalNotation,
+    formatDecimalAmount,
+} from './amountFormat.js';
 
 /**
  * Whether a FIAT_AMOUNT is a price the CHAIN will accept.
@@ -41,7 +45,7 @@ export function isValidFiatAmount(amount) {
 }
 
 function fiatDisplayState(value) {
-    const raw = String(value).trim();
+    const raw = expandDecimalNotation(value);
     if (!raw) return null;
     const numericValue = Number(raw);
     const zeroComparison = compareDecimalStrings(raw, '0');
