@@ -3,10 +3,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Manage token's stats strip at phone width: the supply and holding values
-// are whole token quantities, and in half of a 360px row they broke in the
-// middle of the number ("50,000,000,000,0" over "00"). Below 600px those two
-// cells take a full row each, and the two small counts keep sharing one.
+// Manage token's stats strip: the supply and holding values are whole token
+// quantities, and in a quarter of the card (768px up to about 1100px) or in
+// half of a 360px row they broke in the middle of the number
+// ("50,000,000,000,0" over "00"). The strip is two columns at every width,
+// quantities first, and below 600px each quantity takes a full row.
 
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
@@ -36,10 +37,15 @@ function phoneRules() {
     return rules;
 }
 
-describe('Manage token stats at phone width', () => {
-    it('keeps two columns for the strip', () => {
-        const strip = phoneRules().find((r) => r.selector === '.statsStrip');
-        expect(strip?.decls['grid-template-columns']).toBe('repeat(2, 1fr)');
+describe('Manage token stats strip', () => {
+    it('lays the strip out in two columns at every width', () => {
+        const root = postcss.parse(readFileSync(cssPath, 'utf8'));
+        let base = null;
+        root.walkRules('.statsStrip', (rule) => {
+            if (rule.parent.type === 'root') rule.walkDecls('grid-template-columns', (d) => { base = d.value; });
+        });
+        expect(base).toBe('repeat(2, minmax(0, 1fr))');
+        expect(phoneRules().find((r) => r.selector === '.statsStrip')).toBeUndefined();
     });
 
     it('gives the first two cells a full row each', () => {
