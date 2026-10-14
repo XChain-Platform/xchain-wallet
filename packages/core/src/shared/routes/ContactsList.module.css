@@ -31,12 +31,22 @@
     margin-bottom: 0;
 }
 
+.search input {
+    height: var(--xc-control-h-md);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
+    border-radius: var(--xc-control-radius);
+}
+
 /* Sort sits beside the two half-width controls at its natural width. */
 .sort {
     flex: 0 0 auto;
 }
 
 @media (max-width: 420px) {
+    .search {
+        flex: 1 1 100%;
+    }
+
     .sort {
         flex: 1 1 100%;
     }
@@ -417,22 +427,3 @@
     margin-top: var(--xc-space-3);
 }
 
-/* Empty state shown when no contacts exist or none match the filter.
-   Rendered as a card so the emptiness is clearly intentional, not a
-   loading glitch. */
-
-/* "Not now" inside the publish nudge: reads as a link so the row keeps one
-   real button (Open Backup). */
-.linkButton {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    background: transparent;
-    border: 0;
-    color: var(--xc-accent-text);
-    font: inherit;
-    cursor: pointer;
-    padding: 0;
-}
-
-.linkButton:hover { text-decoration: underline; }

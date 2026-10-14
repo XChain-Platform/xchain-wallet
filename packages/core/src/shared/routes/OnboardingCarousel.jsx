@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Button, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import styles from './OnboardingCarousel.module.css';
 
@@ -123,37 +123,94 @@ export function OnboardingCarousel({
         }
     }
 
+    const skipAction = (
+        <Button type="button" variant="ghost" size="sm" icon={null} onClick={handleSkip}>
+            {t('onboarding.carousel.skip')}
+        </Button>
+    );
+
+    const progressTabs = (
+        <div
+            className={styles.dots}
+            role="tablist"
+            aria-label={t('onboarding.carousel.steps')}
+        >
+            {frames.map((frame, i) => (
+                <button
+                    key={frame.id || i}
+                    ref={(node) => { tabRefs.current[i] = node; }}
+                    id={`${idPrefix}-tab-${i}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={i === index}
+                    aria-current={i === index ? 'step' : undefined}
+                    aria-controls={`${idPrefix}-panel-${i}`}
+                    aria-label={t('onboarding.carousel.stepLabel', {
+                        current: i + 1,
+                        count,
+                        title: frame.title,
+                    })}
+                    tabIndex={i === index ? 0 : -1}
+                    className={i === index ? styles.dotActive : styles.dot}
+                    onClick={() => goTo(i)}
+                    onKeyDown={(event) => handleTabKeyDown(event, i)}
+                />
+            ))}
+        </div>
+    );
+
+    const navigation = (
+        <>
+            <Button
+                variant="ghost"
+                onClick={() => goTo(index - 1)}
+                disabled={index === 0}
+                icon={<Icon.BackIcon />}
+            >
+                {t('common.back')}
+            </Button>
+            {atLast ? (
+                <Button variant="primary" onClick={handleFinish} icon={<Icon.CheckIcon />}>
+                    {t('onboarding.carousel.getStarted')}
+                </Button>
+            ) : (
+                <Button variant="primary" onClick={() => goTo(index + 1)} icon={null}>
+                    {t('onboarding.carousel.next')}
+                </Button>
+            )}
+        </>
+    );
+
     // --- Reduced motion: stack every frame, no stepping, no auto-advance.
     if (reducedMotion) {
+        const [first, ...remaining] = frames;
         return (
-            <div
+            <FormPage
+                as="div"
+                label={t('onboarding.carousel.steps')}
                 className={isFull ? styles.rootFull : styles.rootPopup}
                 data-testid="onboarding-carousel"
                 data-reduced-motion="true"
-            >
-                <div className={styles.skipRow}>
-                    <button type="button" className={styles.skipBtn} onClick={handleSkip}>
-                        {t('onboarding.carousel.skip')}
-                    </button>
-                </div>
-                <div className={styles.stack}>
-                    {frames.map((frame, i) => {
-                        const Heading = i === 0 ? 'h1' : 'h2';
-                        return (
-                            <section key={frame.id || i} className={styles.stackFrame}>
-                                {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
-                                <Heading className={styles.frameTitle}>{frame.title}</Heading>
-                                <p className={styles.frameBody}>{frame.body}</p>
-                            </section>
-                        );
-                    })}
-                </div>
-                <div className={styles.actions}>
+                title={first.title}
+                description={first.body}
+                visual={first.icon ? <div className={styles.frameIcon}>{first.icon}</div> : null}
+                topAction={skipAction}
+                actions={(
                     <Button variant="primary" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
                         {t('onboarding.carousel.getStarted')}
                     </Button>
+                )}
+            >
+                <div className={styles.stack}>
+                    {remaining.map((frame, i) => (
+                        <section key={frame.id || i + 1} className={styles.stackFrame}>
+                            {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
+                            <h2 className={styles.frameTitle}>{frame.title}</h2>
+                            <p className={styles.frameBody}>{frame.body}</p>
+                        </section>
+                    ))}
                 </div>
-            </div>
+            </FormPage>
         );
     }
 
@@ -165,82 +222,42 @@ export function OnboardingCarousel({
             data-reduced-motion="false"
             onKeyDown={handleCarouselKeyDown}
         >
-            <div className={styles.skipRow}>
-                <button type="button" className={styles.skipBtn} onClick={handleSkip}>
-                    {t('onboarding.carousel.skip')}
-                </button>
-            </div>
-
             <div
                 className={styles.frameViewport}
                 aria-live="polite"
                 aria-atomic="true"
             >
                 {frames.map((item, i) => {
-                    const Heading = i === index ? 'h1' : 'h2';
+                    const active = i === index;
                     return (
                         <section
-                            key={`${item.id || i}-${i === index ? 'active' : 'inactive'}`}
+                            key={active ? 'active-frame' : (item.id || i)}
                             id={`${idPrefix}-panel-${i}`}
                             role="tabpanel"
                             aria-labelledby={`${idPrefix}-tab-${i}`}
-                            hidden={i !== index}
+                            hidden={!active}
                             className={styles.frame}
                         >
-                            {item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
-                            <Heading className={styles.frameTitle}>{item.title}</Heading>
-                            <p className={styles.frameBody}>{item.body}</p>
+                            {active ? (
+                                <FormPage
+                                    as="div"
+                                    label={item.title}
+                                    title={item.title}
+                                    description={item.body}
+                                    visual={item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
+                                    progress={progressTabs}
+                                    topAction={skipAction}
+                                    actions={navigation}
+                                />
+                            ) : (
+                                <>
+                                    <h2 className={styles.frameTitle}>{item.title}</h2>
+                                    <p className={styles.frameBody}>{item.body}</p>
+                                </>
+                            )}
                         </section>
                     );
                 })}
-            </div>
-
-            <div
-                className={styles.dots}
-                role="tablist"
-                aria-label={t('onboarding.carousel.steps')}
-            >
-                {frames.map((f, i) => (
-                    <button
-                        key={f.id || i}
-                        ref={(node) => { tabRefs.current[i] = node; }}
-                        id={`${idPrefix}-tab-${i}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={i === index}
-                        aria-current={i === index ? 'step' : undefined}
-                        aria-controls={`${idPrefix}-panel-${i}`}
-                        aria-label={t('onboarding.carousel.stepLabel', {
-                            current: i + 1,
-                            count,
-                            title: f.title,
-                        })}
-                        tabIndex={i === index ? 0 : -1}
-                        className={i === index ? styles.dotActive : styles.dot}
-                        onClick={() => goTo(i)}
-                        onKeyDown={(event) => handleTabKeyDown(event, i)}
-                    />
-                ))}
-            </div>
-
-            <div className={styles.nav}>
-                <Button
-                    variant="ghost"
-                    onClick={() => goTo(index - 1)}
-                    disabled={index === 0}
-                    icon={<Icon.BackIcon />}
-                >
-                    {t('common.back')}
-                </Button>
-                {atLast ? (
-                    <Button variant="primary" onClick={handleFinish} icon={<Icon.CheckIcon />}>
-                        {t('onboarding.carousel.getStarted')}
-                    </Button>
-                ) : (
-                    <Button variant="primary" onClick={() => goTo(index + 1)} icon={null}>
-                        {t('onboarding.carousel.next')}
-                    </Button>
-                )}
             </div>
         </div>
     );

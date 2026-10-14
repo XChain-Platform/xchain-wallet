@@ -33,9 +33,9 @@ describe('Receive action layout', () => {
         expect(css).toMatch(
             /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.qrBox\s*\{[\s\S]*?max-width: min\(100%, calc\(var\(--xc-viewport-h, 100vh\) - 9rem\)\);[\s\S]*?margin-inline: auto;/,
         );
-        expect(css).toMatch(
-            /\.qrBox\s*\{[\s\S]*?box-sizing: border-box;/,
-        );
+        // The receive QR box is also the shared QrDisplay frame, which owns its box model.
+        const qrDisplayCss = readFileSync('packages/core/src/ui/QrDisplay.module.css', 'utf8');
+        expect(qrDisplayCss).toMatch(/\.frame\s*\{[\s\S]*?box-sizing: border-box;/);
         expect(css).toMatch(
             /\.qr\s*\{[\s\S]*?width: 100%;[\s\S]*?height: auto;[\s\S]*?aspect-ratio: 1;/,
         );

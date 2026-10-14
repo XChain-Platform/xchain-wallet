@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -652,39 +652,32 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 </>
             ) : null}
 
-            <fieldset style={{ border: 0, padding: 0, margin: "0 0 var(--xc-space-3)" }} disabled={ownerMissing}>
-                <legend>{t('gatedPublish.pack')}</legend>
-                <label className={styles.checkRow}>
-                    {/* Pack choices stay native because the kit has no radio-group control. */}
-                    <input
-                        type="radio"
-                        name="pack"
-                        checked={packChoice === 'new'}
-                        onChange={() => setPackChoice('new')}
-                    />
-                    {' '}{t('gatedPublish.pack.new')}
-                </label>
-                {(packs || []).map((p) => (
-                    <label key={p.keyHash} className={styles.checkRow}>
-                        {/* Reusable pack choices stay native because the kit has no radio-group control. */}
-                        <input
-                            type="radio"
-                            name="pack"
-                            checked={packChoice === p.keyHash}
-                            onChange={() => setPackChoice(p.keyHash)}
-                        />
-                        {' '}{t('gatedPublish.pack.add')} <code>{String(p.keyHash).slice(0, 12)}…</code>
-                        {' '}{t('gatedPublish.pack.unlockTogether')}
-                    </label>
-                ))}
-                {packs === null ? (
-                    <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
-                ) : packsError ? (
-                    <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
-                ) : packs.length === 0 ? (
-                    <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
-                ) : null}
-            </fieldset>
+            <RadioGroup
+                legend={t('gatedPublish.pack')}
+                name="pack"
+                value={packChoice}
+                onChange={(nextValue) => setPackChoice(nextValue)}
+                disabled={ownerMissing}
+                options={[
+                    { value: 'new', label: t('gatedPublish.pack.new') },
+                    ...(packs || []).map((p) => ({
+                        value: p.keyHash,
+                        label: (
+                            <>
+                                {t('gatedPublish.pack.add')} <code>{String(p.keyHash).slice(0, 12)}…</code>
+                                {' '}{t('gatedPublish.pack.unlockTogether')}
+                            </>
+                        ),
+                    })),
+                ]}
+            />
+            {packs === null ? (
+                <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
+            ) : packsError ? (
+                <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
+            ) : packs.length === 0 ? (
+                <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
+            ) : null}
 
             {feeTiers ? (
                 <FeeSelector
@@ -697,16 +690,12 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 />
             ) : null}
 
-            <label className={styles.checkRow}>
-                {/* The permanent-publish acknowledgement stays native because the kit has no checkbox control. */}
-                <input
-                    type="checkbox"
-                    checked={ackForever}
-                    onChange={(e) => setAckForever(e.target.checked)}
-                    disabled={ownerMissing}
-                />
-                {' '}{t('gatedPublish.ackForever')}
-            </label>
+            <Checkbox
+                label={t('gatedPublish.ackForever')}
+                checked={ackForever}
+                onChange={(e) => setAckForever(e.target.checked)}
+                disabled={ownerMissing}
+            />
 
         </FormPage>,
     );

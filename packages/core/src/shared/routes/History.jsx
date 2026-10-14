@@ -11,6 +11,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    Checkbox,
     ChainBadge,
     Chip,
     CopyButton,
@@ -20,7 +21,9 @@ import {
     ListPage,
     ListRow,
     PageHeader,
+    RadioGroup,
     Screen,
+    SegmentedControl,
     SectionHeader,
     Skeleton,
     StatusMessage,
@@ -60,7 +63,7 @@ import {
     pendingDisplayState,
     pendingTxToEntry,
 } from '../utils/pendingHistory.js';
-import { t } from '../../i18n/index.js';
+import { getFormatLocale, t } from '../../i18n/index.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
@@ -117,6 +120,21 @@ function historyChainFilterKey(walletId) {
 
 function groupingModeStorageKey(walletId) {
     return `${GROUPING_MODE_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function formatFilterDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return value;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    try {
+        return date.toLocaleDateString(getFormatLocale(), {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+    } catch {
+        return value;
+    }
 }
 
 function readPersistedGroupingMode(walletId) {
@@ -1742,7 +1760,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     body={t('history.empty.noAddressesBody')}
                     actionLabel={onReceive ? t('home.receive') : undefined}
                     onAction={onReceive}
-                    icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                    actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
                 />
             </ListPage>,
         );
@@ -1847,7 +1865,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 ) : null}
                 {dateFrom || dateTo ? (
                     <div className={styles.activeDateRange}>
-                        <span>{t('history.filters.activeRange', { from: dateFrom || t('history.filters.anyDate'), to: dateTo || t('history.filters.anyDate') })}</span>
+                        <span>{t('history.filters.activeRange', {
+                            from: dateFrom ? formatFilterDate(dateFrom) : t('history.filters.anyDate'),
+                            to: dateTo ? formatFilterDate(dateTo) : t('history.filters.anyDate'),
+                        })}</span>
                         <Button
                             variant="ghost"
                             size="sm"
@@ -1881,30 +1902,24 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         onClick={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
                         aria-busy={fiatToggleBusy}
+                        aria-label={showFiatInHistory
+                            ? undefined
+                            : t('history.filters.showFiatOff')}
                         title={t('history.filters.fiatHelp')}
                     >
                         {showFiatInHistory
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
-                            : t('history.filters.showFiat')}
+                            : t('history.filters.fiatOff')}
                     </Button>
-                    <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
-                        {/* Native buttons preserve the segmented control's composite radio role. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={groupingMode === 'grouped'}
-                            onClick={() => setGroupingMode('grouped')}
-                            className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
-                        >{t('history.filters.grouped')}</button>
-                        {/* Native buttons preserve the segmented control's composite radio role. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={groupingMode === 'flat'}
-                            onClick={() => setGroupingMode('flat')}
-                            className={`${styles.segBtn} ${groupingMode === 'flat' ? styles.segBtnActive : ''}`}
-                        >{t('history.filters.flat')}</button>
-                    </div>
+                    <SegmentedControl
+                        aria-label={t('history.filters.groupingMode')}
+                        value={groupingMode}
+                        onChange={setGroupingMode}
+                        items={[
+                            { id: 'grouped', label: t('history.filters.grouped') },
+                            { id: 'flat', label: t('history.filters.flat') },
+                        ]}
+                    />
                 </div>
 
                 {moreFiltersOpen ? (
@@ -2408,6 +2423,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             id: 'rbf-cancel',
             label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
             icon: <Icon.XIcon />,
+            danger: true,
             disabled: rbfBusy !== null || !networkAvailable,
             disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
             onClick: () => runRbf('cancel'),
@@ -2563,6 +2579,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                             key={opt.id}
                                             type="button"
                                             role="menuitem"
+                                            data-destructive={opt.danger ? 'true' : undefined}
                                             className={styles.moreMenuItem}
                                             onClick={opt.onClick}
                                             disabled={Boolean(opt.disabled)}
@@ -3734,6 +3751,8 @@ function contractRowLabel(entry) {
 export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
+    const peerAddress = peerAddressOfEntry(entry);
+    const rowAddress = peerAddress || entry.source || '-';
     const receiveLabel = entry.receiveLabel
         && classifyEntryAction(entry, walletAddresses) === 'receive'
         ? entry.receiveLabel
@@ -3775,8 +3794,8 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 )}
                 subtitle={(
                     <span className={styles.rowDetails}>
-                        <span className={styles.rowSourceAddress} title={entry.source || undefined}>
-                            {entry.source || '-'}
+                        <span className={styles.rowSourceAddress} title={rowAddress === '-' ? undefined : rowAddress}>
+                            {rowAddress}
                         </span>
                         {receiveLabel ? (
                             <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
@@ -4166,7 +4185,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
 
     const close = () => {
         setOpen(false);
-        triggerRef.current?.focus();
+        triggerRef.current?.querySelector('button')?.focus();
     };
 
     useEffect(() => {
@@ -4178,7 +4197,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
             setOpen(false);
-            triggerRef.current?.focus();
+            triggerRef.current?.querySelector('button')?.focus();
         };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
@@ -4200,24 +4219,24 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
 
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
-            {/* A native trigger retains the ref-driven focus handoff for this custom listbox. */}
-            <button
-                ref={triggerRef}
-                type="button"
-                className={styles.chainPickerBtn}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => setOpen((v) => !v)}
-                onKeyDown={(event) => {
-                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                    event.preventDefault();
-                    if (!open) setOpen(true);
-                    focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
-                }}
-            >
-                <span className={styles.chainPickerLeft}>{summary}</span>
-                <SingleChevron direction="down" />
-            </button>
+            <div ref={triggerRef}>
+                <Chip
+                    pressed={!isAll}
+                    className={styles.chainPickerLeft}
+                    aria-haspopup="listbox"
+                    aria-expanded={open}
+                    onClick={() => setOpen((v) => !v)}
+                    onKeyDown={(event) => {
+                        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                        event.preventDefault();
+                        if (!open) setOpen(true);
+                        focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
+                    }}
+                >
+                    <span className={styles.chainPickerLeft}>{summary}</span>
+                    <SingleChevron direction="down" />
+                </Chip>
+            </div>
             {open ? (
                 <ul
                     ref={menuRef}
@@ -4600,12 +4619,6 @@ const MODAL_LEGEND = {
     fontSize: 'var(--xc-text-xs)',
     padding: '0 var(--xc-space-1)',
 };
-const MODAL_LABEL = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-};
 const MODAL_ACTIONS = {
     display: 'flex',
     flex: '0 0 auto',
@@ -4661,33 +4674,18 @@ function ExportModal({
                 <SectionHeader id="xc-history-export-title" title={t('history.export.title')} />
 
                 <div style={MODAL_BODY}>
-                    <fieldset style={MODAL_FIELDSET}>
-                        <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
-                        <label style={MODAL_LABEL}>
-                            {/* The kit has no radio control, so the native input preserves selection semantics. */}
-                            <input
-                                type="radio"
-                                name="export-format"
-                                value="csv"
-                                checked={format === 'csv'}
-                                onChange={() => setFormat('csv')}
-                                disabled={exporting}
-                            />
-                            {t('history.export.csv')}
-                        </label>
-                        <label style={MODAL_LABEL}>
-                            {/* The kit has no radio control, so the native input preserves selection semantics. */}
-                            <input
-                                type="radio"
-                                name="export-format"
-                                value="json"
-                                checked={format === 'json'}
-                                onChange={() => setFormat('json')}
-                                disabled={exporting}
-                            />
-                            {t('history.export.json')}
-                        </label>
-                    </fieldset>
+                    <RadioGroup
+                        style={MODAL_FIELDSET}
+                        legend={t('history.export.format')}
+                        name="export-format"
+                        value={format}
+                        onChange={setFormat}
+                        disabled={exporting}
+                        options={[
+                            { value: 'csv', label: t('history.export.csv') },
+                            { value: 'json', label: t('history.export.json') },
+                        ]}
+                    />
 
                     <fieldset style={MODAL_FIELDSET}>
                         <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
@@ -4697,21 +4695,15 @@ function ExportModal({
                                 ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
                                 : detail.label;
                             return (
-                                <label key={col} style={MODAL_LABEL} title={detail.description}>
-                                    {/* The kit has no checkbox control, so the native input preserves selection semantics. */}
-                                    <input
-                                        type="checkbox"
-                                        checked={columns.has(col)}
-                                        onChange={() => toggleColumn(col)}
-                                        disabled={exporting}
-                                    />
-                                    <span>
-                                        <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
-                                        <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                                            {detail.description}
-                                        </span>
-                                    </span>
-                                </label>
+                                <Checkbox
+                                    key={col}
+                                    label={label}
+                                    description={detail.description}
+                                    title={detail.description}
+                                    checked={columns.has(col)}
+                                    onChange={() => toggleColumn(col)}
+                                    disabled={exporting}
+                                />
                             );
                         })}
                     </fieldset>

@@ -48,6 +48,10 @@ const popupAppSource = readFileSync(
     join(process.cwd(), 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
+const bannerCssSource = readFileSync(
+    join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'DemoBanner.module.css'),
+    'utf8',
+);
 
 function mount(props = {}) {
     return render(
@@ -68,9 +72,10 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-function setNarrowViewport(narrow) {
+function setViewportWidth(width) {
+    vi.stubGlobal('innerWidth', width);
     vi.stubGlobal('matchMedia', vi.fn(() => ({
-        matches: narrow,
+        matches: width <= 599,
         media: '(max-width: 599px)',
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -129,34 +134,43 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         }
     });
 
-    it('starts collapsed on a narrow viewport and expands its details on request', async () => {
-        setNarrowViewport(true);
+    it('renders a one-line compact strip at 360px and expands its details on tap', async () => {
+        setViewportWidth(360);
         markDemoWallet('demo-1');
         mount({ activeWalletId: 'demo-1' });
 
-        const toggle = screen.getByRole('button', { name: 'Details' });
+        const toggle = screen.getByRole('button', { name: 'Show demo details' });
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.getByText('Demo wallet: read-only; cannot move funds')).toBeVisible();
-        expect(screen.queryByRole('button', { name: /exit demo/i })).toBeNull();
+        expect(within(toggle).getByText('Demo mode')).toBeVisible();
+        expect(toggle.querySelector('svg')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Exit demo and wipe' })).toBeVisible();
+        expect(document.getElementById(toggle.getAttribute('aria-controls'))).toHaveAttribute('hidden');
+
+        const phoneRules = bannerCssSource.slice(bannerCssSource.indexOf('@media not all and (min-width: 600px)'));
+        expect(phoneRules).toMatch(
+            /\.banner:not\(\.expanded\)\s*\{[\s\S]*?max-height:\s*var\(--xc-control-h-sm\)/,
+        );
 
         await act(async () => { toggle.click(); });
 
         expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByRole('button', { name: /exit demo/i })).toBeVisible();
+        expect(toggle).toHaveAccessibleName('Hide demo details');
+        expect(document.getElementById(toggle.getAttribute('aria-controls')))
+            .not.toHaveAttribute('hidden');
     });
 
     it('starts fully expanded on a wide viewport', () => {
-        setNarrowViewport(false);
+        setViewportWidth(1024);
         markDemoWallet('demo-1');
         mount({ activeWalletId: 'demo-1' });
 
-        expect(screen.getByRole('button', { name: 'Details' }))
+        expect(screen.getByRole('button', { name: 'Hide demo details' }))
             .toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('button', { name: /exit demo/i })).toBeVisible();
     });
 
     it('opens an explicit danger confirmation that names the demo data being destroyed', () => {
-        setNarrowViewport(false);
+        setViewportWidth(1024);
         markDemoWallet('demo-1');
         mount({ activeWalletId: 'demo-1' });
 
@@ -175,7 +189,7 @@ describe('DemoBanner: the demo disclosure on Home', () => {
     });
 
     it('cancels the confirmation without running the teardown', () => {
-        setNarrowViewport(false);
+        setViewportWidth(1024);
         markDemoWallet('demo-1');
         mount({ activeWalletId: 'demo-1' });
         fireEvent.click(screen.getByRole('button', { name: /exit demo/i }));
@@ -187,7 +201,7 @@ describe('DemoBanner: the demo disclosure on Home', () => {
     });
 
     it('shows a busy state, completes the confirmed teardown, and refreshes into onboarding', async () => {
-        setNarrowViewport(false);
+        setViewportWidth(1024);
         markDemoWallet('demo-1');
         const onExited = vi.fn();
         let resolveExit;

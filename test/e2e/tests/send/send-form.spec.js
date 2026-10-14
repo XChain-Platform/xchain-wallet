@@ -143,7 +143,9 @@ test.describe('send form', () => {
         // §5.2.5: the fee comes from the composed PSBT, so it is an exact
         // amount, not the form's rate estimate.
         await expect(confirm).toContainText(/Network fee: [\d.]+ BTC/);
-        // The software signer has no device output screen to cross-check.
+        // §5.2.6: the hardware note names this screen as the intent surface,
+        // so it appears only when a hardware device signs. This wallet signs
+        // in software, so the review leaves it out.
         await expect(confirm).not.toContainText(/hardware device verifies native outputs/i);
     });
 

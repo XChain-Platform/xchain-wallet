@@ -26,7 +26,16 @@
 // behind the same form surface (Phase 2 HW Sign pattern).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, FormPage, Input, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    Checkbox,
+    EmptyState,
+    FormPage,
+    Input,
+    SegmentedControl,
+    Select,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -720,14 +729,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     type="submit"
                     variant="primary"
                     block
-                    loading={actionConfirm.composing}
+                    loading={accountLoading || actionConfirm.composing}
                     disabled={accountLoading || actionConfirm.composing}
                 >
-                    {accountLoading
-                        ? 'Loading wallet…'
-                        : actionConfirm.composing
-                        ? 'Preparing review…'
-                        : (singleEncode ? `Place ${side} order` : 'Review')}
+                    {singleEncode ? `Place ${side} order` : 'Review'}
                 </Button>
             )}
         >
@@ -755,52 +760,16 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {balanceFor(tick2) ?? '-'}
                 </dd>
             </dl>
-            <div className={styles.sideToggle} role="group" aria-label="Order side">
-                {/* Native buttons retain segmented-toggle pressed behavior because the kit has no segmented control. */}
-                <button
-                    type="button"
-                    onClick={() => setSide('buy')}
-                    aria-pressed={side === 'buy'}
-                    style={{
-                        flex: 1,
-                        minWidth: '8rem',
-                        appearance: 'none',
-                        font: 'inherit',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        border: '1px solid var(--xc-success)',
-                        background: 'var(--xc-success)',
-                        color: 'var(--xc-on-accent)',
-                        opacity: side === 'buy' ? 1 : 0.45,
-                    }}
-                >
-                    Buy {tick1}
-                </button>
-                {/* Native buttons retain segmented-toggle pressed behavior because the kit has no segmented control. */}
-                <button
-                    type="button"
-                    onClick={() => setSide('sell')}
-                    aria-pressed={side === 'sell'}
-                    style={{
-                        flex: 1,
-                        minWidth: '8rem',
-                        appearance: 'none',
-                        font: 'inherit',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        border: '1px solid var(--xc-danger)',
-                        background: 'var(--xc-danger)',
-                        color: 'var(--xc-on-accent)',
-                        opacity: side === 'sell' ? 1 : 0.45,
-                    }}
-                >
-                    Sell {tick1}
-                </button>
-            </div>
+            <SegmentedControl
+                className={styles.sideToggle}
+                aria-label="Order side"
+                value={side}
+                onChange={setSide}
+                items={[
+                    { id: 'buy', label: <>Buy {tick1}</>, tone: 'success' },
+                    { id: 'sell', label: <>Sell {tick1}</>, tone: 'danger' },
+                ]}
+            />
             <div className={styles.priceAmountFields} role="group" aria-label="Price and amount">
                 <Input
                     label={`Price (${tick2})`}
@@ -886,20 +855,14 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     </p>
                     {autopayEligible ? (
                         <>
-                            <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                                {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                                <input
-                                    type="checkbox"
+                            <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                                <Checkbox
+                                    label="Enable CoinPay auto-pay"
+                                    description="We monitor for matches on your orders and send payment for them automatically."
                                     checked={autopayEnabled}
                                     onChange={(e) => setAutopayEnabled(e.target.checked)}
-                                    style={{ marginTop: 2 }}
                                 />
-                                <span>
-                                    <strong>Enable CoinPay auto-pay</strong>
-                                    <br />
-                                    We monitor for matches on your orders and send payment for them automatically.
-                                </span>
-                            </label>
+                            </div>
                             {(() => {
                                 // The GIVE side is the coin, so this order's own
                                 // exposure is its GIVE amount: price×size when
@@ -927,16 +890,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                                 return null;
                             })()}
                             {ackRequired ? (
-                                <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                                    <input
-                                        type="checkbox"
+                                <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                                    <Checkbox
+                                        label="I understand the wallet must stay open for auto-pay to work."
                                         checked={keepOpenAck}
                                         onChange={(e) => setKeepOpenAck(e.target.checked)}
-                                        style={{ marginTop: 2 }}
                                     />
-                                    <span>I understand the wallet must stay open for auto-pay to work.</span>
-                                </label>
+                                </div>
                             ) : null}
                         </>
                     ) : (

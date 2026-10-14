@@ -122,6 +122,8 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', { name: 'Amount (BTC)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Share QR payment link' }))
+            .toHaveTextContent(/^Share QR$/);
         expect(screen.queryByRole('slider', { name: /fee/i })).toBeNull();
         expect(screen.queryByText(/network fee|sat\/vB|fee estimate/i)).toBeNull();
         expect(screen.queryByText('0.000015 BTC')).toBeNull();
@@ -198,13 +200,12 @@ describe('Receive QR copy and share toasts', () => {
             expect(precedes(share, generate)).toBe(true);
             expect(precedes(generate, token)).toBe(true);
 
-            const phoneRules = receiveCss.slice(receiveCss.indexOf('@media (max-width: 420px)'));
-            expect(phoneRules).toMatch(
-                /\.receiveQrBox\s*\{[^}]*max-width:\s*14rem;/,
-            );
-            expect(phoneRules).toMatch(
-                /\.qrActions\s*\{[^}]*margin-top:\s*0;/,
-            );
+            // The shared QR frame fills the column up to the receive frame size,
+            // so it shrinks with a phone column instead of needing a phone rule.
+            const qrDisplayCss = readFileSync('packages/core/src/ui/QrDisplay.module.css', 'utf8');
+            expect(receiveCss).toMatch(/\.receiveQrDisplay\s*\{[^}]*--xc-qr-frame-size:\s*20rem;/);
+            expect(qrDisplayCss).toMatch(/\.frame\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*var\(--xc-qr-frame-size\);/);
+            expect(receiveCss).toMatch(/\.qrActions\s*\{[^}]*margin-top:\s*0;/);
             expect(PHONE_QR_CARD_PX).toBeLessThan(360 - 2 * 16);
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);

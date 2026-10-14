@@ -1,6 +1,7 @@
 .chip {
     box-sizing: border-box;
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
     height: var(--xc-control-h-sm);
@@ -26,16 +27,26 @@
     background: var(--xc-control-bg);
     color: var(--xc-text);
     cursor: pointer;
-    transition: background var(--xc-transition), border-color var(--xc-transition);
+    transition: background var(--xc-transition), border-color var(--xc-transition), transform var(--xc-transition);
 }
 
-.toggle:hover:not(:disabled) {
+@media (hover: hover) and (pointer: fine) {
+    .toggle:hover:not(:disabled):not(.pressed) {
+        background: var(--xc-control-bg-hover);
+        border-color: var(--xc-control-border-hover);
+    }
+}
+
+.toggle:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.toggle:active:not(:disabled):not(.pressed) {
     background: var(--xc-control-bg-hover);
     border-color: var(--xc-control-border-hover);
 }
 
-.pressed,
-.pressed:hover:not(:disabled) {
+.pressed {
     background: var(--xc-control-selected);
     border-color: var(--xc-control-selected);
     color: var(--xc-control-selected-text);

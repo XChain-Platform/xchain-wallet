@@ -37,32 +37,20 @@ import {
     isUpdateNoticeEnabled,
     setUpdateNoticeEnabled,
 } from '../../../flows/directUpdate.js';
-import { ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_LABEL,
+    ROW_VALUE,
+    STACK,
+    ToggleRow,
+} from './_settingsPrimitives.jsx';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import {
     redactDiagnosticText,
     sanitizeDiagnosticValue,
 } from '../../../flows/diagnosticDump.js';
 
-const ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    fontSize: 'var(--xc-text-sm)',
-};
-const ROW_LABEL = { color: 'var(--xc-text-muted)' };
-const ROW_VALUE = { color: 'var(--xc-text)', fontWeight: 500 };
 const ROW_VALUE_MUTED = { color: 'var(--xc-text-muted)', fontStyle: 'italic' };
-const STACK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
-};
 const PARAGRAPHS = {
     display: 'flex',
     flexDirection: 'column',

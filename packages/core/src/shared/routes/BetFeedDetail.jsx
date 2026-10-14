@@ -32,6 +32,7 @@ import {
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
 import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -123,10 +124,7 @@ function betAmountError(value, minimum) {
 }
 
 function fmtTime(unix) {
-    if (unix === null || unix === undefined) return 'n/a';
-    const n = Number(unix);
-    if (!Number.isFinite(n)) return 'n/a';
-    return new Date(n * 1000).toLocaleString();
+    return formatLocalDateTime(unix) || 'n/a';
 }
 
 // Why not err.message on the two market loads below: betFeed forwards the SDK
@@ -486,7 +484,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                             ? (
                                 <Button
                                     type="button"
-                                    className={styles.inlineAction}
+                                    variant="link"
+                                    size="sm"
                                     icon={null}
                                     onClick={() => onOpenOracle(chainId, feed.source)}
                                 >

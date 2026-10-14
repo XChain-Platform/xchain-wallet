@@ -31,8 +31,9 @@
 // accepted under either name.)
 
 import { useEffect, useMemo, useState } from 'react';
-import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
+import { AnimatedQrFrames, Button, RadioGroup, StatusMessage } from '../../ui/index.js';
 import { CopyButton, FormSection, Textarea } from '../../ui/index.js';
+import { AddressText } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import { useToast } from './ToastHost.jsx';
@@ -90,7 +91,7 @@ export function WatcherResultPanel({
                             <div className={styles.successRow}>
                                 <dt>From</dt>
                                 <dd className={styles.successMono}>
-                                    {result.fromAddress.slice(0, 8)}…{result.fromAddress.slice(-6)}
+                                    <AddressText address={result.fromAddress} size="sm" />
                                 </dd>
                             </div>
                         ) : null}
@@ -116,31 +117,18 @@ export function WatcherResultPanel({
                     </div>
                 </div>
                 <div className={styles.successTxidBlock}>
-                    <p className={styles.successLabel}>QR format</p>
-                    <div role="radiogroup" aria-label="Animated QR format">
-                        <label style={{ marginRight: '1rem' }}>
-                            {/* Native radio preserves group arrow-key behavior because the kit has no segmented-choice primitive. */}
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="xcw"
-                                checked={qrFormat === 'xcw'}
-                                onChange={() => setQrFormat('xcw')}
-                            />{' '}
-                            XCW (this wallet)
-                        </label>
-                        <label>
-                            {/* Native radio preserves group arrow-key behavior because the kit has no segmented-choice primitive. */}
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="bbqr"
-                                checked={qrFormat === 'bbqr'}
-                                onChange={() => setQrFormat('bbqr')}
-                            />{' '}
-                            BBQr (Sparrow / Coldcard / SeedSigner)
-                        </label>
-                    </div>
+                    <RadioGroup
+                        legend="QR format"
+                        name="watcher-qr-format"
+                        value={qrFormat}
+                        onChange={setQrFormat}
+                        options={[
+                            { value: 'xcw', label: 'XCW (this wallet)' },
+                            { value: 'bbqr', label: 'BBQr (Sparrow / Coldcard / SeedSigner)' },
+                        ]}
+                        role="radiogroup"
+                        aria-label="Animated QR format"
+                    />
                 </div>
                 {exportFrames && exportFrames.error ? (
                     <StatusMessage variant="error">{exportFrames.error}</StatusMessage>

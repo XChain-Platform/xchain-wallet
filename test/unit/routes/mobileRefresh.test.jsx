@@ -150,7 +150,10 @@ describe('mobile refresh', () => {
 
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
         expect(screen.getByText('BTC · Bitcoin')).toBeInTheDocument();
-        expect(screen.queryByText(/retrying/)).toBeNull();
+        expect(screen.getByText(/Showing saved balances from the last successful sync/))
+            .toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+        expect(screen.queryByText('Fund your wallet')).toBeNull();
     });
 
     it('keeps History rows visible and blocks a second refresh while an error is pending', async () => {

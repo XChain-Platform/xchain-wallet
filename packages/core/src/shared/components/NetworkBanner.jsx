@@ -41,13 +41,13 @@ const BANNER_STYLE = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 'var(--xc-space-1, 4px)',
-    minHeight: '24px',
     boxSizing: 'border-box',
-    padding: '3px var(--xc-space-3, 12px)',
-    borderBottom: '1px solid var(--xc-warning, #b7791f)',
+    padding: 'var(--xc-card-pad)',
+    border: '1px solid var(--xc-warning, #b7791f)',
+    borderRadius: 'var(--xc-card-radius)',
     color: 'var(--xc-warning, #8a5a12)',
     // A token rather than color-mix(): Android WebView 102 drops color-mix.
     background: 'var(--xc-warning-bg, rgba(217, 119, 6, 0.10))',
-    fontSize: 'var(--xc-text-xs, 0.75rem)',
-    lineHeight: 1.3,
+    fontSize: 'var(--xc-text-sm, 0.8125rem)',
+    lineHeight: 1.4,
 };

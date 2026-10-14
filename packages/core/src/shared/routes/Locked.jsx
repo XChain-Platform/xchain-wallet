@@ -562,6 +562,7 @@ export function Locked({ onUnlocked }) {
                     <Button
                         type="submit"
                         variant="primary"
+                        block
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
                     >
@@ -571,6 +572,7 @@ export function Locked({ onUnlocked }) {
                         <Button
                             type="button"
                             variant="secondary"
+                            block
                             onClick={handleBiometric}
                             disabled={busy || isLockedOut}
                         >
@@ -604,17 +606,20 @@ export function Locked({ onUnlocked }) {
                         </div>
                     ) : (
                         <div className={styles.forgotBlock}>
-                            <button
+                            <Button
                                 ref={forgotTriggerRef}
                                 type="button"
-                                className={styles.forgotLink}
+                                variant="link"
+                                size="sm"
+                                icon={null}
                                 onClick={() => setForgotOpen(true)}
                                 aria-expanded={forgotOpen}
                                 aria-controls="locked-forgot-password-panel"
                                 hidden={forgotOpen}
+                                style={{ alignSelf: 'center' }}
                             >
                                 Forgot password?
-                            </button>
+                            </Button>
                             {forgotOpen ? (
                                 <div
                                     ref={forgotDialogRef}

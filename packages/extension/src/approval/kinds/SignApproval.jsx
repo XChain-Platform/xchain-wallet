@@ -14,6 +14,7 @@ import {
     FormPage,
     ListPage,
     Button,
+    ChoiceControl,
     Input,
     ChainBadge,
     Icon,
@@ -780,17 +781,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     ) : signInAddresses.map((c, i) => {
                         const d = chainRegistry.get(c.chainId);
                         return (
-                            <label className={shared.toggleRow} key={`${c.chainId}:${c.address}`}>
-                                <input
-                                    type="radio"
-                                    name="sign-in-address"
-                                    checked={i === signInChoice}
-                                    onChange={() => setSignInChoice(i)}
-                                    disabled={busy}
-                                />
+                            <ChoiceControl
+                                className={shared.toggleRow}
+                                key={`${c.chainId}:${c.address}`}
+                                type="radio"
+                                name="sign-in-address"
+                                checked={i === signInChoice}
+                                onChange={() => setSignInChoice(i)}
+                                disabled={busy}
+                            >
                                 {d ? <ChainBadge descriptor={d} size="sm" /> : null}
                                 <span dir="ltr">{neutralizeControlText(c.address, { maxLength: 120 })}</span>
-                            </label>
+                            </ChoiceControl>
                         );
                     })}
                 </fieldset>
@@ -903,15 +905,14 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         error={error || undefined}
                     />
                     {showSavePermanent ? (
-                        <label className={shared.toggleRow}>
-                            <input
-                                type="checkbox"
-                                checked={savePermanent}
-                                onChange={(e) => setSavePermanent(e.target.checked)}
-                                disabled={busy}
-                            />
+                        <ChoiceControl
+                            className={shared.toggleRow}
+                            checked={savePermanent}
+                            onChange={(e) => setSavePermanent(e.target.checked)}
+                            disabled={busy}
+                        >
                             <span>{t('extension.sign.alwaysAllow')}</span>
-                        </label>
+                        </ChoiceControl>
                     ) : null}
                 </FormPage>
             ) : null}

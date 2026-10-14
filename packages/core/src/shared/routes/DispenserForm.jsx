@@ -24,6 +24,7 @@ import {
     AddressField,
     FormErrorSummary,
     Select,
+    RadioGroup,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -1491,10 +1492,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={actionConfirm.composing}
+                    loading={derivingGetAddress || actionConfirm.composing}
                     disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
                 >
-                    {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
+                    Create
                 </Button>
             )}
         >
@@ -1621,17 +1622,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
                     : null}
             />
-            <p className={styles.pickerLabel}>Buyers pay with</p>
-            <label className={styles.radioOption}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="disp-pay" checked={payWith === 'coin'} onChange={() => setPayWith('coin')} />
-                {' '}Native {coinTicker || 'coin'}
-            </label>
-            <label className={styles.radioOption}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="disp-pay" checked={payWith === 'token'} onChange={() => setPayWith('token')} />
-                {' '}A token
-            </label>
+            <RadioGroup
+                legend="Buyers pay with"
+                name="disp-pay"
+                value={payWith}
+                onChange={setPayWith}
+                options={[
+                    { value: 'coin', label: `Native ${coinTicker || 'coin'}` },
+                    { value: 'token', label: 'A token' },
+                ]}
+            />
             {payWith === 'token' ? (
                 <>
                     <Input
@@ -1733,17 +1733,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </>
             ) : null}
 
-            <p className={styles.pickerLabel}>Expiration</p>
-            <label className={styles.radioOption}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="disp-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                {' '}Default window
-            </label>
-            <label className={styles.radioOption}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="disp-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                {' '}Expire at a specific time
-            </label>
+            <RadioGroup
+                legend="Expiration"
+                name="disp-exp"
+                value={expMode}
+                onChange={setExpMode}
+                options={[
+                    { value: 'default', label: 'Default window' },
+                    { value: 'custom', label: 'Expire at a specific time' },
+                ]}
+            />
             {expMode === 'custom' ? (
                 <Input
                     id="dispenser-expiration"

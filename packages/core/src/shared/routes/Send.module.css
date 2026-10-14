@@ -71,10 +71,10 @@
 
 .detailsList {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--xc-space-1) var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     margin: var(--xc-space-2) 0 0;
-    padding: var(--xc-space-3);
+    padding: var(--xc-space-1);
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
@@ -82,9 +82,10 @@
 
 .advancedReviewList {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--xc-space-2) var(--xc-space-4);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     margin: 0 0 var(--xc-space-3);
+    padding: var(--xc-space-1);
 }
 
 .detailsLabel {
@@ -95,6 +96,7 @@
     letter-spacing: 0.04em;
     margin: 0;
     align-self: center;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .detailsValue {
@@ -102,6 +104,34 @@
     color: var(--xc-text);
     margin: 0;
     word-break: break-word;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
+    border-top: var(--xc-table-row-divider);
+}
+
+@media not all and (min-width: 400px) {
+    .detailsList,
+    .advancedReviewList {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsLabel {
+        padding-bottom: 0;
+    }
+
+    .detailsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: 0;
+    }
 }
 
 .detailsValue code,
@@ -166,8 +196,9 @@
     align-items: center;
     vertical-align: middle;
     margin-inline-start: var(--xc-space-2);
+    /* The pill keeps a 1px block inset because the spacing scale starts at 4px. */
     padding: 1px var(--xc-space-2);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 14%, transparent);
     color: var(--xc-accent-text);
     font-size: var(--xc-text-xs);
@@ -206,23 +237,6 @@
     cursor: pointer;
 }
 
-.rbfLabel {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    font-weight: 500;
-    flex: 1;
-}
-
-.rbfHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 400;
-    line-height: 1.3;
-}
-
 .coinControlList {
     margin: var(--xc-space-2) 0 var(--xc-space-3);
     padding: var(--xc-space-3);
@@ -250,6 +264,7 @@
 }
 
 .coinControlRows {
+    composes: scrollArea from '../../ui/Screen.module.css';
     max-height: 18rem;
     margin-top: var(--xc-space-2);
     overflow-y: auto;
@@ -286,6 +301,7 @@
 .coinControlDust {
     display: inline-block;
     margin-inline-start: var(--xc-space-2);
+    /* The compact badge keeps a 1px block inset below the spacing scale. */
     padding: 1px var(--xc-space-1);
     border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 55%, transparent);
     border-radius: var(--xc-radius-sm);
@@ -314,6 +330,7 @@
 }
 
 .coinControlSummary dd {
+    /* The value needs a 2px offset below the spacing scale. */
     margin: 2px 0 0;
     color: var(--xc-text);
     font-family: var(--xc-font-mono);
@@ -371,7 +388,7 @@
     justify-content: center;
     width: 3rem;
     height: 3rem;
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     background: var(--xc-success-fill);
     color: var(--xc-on-success);
     font-size: 1.5rem;
@@ -399,6 +416,7 @@
 .successRow {
     display: flex;
     flex-direction: column;
+    /* The compact summary needs a 2px gap below the spacing scale. */
     gap: 2px;
     min-width: 0;
 }
@@ -450,7 +468,7 @@
 }
 .successLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) * 0.5);
     border-radius: var(--xc-radius-sm);
 }
 
@@ -479,7 +497,7 @@
 
 .heroIconWrapInteractive:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 4px;
+    outline-offset: var(--xc-space-1);
 }
 
 .heroName {
@@ -496,6 +514,7 @@
 
 .heroIconWrap {
     position: relative;
+    /* Hero artwork stays 88px because the icon scale stops at 24px. */
     width: 88px;
     height: 88px;
     display: flex;
@@ -504,6 +523,7 @@
 }
 
 .heroIconImg {
+    /* Hero artwork stays 88px because the icon scale stops at 24px. */
     width: 88px;
     height: 88px;
     border-radius: 50%;
@@ -513,6 +533,7 @@
 }
 
 .heroIconLetter {
+    /* Hero artwork stays 88px because the icon scale stops at 24px. */
     width: 88px;
     height: 88px;
     border-radius: 50%;
@@ -520,14 +541,16 @@
     align-items: center;
     justify-content: center;
     font-weight: 700;
+    /* The hero monogram stays 36px because the type scale stops at 24px. */
     font-size: 36px;
     line-height: 1;
 }
 
 .heroChainOverlay {
     position: absolute;
-    inset-inline-end: -2px;
-    bottom: -2px;
+    inset-inline-end: calc(var(--xc-space-1) * -0.5);
+    bottom: calc(var(--xc-space-1) * -0.5);
+    /* The hero chain artwork stays 32px because the icon scale stops at 24px. */
     width: 32px;
     height: 32px;
     border-radius: 50%;

@@ -97,18 +97,6 @@
     word-break: normal;
 }
 
-/* Scrim + bottom sheet. The sheet sits above the bar so its safe-area
-   padding stacks correctly. */
-
-.scrim {
-    position: fixed;
-    inset: 0;
-    /* safe-area-backdrop: this layer only paints and catches outside taps;
-       the adjacent sheet owns the content insets. */
-    background: var(--xc-overlay, rgba(0, 0, 0, 0.45));
-    z-index: var(--xc-z-overlay);
-}
-
 .sheet {
     box-sizing: border-box;
     position: fixed;
@@ -134,52 +122,22 @@
     box-shadow: var(--xc-shadow-bottom-sheet);
 }
 
-.sheetHeader {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    align-items: center;
-    flex: 0 0 auto;
-}
-
 .handle {
+    grid-column: 1 / -1;
     width: 36px;
     height: 4px;
-    flex: 0 0 auto;
+    margin: 0 auto var(--xc-space-1);
     border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
 }
 
-.sheetTitleRow {
-    display: grid;
-    grid-template-columns: var(--xc-control-h-md, 40px) 1fr var(--xc-control-h-md, 40px);
-    align-items: center;
-    width: 100%;
-    min-height: var(--xc-control-h-md, 40px);
-}
-
-.sheetClose {
-    grid-column: 3;
-    grid-row: 1;
-    display: inline-flex;
-    justify-self: end;
-}
-
-.sheetBody {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-}
-
 .sheetTitle {
-    grid-column: 2;
-    grid-row: 1;
+    min-width: 0;
     margin: 0;
-    padding: 0 var(--xc-space-2);
+    padding-inline-start: var(--xc-space-2);
     font-size: var(--xc-text-lg);
     line-height: 1.25;
-    text-align: center;
+    overflow-wrap: anywhere;
 }
 
 .sheetList {
@@ -239,14 +197,16 @@
 /* Unread count pill on a sheet row (e.g. Messaging). */
 .sheetBadge {
     flex: 0 0 auto;
-    min-width: 1.25rem;
-    padding: 0 0.4rem;
-    border-radius: var(--xc-radius-pill);
+    box-sizing: border-box;
+    min-width: var(--xc-badge-height-sm);
+    height: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
+    border-radius: var(--xc-badge-radius);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.35rem;
+    font-size: var(--xc-badge-font-size-sm);
+    font-weight: var(--xc-badge-font-weight);
+    line-height: 1;
     text-align: center;
 }
 

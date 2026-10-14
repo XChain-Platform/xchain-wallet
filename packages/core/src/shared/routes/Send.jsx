@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -27,6 +27,8 @@ import {
     InfoTip,
     StatusMessage,
     FormErrorSummary,
+    Checkbox,
+    Switch,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -252,6 +254,19 @@ function nativeTickerFor(descriptor) {
     return tickerForDescriptor(descriptor);
 }
 
+function hasMeaningfulSendDraft(values) {
+    if (!values || typeof values !== 'object') return false;
+    if ([values.toAddress, values.amount, values.memo]
+        .some((value) => String(value || '').trim().length > 0)) return true;
+
+    const tick = String(values.tick || '').trim().toUpperCase();
+    if (!tick) return false;
+    const descriptor = typeof values.chainId === 'string'
+        ? chainRegistry.get(values.chainId)
+        : null;
+    return tick !== nativeTickerFor(descriptor);
+}
+
 function utxoKey(utxo) {
     return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
 }
@@ -275,8 +290,7 @@ function utxoValueSats(utxo) {
 
 function utxoOutpoint(utxo) {
     const txid = String(utxo?.txid || 'Unknown transaction');
-    const compactTxid = txid.length > 18 ? `${txid.slice(0, 8)}…${txid.slice(-8)}` : txid;
-    return `${compactTxid}:${utxo?.vout ?? '?'}`;
+    return <><AddressText address={txid} size="sm" />:{utxo?.vout ?? '?'}</>;
 }
 
 // Validate the destination against the chain the SEND will be broadcast on.
@@ -516,6 +530,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reviewPageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const reviewHeadingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
 
     // §37 / G125: form-draft persistence. Persists only the user-visible
     // composition fields; password / mnemonic / passphrase NEVER touch
@@ -531,10 +547,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
-    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    const [draftPending, setDraftPending] = useState(
+        () => !hasMeaningfulSendDraft(draft.load()),
+    );
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
-        draft.save({ chainId, toAddress, tick, amount, memo });
+        const values = { chainId, toAddress, tick, amount, memo };
+        if (hasMeaningfulSendDraft(values)) draft.save(values);
+        else draft.clear();
     }, [stage, draftPending, draft, chainId, toAddress, tick, amount, memo]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -1240,10 +1260,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
     }, [stage, confirmBusy, chainId, addressesByChain, activeByChain, pickedSourceChain]);
 
-    useEffect(() => {
-        if (stage === 'review') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+    useLayoutEffect(() => {
+        if (stage !== 'review') return;
+        const scroller = reviewPageRef.current?.querySelector('main');
+        if (scroller) scroller.scrollTop = 0;
+        reviewHeadingRef.current?.focus({ preventScroll: true });
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
@@ -2437,11 +2458,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
             title={stage === 'review' || stage === 'submitting' ? t('send.review') : t('send.title')}
             titleIcon={<Icon.SendIcon />}
+            titleRef={stage === 'review' ? reviewHeadingRef : undefined}
         />
     );
 
     const wrap = (children, footer = null) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            rootRef={reviewPageRef}
+            variant={variant}
+            header={header}
+            restoreScroll={stage !== 'review' && stage !== 'submitting'}
+        >
             {children}
             {footer}
             {leaveGuard.confirmation}
@@ -2634,9 +2661,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             })
             : null;
         const sentAmount = amount && tick ? `${amount} ${tick}` : null;
-        const recipient = toAddress
-            ? `${toAddress.slice(0, 8)}…${toAddress.slice(-6)}`
-            : null;
+        const recipient = toAddress || null;
         const sendAnother = () => {
             cancelMax();
             setStage('form');
@@ -2711,13 +2736,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     <div role="status" aria-live="polite">
                         <EmptyState
                             role="presentation"
-                            icon="⏳"
+                            icon={<Icon.ClockIcon />}
                             title={SIGNED_NOT_BROADCAST_TITLE}
                             body={t('send.queued.body')}
+                            actionLabel={t('common.done')}
+                            onAction={onDone || leaveGuard.guardedOnBack}
                         />
-                    </div>
-                    <div className={styles.actions}>
-                        <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                     </div>
                 </>,
             );
@@ -2744,7 +2768,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             {recipient ? (
                                 <div className={styles.successRow}>
                                     <dt>{t('send.fields.to')}</dt>
-                                    <dd className={styles.successMono}>{recipient}</dd>
+                                    <dd className={styles.successMono}><AddressText address={recipient} /></dd>
                                 </div>
                             ) : null}
                             {desc ? (
@@ -2759,7 +2783,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         <div className={styles.successTxidBlock}>
                             <p className={styles.successLabel}>{t('send.txid')}</p>
                             <div className={styles.successTxidRow}>
-                                <code className={styles.txid}>{txid}</code>
+                                <AddressText address={txid} className={styles.txid} size="sm" />
                                 <CopyButton
                                     value={txid}
                                     label={t('send.success.copy')}
@@ -3104,7 +3128,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
 
     // stage === 'form'
-    const draftBanner = draft.hasDraft() && !draftPending ? (
+    const draftBanner = hasMeaningfulSendDraft(draft.load()) && !draftPending ? (
         <StatusMessage
             variant="status"
             recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
@@ -3231,6 +3255,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               */}
             {fromAddress ? (
                 <AddressField
+                    size="md"
                     label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
@@ -3246,7 +3271,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </StatusMessage>
             )}
             <AddressCombobox
-                size="lg"
+                size="md"
                 id="send-destination"
                 icon="contacts"
                 label={matchedContact
@@ -3310,7 +3335,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 />
             )}
             <AmountField
-                size="lg"
+                size="md"
                 id="send-amount"
                 amount={amount}
                 fiatAmount={fiatAmount}
@@ -3408,24 +3433,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             />
                         </div>
                     ))}
-                    <label className={styles.rbfRow}>
-                        <span className={styles.rbfLabel}>
-                            <span>{t('send.recipient.differentToken')}</span>
-                            <span className={styles.rbfHint}>
-                                {t('send.recipient.differentTokenOff', {
-                                    token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
-                                })}
-                            </span>
-                        </span>
-                        {/* This segmented switch stays native because the kit has no switch control. */}
-                        <input
-                            type="checkbox"
-                            role="switch"
-                            aria-label={t('send.recipient.differentToken')}
-                            checked={perRecipientToken}
-                            onChange={(e) => setPerRecipientToken(e.target.checked)}
-                        />
-                    </label>
+                    <Switch
+                        className={styles.rbfRow}
+                        label={t('send.recipient.differentToken')}
+                        description={t('send.recipient.differentTokenOff', {
+                            token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
+                        })}
+                        aria-label={t('send.recipient.differentToken')}
+                        checked={perRecipientToken}
+                        onChange={(e) => setPerRecipientToken(e.target.checked)}
+                    />
                     {sendTotals.length > 0 && !nativeMultiSendBlock ? (
                         <p className={styles.hint}>
                             {t('send.recipient.total', {
@@ -3577,27 +3594,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         </p>
                     </>
                 )}
-                <label className={styles.rbfRow}>
-                    <span className={styles.rbfLabel}>
-                        <span>{t('send.advanced.coinControl')}</span>
-                        <span className={styles.rbfHint}>
-                            {utxoLoadState === 'loading'
-                                ? t('send.advanced.loadingInputs')
-                                : utxoLoadState === 'ready'
-                                    ? t('send.advanced.coinControlReady')
-                                    : t('send.advanced.coinControlUnavailable')}
-                        </span>
-                    </span>
-                    {/* This segmented switch stays native because the kit has no switch control. */}
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label={t('send.advanced.coinControlEnabled')}
-                        checked={coinControlEnabled}
-                        disabled={utxoLoadState !== 'ready'}
-                        onChange={(e) => setCoinControlEnabled(e.target.checked)}
-                    />
-                </label>
+                <Switch
+                    className={styles.rbfRow}
+                    label={(
+                        <>
+                            <span aria-hidden="true">{t('send.advanced.coinControl')}</span>
+                            <span id="send-coin-control-enabled-label" className="sr-only">
+                                {t('send.advanced.coinControlEnabled')}
+                            </span>
+                        </>
+                    )}
+                    description={utxoLoadState === 'loading'
+                        ? t('send.advanced.loadingInputs')
+                        : utxoLoadState === 'ready'
+                            ? t('send.advanced.coinControlReady')
+                            : t('send.advanced.coinControlUnavailable')}
+                    aria-label={t('send.advanced.coinControlEnabled')}
+                    aria-labelledby="send-coin-control-enabled-label"
+                    checked={coinControlEnabled}
+                    disabled={utxoLoadState !== 'ready'}
+                    onChange={(e) => setCoinControlEnabled(e.target.checked)}
+                />
                 {coinControlEnabled ? (
                     <fieldset className={styles.coinControlList}>
                         <legend>{t('send.advanced.inputs')}</legend>
@@ -3636,33 +3653,33 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     const isDust = valueSats !== null && dustFloor !== null
                                         && valueSats < BigInt(dustFloor);
                                     return (
-                                        <label key={key} className={styles.coinControlRow}>
-                                            {/* UTXO selection stays native because the kit has no checkbox control. */}
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedUtxoKeys.has(key)}
-                                                onChange={(e) => setSelectedUtxoKeys((current) => {
-                                                    const next = new Set(current);
-                                                    if (e.target.checked) next.add(key);
-                                                    else next.delete(key);
-                                                    return next;
-                                                })}
-                                            />
-                                            <span className={styles.coinControlValue}>
-                                                <span>
-                                                    {utxoAmount(utxo, descriptor)} {nativeTickerFor(descriptor)}
-                                                    {isDust ? (
-                                                        <span
-                                                            className={styles.coinControlDust}
-                                                            title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
-                                                        >
-                                                            {t('send.advanced.dust')}
-                                                        </span>
-                                                    ) : null}
+                                        <Checkbox
+                                            key={key}
+                                            className={styles.coinControlRow}
+                                            checked={selectedUtxoKeys.has(key)}
+                                            onChange={(e) => setSelectedUtxoKeys((current) => {
+                                                const next = new Set(current);
+                                                if (e.target.checked) next.add(key);
+                                                else next.delete(key);
+                                                return next;
+                                            })}
+                                            label={(
+                                                <span className={styles.coinControlValue}>
+                                                    <span>
+                                                        {utxoAmount(utxo, descriptor)} {nativeTickerFor(descriptor)}
+                                                        {isDust ? (
+                                                            <span
+                                                                className={styles.coinControlDust}
+                                                                title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
+                                                            >
+                                                                {t('send.advanced.dust')}
+                                                            </span>
+                                                        ) : null}
+                                                    </span>
+                                                    <small>{utxoOutpoint(utxo)}</small>
                                                 </span>
-                                                <small>{utxoOutpoint(utxo)}</small>
-                                            </span>
-                                        </label>
+                                            )}
+                                        />
                                     );
                                 })}
                             </div>
@@ -3707,33 +3724,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     settings.fees[chainId].rbfByDefault (see the effect
                     above); the live value flows into the send payload as
                     `rbf: rbfForSend`, off and disabled where the chain has no RBF. */}
-                <label className={styles.rbfRow}>
-                    <span className={styles.rbfLabel}>
-                        <span>
+                <Switch
+                    className={styles.rbfRow}
+                    label={(
+                        <>
                             {t('send.rbf.label')}
                             <InfoTip
                                 aria={t('send.rbf.helpLabel')}
                                 label={t('send.rbf.help')}
                             />
-                        </span>
-                        <span className={styles.rbfHint}>
-                            {rbfSupported
-                                ? t('send.rbf.enabledHint')
-                                : t('send.rbf.unsupported', {
-                                    chain: descriptor?.displayName ?? t('send.rbf.thisChain'),
-                                })}
-                        </span>
-                    </span>
-                    {/* This segmented switch stays native because the kit has no switch control. */}
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label={t('send.rbf.label')}
-                        checked={rbfForSend}
-                        disabled={!rbfSupported}
-                        onChange={(e) => setRbfEnabled(e.target.checked)}
-                    />
-                </label>
+                        </>
+                    )}
+                    description={rbfSupported
+                        ? t('send.rbf.enabledHint')
+                        : t('send.rbf.unsupported', {
+                            chain: descriptor?.displayName ?? t('send.rbf.thisChain'),
+                        })}
+                    aria-label={t('send.rbf.label')}
+                    checked={rbfForSend}
+                    disabled={!rbfSupported}
+                    onChange={(e) => setRbfEnabled(e.target.checked)}
+                />
             </details>
             {testSendGateBanner}
         </FormPage>,

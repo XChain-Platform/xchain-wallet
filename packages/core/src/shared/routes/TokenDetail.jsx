@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -17,8 +17,8 @@ import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
-import tableStyles from '../components/DataTable.module.css';
 import { isDemoWallet } from '../../flows/demoMode.js';
+import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { RANGES as CHART_RANGES, priceHistoryForRange } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -175,10 +175,18 @@ function TokenDetailContent({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const nativePrice = useNativePrice(isNative && fiatSupported ? chainId : null, {
+    const queriedNativePrice = useNativePrice(isNative && fiatSupported && !isDemo ? chainId : null, {
         includeSparkline: true,
         fiatCurrency,
     });
+    const nativePrice = isNative && isDemo
+        ? {
+            entry: synthesizeDemoNativePrices([chainId])[chainId] ?? null,
+            loading: false,
+            disabled: false,
+            error: null,
+        }
+        : queriedNativePrice;
 
     const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
 
@@ -619,61 +627,50 @@ function TokenDetailContent({
                     reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
                     {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onSend}
                             disabled={Boolean(sendDisabledReason)}
-                            title={sendDisabledReason || undefined}
                             aria-label="Send"
-                            icon={<span className={styles.quickActionIcon}><Icon.SendIcon /></span>}
-                        >
-                            <span className={styles.quickActionContent}>
-                                <span>Send</span>
-                                {sendDisabledReason ? <span className={styles.quickActionReason}>{sendDisabledReason}</span> : null}
-                            </span>
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>}
+                            title="Send"
+                            subtitle={sendDisabledReason}
+                        />
                     ) : null}
                     {typeof onReceive === 'function' ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onReceive}
-                            icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
-                        >
-                            Receive
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>}
+                            title="Receive"
+                        />
                     ) : null}
                     {typeof onBuy === 'function' ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onBuy}
                             disabled={Boolean(tradeDisabledReason)}
-                            title={tradeDisabledReason || undefined}
                             aria-label="Trade"
-                            icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
-                        >
-                            <span className={styles.quickActionContent}>
-                                <span>Trade</span>
-                                {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
-                            </span>
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>}
+                            title="Trade"
+                            subtitle={tradeDisabledReason}
+                        />
                     ) : null}
                     {typeof onViewActivity === 'function' ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onViewActivity}
-                            icon={<span className={styles.quickActionIcon}><Icon.HistoryIcon /></span>}
-                        >
-                            History
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>}
+                            title="History"
+                        />
                     ) : null}
                     {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onManageToken}
-                            icon={<span className={styles.quickActionIcon}><Icon.GearIcon /></span>}
-                        >
-                            Manage
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.GearIcon /></span>}
+                            title="Manage"
+                        />
                     ) : null}
                 </div>
 
@@ -1141,107 +1138,82 @@ function DetailsPanel({
             aria-label="Token details"
             aria-busy={loading || undefined}
         >
-            <table className={styles.metaTable}>
-                <tbody>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Name</th>
-                        <td>{displayName || tick}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Ticker</th>
-                        <td>
-                            <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
-                        </td>
-                    </tr>
-                    {/* A bridged copy is a claim on an asset held in escrow on
-                        another chain, and its holder should be able to read that
-                        off the page rather than infer it from a dot in the
-                        ticker. Native rows have no origin to name and get no
-                        row at all. */}
-                    {parseBridgedTick(tick, coinFromChainId(chainId)) ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Origin</th>
-                            <td>
-                                {`Native to ${coinDisplay(parseBridgedTick(tick, coinFromChainId(chainId)).origin)}`
-                                    + `, bridged here as ${tick}`}
-                            </td>
-                        </tr>
-                    ) : null}
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Type</th>
-                        <td>{kindLabel(kind)}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Chain</th>
-                        <td>{descriptor?.displayName || chainId}</td>
-                    </tr>
-                    {!isNative ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Divisibility</th>
-                            <td>{detailText(divisibility)}</td>
-                        </tr>
-                    ) : null}
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Total supply</th>
-                        <td>
-                            {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
-                            {!isNative && assetInfo ? (
-                                <span className={styles.supplyState}>
-                                    {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
-                                </span>
-                            ) : null}
-                        </td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Current balance</th>
-                        <td>{balanceHidden ? '•••••' : `${formatAmount(quantity, divisibility)} ${tick}`}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Estimated value</th>
-                        <td>
-                            {balanceHidden
-                                ? '•••••'
-                                : fiat == null
-                                    ? '-'
-                                    : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
-                        </td>
-                    </tr>
-                    {!isNative ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Creator</th>
-                            <td>
-                                {loading ? (
-                                    <Skeleton shape="text" width="70%" height={20} />
-                                ) : assetInfo?.creator ? (
-                                    <span className={styles.copyableValue}>
-                                        <span className={styles.creatorCell} title={assetInfo.creator}>
-                                            {shorten(assetInfo.creator)}
-                                        </span>
-                                        <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
-                                    </span>
-                                ) : 'N/A'}
-                            </td>
-                        </tr>
-                    ) : null}
-                    {!isNative ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Status</th>
-                            <td>
-                                {loading ? (
-                                    <Skeleton shape="text" width="40%" height={20} />
-                                ) : assetInfo?.locked == null ? (
-                                    '-'
-                                ) : assetInfo.locked ? (
-                                    <span className={styles.lockedFlag}>Locked</span>
-                                ) : (
-                                    <span className={styles.unlockedFlag}>Mutable</span>
-                                )}
-                            </td>
-                        </tr>
-                    ) : null}
-                </tbody>
-            </table>
+            <ul className={styles.detailList} aria-label="Token detail fields">
+                <DetailRow label="Name">{displayName || tick}</DetailRow>
+                <DetailRow label="Ticker">
+                    <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
+                </DetailRow>
+                {/* A bridged copy is a claim on an asset held in escrow on
+                    another chain, and its holder should be able to read that
+                    off the page rather than infer it from a dot in the
+                    ticker. Native rows have no origin to name and get no
+                    row at all. */}
+                {parseBridgedTick(tick, coinFromChainId(chainId)) ? (
+                    <DetailRow label="Origin">
+                        {`Native to ${coinDisplay(parseBridgedTick(tick, coinFromChainId(chainId)).origin)}`
+                            + `, bridged here as ${tick}`}
+                    </DetailRow>
+                ) : null}
+                <DetailRow label="Type">{kindLabel(kind)}</DetailRow>
+                <DetailRow label="Chain">{descriptor?.displayName || chainId}</DetailRow>
+                {!isNative ? (
+                    <DetailRow label="Divisibility">{detailText(divisibility)}</DetailRow>
+                ) : null}
+                <DetailRow label={<span>Total supply</span>}>
+                    <span>
+                        {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
+                        {!isNative && assetInfo ? (
+                            <span className={styles.supplyState}>
+                                {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
+                            </span>
+                        ) : null}
+                    </span>
+                </DetailRow>
+                <DetailRow label="Current balance">
+                    {balanceHidden ? '•••••' : `${formatAmount(quantity, divisibility)} ${tick}`}
+                </DetailRow>
+                <DetailRow label="Estimated value">
+                    {balanceHidden
+                        ? '•••••'
+                        : fiat == null
+                            ? '-'
+                            : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
+                </DetailRow>
+                {!isNative ? (
+                    <DetailRow label={<span>Creator</span>}>
+                        {loading ? (
+                            <Skeleton shape="text" width="70%" height={20} />
+                        ) : assetInfo?.creator ? (
+                            <span className={styles.copyableValue}>
+                                <AddressText address={assetInfo.creator} className={styles.creatorCell} />
+                                <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
+                            </span>
+                        ) : 'N/A'}
+                    </DetailRow>
+                ) : null}
+                {!isNative ? (
+                    <DetailRow label={<span>Status</span>}>
+                        {loading ? (
+                            <Skeleton shape="text" width="40%" height={20} />
+                        ) : assetInfo?.locked == null ? (
+                            '-'
+                        ) : assetInfo.locked ? (
+                            <span className={styles.lockedFlag}>Locked</span>
+                        ) : (
+                            <span className={styles.unlockedFlag}>Mutable</span>
+                        )}
+                    </DetailRow>
+                ) : null}
+            </ul>
         </div>
+    );
+}
+
+function DetailRow({ label, children }) {
+    return (
+        <li>
+            <ListRow title={label} trailing={children} />
+        </li>
     );
 }
 
@@ -2451,39 +2423,32 @@ function HoldersPanel({
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
                 </div>
             ) : null}
-            <table className={tableStyles.table}>
-                <caption className={tableStyles.visuallyHiddenCaption}>Holder balances</caption>
-                <thead>
-                    <tr>
-                        <th className={tableStyles.headerCell} scope="col">Address</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {renderedHolders.map((h, i) => (
-                        <tr key={holderIdentity(h) || `holder:${i}`}>
-                            <td className={tableStyles.cell} data-label="Address">
-                                <span className={styles.holdersAddrWrap}>
-                                    <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
-                                        {shorten(h.address || h.ADDRESS || 'unknown')}
+            <ul className={styles.holdersList} aria-label="Holder balances">
+                {renderedHolders.map((h, i) => {
+                    const address = h.address || h.ADDRESS;
+                    const balance = h.quantity != null || h.QUANTITY != null
+                        ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
+                        : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'));
+                    return (
+                        <li key={holderIdentity(h) || `holder:${i}`}>
+                            <ListRow
+                                title={(
+                                    <span className={styles.holdersAddrWrap}>
+                                        <AddressText address={address || 'unknown'} className={styles.holdersAddr} />
+                                        {address ? (
+                                            <CopyButton
+                                                value={address}
+                                                ariaLabel={`Copy holder address ${i + 1}`}
+                                            />
+                                        ) : null}
                                     </span>
-                                    {(h.address || h.ADDRESS) ? (
-                                        <CopyButton
-                                            value={h.address || h.ADDRESS}
-                                            ariaLabel={`Copy holder address ${i + 1}`}
-                                        />
-                                    ) : null}
-                                </span>
-                            </td>
-                            <td className={`${tableStyles.cell} ${tableStyles.numeric} ${styles.holdersQty}`} data-label="Balance">
-                                {h.quantity != null || h.QUANTITY != null
-                                    ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
-                                    : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'))}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+                                )}
+                                trailing={<span className={styles.holdersQty}>{balance}</span>}
+                            />
+                        </li>
+                    );
+                })}
+            </ul>
             {holdersMoreError ? (
                 <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
             ) : null}
@@ -2548,11 +2513,6 @@ function kindLabel(kind) {
 function nativeTickerOf(chainId) {
     const desc = chainRegistry.get(chainId);
     return tickerForCoin(desc?.coin);
-}
-
-function shorten(addr) {
-    if (!addr || addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 function safeBigInt(v) {

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1363,19 +1363,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                                 const isLocked = !!tokenLocks[f.key];
                                 return (
                                     <div key={f.key} className={styles.lockFlagRow}>
-                                        <label className={styles.checkRow}>
-                                            <input
-                                                type="checkbox"
-                                                checked={isLocked || !!lockChecks[f.key]}
-                                                disabled={isLocked}
-                                                onChange={(e) => setLockChecks((prev) => ({
-                                                    ...prev,
-                                                    [f.key]: e.target.checked,
-                                                }))}
-                                            />
-                                            <span>{f.label}{isLocked ? ' (already locked)' : ''}</span>
-                                        </label>
-                                        <p className={styles.lockFlagHint}>{f.hint}</p>
+                                        <Checkbox
+                                            label={`${f.label}${isLocked ? ' (already locked)' : ''}`}
+                                            description={f.hint}
+                                            checked={isLocked || !!lockChecks[f.key]}
+                                            disabled={isLocked}
+                                            onChange={(e) => setLockChecks((prev) => ({
+                                                ...prev,
+                                                [f.key]: e.target.checked,
+                                            }))}
+                                        />
                                     </div>
                                 );
                             })}
@@ -1655,17 +1652,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     ) : null}
                     <span className={styles.pickerLabel}>Destination chains</span>
                     {bridgeDestinations.map((coin) => (
-                        <label key={coin} className={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={!!bridgeChainPicks[coin]}
-                                disabled={bridgeFrozen || bridgePolicyBound}
-                                onChange={(e) => setBridgeChainPicks(
-                                    (prev) => ({ ...prev, [coin]: e.target.checked }),
-                                )}
-                            />
-                            {` ${bridgeCoinDisplay(coin)}`}
-                        </label>
+                        <Checkbox
+                            key={coin}
+                            label={bridgeCoinDisplay(coin)}
+                            checked={!!bridgeChainPicks[coin]}
+                            disabled={bridgeFrozen || bridgePolicyBound}
+                            onChange={(e) => setBridgeChainPicks(
+                                (prev) => ({ ...prev, [coin]: e.target.checked }),
+                            )}
+                        />
                     ))}
                     <p className={styles.hint}>
                         Unchecking every chain closes the door to NEW transfers. It never
@@ -1681,14 +1676,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         inputMode="numeric"
                     />
                     {!bridgeFrozen ? (
-                        <label className={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={bridgeLock}
-                                onChange={(e) => setBridgeLock(e.target.checked)}
-                            />
-                            {' Freeze these settings permanently'}
-                        </label>
+                        <Checkbox
+                            label="Freeze these settings permanently"
+                            checked={bridgeLock}
+                            onChange={(e) => setBridgeLock(e.target.checked)}
+                        />
                     ) : null}
                     {bridgeLock ? (
                         <StatusMessage variant="status">

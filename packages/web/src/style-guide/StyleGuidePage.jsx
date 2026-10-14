@@ -12,6 +12,8 @@
 // wallet's reusable component vocabulary. Add a new <Section> for each
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
+import { useState } from 'react';
+import { Checkbox, ChoiceControl, RadioGroup, SegmentedControl } from '@xchain-wallet/core/ui';
 import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
 import { ComponentStateMatrix } from './ComponentStateMatrix.jsx';
 import {
@@ -56,6 +58,7 @@ import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
 import { ButtonsSection } from './sections/ButtonsSection.jsx';
 import { ChipSection } from './sections/ChipSection.jsx';
+import { SwitchSection } from './sections/SwitchSection.jsx';
 import { DialogsSection } from './sections/DialogsSection.jsx';
 import {
     AddressComboboxSection,
@@ -91,8 +94,11 @@ export const SECTIONS = [
     { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
-    { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
+    { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button', 'Spinner'] },
+    { id: 'checkbox',              label: 'Checkbox',               Component: CheckboxSection, primitives: ['Checkbox'] },
+    { id: 'choice-control',        label: 'Choice control',         Component: ChoiceControlSection, primitives: ['ChoiceControl'] },
     { id: 'chip',                  label: 'Chip',                   Component: ChipSection, primitives: ['Chip'] },
+    { id: 'switch',                label: 'Switch',                 Component: SwitchSection, primitives: ['Switch'] },
     { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
@@ -106,6 +112,8 @@ export const SECTIONS = [
     { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection },
     { id: 'token-selector',        label: 'Token selector page',    Component: TokenSelectorSection },
     { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection },
+    { id: 'radio-group',           label: 'Radio group',            Component: RadioGroupSection, primitives: ['RadioGroup'] },
+    { id: 'segmented-control',     label: 'Segmented control',      Component: SegmentedControlSection, primitives: ['SegmentedControl'] },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
     { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
     { id: 'field-sizes',           label: 'Field sizes',            Component: FieldSizesSection, primitives: ['Input', 'Select', 'Textarea'] },
@@ -135,6 +143,79 @@ export const DOCUMENTED_PRIMITIVES = Object.freeze(
 );
 
 export { DOCUMENTED_TOKENS, TOKEN_GROUPS };
+
+function CheckboxSection() {
+    return (
+        <Section
+            id="checkbox"
+            title="Checkbox"
+            tag="CANONICAL · Checkbox"
+            kicker="A native checkbox with a token-styled box, supporting text, validation, and a label-wide 44px touch target."
+        >
+            <Guidance
+                what={<>A semantic <code>input type="checkbox"</code> with <code>label</code>, optional <code>description</code> and <code>error</code>, plus checked, indeterminate, disabled, and error visuals.</>}
+                when={<>Use it for independent yes/no choices and acknowledgements in forms.</>}
+                whenNot={<>Use radio buttons or a select when the user must choose exactly one item from a set.</>}
+                sizing={<>The painted box uses <code>--xc-control-icon-md</code>; the surrounding label remains at least 44px tall on every pointer type.</>}
+                variants={<>Unchecked, checked, indeterminate, disabled, and error states in both light and dark themes.</>}
+                doRule={<>Keep the complete label meaningful and add a description only when it helps the user decide.</>}
+                dontRule={<>Do not replace it with a clickable image or remove the native input from the accessibility tree.</>}
+            />
+            <Markup>
+{`<Checkbox
+    label="Publish permanently"
+    description="On-chain bytes cannot be deleted."
+    checked={accepted}
+    onChange={(event) => setAccepted(event.target.checked)}
+/>
+<Checkbox label="Select all files" indeterminate />
+<Checkbox label="Accept terms" error="Required" />`}
+            </Markup>
+            <LiveExample label="Default, supporting text, indeterminate, disabled, and error states">
+                <div style={{ display: 'grid', gap: 'var(--xc-space-2)' }}>
+                    <Checkbox label="Publish permanently" description="On-chain bytes cannot be deleted." defaultChecked />
+                    <Checkbox label="Select all files" indeterminate />
+                    <Checkbox label="Managed by your organization" disabled checked readOnly />
+                    <Checkbox label="Accept terms" error="Required" />
+                </div>
+            </LiveExample>
+        </Section>
+    );
+}
+
+function ChoiceControlSection() {
+    return (
+        <Section
+            id="choice-control"
+            title="Choice control"
+            tag="CANONICAL · ChoiceControl"
+            kicker="A compact checkbox or radio whose whole label is the pointer target, for dense approval and permission lists."
+        >
+            <Guidance
+                what={<>A native <code>input</code> of type <code>checkbox</code> or <code>radio</code> wrapped in its label. Extra props pass through to the input.</>}
+                when={<>Use it inside extension approval screens where each row is one permission or account choice with a short inline label.</>}
+                whenNot={<>Use <code>Checkbox</code> when a form field needs a description or error, and <code>RadioGroup</code> for a labelled set of exclusive options.</>}
+                sizing={<>The painted box uses the control icon token and the label keeps the shared touch target on coarse pointers.</>}
+                variants={<>Checkbox or radio, checked, unchecked and disabled, in both themes.</>}
+                doRule={<>Keep the label short and specific to the permission it grants.</>}
+                dontRule={<>Do not hand-roll a label around a raw input when this control fits.</>}
+            />
+            <Markup>
+{`<ChoiceControl checked={remember} onChange={(event) => setRemember(event.target.checked)}>
+    Remember this site
+</ChoiceControl>
+<ChoiceControl type="radio" name="account" value="main">Main account</ChoiceControl>`}
+            </Markup>
+            <LiveExample label="Checkbox, radio, and disabled states">
+                <div style={{ display: 'grid', gap: 'var(--xc-space-2)' }}>
+                    <ChoiceControl defaultChecked>Remember this site</ChoiceControl>
+                    <ChoiceControl type="radio" name="sg-choice-account" value="main" defaultChecked>Main account</ChoiceControl>
+                    <ChoiceControl disabled>Managed by your organization</ChoiceControl>
+                </div>
+            </LiveExample>
+        </Section>
+    );
+}
 
 export function StyleGuidePage() {
     const [view, setView] = useViewState();
@@ -287,6 +368,128 @@ export function LiveExample({ label, minHeight, padded = true, children }) {
             {label ? <p className="sg-example-label">{label}</p> : null}
             <ViewFrame title={label} minHeight={minHeight} padded={padded}>{children}</ViewFrame>
         </div>
+    );
+}
+
+export function RadioGroupSection() {
+    const [delivery, setDelivery] = useState('private');
+
+    return (
+        <Section
+            id="radio-group"
+            title="Radio group"
+            tag="CANONICAL expanded exclusive choice"
+            kicker="A labelled set of mutually exclusive choices that preserves native radio keyboard behavior."
+        >
+            <Guidance
+                what={<>A native <code>fieldset</code> and <code>legend</code> containing same-name radio inputs, label-wide touch targets, and optional descriptions.</>}
+                when={<>Use when every choice should remain visible and supporting copy helps users compare the options.</>}
+                whenNot={<>Use <a href="#segmented-control">SegmentedControl</a> for two or three compact choices with short labels, or checkboxes when more than one value may be selected.</>}
+                sizing={<>The circle uses <code>--xc-control-icon-md</code>. Every label provides a 44px minimum touch target without enlarging the circle.</>}
+                variants={<>Option descriptions, disabled options or groups, required state, hint text, and error text.</>}
+                doRule={<>Give the group a concise legend, pass one stable value, and let the native inputs provide arrow-key movement.</>}
+                dontRule={<>Do not add route-local keyboard handlers, omit the legend, or use radio buttons for independent on/off settings.</>}
+                supersedes={<>Route-local radio markup for expanded exclusive choices. Use <code>&lt;RadioGroup&gt;</code> from <code>@xchain-wallet/core/ui</code>.</>}
+            />
+            <Markup>
+{`<RadioGroup
+    legend="Delivery visibility"
+    name="delivery"
+    value={delivery}
+    onChange={setDelivery}
+    options={[
+        { value: 'private', label: 'Private', description: 'Only the recipient can read it' },
+        { value: 'public', label: 'Public', description: 'Readable by anyone' },
+    ]}
+/>`}
+            </Markup>
+            <LiveExample label="Delivery visibility">
+                <RadioGroup
+                    legend="Delivery visibility"
+                    name="style-guide-delivery"
+                    value={delivery}
+                    onChange={setDelivery}
+                    options={[
+                        {
+                            value: 'private',
+                            label: 'Private',
+                            description: 'Only the recipient can read it.',
+                        },
+                        {
+                            value: 'public',
+                            label: 'Public',
+                            description: 'Stored as readable chain data.',
+                        },
+                        {
+                            value: 'scheduled',
+                            label: 'Scheduled release',
+                            description: 'Unavailable for this message type.',
+                            disabled: true,
+                        },
+                    ]}
+                />
+            </LiveExample>
+        </Section>
+    );
+}
+
+export function SegmentedControlSection() {
+    const [grouping, setGrouping] = useState('grouped');
+    const [side, setSide] = useState('buy');
+
+    return (
+        <Section
+            id="segmented-control"
+            title="Segmented control"
+            tag="CANONICAL compact exclusive choice"
+            kicker="A two- or three-way choice with one selected value, a shared control height, and radio keyboard behavior."
+        >
+            <Guidance
+                what={<>A <code>radiogroup</code> containing equal-width radio buttons. One segment is selected and reachable in the tab order; arrow keys, Home, and End both move focus and select a value.</>}
+                when={<>Use for two or three short, mutually exclusive choices such as Grouped / Flat history or Buy / Sell order side.</>}
+                whenNot={<>Use <a href="#tabs">Tabs</a> when the choice changes a page panel, checkboxes for multiple values, or a switch for an independent on/off setting.</>}
+                sizing={<>The control uses <code>--xc-control-h-md</code>, <code>--xc-control-radius</code>, and equal-width segments. Apply a width through <code>className</code> when the control should fill its container.</>}
+                doRule={<>✓ Provide an accessible label · keep labels short · keep exactly one selected value · use semantic success or danger tones only when the choices carry those meanings</>}
+                dontRule={<>✗ Put unrelated actions in one control · wrap segments onto multiple lines · add custom heights or radii · implement route-local arrow-key handling</>}
+                supersedes={<>Route-local native button groups for compact exclusive choices. Use <code>&lt;SegmentedControl&gt;</code> from <code>@xchain-wallet/core/ui</code>.</>}
+            />
+
+            <Markup>
+{`<SegmentedControl
+    aria-label="History grouping"
+    value={grouping}
+    onChange={setGrouping}
+    items={[
+        { id: 'grouped', label: 'Grouped' },
+        { id: 'flat', label: 'Flat' },
+    ]}
+/>`}
+            </Markup>
+
+            <LiveExample label="History grouping">
+                <SegmentedControl
+                    aria-label="History grouping"
+                    value={grouping}
+                    onChange={setGrouping}
+                    items={[
+                        { id: 'grouped', label: 'Grouped' },
+                        { id: 'flat', label: 'Flat' },
+                    ]}
+                />
+            </LiveExample>
+
+            <LiveExample label="Semantic order side">
+                <SegmentedControl
+                    aria-label="Order side"
+                    value={side}
+                    onChange={setSide}
+                    items={[
+                        { id: 'buy', label: 'Buy', tone: 'success' },
+                        { id: 'sell', label: 'Sell', tone: 'danger' },
+                    ]}
+                />
+            </LiveExample>
+        </Section>
     );
 }
 

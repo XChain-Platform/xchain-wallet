@@ -13,7 +13,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { TickerIcon } from './TickerIcon.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
 import styles from './TokenField.module.css';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import inputStyles from '../../ui/Input.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -107,7 +107,7 @@ export function TokenField({
                 </span>
             </button>
             {error ? (
-                <StatusMessage variant="error" id={errorId} className={styles.error}>{error}</StatusMessage>
+                <div id={errorId} className={inputStyles.error} role="alert">{error}</div>
             ) : null}
         </div>
     );

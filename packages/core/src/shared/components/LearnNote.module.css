@@ -4,6 +4,7 @@
 
 .note {
     border: 1px solid var(--xc-border);
+    /* The accent rail has no matching border-width token. */
     border-inline-start: 3px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-md);
     background: var(--xc-bg-muted);
@@ -29,7 +30,7 @@
     letter-spacing: 0.04em;
 }
 
-/* Inline link-style button; the flex box lets it meet the 24px pointer
+/* Inline link-style button; the flex box lets it meet the minimum pointer
    target floor without padding that would push the text out of line. */
 .dismiss {
     display: inline-flex;
@@ -42,17 +43,20 @@
     cursor: pointer;
     font: inherit;
     text-decoration: underline;
+    /* Two pixels separate the underline without changing the line box. */
     text-underline-offset: 2px;
 }
 
 .dismiss:focus-visible {
     border-radius: var(--xc-radius-sm);
     outline: 2px solid var(--xc-focus-ring);
+    /* Two pixels separate the focus ring without enlarging the control. */
     outline-offset: 2px;
 }
 
 .body {
     margin: 0;
+    max-width: var(--xc-prose-max-width);
 }
 
 .body a {

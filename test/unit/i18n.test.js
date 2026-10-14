@@ -430,6 +430,8 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // Retrying a desktop update download and retrying a balance load.
+            ['desktopUpdate.retry', 'home.retryBalances'],
             ['home.receive', 'uri.intent.receive'],
             ['send.title', 'uri.intent.send'],
         ]);

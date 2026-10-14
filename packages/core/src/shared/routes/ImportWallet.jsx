@@ -13,17 +13,20 @@ import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     Button,
+    Checkbox,
     FormPage,
     Input,
     Select,
     Textarea,
     Icon,
     ListPage,
+    PageHeader,
     QrScanner,
     StatusMessage,
     Tabs,
     InfoTip,
     FormErrorSummary,
+    Switch,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -56,7 +59,6 @@ import {
     restorePasswordRequiredMessage,
 } from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
-import pickerStyles from './WalletPicker.module.css';
 import { t } from '../../i18n/index.js';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -233,7 +235,7 @@ export function ImportWallet({
 
     useEffect(() => {
         headingRef.current?.focus();
-    }, [lane]);
+    }, [lane, adsNotice]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -703,7 +705,6 @@ export function ImportWallet({
     }
 
     const headClass = isFull ? styles.headFull : styles.headPopup;
-    const titleClass = isFull ? styles.titleFull : styles.titlePopup;
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
     const backupSourceMessage = backupDrop.isDragOver
@@ -804,7 +805,12 @@ export function ImportWallet({
         importErrorTarget = { id: 'import-bip39-passphrase', label: 'BIP39 passphrase' };
     }
     const importErrors = error ? [{ ...importErrorTarget, message: error }] : [];
-    const formStatus = error ? (
+    // The summary links field errors after a submit attempt. An error raised
+    // before any submit (a rejected scan, an unreadable file or drop) has no
+    // attempt to anchor to, so it shows as a plain error message instead.
+    const formStatus = error && validationAttempt === 0 ? (
+        <StatusMessage variant="error">{error}</StatusMessage>
+    ) : error ? (
         <FormErrorSummary
             errors={importErrors}
             focusKey={validationAttempt}
@@ -834,7 +840,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? t('importWallet.restoring') : t('send.draft.restore')}
+            {t('send.draft.restore')}
         </Button>
     ) : lane === 'wif' ? (
         <Button
@@ -845,7 +851,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? t('importWallet.importing') : t('importWallet.import')}
+            {t('importWallet.import')}
         </Button>
     ) : (
         <Button
@@ -856,9 +862,19 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? t('importWallet.importing') : t('importWallet.import')}
+            {t('importWallet.import')}
         </Button>
     );
+
+    const pageTitle = adsNotice
+        ? t('adsNotice.title')
+        : isFreeWallet
+            ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
+            : lane === 'backup'
+                ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
+                : lane === 'wif'
+                    ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
+                    : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'));
 
     const form = (
         <FormPage
@@ -868,42 +884,26 @@ export function ImportWallet({
                 : lane === 'wif'
                     ? handleWifSubmit
                     : handleSubmit}
+            description={isFreeWallet
+                ? (isFull
+                    ? t('importWallet.freeWallet.fullSubtitle')
+                    : t('importWallet.freeWallet.subtitle'))
+                : lane === 'backup'
+                    ? (isFull
+                        ? (mode === 'add'
+                            ? t('importWallet.backup.addFullSubtitle')
+                            : t('importWallet.backup.replaceFullSubtitle'))
+                        : (mode === 'add'
+                            ? t('importWallet.backup.addSubtitle')
+                            : t('importWallet.backup.replaceSubtitle')))
+                    : lane === 'wif'
+                        ? t('importWallet.wif.subtitle')
+                        : (isFull
+                            ? t('importWallet.phrase.fullSubtitle')
+                            : t('importWallet.phrase.subtitle'))}
             status={formStatus}
             actions={formActions}
         >
-            <header className={headClass}>
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
-                    {isFreeWallet
-                        ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
-                        : lane === 'backup'
-                            ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
-                            : lane === 'wif'
-                                ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
-                            : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'))}
-                </h1>
-                <p className={subtitleClass}>
-                    {isFreeWallet
-                        ? (isFull
-                            ? t('importWallet.freeWallet.fullSubtitle')
-                            : t('importWallet.freeWallet.subtitle'))
-                        : lane === 'backup'
-                            ? (isFull
-                                ? (mode === 'add'
-                                    ? t('importWallet.backup.addFullSubtitle')
-                                    // It used to say "the password",
-                                    // singular, one line above three password
-                                    // boxes.
-                                    : t('importWallet.backup.replaceFullSubtitle'))
-                                : (mode === 'add'
-                                    ? t('importWallet.backup.addSubtitle')
-                                    : t('importWallet.backup.replaceSubtitle')))
-                            : lane === 'wif'
-                                ? t('importWallet.wif.subtitle')
-                            : (isFull
-                                ? t('importWallet.phrase.fullSubtitle')
-                                : t('importWallet.phrase.subtitle'))}
-                </p>
-            </header>
             {laneSwitcher}
             {lane === 'backup' ? (
                 <>
@@ -1047,16 +1047,13 @@ export function ImportWallet({
                         autoComplete="off"
                         disabled={busy}
                     />
-                    <label className={styles.advancedToggle}>
-                        {/* The kit has no checkbox primitive for this boolean option. */}
-                        <input
-                            type="checkbox"
-                            checked={backupOverwrite}
-                            onChange={(e) => setBackupOverwrite(e.target.checked)}
-                            disabled={busy}
-                        />
-                        <span>{t('importWallet.backup.overwrite')}</span>
-                    </label>
+                    <Switch
+                        className={styles.advancedToggle}
+                        label={t('importWallet.backup.overwrite')}
+                        checked={backupOverwrite}
+                        onChange={(e) => setBackupOverwrite(e.target.checked)}
+                        disabled={busy}
+                    />
                 </>
             ) : null}
             {lane === 'mnemonic' ? (
@@ -1204,10 +1201,9 @@ export function ImportWallet({
             />
             {!isFreeWallet ? (
                 <div className={styles.advancedRow}>
-                    <label className={styles.advancedToggle}>
-                        {/* The kit has no checkbox primitive for this boolean option. */}
-                        <input
-                            type="checkbox"
+                    <div className={styles.advancedToggle}>
+                        <Switch
+                            label={t('importWallet.passphrase.toggle')}
                             checked={showPassphrase}
                             onChange={(e) => {
                                 setShowPassphrase(e.target.checked);
@@ -1215,12 +1211,11 @@ export function ImportWallet({
                             }}
                             disabled={busy}
                         />
-                        <span>{t('importWallet.passphrase.toggle')}</span>
                         <InfoTip
                             aria={t('importWallet.passphrase.help')}
                             label={t('importWallet.passphrase.helpBody')}
                         />
-                    </label>
+                    </div>
                     {showPassphrase ? (
                         <Input
                             id="import-bip39-passphrase"
@@ -1301,48 +1296,40 @@ export function ImportWallet({
                         autoComplete="new-password"
                         disabled={busy}
                     />
-                    <label className={styles.advancedToggle}>
-                        {/* The kit has no checkbox primitive for this acknowledgement. */}
-                        <input
-                            type="checkbox"
-                            checked={wifWarningAck}
-                            onChange={(e) => {
-                                setWifWarningAck(e.target.checked);
-                                if (error) setError(null);
-                            }}
-                            disabled={busy}
-                        />
-                        <span>{t('importWallet.wif.ack')}</span>
-                    </label>
+                    <Checkbox
+                        className={styles.advancedToggle}
+                        label={t('importWallet.wif.ack')}
+                        checked={wifWarningAck}
+                        onChange={(e) => {
+                            setWifWarningAck(e.target.checked);
+                            if (error) setError(null);
+                        }}
+                        disabled={busy}
+                    />
                 </>
             ) : null}
         </FormPage>
     );
 
     const screenHeader = (
-        <div className={pickerStyles.header}>
-            <Button
-                type="button"
-                onClick={handleBack}
-                className={pickerStyles.iconBtn}
-                aria-label={t('importWallet.backToSetup')}
-                title={t('importWallet.backToSetup')}
-                disabled={busy}
-            >
-                <Icon.BackIcon />
-            </Button>
-            <span />
-            {onOpenInTab ? (
+        <PageHeader
+            onBack={handleBack}
+            backLabel={t('importWallet.backToSetup')}
+            backDisabled={busy}
+            title={pageTitle}
+            titleRef={headingRef}
+            trailing={onOpenInTab && !adsNotice ? (
                 <Button
                     variant="ghost"
                     size="sm"
+                    icon={<Icon.ExternalLinkIcon />}
                     onClick={() => onOpenInTab({ lane })}
                     disabled={busy}
-                >
-                    {t('importWallet.openInTab')}
-                </Button>
-            ) : <span />}
-        </div>
+                    aria-label={t('importWallet.openInTab')}
+                    title={t('importWallet.openInTab')}
+                />
+            ) : null}
+        />
     );
 
     const continueAfterNotice = () => {
@@ -1388,7 +1375,6 @@ export function ImportWallet({
                     onContinue={continueAfterNotice}
                     isFull={isFull}
                     headClass={headClass}
-                    titleClass={titleClass}
                     subtitleClass={subtitleClass}
                     actionsClass={actionsClass}
                     busy={continuing}
@@ -1397,7 +1383,7 @@ export function ImportWallet({
             </>
         );
         return (
-            <Screen variant={variant}>
+            <Screen variant={variant} header={screenHeader}>
                 <ListPage>{noticeBody}</ListPage>
             </Screen>
         );

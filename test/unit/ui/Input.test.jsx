@@ -55,13 +55,41 @@ describe('<Input>', () => {
             `\\.${size}\\s*\\{[^}]*--xc-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
             's',
         );
-        const heights = { sm: '32px', md: '40px', lg: '48px' };
+        const heights = { sm: '28px', md: '36px', lg: '44px' };
         expect(inputCss).toMatch(heightRule);
         expect(iconSelectCss).toMatch(heightRule);
         expect(tokensCss).toMatch(new RegExp(`--xc-control-h-${size}:\\s*${heights[size]}`));
-        expect(tokensCss).toMatch(/--xc-control-radius:\s*var\(--xc-radius-md\)/);
-        expect(inputCss).toMatch(/\.input\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
+        expect(tokensCss).toMatch(/--xc-control-radius:\s*8px/);
+        expect(inputCss).toMatch(/\.input\s*\{[^}]*border-radius:\s*var\(--xc-control-radius,\s*8px\)/s);
         expect(iconSelectCss).toMatch(/\.trigger\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
+    });
+
+    it('defines the measured mouse and touch control scales', () => {
+        const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const mouseTokens = {
+            '--xc-control-font-sm': '13px',
+            '--xc-control-font-md': '14px',
+            '--xc-control-font-lg': '16px',
+            '--xc-control-pad-x-sm': '8px',
+            '--xc-control-pad-x-md': '12px',
+            '--xc-control-pad-x-lg': '16px',
+            '--xc-control-icon-sm': '16px',
+            '--xc-control-icon-md': '20px',
+            '--xc-control-icon-lg': '24px',
+            '--xc-control-line': '1.25',
+            '--xc-control-radius': '8px',
+            '--xc-control-border': '1px',
+            '--xc-control-hit-min': '24px',
+        };
+
+        for (const [token, value] of Object.entries(mouseTokens)) {
+            expect(tokensCss).toContain(`${token}: ${value};`);
+        }
+        expect(tokensCss).toMatch(/--xc-radius-control:\s*var\(--xc-control-radius\)/);
+        expect(tokensCss).toMatch(/@media \(pointer: coarse\), \(hover: none\)\s*\{\s*:root\s*\{[^}]*--xc-control-h-sm:\s*36px[^}]*--xc-control-h-md:\s*44px[^}]*--xc-control-h-lg:\s*48px[^}]*--xc-control-font-sm:\s*1rem[^}]*--xc-control-font-md:\s*1rem[^}]*--xc-control-font-lg:\s*1\.0625rem[^}]*--xc-control-hit-min:\s*44px/s);
+        expect(inputCss).toMatch(/\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height\)[^}]*padding-block:\s*0/s);
+        expect(inputCss).toMatch(/calendar-picker-indicator\s*\{[^}]*width:\s*var\(--xc-tap-min,\s*24px\)[^}]*background-size:\s*var\(--xc-control-icon-size,\s*20px\) var\(--xc-control-icon-size,\s*20px\)[^}]*padding:\s*0/s);
     });
 
     it('associates label via htmlFor / id', () => {
@@ -340,6 +368,18 @@ describe('<Input>', () => {
         fireEvent.change(input, { target: { value: max } });
         expect(onChange).toHaveBeenCalledOnce();
         expect(onChange.mock.calls[0][0].target.value).toBe(max);
+    });
+
+    it('constrains native date and time controls to their container', () => {
+        const css = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const rule = /\.input:is\(\[type='date'\], \[type='datetime-local'\], \[type='time'\]\)\s*\{([^}]*)\}/s
+            .exec(css)?.[1];
+
+        expect(rule).toMatch(/-webkit-appearance:\s*none/);
+        expect(rule).toMatch(/appearance:\s*none/);
+        expect(rule).toMatch(/box-sizing:\s*border-box/);
+        expect(rule).toMatch(/width:\s*100%/);
+        expect(rule).toMatch(/min-width:\s*0/);
     });
 
     it('explains date range violations and clears the error after a valid entry', () => {

@@ -29,12 +29,22 @@ const migratedRoutes = [
 
 const styleGuideRoutes = {
     AccountPicker: ['Button', 'ListRow'],
-    ControllerBindForm: ['Button', 'Input', 'Select'],
-    ListCreateForm: ['Button', 'Input', 'Select', 'Textarea'],
+    CoSignerPolicyEditor: ['Button', 'Checkbox', 'Input', 'Select', 'Switch'],
+    ControllerBindForm: ['Button', 'Checkbox', 'Input', 'Select'],
+    ListCreateForm: ['Button', 'Checkbox', 'Input', 'Select', 'Textarea'],
+    ListForkForm: ['Button', 'Checkbox', 'Input', 'Textarea'],
     MarketActivity: ['Button'],
     MarketView: ['Button'],
-    MultisigCreate: ['Button', 'Input', 'Select'],
+    MultisigCreate: ['Button', 'Input', 'RadioGroup', 'Select'],
     PairSignerForm: ['Button', 'Input'],
+    PollDetail: ['Button', 'Checkbox', 'Input'],
+    UnionListForm: ['Button', 'Checkbox', 'Input'],
+    Send: ['Button', 'Checkbox', 'Switch'],
+};
+const choiceControlRoutes = {
+    History: ['Checkbox', 'RadioGroup'],
+    MultisigCreate: ['RadioGroup'],
+    Send: ['Checkbox', 'Switch'],
 };
 const styleGuideRowRoutes = [
     'BetFeedDetail',
@@ -54,6 +64,22 @@ const listRowRoutes = [
     'MarketActivity',
     'MyBets',
     'MyLists',
+];
+
+const choicePrimitiveRoutes = {
+    AttachContentForm: ['Checkbox'],
+    BroadcastForm: ['RadioGroup', 'Switch'],
+    GatedPublishForm: ['Checkbox', 'RadioGroup'],
+    LinkForm: ['RadioGroup'],
+    SleepForm: ['RadioGroup'],
+};
+const tokenControlRoutes = [
+    ['IssueTokenForm', { Switch: 2 }],
+    ['TokenAdminForm', { Checkbox: 3 }],
+    ['TokenWizard', { Checkbox: 1, Switch: 2 }],
+    ['SweepForm', { Checkbox: 2 }],
+    ['StakeForm', { RadioGroup: 1 }],
+    ['ContractStakeForm', { RadioGroup: 1 }],
 ];
 
 describe('shared route button usage', () => {
@@ -98,7 +124,7 @@ describe('shared route button usage', () => {
         expect(source).not.toMatch(/<(?:button|select|textarea)\b/);
     });
 
-    it('documents the native checkbox and radio exceptions', () => {
+    it('uses Checkbox and documents the remaining native radio exceptions', () => {
         const source = ['ParallelComposer', 'PublishFileForm']
             .map((routeName) => readFileSync(
                 resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
@@ -107,8 +133,11 @@ describe('shared route button usage', () => {
             .join('\n');
         const inputs = source.match(/<input\b/g) || [];
         const rationales = source.match(/The kit has no (?:checkbox|radio) primitive/g) || [];
+        const checkboxes = source.match(/<Checkbox\b/g) || [];
 
-        expect(inputs).toHaveLength(4);
+        expect(source).toMatch(/import\s+\{[^}]*\bCheckbox\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
+        expect(checkboxes).toHaveLength(2);
+        expect(inputs).toHaveLength(2);
         expect(rationales).toHaveLength(inputs.length);
     });
 
@@ -122,6 +151,19 @@ describe('shared route button usage', () => {
             expect(source).toMatch(new RegExp(`<${control}\\b`));
         }
         expect(source).not.toMatch(/<(?:select|textarea)\b/);
+    });
+
+    it.each(Object.entries(choiceControlRoutes))('%s uses kit choice controls', (routeName, controls) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        for (const control of controls) {
+            expect(source).toMatch(new RegExp(`<${control}\\b`));
+        }
+        expect(source).not.toMatch(/<input\b[^>]*type="(?:checkbox|radio)"/s);
+        expect(source).not.toMatch(/The kit has no (?:checkbox|radio|switch)/);
     });
 
     it.each([
@@ -174,9 +216,23 @@ describe('shared route button usage', () => {
         expect(source).not.toMatch(/<button\b/);
     });
 
+    it.each(tokenControlRoutes)('%s uses the matching kit choice controls', (routeName, controls) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        for (const [control, count] of Object.entries(controls)) {
+            expect(source).toMatch(
+                new RegExp(`import\\s+\\{[^}]*\\b${control}\\b[^}]*\\}\\s+from\\s+'@xchain-wallet/core/ui'`, 's'),
+            );
+            expect(source.match(new RegExp(`<${control}\\b`, 'g')) || []).toHaveLength(count);
+        }
+        expect(source).not.toMatch(/<input\b/);
+    });
+
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
-        const expectedInputs = { ControllerBindForm: 1, ListCreateForm: 1, MultisigCreate: 1 };
-        const expectedButtons = {};
+        const expectedInputs = {};
 
         for (const routeName of Object.keys(styleGuideRoutes)) {
             const source = readFileSync(
@@ -190,7 +246,7 @@ describe('shared route button usage', () => {
 
             expect(nativeInputs, routeName).toHaveLength(expectedInputs[routeName] || 0);
             expect(inputRationales, routeName).toHaveLength(nativeInputs.length);
-            expect(nativeButtons, routeName).toHaveLength(expectedButtons[routeName] || 0);
+            expect(nativeButtons, routeName).toHaveLength(0);
             expect(rowRationales, routeName).toHaveLength(nativeButtons.length);
         }
     });
@@ -205,17 +261,74 @@ describe('shared route button usage', () => {
         expect(source).toMatch(/<ListRow\b/);
         expect(source).not.toMatch(/<button\b/);
     });
+
+    it.each(Object.entries(choicePrimitiveRoutes))(
+        '%s uses kit choice controls instead of native checkbox or radio markup',
+        (routeName, controls) => {
+            const source = readFileSync(
+                resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+                'utf8',
+            );
+
+            for (const control of controls) {
+                expect(source).toMatch(new RegExp(`\\b${control}\\b`));
+                expect(source).toMatch(new RegExp(`<${control}\\b`));
+            }
+            expect(source).not.toMatch(/type="(?:checkbox|radio)"/);
+            expect(source).not.toMatch(/kit has no (?:checkbox|radio|radio-group) control/);
+        },
+    );
+
+    it('uses kit controls for settings switches and wallet mode choices', () => {
+        const primitives = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/settings/_settingsPrimitives.jsx',
+        ), 'utf8');
+        const walletMode = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/settings/WalletModeSection.jsx',
+        ), 'utf8');
+
+        expect(primitives).toMatch(/import\s+\{\s*Switch\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(primitives).toMatch(/<Switch\b/);
+        expect(primitives).not.toMatch(/<input\b/);
+        expect(walletMode).toMatch(/import\s+\{\s*RadioGroup\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(walletMode).toMatch(/<RadioGroup\b/);
+        expect(walletMode).not.toMatch(/<input\b/);
+    });
 });
 
 describe('trade form style guide primitives', () => {
-    const targets = [
+    const tradeChoicePrimitiveRoutes = {
+        CreateOrderForm: ['Checkbox', 'RadioGroup', 'Switch'],
+        CrossChainOrderForm: ['Checkbox', 'RadioGroup'],
+        CrossChainSwapForm: ['Checkbox', 'RadioGroup'],
+        DispenserExplorer: ['RadioGroup'],
+        DispenserForm: ['RadioGroup'],
+        MyOrdersView: ['Switch'],
+    };
+
+    it.each(Object.entries(tradeChoicePrimitiveRoutes))('%s uses kit choice controls', (routeName, controls) => {
+        const source = readFileSync(resolve(
+            process.cwd(),
+            `packages/core/src/shared/routes/${routeName}.jsx`,
+        ), 'utf8');
+
+        for (const control of controls) {
+            expect(source).toMatch(new RegExp(`import\\s+\\{[^}]*\\b${control}\\b[^}]*\\}\\s+from\\s+'@xchain-wallet/core/ui'`, 's'));
+            expect(source).toMatch(new RegExp(`<${control}\\b`));
+        }
+        expect(source).not.toMatch(/<input\b[^>]*type="(?:checkbox|radio)"/s);
+        expect(source).not.toMatch(/kit has no (?:checkbox|radio)/i);
+    });
+
+    const nativeControlTargets = [
         'packages/core/src/shared/routes/CreateOrderForm.jsx',
         'packages/core/src/shared/routes/DispenserForm.jsx',
         'packages/core/src/shared/routes/SwapForm.jsx',
-        'packages/core/src/shared/components/PlaceOrderPanel.jsx',
     ];
 
-    it.each(targets)('%s uses kit fields and documents native control exceptions', (file) => {
+    it.each(nativeControlTargets)('%s uses kit fields and documents any native control exceptions', (file) => {
         const source = readFileSync(resolve(process.cwd(), file), 'utf8');
         const rawInputs = source.match(/<input\b[^>]*>/g) || [];
 
@@ -227,6 +340,28 @@ describe('trade form style guide primitives', () => {
             expect(source.slice(Math.max(0, offset - 180), offset)).toMatch(
                 /Native (?:checkboxes|radios) preserve [^\n]+ because the kit has no (?:checkbox|radio) primitive\./,
             );
+        }
+    });
+
+    it('uses kit choice controls throughout the shared order panels', () => {
+        const componentControls = {
+            DerivationPathCrossCheck: ['Checkbox'],
+            OpenOrdersPanel: ['Switch'],
+            PlaceOrderPanel: ['Checkbox'],
+            PreflightPanel: ['Checkbox'],
+            WatcherResultPanel: ['RadioGroup'],
+        };
+
+        for (const [componentName, controls] of Object.entries(componentControls)) {
+            const source = readFileSync(resolve(
+                process.cwd(),
+                `packages/core/src/shared/components/${componentName}.jsx`,
+            ), 'utf8');
+
+            for (const control of controls) {
+                expect(source, componentName).toMatch(new RegExp(`<${control}\\b`));
+            }
+            expect(source, componentName).not.toMatch(/<input\b/);
         }
     });
 
@@ -255,19 +390,25 @@ describe('trade form style guide primitives', () => {
         expect(placeOrder).toMatch(/<FormPage\b/);
         expect(placeOrder).toMatch(/<EmptyState\b/);
         expect(placeOrder).toMatch(/<Select[\s\S]*label="Expiration"/);
-        expect(placeOrder.match(/<button\b/g)).toHaveLength(2);
-        expect(placeOrder.match(/Native buttons retain segmented-toggle pressed behavior/g)).toHaveLength(2);
+        expect(placeOrder.match(/<Checkbox\b/g)).toHaveLength(2);
+        expect(placeOrder).toMatch(/<SegmentedControl\b/);
+        expect(placeOrder).not.toMatch(/<button\b/);
     });
 
     it('uses style-guide controls throughout wallet setup routes', () => {
-        const importSource = readFileSync(
-            resolve(process.cwd(), 'packages/core/src/shared/routes/ImportWallet.jsx'),
+        const readRoute = (name) => readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${name}.jsx`),
             'utf8',
         );
-        const createSource = readFileSync(
-            resolve(process.cwd(), 'packages/core/src/shared/routes/CreateWallet.jsx'),
-            'utf8',
-        );
+        const sources = {
+            addressList: readRoute('AddressList'),
+            create: readRoute('CreateWallet'),
+            import: readRoute('ImportWallet'),
+            migrate: readRoute('MigrateToBip39'),
+            onboarding: readRoute('Onboarding'),
+            signerSelect: readRoute('SignerSelectForm'),
+        };
+        const { create: createSource, import: importSource } = sources;
 
         expect(importSource).toMatch(/\bTextarea\b/);
         expect(importSource).toMatch(
@@ -277,6 +418,18 @@ describe('trade form style guide primitives', () => {
         expect(importSource).toMatch(/<Tabs\b/);
         expect(importSource).not.toMatch(/<button\b/);
         expect(createSource).not.toMatch(/<button\b|<textarea\b|<select\b/);
+        expect(sources.addressList.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(createSource.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(createSource.match(/<RadioGroup\b/g)).toHaveLength(1);
+        expect(createSource.match(/<Switch\b/g)).toHaveLength(1);
+        expect(importSource.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(importSource.match(/<Switch\b/g)).toHaveLength(2);
+        expect(sources.migrate.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(sources.onboarding.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(sources.signerSelect.match(/<RadioGroup\b/g)).toHaveLength(1);
+        for (const source of Object.values(sources)) {
+            expect(source).not.toMatch(/type="(?:checkbox|radio)"/);
+        }
     });
 
     it('uses style guide controls in the market, contact, preference, and token lists', () => {
@@ -301,9 +454,10 @@ describe('trade form style guide primitives', () => {
 
         expect(preferences).toMatch(/<FormSection\b/);
         expect(preferences).toMatch(/<FeeSelector\b/);
+        expect(preferences.match(/<RadioGroup\b/g)).toHaveLength(2);
         expect(preferences).not.toMatch(/<(?:button|select|textarea)\b/);
-        expect(preferences.match(/<input\b/g)).toHaveLength(5);
-        expect(preferences.match(/type="(?:radio|checkbox)"/g)).toHaveLength(5);
+        expect(preferences.match(/<input\b/g)).toHaveLength(1);
+        expect(preferences.match(/type="checkbox"/g)).toHaveLength(1);
 
         expect(tokens).toMatch(/<Input\b/);
         expect(tokens).toMatch(/<Button\b/);

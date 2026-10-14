@@ -12,6 +12,7 @@ import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react
 import { Input } from './Input.jsx';
 import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
+import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
 
@@ -63,7 +64,7 @@ function inspectClipboardPaste(value) {
  *                             trailing button when set.
  *   - onIconClick           handler for the trailing icon button.
  *   - iconLabel             accessible label override for the icon button.
- *   - size                  'md' | 'lg'; forwarded to `<Input>`.
+ *   - size                  'sm' | 'md' | 'lg'; forwarded to `<Input>`.
  *   - everything else       forwarded to `<Input>` (label, hint, error,
  *                             placeholder, autoComplete, etc.).
  *
@@ -161,7 +162,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
     ].filter(Boolean).join(' ');
 
@@ -184,7 +185,10 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 disabled={disabled}
                 dir="ltr"
                 autoComplete="off"
-                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                style={IconComponent ? {
+                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                    ...style,
+                } : style}
                 value={value}
                 onChange={(e) => {
                     setPasteError('');
@@ -288,7 +292,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                             {s.sublabel ? (
                                 <span className={styles.sublabel}>{s.sublabel}</span>
                             ) : null}
-                            <span className={styles.sublabel}>{s.address}</span>
+                            <AddressText address={s.address} className={styles.sublabel} size="sm" />
                         </li>
                     ))}
                 </ul>

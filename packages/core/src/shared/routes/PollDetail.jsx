@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    Checkbox,
     FeeSelector,
     FormPage,
     Input,
@@ -719,12 +720,14 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                                     </div>
                                 </div>
                             ) : (
-                                <label key={i} className={detailStyles.optionRow}>
-                                    <input type="checkbox" checked={approvalChoices.has(i)}
-                                        disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
-                                        onChange={() => toggleApproval(i)} />
-                                    <span className={detailStyles.optionLabel}>{i}: {label}</span>
-                                </label>
+                                <Checkbox
+                                    key={i}
+                                    className={detailStyles.optionRow}
+                                    label={<span className={detailStyles.optionLabel}>{i}: {label}</span>}
+                                    checked={approvalChoices.has(i)}
+                                    disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
+                                    onChange={() => toggleApproval(i)}
+                                />
                             )
                         ))}
                     </div>

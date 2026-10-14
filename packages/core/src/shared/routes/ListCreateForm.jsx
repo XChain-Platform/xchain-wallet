@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -987,15 +987,17 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {rows.map((r) => (
                     <li key={r.key} style={{ padding: 'var(--xc-space-2) 0', borderBottom: '1px solid var(--xc-border)' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                            {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
-                            <input type="checkbox" checked={checked.has(r.key)} onChange={() => toggle(r.key)} />
-                            <span>
-                                <strong>{r.name}</strong>{r.label ? ` (${r.label})` : ''}
-                                <br />
-                                <code>{r.address}</code>
-                            </span>
-                        </label>
+                        <Checkbox
+                            checked={checked.has(r.key)}
+                            onChange={() => toggle(r.key)}
+                            label={(
+                                <span>
+                                    <strong>{r.name}</strong>{r.label ? ` (${r.label})` : ''}
+                                    <br />
+                                    <code>{r.address}</code>
+                                </span>
+                            )}
+                        />
                     </li>
                 ))}
             </ul>

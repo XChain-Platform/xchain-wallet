@@ -23,6 +23,7 @@ import { UpdateNoticeBanner } from '../../../packages/core/src/shared/components
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { setDirectUpdateProvider } from '../../../packages/core/src/flows/directUpdate.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 function lane({ notice = null, version = '9.9.9', enabled = true, onEnable = () => {} } = {}) {
     const check = vi.fn(async () => (notice ? { version, notice } : null));
@@ -67,6 +68,26 @@ describe('UpdateNoticeBanner', () => {
         expect(container.querySelectorAll('a').length).toBe(0);
         const buttons = [...container.querySelectorAll('button')].map((b) => b.textContent);
         expect(buttons).toEqual(['Dismiss']);
+    });
+
+    it('uses the shared notice tokens and small kit dismiss control', async () => {
+        lane({ notice: 'XChain Wallet 9.9.9 is available.' });
+        render(<UpdateNoticeBanner />);
+
+        const notice = await screen.findByRole('status');
+        expect(notice).toHaveStyle({
+            padding: 'var(--xc-card-pad)',
+            borderRadius: 'var(--xc-card-radius)',
+            fontSize: 'var(--xc-text-sm)',
+            lineHeight: '1.4',
+        });
+        expect(notice.querySelector('[aria-hidden="true"]')).toHaveStyle({
+            width: 'var(--xc-icon-md)',
+            height: 'var(--xc-icon-md)',
+            fontSize: 'var(--xc-icon-md)',
+        });
+        expect(screen.getByRole('button', { name: 'Dismiss update notice' }))
+            .toHaveClass(buttonStyles.btn, buttonStyles.sm);
     });
 
     it('stays dismissed across remounts for the same session and version', async () => {

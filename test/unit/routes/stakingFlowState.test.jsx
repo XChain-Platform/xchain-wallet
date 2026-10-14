@@ -340,7 +340,7 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 'packages/core/src/shared/routes/StakingList.module.css',
             ), 'not all and (min-width: 400px)');
             expect(ruleBody(listNarrow, '.row')).toMatch(
-                /grid-template-columns:\s*40px\s+minmax\(0, 1fr\)/,
+                /grid-template-columns:\s*var\(--xc-control-h-md\)\s+minmax\(0, 1fr\)/,
             );
             expect(ruleBody(listNarrow, '.trailing')).toMatch(/grid-column:\s*2/);
 

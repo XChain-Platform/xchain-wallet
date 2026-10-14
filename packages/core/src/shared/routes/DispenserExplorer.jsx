@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -288,67 +288,59 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             title="Dispenser explorer"
         />
     );
-    const toolbar = (
-        <form className={local.searchForm} onSubmit={handleSearch} noValidate>
-                <div className={local.searchModes}>
-                    <Input
-                        type="radio"
-                        name="searchMode"
-                        value="token"
-                        label="By token"
-                        className={local.searchModeInput}
-                        checked={searchMode === 'token'}
-                        onChange={() => setSearchMode('token')}
-                    />
-                    <Input
-                        type="radio"
-                        name="searchMode"
-                        value="address"
-                        label="By address"
-                        className={local.searchModeInput}
-                        checked={searchMode === 'address'}
-                        onChange={() => setSearchMode('address')}
-                    />
-                </div>
-                <Select
-                    label="Chain"
-                    value={chainFilter}
-                    onChange={(e) => setChainFilter(e.target.value)}
-                    className={local.chainSelect}
-                >
-                    <option value="all">All chains</option>
-                    {chains.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        return (
-                            <option key={cid} value={cid}>
-                                {d ? `${d.displayName} (${d.networkKind})` : cid}
-                            </option>
-                        );
-                    })}
-                </Select>
-                <Input
-                    type="search"
-                    role="textbox"
-                    label={searchMode === 'token' ? 'Token ticker' : 'Address'}
-                    hint={searchMode === 'token'
-                        ? 'Ticker name, such as MYTOKEN, or a token reference from the explorer.'
-                        : 'Dispenser address or source address.'}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
-                    autoCorrect="off"
-                    spellCheck={false}
+    const searchForm = (
+        <FormPage className={local.searchForm} onSubmit={handleSearch} sectioned label="Find open dispensers">
+            <FormSection title="Find open dispensers">
+                <RadioGroup
+                    legend="Search mode"
+                    name="searchMode"
+                    value={searchMode}
+                    onChange={setSearchMode}
+                    options={[
+                        { value: 'token', label: 'By token' },
+                        { value: 'address', label: 'By address' },
+                    ]}
+                    className={local.searchModes}
                 />
-                {searchDisabledReason ? (
-                    <p id="dispenser-search-disabled-reason" className={styles.entryDescription}>
-                        {searchDisabledReason}
-                    </p>
-                ) : null}
-                <div className={local.searchActions}>
+                <div className={local.filterRow}>
+                    <div className={local.chainControl}>
+                        <Select
+                            label="Chain"
+                            size="md"
+                            value={chainFilter}
+                            onChange={(e) => setChainFilter(e.target.value)}
+                            className={local.chainSelect}
+                        >
+                            <option value="all">All chains</option>
+                            {chains.map((cid) => {
+                                const d = chainRegistry.get(cid);
+                                return (
+                                    <option key={cid} value={cid}>
+                                        {d ? `${d.displayName} (${d.networkKind})` : cid}
+                                    </option>
+                                );
+                            })}
+                        </Select>
+                    </div>
+                    <div className={local.queryControl}>
+                        <Input
+                            type="search"
+                            role="textbox"
+                            size="md"
+                            label={searchMode === 'token' ? 'Token ticker' : 'Address'}
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoComplete="off"
+                            autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
+                            autoCorrect="off"
+                            spellCheck={false}
+                            aria-describedby="dispenser-search-hint"
+                        />
+                    </div>
                     <Button
                         type="submit"
                         variant="primary"
+                        size="md"
                         loading={searching}
                         disabled={Boolean(searchDisabledReason)}
                         aria-describedby={searchDisabledReason ? 'dispenser-search-disabled-reason' : undefined}
@@ -356,12 +348,24 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {searching ? 'Searching…' : 'Search'}
                     </Button>
                 </div>
-        </form>
+                <p id="dispenser-search-hint" className={`${styles.entryDescription} ${local.searchHint}`}>
+                    {searchMode === 'token'
+                        ? 'Ticker name, such as MYTOKEN, or a token reference from the explorer.'
+                        : 'Dispenser address or source address.'}
+                </p>
+                {searchDisabledReason ? (
+                    <p id="dispenser-search-disabled-reason" className={styles.entryDescription}>
+                        {searchDisabledReason}
+                    </p>
+                ) : null}
+            </FormSection>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
+            <ListPage>
+            {searchForm}
             {lastQueried ? (
                 <ResultsPane
                     rowsByChain={rowsByChain}

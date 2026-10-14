@@ -15,7 +15,6 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -313,6 +312,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [loadError, setLoadError] = useState(
         /** @type {string | null} */ (null),
     );
+    // Balance reads resolve with per-address error entries, so loadError alone
+    // cannot distinguish a failed balance refresh from another Home error.
+    // This flag keeps failed data out of the loaded-zero presentation and
+    // marks a retained cache as saved data until a clean read lands.
+    const [balanceLoadFailed, setBalanceLoadFailed] = useState(false);
     // A rate limit is the one load failure that comes with an end time, so it
     // is the one the banner can count down instead of leaving the user to
     // guess (rate-limits spec, M4). `rateLimitRetryAt` is the wall-clock ms the
@@ -626,6 +630,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         setRateLimitNamedSeconds(named);
         setRateLimitTickNow(now);
         setRateLimitRetryAt(now + seconds * 1000);
+        setBalanceLoadFailed(true);
         setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(named ? seconds : null)}`);
     }, []);
 
@@ -659,6 +664,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // up to 60 s) would be joined by the 20 s beat, which is the burst
             // the limiter counted in the first place.
             pollThrottleRef.current.start();
+            setBalanceLoadFailed(false);
             if (!hasCachedBalances) {
                 setBalances(null);
                 setBalancesFetchedAt(null);
@@ -686,26 +692,31 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 // reports a refused address as that entry's `error` string
                 // rather than throwing, so the banner is decided from what
                 // came back, on the poll path as well as the reset one. The
-                // balances that did land stay on screen either way.
+                // last complete balances stay on screen until every requested
+                // address has a usable answer.
                 const wait = rateLimitWaitFromBalances(b);
-                const refreshHasFailure = reportError
-                    && balancesRef.current !== null
-                    && Object.values(b || {}).some((rows) => (
-                        Array.isArray(rows) && rows.some((entry) => entry?.error)
-                    ));
-                if (refreshHasFailure) {
+                const hasBalanceFailure = Object.values(b || {}).some((rows) => (
+                    Array.isArray(rows) && rows.some((entry) => entry?.error)
+                ));
+                if (hasBalanceFailure) {
                     pollThrottleRef.current.fail();
-                    showToast({
-                        message: wait
-                            ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
-                            : "Couldn't refresh balances. Try again.",
-                        variant: 'error',
-                    });
+                    setBalanceLoadFailed(true);
+                    if (wait) beginRateLimitWait(wait.seconds);
+                    else setLoadError("Couldn't load balances. Try again.");
+                    if (reportError && balancesRef.current !== null) {
+                        showToast({
+                            message: wait
+                                ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
+                                : "Couldn't refresh balances. Try again.",
+                            variant: 'error',
+                        });
+                    }
                 } else {
-                    freshBalancesCacheable = !wait;
+                    freshBalancesCacheable = true;
                     // Fresh balances restart the re-poll window, whichever
                     // path asks for them.
                     pollThrottleRef.current.succeed();
+                    setBalanceLoadFailed(false);
                     balancesScopeRef.current = `${walletId}:${accountId || ''}`;
                     setBalances(b);
                     setBalancesFetchedAt(Date.now());
@@ -713,9 +724,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     freshFetchedAt = Date.now();
                 }
                 setCachedBalancesUpdating(false);
-                if (wait && !refreshHasFailure) {
-                    beginRateLimitWait(wait.seconds);
-                } else if (!refreshHasFailure) {
+                if (!hasBalanceFailure) {
                     // Balances landed clean, so whatever the last failure said
                     // is no longer true. Cleared on the poll path too: a wallet
                     // that recovered on its own used to keep the error banner
@@ -729,11 +738,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // Release the window rather than move it: a blip must not pin the
             // screen to stale balances for a whole interval.
             pollThrottleRef.current.fail();
-            // A silent poll that fails (e.g. a transient network blip)
-            // should not stomp a screen the user is already looking at
-            // with an error banner; only surface it on the reset path.
+            // A failed poll leaves the last complete rows in place and marks
+            // them as saved data, so they cannot look freshly synchronized.
             if (!isCancelled()) {
                 setCachedBalancesUpdating(false);
+                setBalanceLoadFailed(true);
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -747,9 +756,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         message: humanizeError(err, 'refresh balances').message,
                         variant: 'error',
                     });
-                } else if (reset && humanized.cause === 'rate_limited') {
+                }
+                if (humanized.cause === 'rate_limited') {
                     beginRateLimitWait(humanized.retryAfterSeconds ?? null);
-                } else if (reset) {
+                } else {
                     setLoadError(humanized.message);
                 }
             }
@@ -1001,9 +1011,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via
     // `verifyProofs` (default on). The map is keyed `chainId:tick` and
-    // fills in progressively; HomeTabs badges the Tokens rows from it.
+    // fills in progressively after the user opens the Tokens tab.
     const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
-    const verifyMap = useProofVerification({ messaging, balances, enabled: verifyProofsEnabled });
 
     // `hideSmallBalances` persisted for fourteen sessions without a
     // single reader. HomeTabs forwards it to the Coins and Tokens lists,
@@ -1176,6 +1185,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const loadErrorText = rateLimitRetryAt === null
         ? loadError
         : `Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(rateLimitSecondsLeft)}`;
+    const balanceStatusText = balanceLoadFailed && balances && loadErrorText
+        ? `${loadErrorText} Showing saved balances from the last successful sync.`
+        : loadErrorText;
+    const retryBalanceLoad = () => {
+        setRateLimitRetryAt(null);
+        setHomeReloadKey((key) => key + 1);
+    };
 
     // §20 / G041: signer-mode home variant. The wallet only signs PSBTs
     // pasted in from a paired Watcher wallet; balances, history, send,
@@ -1189,8 +1205,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <Screen variant={variant}>
                 <ListPage className={isFull ? styles.bodyFull : undefined}>
                     <h1 className="sr-only">{t('home.title')}</h1>
-                    {loadErrorText ? (
-                        <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
+                    {balanceStatusText ? (
+                        <StatusMessage
+                            variant="error"
+                            className={styles.error}
+                            recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
+                        >
+                            {balanceStatusText}
+                        </StatusMessage>
                     ) : null}
                     {/* §25.2 / Cluster J FOLLOWUP 2: shells that
                         mount the banner in their layout header say so with
@@ -1244,8 +1266,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             : t('home.offline.empty')}
                     </StatusMessage>
                 ) : null}
-                {loadErrorText ? (
-                    <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
+                {balanceStatusText ? (
+                    <StatusMessage
+                        variant="error"
+                        className={styles.error}
+                        recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
+                    >
+                        {balanceStatusText}
+                    </StatusMessage>
                 ) : null}
 
                 {cachedBalancesUpdating ? (
@@ -1378,7 +1406,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
                         hiddenKeys={hiddenKeys}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
-                        verifyMap={verifyMap}
+                        verifyProofsEnabled={verifyProofsEnabled}
                         hideSmallBalances={hideSmallBalances}
                         onRefresh={refreshPortfolio}
                         refreshing={portfolioRefreshing}

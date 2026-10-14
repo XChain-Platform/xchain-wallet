@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -17,6 +17,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
@@ -593,7 +594,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 : mode === 'detail' ? 'View Contact' : 'Contacts'}
             titleIcon={
                 mode === 'list' ? <Icon.UsersIcon />
-                    : mode === 'detail' ? <Icon.UserIcon />
+                    : mode === 'detail' && active ? (
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="header"
+                        />
+                    )
                     : (mode === 'edit' && active) ? <Icon.PencilIcon />
                     : (mode === 'edit' && !active) ? <Icon.PlusIcon />
                     : undefined
@@ -756,8 +763,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             <ListPage>
                 {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
-                    <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
-                    <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600 }}>{active.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="hero"
+                        />
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
+                            <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600, overflowWrap: 'anywhere' }}>{active.name}</div>
+                        </div>
+                    </div>
                     {active.notes ? (
                         <>
                             <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>Notes</div>
@@ -823,7 +839,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         onClick={() => runAction(addrPicker, e)}
                                     >
                                         <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                        <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                        <AddressText address={e.address} className={picker.addressText} />
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                     </Button>
                                 </li>
@@ -852,7 +868,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         return (
                             <li key={i} className={picker.addressCard}>
                                 <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                <AddressText address={e.address} className={picker.addressText} />
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                 <Button
                                     type="button"
@@ -885,6 +901,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 label="Address"
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
+                                error={addAddrError}
                                 placeholder=""
                                 autoFocus
                                 autoComplete="off"
@@ -895,9 +912,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
-                            {addAddrError ? (
-                                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{addAddrError}</p>
-                            ) : null}
                             <div className={picker.modalActions}>
                                 <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
@@ -917,6 +931,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     <div className={picker.search}>
                         <Input
                             type="search"
+                            size="md"
                             enterKeyHint="search"
                             autoCapitalize="off"
                             placeholder="Search"
@@ -977,7 +992,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     {typeof onOpenBackup === 'function' ? (
                         <>
                             {' '}
-                            <Button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
+                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
                                 Not now
                             </Button>
                         </>
@@ -1019,6 +1034,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                     className={picker.row}
                                     onClick={() => { setActiveId(c.id); setMode('detail'); }}
                                     aria-label={c.name}
+                                    leading={(
+                                        <IdentityAvatar
+                                            name={c.name}
+                                            seed={c.avatarSeed || c.id}
+                                            context="list"
+                                        />
+                                    )}
                                     title={<span className={picker.rowName}>{c.name}</span>}
                                     trailing={(
                                         <span className={picker.rowChains}>

@@ -10,7 +10,7 @@
 
 import { useEffect, useId, useRef } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
-import styles from './NoticeModal.module.css';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 
@@ -41,27 +41,23 @@ export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
     }, [onClose]);
 
     return (
-        <div
-            ref={rootRef}
-            className={styles.overlay}
-            role="dialog"
-            aria-modal="true"
+        <OverlaySurface
+            rootRef={rootRef}
+            surfaceRef={panelRef}
+            title={title}
+            titleId={titleId}
+            titleAs="p"
             aria-labelledby={titleId}
             aria-describedby={message ? messageId : undefined}
-            onClick={onClose}
+            onBackdrop={onClose}
             tabIndex={-1}
+            footer={(
+                <Button variant="primary" block onClick={onClose}>
+                    {confirmLabel}
+                </Button>
+            )}
         >
-            <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <div className={styles.content}>
-                    <p id={titleId} className={styles.title}>{title}</p>
-                    {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
-                </div>
-                <div className={styles.actions}>
-                    <Button variant="primary" block onClick={onClose}>
-                        {confirmLabel}
-                    </Button>
-                </div>
-            </div>
-        </div>
+            {message ? <p id={messageId}>{message}</p> : null}
+        </OverlaySurface>
     );
 }

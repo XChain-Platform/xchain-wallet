@@ -7,33 +7,6 @@
     width: 100%;
 }
 
-.iconBtn {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 40px;
-    height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-text);
-    cursor: pointer;
-    border-radius: var(--xc-radius-sm);
-}
-
-.iconBtn:hover:not(:disabled) { background: var(--xc-bg-muted); }
-
-.iconBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.iconBtn:disabled {
-    color: var(--xc-text-muted);
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
 /* WalletDetails read-only metadata list. */
 .detailList {
     display: flex;

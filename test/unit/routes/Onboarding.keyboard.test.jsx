@@ -108,7 +108,7 @@ describe('create onboarding keyboard flow', () => {
         const expectedTabOrder = [
             screen.getByLabelText('Confirm password'),
             screen.getByRole('radio', { name: /^12 words/ }),
-            screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ }),
+            screen.getByRole('switch', { name: /Use a BIP39 passphrase/ }),
             screen.getByRole('button', { name: 'BIP39 passphrase help' }),
         ];
         for (const control of expectedTabOrder) {
@@ -172,7 +172,7 @@ describe('create onboarding keyboard flow', () => {
 
         fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Travel wallet' } });
         fireEvent.click(screen.getByRole('radio', { name: /^24 words/ }));
-        fireEvent.click(screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ }));
+        fireEvent.click(screen.getByRole('switch', { name: /Use a BIP39 passphrase/ }));
         fillCreatePasswords();
         fireEvent.change(screen.getByLabelText('BIP39 passphrase'), { target: { value: 'hidden phrase' } });
         fireEvent.change(screen.getByLabelText('Confirm passphrase'), { target: { value: 'hidden phrase' } });
@@ -192,7 +192,7 @@ describe('create onboarding keyboard flow', () => {
         await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Travel wallet');
         expect(screen.getByRole('radio', { name: /^24 words/ })).toBeChecked();
-        expect(screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ })).toBeChecked();
+        expect(screen.getByRole('switch', { name: /Use a BIP39 passphrase/ })).toBeChecked();
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
         expect(screen.getByLabelText('BIP39 passphrase')).toHaveValue('');
@@ -259,7 +259,7 @@ describe('import onboarding keyboard flow', () => {
             screen.getByLabelText('Wallet name'),
             screen.getByLabelText('Password'),
             screen.getByLabelText('Confirm password'),
-            screen.getByRole('checkbox', { name: /wallet uses a BIP39 passphrase/ }),
+            screen.getByRole('switch', { name: /wallet uses a BIP39 passphrase/ }),
             screen.getByRole('button', { name: 'BIP39 passphrase help' }),
         ];
         for (const control of expectedTabOrder) {
@@ -306,7 +306,7 @@ describe('import onboarding keyboard flow', () => {
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
-        fireEvent.click(screen.getByRole('checkbox', { name: /wallet uses a BIP39 passphrase/ }));
+        fireEvent.click(screen.getByRole('switch', { name: /wallet uses a BIP39 passphrase/ }));
         fireEvent.change(screen.getByLabelText('BIP39 passphrase'), { target: { value: 'hidden phrase' } });
 
         fireEvent.keyDown(window, { key: 'Escape' });
@@ -317,7 +317,7 @@ describe('import onboarding keyboard flow', () => {
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
         // Back clears the passphrase and collapses its field.
         expect(screen.queryByLabelText('BIP39 passphrase')).toBeNull();
-        expect(screen.getByRole('checkbox', { name: /wallet uses a BIP39 passphrase/ })).not.toBeChecked();
+        expect(screen.getByRole('switch', { name: /wallet uses a BIP39 passphrase/ })).not.toBeChecked();
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallet setup' }));

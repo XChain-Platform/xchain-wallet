@@ -50,7 +50,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: var(--xc-bg-muted);
+    background: transparent;
 }
 
 .iconImg {
@@ -58,6 +58,7 @@
     height: 40px;
     display: block;
     border-radius: 50%;
+    object-fit: contain;
 }
 
 .iconLetter {
@@ -66,16 +67,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
     font-family: var(--xc-font-sans);
     font-weight: 700;
     font-size: var(--xc-text-md);
-    color: var(--xc-on-accent);
+    color: var(--xc-text);
 }
 
-/* The fill is a per-ticker colour set inline; the letter colour lives here so
-   forced-colors mode can re-pair it. --xc-on-accent maps to Canvas there,
-   which only suits an accent fill, and the mode repaints this fill to Canvas
-   as well, so the letter would vanish into it. */
+/* Forced-colors mode pairs the neutral monogram with the platform canvas. */
 @media (forced-colors: active) {
     .iconLetter {
         color: CanvasText;
@@ -137,6 +137,7 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-md);
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     color: var(--xc-text);
     line-height: 1.1;
     max-width: 100%;
@@ -150,6 +151,7 @@
     color: var(--xc-text-muted);
     font-weight: 600;
     font-family: var(--xc-font-mono);
+    font-variant-numeric: tabular-nums;
     max-width: 100%;
     text-align: end;
     direction: ltr;
@@ -160,13 +162,8 @@
     display: block;
     width: 100%;
     overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.amountFitInner {
-    display: inline-block;
-    white-space: nowrap;
-    transform-origin: right center;
 }
 
 /* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
@@ -185,34 +182,10 @@
     padding: var(--xc-space-5) var(--xc-space-3);
 }
 
+/* Row spacing for the kit pin and hide Buttons; the kit owns their look. */
 .pinBtn {
     flex: 0 0 auto;
     margin-inline-start: var(--xc-space-2);
-    width: 1.5rem;
-    height: 1.5rem;
-    min-width: var(--xc-tap-min);
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.125rem;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    user-select: none;
-    border-radius: var(--xc-radius-sm);
-    line-height: 1;
-    padding: 0;
-    border: 0;
-    background: transparent;
-}
-
-.pinBtn:hover {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.pinBtnActive {
-    color: var(--xc-accent-text);
 }
 
 .rowPinned {
@@ -222,31 +195,6 @@
 .hideBtn {
     flex: 0 0 auto;
     margin-inline-start: var(--xc-space-1);
-    width: 1.5rem;
-    height: 1.5rem;
-    min-width: var(--xc-tap-min);
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    user-select: none;
-    border-radius: var(--xc-radius-sm);
-    line-height: 1;
-    padding: 0;
-    border: 0;
-    background: transparent;
-}
-
-.hideBtn:hover {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.hideBtnActive {
-    color: var(--xc-text);
 }
 
 .hiddenToggle {

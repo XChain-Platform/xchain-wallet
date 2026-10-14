@@ -421,6 +421,7 @@ export function StakeDetail({
                                     block
                                     icon={<Icon.UnlinkIcon />}
                                     role="menuitem"
+                                    data-destructive="true"
                                     onClick={onRevokeDelegation ? () => { setMoreOpen(false); onRevokeDelegation(); } : undefined}
                                     disabled={!onRevokeDelegation || !primaryDelegation}
                                 >

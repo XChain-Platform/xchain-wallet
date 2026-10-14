@@ -30,7 +30,7 @@
 // before it reports anything.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act, render, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
@@ -107,9 +107,7 @@ async function mountSweep({
         submit: () => container.querySelector('button[type="submit"]'),
         destination: () => labelledInput(container, 'Destination address'),
         memo: () => labelledInput(container, 'Memo (optional)'),
-        category: (text) => Array.from(container.querySelectorAll('label'))
-            .find((l) => l.textContent.includes(text))
-            ?.querySelector('input[type="checkbox"]'),
+        category: (text) => within(container).getByRole('checkbox', { name: new RegExp(text) }),
         button: (label) => container.querySelector(`button[aria-label="${label}"]`),
         /** Text of every rendered alert, joined. Cheap and dump-free. */
         alerts: () => Array.from(container.querySelectorAll('[role="alert"]'))

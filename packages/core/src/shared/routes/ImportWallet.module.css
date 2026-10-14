@@ -7,20 +7,6 @@
     margin-bottom: var(--xc-space-5);
 }
 
-.titlePopup {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-1);
-    color: var(--xc-text);
-}
-
-.titleFull {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-2);
-    color: var(--xc-text);
-}
-
 .subtitlePopup {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
@@ -74,11 +60,11 @@
 .dropZoneActive {
     background: var(--xc-focus-ring);
     outline: 2px dashed var(--xc-accent-primary);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .dropHint {
-    margin: -2px 0 var(--xc-space-3);
+    margin: calc(var(--xc-space-1) / -2) 0 var(--xc-space-3);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     line-height: 1.3;

@@ -14,9 +14,12 @@ import { NetworkFilter } from '../../../packages/core/src/shared/components/Netw
 import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
 import { useWalletFilters } from '../../../packages/core/src/shared/hooks/useWalletFilters.js';
 import { Input } from '../../../packages/core/src/ui/Input.jsx';
+import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 import dropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
 import filterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
@@ -96,12 +99,15 @@ describe('NetworkFilter trigger', () => {
         expect(trigger).not.toHaveTextContent(countLabel);
         expect(trigger).toHaveAccessibleName(`All networks, ${countLabel}`);
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveAttribute('aria-pressed', 'false');
+        expect(trigger).toHaveClass(chipStyles.chip);
     });
 
     it('uses the selected family display name', () => {
         mount({ value: 'dogecoin' });
 
         expect(screen.getByRole('button', { name: /Dogecoin/ })).toHaveTextContent('Dogecoin');
+        expect(screen.getByRole('button', { name: /Dogecoin/ })).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('falls back to the selected coin code without a descriptor', () => {
@@ -279,7 +285,7 @@ describe('NetworkFilter search', () => {
 });
 
 describe('shared network filter surfaces', () => {
-    it('matches a neighboring search Input at the default control size', () => {
+    it('uses canonical field and chip geometry for neighboring filters', () => {
         render(
             <div>
                 <Input type="search" aria-label="Search contacts" />
@@ -299,21 +305,27 @@ describe('shared network filter surfaces', () => {
             process.cwd(),
             'packages/core/src/ui/Input.module.css',
         ), 'utf8');
+        const chipCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/ui/Chip.module.css',
+        ), 'utf8');
         const triggerClass = css.match(/\.trigger\s*\{[^}]*\}/)?.[0] || '';
         const inputClass = inputCss.match(/\.input\s*\{[^}]*\}/)?.[0] || '';
-        // Text controls take their height from the size class's control token.
-        const inputHeight = inputCss.match(/\.input:not\(textarea\)\s*\{[^}]*\}/)?.[0] || '';
-        const mdSize = inputCss.match(/\.md\s*\{[^}]*\}/)?.[0] || '';
+        const inputHeightClass = inputCss.match(/\.input:not\(textarea\)\s*\{[^}]*\}/)?.[0] || '';
+        const inputMdClass = inputCss.match(/\.md\s*\{[^}]*\}/)?.[0] || '';
+        const chipClass = chipCss.match(/\.chip\s*\{[^}]*\}/)?.[0] || '';
 
         expect(search).toHaveClass(inputStyles.input);
         expect(dropdown).toHaveClass(dropdownStyles.md);
         expect(filter).toHaveClass(filterStyles.md);
         expect(trigger).toHaveClass(filterStyles.trigger);
-        expect(inputHeight).toMatch(/height:\s*var\(--xc-control-height\)/);
-        expect(mdSize).toMatch(/--xc-control-height:\s*var\(--xc-control-h-md\)/);
+        expect(inputHeightClass).toMatch(/height:\s*var\(--xc-control-height\)/);
+        expect(inputMdClass).toMatch(/--xc-control-height:\s*var\(--xc-control-h-md\)/);
         expect(inputClass).toMatch(/border-radius:\s*var\(--xc-(?:control-radius|radius-md)/);
-        expect(triggerClass).toMatch(/height:\s*var\(--network-filter-control-height,\s*var\(--xc-control-h-md/);
-        expect(triggerClass).toMatch(/border-radius:\s*var\(--xc-control-radius,\s*var\(--xc-radius-md\)\)/);
+        expect(trigger).toHaveClass(chipStyles.chip);
+        expect(triggerClass).not.toMatch(/(?:min-)?height:|border-radius:/);
+        expect(chipClass).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
+        expect(chipClass).toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
     });
 
     it('uses the canonical filter for compact dropdowns and clears through All networks', () => {
@@ -327,16 +339,52 @@ describe('shared network filter surfaces', () => {
         expect(onChange).toHaveBeenCalledWith('all');
     });
 
-    it('allows both toolbar controls to shrink inside a 320px viewport', () => {
-        const css = readFileSync(resolve(
+    it('preserves the label and wraps the shared toolbar at 320px', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        window.dispatchEvent(new Event('resize'));
+        render(
+            <div style={{ width: '320px' }}>
+                <ListPage toolbar={(
+                    <>
+                        <Input type="search" aria-label="Search addresses" />
+                        <NetworkFilterDropdown value="all" onChange={() => {}} />
+                    </>
+                )}>
+                    <div>Addresses</div>
+                </ListPage>
+            </div>,
+        );
+
+        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const dropdown = trigger.closest(`.${dropdownStyles.networkWrap}`);
+        const filter = trigger.closest(`.${filterStyles.wrap}`);
+        const toolbar = trigger.closest(`.${listPageStyles.toolbar}`);
+        const dropdownCss = readFileSync(resolve(
             process.cwd(),
             'packages/core/src/shared/components/NetworkFilterDropdown.module.css',
         ), 'utf8');
-        const wrapper = css.match(/\.networkWrap\s*\{[^}]*\}/)?.[0] || '';
+        const filterCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/NetworkFilter.module.css',
+        ), 'utf8');
+        const listPageCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/ui/ListPage.module.css',
+        ), 'utf8');
+        const dropdownRule = dropdownCss.match(/\.networkWrap\s*\{[^}]*\}/)?.[0] || '';
+        const filterRule = filterCss.match(/\.wrap\s*\{[^}]*\}/)?.[0] || '';
+        const toolbarRule = listPageCss.match(/\.toolbar\s*\{[^}]*\}/)?.[0] || '';
 
-        expect(wrapper).toMatch(/flex:\s*1 1 0/);
-        expect(wrapper).toMatch(/min-width:\s*0/);
-        expect(wrapper).not.toMatch(/min-width:\s*10\.5rem/);
+        expect(window.innerWidth).toBe(320);
+        expect(dropdown).toBeInTheDocument();
+        expect(filter).toBeInTheDocument();
+        expect(toolbar).toBeInTheDocument();
+        expect(trigger).toHaveTextContent('All networks');
+        expect(trigger).toHaveTextContent('3 networks');
+        expect(dropdownRule).toMatch(/flex:\s*1 1 10rem/);
+        expect(dropdownRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
+        expect(filterRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
+        expect(toolbarRule).toMatch(/flex-wrap:\s*wrap/);
     });
 
     it('keeps Contacts and Dispensers filters on one line at 411px', () => {

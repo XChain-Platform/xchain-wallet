@@ -24,7 +24,7 @@
 }
 .back:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 /* Lists and tables (inbox, signing session, settlement) fill the content
@@ -92,7 +92,7 @@
 
 .tickItem:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
     border-radius: var(--xc-radius-sm);
 }
 
@@ -115,6 +115,7 @@
 
 .visuallyHidden {
     position: absolute;
+    /* Preserve the canonical one-pixel clipping box for assistive text. */
     width: 1px;
     height: 1px;
     padding: 0;
@@ -153,30 +154,6 @@
     margin: var(--xc-space-2) 0;
 }
 
-.listMemberToggle {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.listMemberToggle > div {
-    flex: 0 0 auto;
-    margin-bottom: 0;
-}
-
-.listMemberToggle .listMemberCheckbox {
-    width: 1rem;
-    min-height: 1rem;
-    padding: 0;
-}
-
-.listMemberToggle label {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    cursor: pointer;
-}
-
 /* PC-02 lock matrix: one row per ISSUE v3 lock flag (checkbox + label
    via .checkRow, then a per-flag permanence hint underneath it). */
 .lockFlagRow {
@@ -185,13 +162,6 @@
 }
 .lockFlagRow:last-child {
     border-bottom: none;
-}
-
-.lockFlagHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: 0;
-    margin-inline-start: calc(1rem + var(--xc-space-2));
 }
 
 .hint {
@@ -287,11 +257,11 @@
 
 .detailsList {
     display: grid;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--xc-space-1) var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-3);
+    padding: var(--xc-space-1);
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
@@ -305,6 +275,7 @@
     letter-spacing: 0.04em;
     margin: 0;
     align-self: center;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .detailsValue {
@@ -313,6 +284,14 @@
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
+    border-top: var(--xc-table-row-divider);
 }
 
 @media not all and (min-width: 400px) {
@@ -343,8 +322,17 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .detailsLabel:not(:first-child) {
-        margin-top: var(--xc-space-2);
+    .detailsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .detailsLabel {
+        padding-bottom: 0;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: 0;
     }
 }
 
@@ -427,35 +415,12 @@
 
 .validationLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.inlineAction {
-    /* A full tap target even though it reads as an inline link. */
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    text-align: start;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--xc-accent-primary);
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .splitValue {
     min-width: 0;
     overflow-wrap: anywhere;
-}
-
-.inlineAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
 }
 
 .inlineDirectionalIcon {
@@ -503,39 +468,4 @@
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
-}
-
-/* One radio option: the control beside its text. `.pickerLabel` stacks its
-   children (it is built for a caption above a select), which left the
-   dispenser form's "Buyers pay with" and "Expiration" options rendering as a
-   centred radio with its label orphaned on the next line. */
-.radioOption {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-weight: normal;
-}
-
-.radioGroup {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2) var(--xc-space-4);
-    min-width: 0;
-    margin: 0 0 var(--xc-space-3);
-    padding: 0;
-    border: 0;
-}
-
-.radioGroup > legend {
-    width: 100%;
-    margin-bottom: var(--xc-space-1);
-}
-
-@media not all and (min-width: 400px) {
-    .radioGroup {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: var(--xc-space-2);
-    }
 }

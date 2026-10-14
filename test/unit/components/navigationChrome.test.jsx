@@ -108,9 +108,8 @@ describe('navigation route highlighting', () => {
                 rerender(<BottomTabBar currentView={route} onSelect={() => {}} />);
                 const activeTabs = bottomNavigation.getAllByRole('button')
                     .filter((tab) => tab.getAttribute('aria-current') === 'page');
-
-                expect(activeTabs, route).toHaveLength(1);
-                const expected = group === 'home' && [
+                // Wallet and account management views open from More, so More owns them.
+                const expectedTab = [
                     'wallet-picker',
                     'account-picker',
                     'wallet-details',
@@ -119,8 +118,12 @@ describe('navigation route highlighting', () => {
                     'add-wallet',
                     'add-account',
                     'migrate-bip39',
-                ].includes(route) ? 'More' : tabByGroup[group];
-                expect(activeTabs[0], route).toHaveAccessibleName(expected);
+                ].includes(route)
+                    ? 'More'
+                    : (tabByGroup[group] || 'More');
+
+                expect(activeTabs, route).toHaveLength(1);
+                expect(activeTabs[0], route).toHaveAccessibleName(expectedTab);
             }
         }
     });
@@ -173,6 +176,12 @@ describe('navigation route highlighting', () => {
         expect(more).toHaveAttribute('aria-current', 'page');
         fireEvent.click(more);
         expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('marks More for the account picker opened from Settings', () => {
+        render(<BottomTabBar currentView="account-picker" onSelect={() => {}} />);
+        expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
     it('marks Home for the compact menu route in the shared Home group', () => {

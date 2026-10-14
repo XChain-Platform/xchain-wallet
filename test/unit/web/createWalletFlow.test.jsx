@@ -23,6 +23,7 @@ const background = vi.hoisted(() => {
         listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Main Wallet' }]),
         listAccounts: vi.fn(async () => [{ id: 'account-1', index: 0, name: 'Main Account' }]),
         getAddressesByChain: vi.fn(async () => ({})),
+        getWalletBalances: vi.fn(async () => ({})),
     };
 });
 
@@ -42,6 +43,7 @@ vi.mock('../../../packages/web/src/messaging.js', async (importOriginal) => ({
     listWallets: background.listWallets,
     listAccounts: background.listAccounts,
     getAddressesByChain: background.getAddressesByChain,
+    getWalletBalances: background.getWalletBalances,
     reportAutoLock: undefined,
 }));
 
@@ -69,7 +71,7 @@ afterEach(() => {
 });
 
 describe('web create-wallet flow', () => {
-    it('requires every create step before entering Home and moves focus with the flow', async () => {
+    it('enters Home with its skeleton before post-create data loads finish', async () => {
         render(<App />);
 
         expect(await screen.findByRole('heading', { name: 'XChain Wallet' })).toBeInTheDocument();
@@ -128,15 +130,20 @@ describe('web create-wallet flow', () => {
             origin: 'created',
         }));
         expect(background.getSessionStatus).toHaveBeenCalledTimes(1);
+        background.getSessionStatus.mockImplementation(() => new Promise(() => {}));
+        background.getAddressesByChain.mockImplementation(() => new Promise(() => {}));
+        background.getWalletBalances.mockImplementation(() => new Promise(() => {}));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-        // Home is keyed by wallet and account, so it mounts once wallet-wide and
-        // again when the first account is selected. Query afresh each time
-        // rather than holding a heading from the first mount.
+        // Home renders at once with its balance skeleton; query the heading afresh
+        // rather than holding one from an earlier mount.
         await waitFor(
             () => expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument(),
             { timeout: 10_000 },
         );
-        expect(background.getSessionStatus).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('status', { name: 'Loading balances' })).toHaveAttribute('aria-busy', 'true');
+        await waitFor(() => expect(background.getWalletBalances).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(background.getAddressesByChain).toHaveBeenCalled());
+        expect(background.getSessionStatus).toHaveBeenCalledTimes(1);
     });
 });

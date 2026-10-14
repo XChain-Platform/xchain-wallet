@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Chip, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './NetworkFilter.module.css';
 
@@ -54,7 +54,7 @@ export function NetworkFilter({
     const closeFilter = useCallback((restoreFocus = false) => {
         setOpen(false);
         setQuery('');
-        if (restoreFocus) triggerRef.current?.focus();
+        if (restoreFocus) triggerRef.current?.querySelector('button')?.focus();
     }, []);
 
     useBackHandler(open ? () => closeFilter(true) : undefined);
@@ -159,10 +159,9 @@ export function NetworkFilter({
     };
 
     return (
-        <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
-            <button
-                type="button"
-                ref={triggerRef}
+        <div ref={triggerRef} className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
+            <Chip
+                pressed={value !== 'all'}
                 className={styles.trigger}
                 onClick={() => {
                     if (open) closeFilter();
@@ -192,7 +191,7 @@ export function NetworkFilter({
                 <span className={styles.triggerCaret} aria-hidden="true">
                     {open ? '▴' : '▾'}
                 </span>
-            </button>
+            </Chip>
             {open ? (
                 <div
                     ref={popoverRef}

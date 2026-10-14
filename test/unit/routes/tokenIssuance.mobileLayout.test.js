@@ -81,10 +81,13 @@ describe('token issuance mobile layout', () => {
     it.each(routeStyles)('%s keeps review text inside its grid track', (path) => {
         const css = readCss(path);
         expect(ruleBody(css, '.detailsList')).toMatch(
-            /grid-template-columns:\s*minmax\(0, max-content\)\s+minmax\(0, 1fr\)/,
+            /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/,
         );
         expect(ruleBody(css, '.detailsValue')).toMatch(/min-width:\s*0/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(ruleBody(css, '.detailsValue')).toMatch(/text-align:\s*end/);
+        expect(ruleBody(css, '.detailsValue')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+        expect(css).toContain('border-top: var(--xc-table-row-divider);');
         expect(ruleBody(css, '.summary')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 

@@ -15,8 +15,8 @@
 
 .optionIcon {
     flex: 0 0 auto;
-    width: 40px;
-    height: 40px;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
     color: var(--xc-accent-text);
@@ -30,6 +30,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    /* The paired title and description need an optical gap below the spacing scale. */
     gap: 2px;
 }
 
@@ -56,8 +57,8 @@
 }
 
 .chainIcon {
-    width: 24px;
-    height: 24px;
+    width: var(--xc-icon-xl);
+    height: var(--xc-icon-xl);
     border-radius: 50%;
     object-fit: cover;
     display: block;

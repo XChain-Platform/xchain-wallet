@@ -21,6 +21,71 @@
     color: var(--xc-text-muted);
 }
 
+.topRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-height: var(--xc-control-h-sm);
+}
+
+.progress {
+    grid-column: 2;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-align: center;
+}
+
+.topAction {
+    grid-column: 3;
+    justify-self: end;
+    min-width: 0;
+}
+
+.pageHeader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin: 0;
+    text-align: center;
+}
+
+.visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+}
+
+.visual > * {
+    margin: 0;
+}
+
+.visual > img {
+    width: 96px;
+    max-width: 100%;
+    height: auto;
+}
+
+.title {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.description {
+    max-width: 32rem;
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+}
+
 .body {
     display: flex;
     flex-direction: column;
@@ -44,8 +109,17 @@
     flex: 1 1 10rem;
 }
 
-/* Narrow sections: one bare block per section, each after the first
-   divided from the last by a rule above its heading. */
+.stackedActions {
+    flex-direction: column;
+}
+
+.stackedActions > * {
+    flex-basis: auto;
+    width: 100%;
+}
+
+/* Sections stay bare inside the form. Each section after the first is
+   separated by the shared section rhythm on both sides of its divider. */
 .section {
     display: flex;
     flex-direction: column;
@@ -55,7 +129,7 @@
 }
 
 .section + .section {
-    padding-top: var(--xc-space-4);
+    padding-top: var(--xc-section-gap);
     border-top: 1px solid var(--xc-border);
 }
 
@@ -85,33 +159,16 @@
     min-width: 0;
 }
 
-/* Wide: one centred 560px card around the whole form, or, for a sectioned
-   form, one card per section with the action row below the last card. */
+/* Wide: one centred 560px card around the whole form. */
 @media (min-width: 600px) {
     .form {
         max-width: 560px;
         margin: 0 auto;
-    }
-
-    .form:not(.sectioned) {
         padding: var(--xc-space-6);
         background: var(--xc-surface-raised);
         border: 1px solid var(--xc-border);
         border-radius: var(--xc-radius-lg);
         box-shadow: var(--xc-shadow-md);
-    }
-
-    .sectioned > .body > .section {
-        padding: var(--xc-space-6);
-        background: var(--xc-surface-raised);
-        border: 1px solid var(--xc-border);
-        border-radius: var(--xc-radius-lg);
-        box-shadow: var(--xc-shadow-md);
-    }
-
-    .sectioned > .body > .section + .section {
-        padding-top: var(--xc-space-6);
-        border-top: 1px solid var(--xc-border);
     }
 
     /* A reusable form fragment shares the parent form's card instead of
@@ -119,9 +176,6 @@
     form .form {
         max-width: none;
         margin: 0;
-    }
-
-    form .form.sectioned > .body > .section {
         padding: 0;
         background: transparent;
         border: 0;

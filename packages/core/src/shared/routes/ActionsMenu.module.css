@@ -11,6 +11,7 @@
    list (operator ruling 2026-10-12); only forms keep a narrow column. */
 .listFull {
     display: grid;
+    /* 260px preserves useful entry width before the grid adds a column. */
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: var(--xc-space-3);
     margin: 0;
@@ -32,6 +33,7 @@
     box-sizing: border-box;
     padding: var(--xc-space-3) var(--xc-space-4);
     background: var(--xc-surface-raised);
+    /* 1px keeps the card boundary as a crisp hairline. */
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     text-align: start;
@@ -39,6 +41,7 @@
     color: var(--xc-text);
     font-family: inherit;
     width: 100%;
+    transition: background var(--xc-transition), border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
 .entryIcon {
@@ -46,14 +49,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
     color: var(--xc-accent-text);
 }
 
 .entryIcon > svg {
-    width: 32px;
-    height: 32px;
+    width: var(--xc-icon-xl);
+    height: var(--xc-icon-xl);
 }
 
 .entryText {
@@ -65,9 +68,21 @@
     min-width: 0;
 }
 
-.entry:hover:not([aria-disabled="true"]) {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
+@media (hover: hover) and (pointer: fine) {
+    .entry:hover:not([aria-disabled="true"]) {
+        background: var(--xc-control-bg-hover);
+        border-color: var(--xc-control-border-hover);
+    }
+}
+
+.entry:active:not([aria-disabled="true"]) {
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-selected);
+}
+
+.entry:is([aria-current='page'], [aria-pressed='true']) {
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-selected);
 }
 
 .entry[aria-disabled="true"] {
@@ -76,7 +91,9 @@
 }
 
 .entry:focus-visible {
+    /* 2px keeps the keyboard focus outline crisp without obscuring content. */
     outline: 2px solid var(--xc-focus-ring);
+    /* 2px separates the outline from the card while the spacing scale starts at 4px. */
     outline-offset: 2px;
 }
 
@@ -110,8 +127,8 @@
     display: inline-flex;
     align-items: center;
     padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    font-size: 11px;
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: 1.6;
     letter-spacing: 0.04em;

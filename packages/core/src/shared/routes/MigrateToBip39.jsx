@@ -16,6 +16,7 @@ import {
     FormPage,
     ListPage,
     Button,
+    Checkbox,
     Input,
     ChainBadge,
     AddressText,
@@ -321,14 +322,13 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     the phrase to restore your BIP39 wallet on another device.
                 </p>
                 {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} /> : null}
-                <label className={styles.hint} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', margin: 'var(--xc-space-3) 0' }}>
-                    <input
-                        type="checkbox"
+                <div style={{ margin: 'var(--xc-space-3) 0' }}>
+                    <Checkbox
+                        label="I have written down the new recovery phrase and stored it safely."
                         checked={wroteItDown}
                         onChange={(e) => setWroteItDown(e.target.checked)}
                     />
-                    I have written down the new recovery phrase and stored it safely.
-                </label>
+                </div>
             </FormPage>,
         );
     }

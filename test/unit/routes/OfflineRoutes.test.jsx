@@ -72,7 +72,7 @@ function renderOffline(messaging, route) {
 }
 
 function expectOneOfflineNotice() {
-    expect(screen.getAllByText('Wallet is offline')).toHaveLength(1);
+    expect(screen.getAllByText('Wallet offline')).toHaveLength(1);
 }
 
 beforeEach(() => {

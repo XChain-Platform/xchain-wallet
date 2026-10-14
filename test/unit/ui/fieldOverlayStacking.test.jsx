@@ -77,12 +77,15 @@ describe('overlays drawn on a kit Input', () => {
 
         const input = screen.getByLabelText('From');
         const preview = container.querySelector('[class*="readOnlyValue"]');
-        const icon = container.querySelector('button[class*="iconButton"]');
+        const icon = container.querySelector('[class*="iconButton"]');
 
         expect(preview).not.toBeNull();
         // The single-line preview truncates the middle of the address.
         expect(preview.textContent).toMatch(/^bc1qso.*acking$/);
         expect(icon).not.toBeNull();
+        expect(icon.querySelector('button')).not.toBeNull();
+        // The preview duplicates the input value, so it is not a second tab stop.
+        expect(preview.querySelector('[tabindex]')).toBeNull();
         // Equal layers paint in tree order, so both overlays also follow the input.
         for (const overlay of [preview, icon]) {
             expect(input.compareDocumentPosition(overlay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

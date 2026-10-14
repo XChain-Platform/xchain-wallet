@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
+import { Button } from './Button.jsx';
 import styles from './CopyButton.module.css';
 import { CopyIcon, CheckIcon } from './icons/index.jsx';
 import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
@@ -38,11 +39,11 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
 export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
-    const buttonRef = useRef(null);
     const haptic = useHapticFeedback();
     const { announce } = useToast();
 
-    async function handleCopy() {
+    async function handleCopy(event) {
+        const button = event.currentTarget;
         // A sensitive copy can come back false on a native shell whose
         // clipboard plugin did not register: the shared path refuses rather
         // than leaking through the web API, and the user sees "Copy failed"
@@ -65,7 +66,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
             : reason === CopyFailure.NO_NATIVE_CLIPBOARD
                 ? 'Copy blocked: this app has no secure clipboard.'
                 : 'Copy failed: the clipboard is unavailable.';
-        const localRegion = buttonRef.current?.parentElement?.closest(
+        const localRegion = button.parentElement?.closest(
             '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
         );
         if (!localRegion) announce(resultText);
@@ -75,16 +76,17 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
     const text = state === 'copied' ? 'Copied' : state === 'failed' ? failureText : label;
     const icon = state === 'copied' ? <CheckIcon /> : <CopyIcon />;
     return (
-        <button
-            ref={buttonRef}
-            type="button"
-            onClick={handleCopy}
+        <Button
+            size="sm"
             className={styles.btn}
+            onClick={handleCopy}
+            icon={icon}
             aria-label={ariaLabel || label}
+            title={text}
             data-state={state}
+            style={{ minHeight: 'var(--xc-control-h-sm)' }}
         >
-            <span className={styles.icon} aria-hidden="true">{icon}</span>
-            <span>{text}</span>
-        </button>
+            {text}
+        </Button>
     );
 }

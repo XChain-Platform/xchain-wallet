@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormPage, FormSection, Input, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FormPage, FormSection, Input, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1320,15 +1320,11 @@ function renderDetailsStage({
                 />
             ) : null}
             {show.divisible ? (
-                <label className={styles.checkRow}>
-                    {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                    <input
-                        type="checkbox"
-                        checked={divisible}
-                        onChange={(e) => setDivisible(e.target.checked)}
-                    />
-                    <span>Divisible (8 decimal places)</span>
-                </label>
+                <Switch
+                    label="Divisible (8 decimal places)"
+                    checked={divisible}
+                    onChange={(e) => setDivisible(e.target.checked)}
+                />
             ) : null}
             {show.description ? (
                 <Input
@@ -1397,15 +1393,11 @@ function renderDetailsStage({
                 />
             ) : null}
             {show.lockOnCreate ? (
-                <label className={styles.checkRow}>
-                    {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                    <input
-                        type="checkbox"
-                        checked={lockOnCreate}
-                        onChange={(e) => setLockOnCreate(e.target.checked)}
-                    />
-                    <span>Lock supply + minting immediately (irreversible)</span>
-                </label>
+                <Switch
+                    label="Lock supply + minting immediately (irreversible)"
+                    checked={lockOnCreate}
+                    onChange={(e) => setLockOnCreate(e.target.checked)}
+                />
             ) : null}
             {show.transferTo ? (
                 <AddressField
@@ -1505,23 +1497,21 @@ function AdvancedIssuePanel({
                                 const forced = !!forcedByShortcut[f.key];
                                 return (
                                     <div key={f.key} className={styles.lockFlagRow}>
-                                        <label className={styles.checkRow}>
-                                            {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                                            <input
-                                                type="checkbox"
-                                                checked={forced || !!lockChecks[f.key]}
-                                                disabled={forced}
-                                                onChange={(e) => setLockChecks({
-                                                    ...lockChecks,
-                                                    [f.key]: e.target.checked,
-                                                })}
-                                            />
-                                            <span>
-                                                {f.label}
-                                                {forced ? ' (set by "Lock supply + minting immediately")' : ''}
-                                            </span>
-                                        </label>
-                                        <p className={styles.lockFlagHint}>{f.hint}</p>
+                                        <Checkbox
+                                            label={(
+                                                <>
+                                                    {f.label}
+                                                    {forced ? ' (set by "Lock supply + minting immediately")' : ''}
+                                                </>
+                                            )}
+                                            description={f.hint}
+                                            checked={forced || !!lockChecks[f.key]}
+                                            disabled={forced}
+                                            onChange={(e) => setLockChecks({
+                                                ...lockChecks,
+                                                [f.key]: e.target.checked,
+                                            })}
+                                        />
                                     </div>
                                 );
                             })}

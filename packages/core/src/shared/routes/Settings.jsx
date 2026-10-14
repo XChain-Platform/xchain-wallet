@@ -44,6 +44,7 @@ import {
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
+import { writeLastView } from '../utils/lastViewMemory.js';
 import actionStyles from './ActionsMenu.module.css';
 import settingsStyles from './Settings.module.css';
 
@@ -204,6 +205,7 @@ export function Settings({
             kind: 'internal-drill',
             Component: KeyboardSection,
             summary: keyboardSummary(settings),
+            visible: variant !== 'small',
         },
         {
             id: 'language-region',
@@ -274,7 +276,15 @@ export function Settings({
             Component: NetworkSection,
             // The section needs the wallet so the switch can derive
             // that wallet's first address on each chain of the new network.
-            props: { activeWallet },
+            props: {
+                activeWallet,
+                reload: () => {
+                    // Resume on Home because the saved route belongs to the
+                    // previous network's data.
+                    writeLastView(activeWallet?.id, 'home');
+                    reload();
+                },
+            },
         },
         {
             id: 'network-endpoints',
@@ -347,7 +357,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, onNavigateToMint, handleWalletRemoved, reload]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, onNavigateToMint, handleWalletRemoved, reload, variant]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -355,10 +365,10 @@ export function Settings({
     // call from the second render, tripping React's
     // "Rendered fewer hooks than expected" guard.
     const filtered = useMemo(() => {
+        const visibleSections = sections.filter((section) => section.visible !== false);
         const q = normalizeSearchText(query);
-        if (!q) return sections;
-        return sections.filter((s) => {
-            if (s.visible === false) return false;
+        if (!q) return visibleSections;
+        return visibleSections.filter((s) => {
             const searchable = normalizeSearchText([
                 s.title,
                 s.description,
@@ -383,7 +393,14 @@ export function Settings({
                     backLabel="Back to settings"
                     title={section.title}
                     trailing={section.id === 'backup' && onOpenBackupInTab ? (
-                        <Button variant="ghost" size="sm" onClick={onOpenBackupInTab}>Open in tab</Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Icon.ExternalLinkIcon />}
+                            onClick={onOpenBackupInTab}
+                            aria-label="Open in tab"
+                            title="Open in tab"
+                        />
                     ) : null}
                 />
             );

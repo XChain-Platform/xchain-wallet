@@ -27,6 +27,7 @@ import {
     Button,
     EmptyState,
     FormErrorSummary,
+    FormPage,
     FormSection,
     Input,
 } from '@xchain-wallet/core/ui';
@@ -35,7 +36,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, Status } from './_settingsPrimitives.jsx';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
     SIGN_THROTTLE_BURST_MIN,
@@ -47,6 +48,7 @@ import {
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,
 } from '../../../flows/signThrottle.js';
+import local from './ConnectedSitesSection.module.css';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function ConnectedSitesSection() {
@@ -189,31 +191,35 @@ export function ConnectedSitesSection() {
     if (error) return <Status text={`Connected sites unavailable: ${error}`} tone="error" />;
 
     return (
-        <div style={STACK}>
-            {(!sites || sites.length === 0) ? (
-                <EmptyState
-                    title="No sites connected yet"
-                    body="When a website asks to connect to this wallet and you allow it, it appears here."
-                    titleAs="p"
-                />
-            ) : (
-                sites.map((site) => {
-                    const isOpen = expanded.has(site.id);
-                    return (
-                        <FormSection
-                            key={site.id}
-                            headingLevel="h3"
-                            title={site.appName || site.origin}
-                            description={(
-                                <>
-                                    <span style={{ display: 'block' }}>{site.origin}</span>
-                                    <span style={ROW_HINT}>
-                                        Last used {formatLastUsed(site.lastUsedAt)} · connected {formatLastUsed(site.connectedAt)}
-                                    </span>
-                                </>
-                            )}
-                        >
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
+        <FormPage as="div" sectioned label="Connected sites and dApp permissions">
+            <FormSection
+                title="Connected sites"
+                description="Review dApp connections and control each site's permissions."
+            >
+                {(!sites || sites.length === 0) ? (
+                    <EmptyState
+                        title="No sites connected yet"
+                        body="When a website asks to connect to this wallet and you allow it, it appears here."
+                        titleAs="p"
+                    />
+                ) : (
+                    sites.map((site) => {
+                        const isOpen = expanded.has(site.id);
+                        return (
+                            <FormSection
+                                key={site.id}
+                                headingLevel="h3"
+                                title={site.appName || site.origin}
+                                description={(
+                                    <>
+                                        <span style={{ display: 'block' }}>{site.origin}</span>
+                                        <span style={ROW_HINT}>
+                                            Last used {formatLastUsed(site.lastUsedAt)} · connected {formatLastUsed(site.connectedAt)}
+                                        </span>
+                                    </>
+                                )}
+                            >
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
                                     <Button
                                         type="button"
                                         aria-expanded={isOpen}
@@ -247,12 +253,13 @@ export function ConnectedSitesSection() {
                                             Block
                                         </Button>
                                     ) : null}
-                            </div>
-                            {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
-                        </FormSection>
-                    );
-                })
-            )}
+                                </div>
+                                {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
+                            </FormSection>
+                        );
+                    })
+                )}
+            </FormSection>
             {blocklistWired ? (
                 <BlockedOriginsPanel
                     blocked={blocked}
@@ -275,7 +282,7 @@ export function ConnectedSitesSection() {
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
-        </div>
+        </FormPage>
     );
 }
 
@@ -494,16 +501,11 @@ function SignThrottlePanel() {
             <form
                 aria-label="Sign-request throttle controls"
                 onSubmit={onApply}
-                style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-2)',
-                }}
+                className={local.controlRow}
             >
                 <Input
                     id="sign-throttle-burst"
+                    size="md"
                     label="Burst"
                     type="number"
                     inputMode="numeric"
@@ -524,6 +526,7 @@ function SignThrottlePanel() {
                 />
                 <Input
                     id="sign-throttle-window"
+                    size="md"
                     label="Window (seconds)"
                     type="number"
                     inputMode="decimal"
@@ -545,7 +548,7 @@ function SignThrottlePanel() {
                 <Button
                     type="submit"
                     disabled={submitting}
-                    size="sm"
+                    size="md"
                     variant="primary"
                 >
                     {submitting ? 'Applying…' : 'Apply'}
@@ -602,9 +605,10 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         ))}
                     </ul>
                 )}
-                <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
+                <form onSubmit={onSubmit} className={`${local.controlRow} ${local.blockRow}`}>
                     <Input
                         type="text"
+                        size="md"
                         enterKeyHint="go"
                         autoCapitalize="off"
                         autoCorrect="off"
@@ -616,7 +620,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     />
                     <Button
                         type="submit"
-                        size="sm"
+                        size="md"
                         variant="danger"
                         loading={pendingAction === 'block:manual'}
                         disabled={!manualBlock.trim() || pendingAction !== null}

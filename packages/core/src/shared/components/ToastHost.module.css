@@ -36,6 +36,7 @@
 
 .liveAnnouncement {
     position: absolute;
+    /* Keep the live region in an untokenized one-pixel box while hiding it visually. */
     width: 1px;
     height: 1px;
     padding: 0;
@@ -61,6 +62,7 @@
 .overflowBadge {
     pointer-events: none;
     align-self: center;
+    /* Preserve the untokenized 2px optical inset around the compact badge. */
     padding: 2px var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     background: var(--xc-surface-raised);
@@ -78,30 +80,58 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding: var(--xc-card-pad);
     border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-card-radius);
     background: var(--xc-surface-raised);
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
+    line-height: 1.4;
     box-shadow: var(--xc-shadow-toast);
-    animation: toast-in 160ms ease-out;
+    animation: toast-in var(--xc-motion-duration-standard) var(--xc-motion-ease-enter);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .toast { animation: none; }
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .toast { animation: none; }
 }
 
+:global(:root[data-xc-reduced-motion='reduce']) .toast { animation: none; }
+
 @keyframes toast-in {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(var(--xc-space-2)); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.variant_success {
-    border-color: var(--xc-success, #2c7a3d);
+.variant_info {
+    border-color: var(--xc-info);
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
 }
+
+.variant_warning {
+    border-color: var(--xc-warning);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+}
+
+.variant_success {
+    border-color: var(--xc-success);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+}
+
 .variant_error {
-    border-color: var(--xc-danger-fg);
+    border-color: var(--xc-danger);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
+}
+
+.icon {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    font-size: var(--xc-icon-sm);
+    font-weight: 700;
+    line-height: 1.4;
 }
 
 .message {
@@ -121,7 +151,7 @@
 .actionBtn {
     background: transparent;
     border: none;
-    color: var(--xc-accent-text);
+    color: inherit;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -151,7 +181,7 @@
 .dismissBtn {
     background: transparent;
     border: none;
-    color: var(--xc-text-muted);
+    color: inherit;
     cursor: pointer;
     font-size: var(--xc-text-lg);
     line-height: 1;
@@ -160,7 +190,8 @@
     font-family: inherit;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
+    min-width: var(--xc-control-h-sm);
+    min-height: var(--xc-control-h-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;

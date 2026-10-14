@@ -10,6 +10,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
 
 afterEach(() => {
     cleanup();
@@ -51,6 +52,8 @@ describe('MarketsList narrow layout', () => {
         );
 
         await screen.findByRole('button', { name: 'Open Pepe market' });
+        const pair = screen.getByText('PEPE').closest(`.${chipStyles.chip}`);
+        expect(pair).toHaveTextContent('BTC / PEPE');
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         back.focus();
         await user.keyboard('{Enter}');

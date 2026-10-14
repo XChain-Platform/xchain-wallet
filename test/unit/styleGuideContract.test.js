@@ -33,9 +33,16 @@ describe('STYLE_GUIDE component contracts', () => {
                 `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`,
                 's',
             ));
+            expect(guide).toContain(`\`--xc-control-h-${size}\``);
         }
-        expect(guide).toContain('`md` (36px minimum height, default)');
-        expect(guide).toContain('`sm` (28px minimum height)');
+        expect(guide).toContain('`sm` | `--xc-control-h-sm`, 28px (36px on touch)');
+        expect(guide).toContain('`md` | `--xc-control-h-md`, 36px (44px on touch)');
+        expect(guide).toContain('`lg` | `--xc-control-h-lg`, 44px (48px on touch)');
+        // Every badge geometry token in tokens.css has a row in the guide.
+        const tokens = read('packages/core/src/ui/tokens.css');
+        const badgeTokens = [...new Set(tokens.match(/--xc-badge-(?!multisig)[a-z-]+(?=:)/g))];
+        expect(badgeTokens.length).toBeGreaterThan(0);
+        for (const token of badgeTokens) expect(guide).toContain(`| \`${token}\` |`);
         expect(section).toMatch(/import \{ Button, Icon, Input \}/);
         expect(section).toMatch(/\['sm', 'md', 'lg'\]\.map/);
         expect(section).toMatch(/<Input[\s\S]*?size=\{size\}[\s\S]*?<Button[\s\S]*?size=\{size\}/);
@@ -95,15 +102,48 @@ describe('STYLE_GUIDE component contracts', () => {
     it('documents the shared Input size prop instead of inline big-field values', () => {
         const source = read('packages/core/src/ui/Input.jsx');
         const css = read('packages/core/src/ui/Input.module.css');
+        const tokens = read('packages/core/src/ui/tokens.css');
         expect(source).toContain("size = 'md'");
         // Heights come from the shared control-size tokens, so the CSS names the
         // token per size and tokens.css owns the pixel values.
         expect(css).toMatch(/\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height\)/s);
-        expect(css).toMatch(/\.md\s*\{[^}]*--xc-control-height:\s*var\(--xc-control-h-md\)/s);
-        expect(css).toMatch(/\.lg\s*\{[^}]*--xc-control-height:\s*var\(--xc-control-h-lg\)/s);
-        expect(guide).toContain('Its `size` prop is `md` (36px minimum height, default) or `lg` (48px minimum height');
+        for (const [size, height] of [['sm', '28px'], ['md', '36px'], ['lg', '44px']]) {
+            expect(css).toMatch(new RegExp(
+                `\\.${size}\\s*\\{[^}]*--xc-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+                's',
+            ));
+            expect(tokens).toContain(`--xc-control-h-${size}: ${height};`);
+        }
+        expect(guide).toContain('Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px');
         expect(guide).toContain('<Input label="Amount" size="lg" />');
         expect(guide).not.toContain("fontSize: 'var(--xc-text-lg)'");
+    });
+
+    it('documents kit usage decisions with do and do-not examples', () => {
+        for (const heading of [
+            '### The page gutter and vertical rhythm',
+            '### The form rule: narrow is bare, wide is one card',
+            '### ListRow versus a card',
+            '### Control sizes: sm, md and lg',
+            '### Chip versus SegmentedControl versus Tabs',
+            '### Checkbox versus Switch versus RadioGroup',
+        ]) {
+            expect(guide).toContain(heading);
+        }
+
+        expect(guide).toContain('**Do:** let `<Screen>` provide `--xc-page-gutter`');
+        expect(guide).toContain('**Do not:** branch on `screenVariantFor(shell)`');
+        expect(guide).toContain('**Do:** render each history transaction as a `<ListRow');
+        expect(guide.match(/\| control \| use it when \| do \| do not \|/g)).toHaveLength(2);
+        for (const example of [
+            '`Grouped / Flat` for history grouping',
+            '`Balances / Activity / DeFi` above one connected tab panel',
+            '`Include spam` and `Include testnet`',
+            '`Hide balances` and save the change on toggle',
+            '`Low / Normal / Fast` default fee priority',
+        ]) {
+            expect(guide).toContain(example);
+        }
     });
 
     it('documents the FormPage breakpoint, full-width ListPage and EmptyState props', () => {
@@ -115,7 +155,9 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(guide).toContain('### The list rule: full width to the scrollbar');
         expect(guide).toContain('Do not wrap it in a card or add a centered maximum width');
         for (const prop of [
-            'title', 'body', 'icon', 'actionLabel', 'onAction', 'actionIcon', 'titleAs', 'role', 'className',
+            'title', 'body', 'icon', 'actionLabel', 'onAction', 'actionIcon',
+            'secondaryActionLabel', 'onSecondaryAction', 'secondaryActionIcon',
+            'titleAs', 'role', 'className',
         ]) {
             expect(emptyState).toMatch(new RegExp(`\\b${prop}\\b`));
             expect(guide).toMatch(new RegExp(`\`${prop}\``));
@@ -126,6 +168,8 @@ describe('STYLE_GUIDE component contracts', () => {
         const tokens = read('packages/core/src/ui/tokens.css');
         const names = [
             '--xc-space-1', '--xc-space-2', '--xc-space-3', '--xc-space-4', '--xc-space-5', '--xc-space-6', '--xc-space-8',
+            '--xc-form-gap', '--xc-label-gap', '--xc-help-gap', '--xc-section-gap',
+            '--xc-control-h-sm', '--xc-control-h-md', '--xc-control-h-lg',
             '--xc-text-xs', '--xc-text-sm', '--xc-text-md', '--xc-text-lg', '--xc-text-xl', '--xc-text-2xl',
             '--xc-icon-xs', '--xc-icon-sm', '--xc-icon-md', '--xc-icon-lg', '--xc-icon-xl',
             '--xc-radius-sm', '--xc-radius-md', '--xc-radius-lg', '--xc-radius-pill',
@@ -135,7 +179,12 @@ describe('STYLE_GUIDE component contracts', () => {
         for (const name of names) {
             const value = new RegExp(`${name}:\\s*([^;]+);`).exec(tokens)?.[1].trim();
             expect(value, name).toBeTruthy();
-            expect(guide).toContain(`| \`${name}\` | ${value} |`);
+            const plainValue = `| \`${name}\` | ${value} |`;
+            const codeValue = `| \`${name}\` | \`${value}\` |`;
+            expect(
+                guide.includes(plainValue) || guide.includes(codeValue),
+                `${name} is documented with its token value`,
+            ).toBe(true);
         }
     });
 

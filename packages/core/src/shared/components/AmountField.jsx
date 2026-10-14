@@ -47,7 +47,7 @@ import styles from './AmountField.module.css';
  * @param {string} [props.error]                          caller-supplied validation error, forwarded to Input
  * @param {string} [props.id]                             id forwarded to the amount input
  * @param {number | string} [props.divisibility]          maximum coin-mode decimal places for the selected asset
- * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.
+ * @param {'sm' | 'md' | 'lg'} [props.size]                  control size, forwarded to the amount Input and inline Max Button. Defaults to 'md'.
  */
 export function AmountField({
     id,
@@ -140,12 +140,11 @@ export function AmountField({
                     onChange={handleChange}
                     autoComplete="off"
                     placeholder="0.00"
-                    style={onMax ? { paddingInlineEnd: '64px' } : undefined}
                 />
                 {onMax ? (
                     <Button
                         variant="primary"
-                        size="sm"
+                        size={size}
                         icon={null}
                         onClick={() => {
                             setInputError('');
@@ -154,11 +153,6 @@ export function AmountField({
                         disabled={maxDisabled || maxBusy}
                         aria-busy={maxBusy || undefined}
                         aria-label="Use max available amount"
-                        style={{
-                            position: 'absolute',
-                            insetInlineEnd: 'var(--xc-space-2)',
-                            bottom: size === 'lg' ? '10px' : '4px',
-                        }}
                     >
                         Max
                     </Button>

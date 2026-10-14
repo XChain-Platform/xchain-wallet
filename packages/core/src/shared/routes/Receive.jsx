@@ -17,6 +17,7 @@ import {
 } from '@xchain-wallet/core';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -44,6 +45,7 @@ import {
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
 import styles from './Receive.module.css';
+import qrStyles from '../../ui/QrDisplay.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
@@ -142,7 +144,7 @@ function newestAddressOfType(addresses, addressType) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, scopes addresses + new-receive derivation to that account
- * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, imageUrl?: string | null }} [props.prefill]
+ * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, divisibility?: number, imageUrl?: string | null }} [props.prefill]
  *        Selection from ReceivePicker. `chainId` becomes the active
  *        chain; `tick` pre-fills the Token field unless it matches the
  *        chain's native ticker (no point encoding `?tick=BTC` on a
@@ -528,6 +530,30 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const native = nativeTickerFor(activeChainId ? chainRegistry.get(activeChainId) : null);
         return native ? t === native : false;
     }, [reqTick, activeChainId]);
+    const requestTokenInfo = useTokenInfo({
+        chainId: activeChainId,
+        tick: reqTick,
+        skip: isNativeRequest || !reqTick,
+    });
+    // The live explorer omits divisibility, so TokenInfo carries null. Number(null)
+    // is 0, which would cap a divisible token at whole units and erase a valid
+    // amount; an unknown divisibility keeps the coin-precision fallback instead.
+    const divisibilityRaw = prefill?.divisibility ?? requestTokenInfo?.divisibility;
+    const selectedDivisibility = divisibilityRaw == null || divisibilityRaw === ''
+        ? Number.NaN
+        : Number(divisibilityRaw);
+    const requestDivisibility = isNativeRequest
+        ? NATIVE_COIN_DECIMALS
+        : Number.isInteger(selectedDivisibility) && selectedDivisibility >= 0
+            ? selectedDivisibility
+            : NATIVE_COIN_DECIMALS;
+    useEffect(() => {
+        if (!reqAmount.includes('.')) return;
+        const fraction = reqAmount.split('.')[1] || '';
+        if (fraction.length <= requestDivisibility) return;
+        setReqAmount('');
+        setAmountError(`Amount can have at most ${requestDivisibility} decimal places.`);
+    }, [reqAmount, requestDivisibility]);
     // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatRate = useFiatRate({
@@ -544,10 +570,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const validDecimal = /^\d+(?:\.\d*)?$/.test(stripped);
         const fraction = stripped.includes('.') ? stripped.split('.')[1] : '';
         const exceedsCoinPrecision = amountInputMode === 'coin'
-            && fraction.length > NATIVE_COIN_DECIMALS;
+            && fraction.length > requestDivisibility;
         if (stripped !== '' && (!validDecimal || exceedsCoinPrecision)) {
             setAmountError(exceedsCoinPrecision
-                ? `Amount can have at most ${NATIVE_COIN_DECIMALS} decimal places.`
+                ? `Amount can have at most ${requestDivisibility} decimal places.`
                 : 'Enter the amount using numbers and a decimal point only.');
             return;
         }
@@ -557,7 +583,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (!fiatRate) {
                 if (stripped === '') setReqAmount('');
             } else {
-                const derivedCoin = fiatToCoin(stripped, fiatRate, NATIVE_COIN_DECIMALS);
+                const derivedCoin = fiatToCoin(stripped, fiatRate, requestDivisibility);
                 setReqAmount(derivedCoin != null ? derivedCoin : '');
             }
         } else {
@@ -574,7 +600,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 }
             });
         }
-    }, [amountInputMode, fiatRate]);
+    }, [amountInputMode, fiatRate, requestDivisibility]);
 
     const toggleAmountInputMode = useCallback(() => {
         if (!fiatRate) return;
@@ -914,7 +940,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }
 
     const qrActionsContent = address ? (
-        <div className={styles.qrActions}>
+        <div className={`${qrStyles.actions} ${styles.qrActions}`}>
             <Button
                 variant="secondary"
                 onClick={copyQrImage}
@@ -928,8 +954,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 onClick={shareQrImage}
                 disabled={!qrDataUrl}
                 icon={<Icon.UploadIcon />}
+                aria-label="Share QR payment link"
             >
-                Share QR payment link
+                Share QR
             </Button>
             {addressExplorerUrl ? (
                 <a
@@ -977,6 +1004,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {descriptor?.addressTypes?.length > 1 ? (
                 <Select
+                    size="md"
                     label="Address type"
                     value={addressType}
                     onChange={(event) => changeAddressType(event.target.value)}
@@ -1001,56 +1029,55 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             ) : null}
 
             {address ? (
-                <div className={`${styles.qrBox} ${styles.receiveQrBox}`}>
-                    <div ref={qrSurfaceRef} className={styles.qrSurface}>
-                        {qrDataUrl ? (
-                            <img
-                                src={qrDataUrl}
-                                alt={`QR code for ${address.address}`}
-                                width={qrPixelSize}
-                                height={qrPixelSize}
-                                className={styles.qr}
-                            />
-                        ) : (
-                            <div className={styles.qrPlaceholder} aria-hidden="true">
-                                Rendering QR…
-                            </div>
-                        )}
+                <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
+                    <div className={`${qrStyles.frame} ${styles.qrBox}`}>
+                        <div ref={qrSurfaceRef} className={styles.qrSurface}>
+                            {qrDataUrl ? (
+                                <img
+                                    src={qrDataUrl}
+                                    alt={`QR code for ${address.address}`}
+                                    width={qrPixelSize}
+                                    height={qrPixelSize}
+                                    className={styles.qr}
+                                />
+                            ) : (
+                                <div className={styles.qrPlaceholder} aria-hidden="true">
+                                    Rendering QR…
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    <AddressField
+                        size="md"
+                        // The visible label is the accessible name; the hint says a tap
+                        // copies the address. A name about a payment link went stale when
+                        // the tap stopped copying one.
+                        label={address.label || 'Address'}
+                        icon="addresses"
+                        value={address.address}
+                        readOnly
+                        onChange={() => {}}
+                        onClick={copyAddress}
+                        onKeyDown={onAddressKeyDown}
+                        title="Tap to copy address"
+                        hint="Tap the address to copy it."
+                        style={{ cursor: 'text', userSelect: 'text' }}
+                        wrapReadOnlyAddress
+                        onIconClick={() => setAddressPickerOpen(true)}
+                        iconLabel="Choose receive address"
+                    />
+                    {qrActionsContent}
                 </div>
             ) : null}
 
-            {address ? (
-                <AddressField
-                    // The visible label is the accessible name; the hint says a tap
-                    // copies the address. A name about a payment link went stale when
-                    // the tap stopped copying one.
-                    label={address.label || 'Address'}
-                    icon="addresses"
-                    value={address.address}
-                    readOnly
-                    onChange={() => {}}
-                    onClick={copyAddress}
-                    onKeyDown={onAddressKeyDown}
-                    title="Tap to copy address"
-                    hint="Tap the address to copy it."
-                    style={{ cursor: 'text', userSelect: 'text' }}
-                    wrapReadOnlyAddress
-                    onIconClick={() => setAddressPickerOpen(true)}
-                    iconLabel="Choose receive address"
-                />
-            ) : null}
-
             {phoneReceiveLayout ? (
-                <>
-                    {qrActionsContent}
-                    {generateAddressContent}
-                </>
+                generateAddressContent
             ) : null}
 
             {address?.id ? (
                 <div className={styles.labelEditor}>
                     <Input
+                        size="md"
                         label="Address label"
                         value={labelDraftValue}
                         onChange={(event) => setLabelDraft({
@@ -1063,8 +1090,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         error={labelError || undefined}
                     />
                     <Button
+                        size="md"
                         type="button"
                         variant="secondary"
+                        style={{ marginBottom: 'var(--xc-space-3)' }}
                         loading={labelSaving}
                         disabled={labelSaving || labelDraftValue.trim() === (address.label || '')}
                         onClick={saveAddressLabel}
@@ -1096,12 +1125,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {address ? (
                 <>
                     <AmountField
+                        size="md"
                         amount={reqAmount}
                         fiatAmount={fiatAmount}
                         tick={reqTick.trim() || nativeTicker || ''}
                         fiatRate={fiatRate}
                         fiatCurrency={fiatCurrency}
                         amountInputMode={amountInputMode}
+                        divisibility={requestDivisibility}
                         onAmountFieldChange={onAmountFieldChange}
                         toggleAmountInputMode={toggleAmountInputMode}
                         inputRef={amountInputRef}
@@ -1109,8 +1140,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     {amountError ? (
                         <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
                     ) : null}
-                    {!phoneReceiveLayout ? qrActionsContent : null}
-
                     {isHwAddress ? (
                         <section
                             role="group"
@@ -1173,24 +1202,26 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         />
                         <strong>{multisig.schemeLabel}</strong>
                     </header>
-                    {multisigQrs[multisig.multisigConfigId] ? (
-                        <div className={styles.qrBox}>
-                            <img
-                                src={multisigQrs[multisig.multisigConfigId]}
-                                alt={`Multisig QR code for ${multisig.address}`}
-                                width={qrPixelSize}
-                                height={qrPixelSize}
-                                className={styles.qr}
-                            />
+                    <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
+                        {multisigQrs[multisig.multisigConfigId] ? (
+                            <div className={`${qrStyles.frame} ${styles.qrBox}`}>
+                                <img
+                                    src={multisigQrs[multisig.multisigConfigId]}
+                                    alt={`Multisig QR code for ${multisig.address}`}
+                                    width={qrPixelSize}
+                                    height={qrPixelSize}
+                                    className={styles.qr}
+                                />
+                            </div>
+                        ) : (
+                            <div className={`${qrStyles.frame} ${styles.qrBox}`} aria-hidden="true">
+                                <div className={styles.qrPlaceholder}>Rendering multisig QR…</div>
+                            </div>
+                        )}
+                        <div className={styles.addressBox}>
+                            <AddressText address={multisig.address} truncate={false} size="sm" />
+                            <CopyButton value={multisig.address} label="Copy multisignature receive address" />
                         </div>
-                    ) : (
-                        <div className={styles.qrBox} aria-hidden="true">
-                            <div className={styles.qrPlaceholder}>Rendering multisig QR…</div>
-                        </div>
-                    )}
-                    <div className={styles.addressBox}>
-                        <AddressText address={multisig.address} truncate={false} size="sm" />
-                        <CopyButton value={multisig.address} label="Copy multisignature receive address" />
                     </div>
                     {multisig.cosignerNames?.length > 0 ? (
                         <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>

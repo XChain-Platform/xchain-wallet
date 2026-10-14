@@ -122,6 +122,24 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('CreateOrderForm coverage', () => {
+    it('exposes kit choice controls through their native semantic roles', async () => {
+        await renderForm();
+
+        const giveToken = screen.getAllByRole('radio', { name: 'A token' })[0];
+        expect(giveToken).toHaveAttribute('name', 'You give-type');
+        expect(giveToken).toHaveAttribute('value', 'token');
+        expect(screen.getByRole('checkbox', {
+            name: 'Trade ownership of this ticker (not a balance)',
+        })).toBeInTheDocument();
+
+        fireEvent.click(screen.getAllByRole('radio', { name: 'Native BTC' })[0]);
+
+        expect(screen.getByRole('switch', { name: 'Enable CoinPay auto-pay' })).toBeChecked();
+        expect(screen.getByRole('checkbox', {
+            name: 'I understand this web wallet only auto-pays while it is open and unlocked.',
+        })).not.toBeChecked();
+    });
+
     it('surfaces actionable validation for malformed order fields', async () => {
         await renderForm();
 
@@ -140,7 +158,7 @@ describe('CreateOrderForm coverage', () => {
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '' } });
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        fireEvent.click(screen.getByRole('radio', { name: 'Expire at a specific time' }));
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
             .toBeInTheDocument();

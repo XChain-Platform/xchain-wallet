@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     AddressField,
     Button,
+    Checkbox,
     EmptyState,
     FormPage,
     FormSection,
@@ -386,15 +387,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     const reason = state?.reason || null;
                     return (
                         <div key={candidate.actionIndex}>
-                            <label>
-                                <input
-                                    type="checkbox"
-                                    checked={state?.picked === true}
-                                    disabled={sdkSupported !== true || state?.disabled === true}
-                                    onChange={() => toggleCandidate(candidate.actionIndex)}
-                                />
-                                {' '}{candidateName(candidate)}
-                            </label>
+                            <Checkbox
+                                label={candidateName(candidate)}
+                                checked={state?.picked === true}
+                                disabled={sdkSupported !== true || state?.disabled === true}
+                                onChange={() => toggleCandidate(candidate.actionIndex)}
+                            />
                             {reason ? <p className={styles.hint}>{reason}</p> : null}
                         </div>
                     );

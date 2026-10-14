@@ -13,6 +13,7 @@
 // hide help for a different kind of signature.
 
 import { useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import { useLearnMode } from '../hooks/useLearnMode.js';
 import styles from './LearnNote.module.css';
 
@@ -73,14 +74,16 @@ export function LearnNote({ variant = 'action', chainLabel, title = 'Good to kno
         <div className={styles.note} data-testid="learn-note">
             <div className={styles.header}>
                 <span className={styles.title}>{title}</span>
-                <button
+                <Button
                     type="button"
-                    className={styles.dismiss}
+                    variant="link"
+                    size="sm"
+                    icon={null}
                     onClick={dismiss}
                     aria-label={DISMISS_LABEL}
                 >
                     {DISMISS_TEXT}
-                </button>
+                </Button>
             </div>
             <p className={styles.body}>
                 {body}{' '}

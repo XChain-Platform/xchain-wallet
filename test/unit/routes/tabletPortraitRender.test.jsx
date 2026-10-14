@@ -212,7 +212,7 @@ describe('primary routes at 768x1024', () => {
 
     it('locks the portrait sizing rules to cards, list lanes, and the scrollbar gutter', () => {
         expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form\s*\{[^}]*max-width:\s*560px[^}]*margin:[^;]*auto/s);
-        expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form:not\(\.sectioned\)\s*\{[^}]*background:\s*var\(--xc-surface-raised\)[^}]*border:/s);
+        expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form\s*\{[^}]*background:\s*var\(--xc-surface-raised\)[^}]*border:/s);
         expect(listCss).toMatch(/\.page\s*\{[^}]*width:\s*100%[^}]*max-width:\s*48rem[^}]*margin-inline:\s*auto/s);
         expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto/s);
         expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);

@@ -20,7 +20,7 @@
 // Reuses the AirdropForm / OrderbookPanel visibility-gated pattern.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, AddressText, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, AddressText, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -360,22 +360,17 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                     if (!consent) return null;
                                     const on = consent.autopay === true;
                                     return (
-                                        <label style={{
+                                        <div style={{
                                             gridColumn: '1 / -1',
-                                            display: 'flex',
-                                            gap: '0.35rem',
-                                            alignItems: 'center',
                                             fontSize: '0.7rem',
                                             color: 'var(--xc-text-muted)',
-                                            cursor: 'pointer',
                                         }}>
-                                            <input
-                                                type="checkbox"
+                                            <Switch
+                                                label={`CoinPay auto-pay ${on ? 'on' : 'off (notify-only)'}`}
                                                 checked={on}
                                                 onChange={() => handleAutopayToggle(consent)}
                                             />
-                                            CoinPay auto-pay {on ? 'on' : 'off (notify-only)'}
-                                        </label>
+                                        </div>
                                     );
                                 })()}
                             </li>

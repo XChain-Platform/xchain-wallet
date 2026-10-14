@@ -21,9 +21,15 @@
     align-items: center;
 }
 
+.searchWrap > div {
+    flex: 1 1 0;
+    width: 100%;
+}
+
 .searchIcon {
     position: absolute;
     inset-inline-start: 10px;
+    z-index: calc(var(--xc-z-base) + 1);
     display: inline-flex;
     align-items: center;
     color: var(--xc-text-muted);

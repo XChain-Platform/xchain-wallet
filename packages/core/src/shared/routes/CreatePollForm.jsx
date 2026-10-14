@@ -685,7 +685,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Create poll' : 'Preview'}
+                    {singleEncode ? 'Create poll' : 'Preview'}
                 </Button>
             )}
         >

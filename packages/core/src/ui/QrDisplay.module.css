@@ -1,0 +1,41 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    max-width: var(--xc-qr-frame-size);
+    margin-inline: auto;
+}
+
+.frame {
+    width: 100%;
+    max-width: var(--xc-qr-frame-size);
+    box-sizing: border-box;
+    padding: var(--xc-space-3);
+    margin-inline: auto;
+    /* raw-color-ok: fixed white preserves QR scanner contrast. */
+    background: #FFFFFF;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.caption {
+    width: 100%;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-align: center;
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+}

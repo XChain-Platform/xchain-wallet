@@ -20,16 +20,28 @@
 .interactive {
     min-height: var(--xc-control-h-lg, 24px);
     cursor: pointer;
-    transition: background-color var(--xc-transition);
+    transition: background-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
-.interactive:hover:not(:disabled) {
+@media (hover: hover) and (pointer: fine) {
+    .interactive:hover:not(:disabled) {
+        background: var(--xc-control-bg-hover);
+    }
+}
+
+.interactive:active:not(:disabled) {
     background: var(--xc-control-bg-hover);
+    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
 }
 
 .interactive:focus-visible {
     outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: 2px;
+}
+
+.interactive:is([aria-current='page'], [aria-selected='true']) {
+    background: var(--xc-control-bg-hover);
+    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
 }
 
 .interactive:disabled {

@@ -17,6 +17,12 @@
     margin-bottom: 0;
 }
 
+.searchField input {
+    height: var(--xc-control-h-md);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
+    border-radius: var(--xc-control-radius);
+}
+
 /* Header "+" button + its Add/Import dropdown menu. */
 .addMenuWrap {
     position: relative;
@@ -106,9 +112,10 @@
 .segmented {
     display: flex;
     width: 100%;
+    height: var(--xc-control-h-md);
     margin-bottom: var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     overflow: hidden;
 }
 
@@ -120,7 +127,7 @@
     border-inline-start: 1px solid var(--xc-border);
     padding: var(--xc-space-2) var(--xc-space-1);
     font: inherit;
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
     font-weight: 600;
     color: var(--xc-text-muted);
     cursor: pointer;
@@ -282,7 +289,7 @@
     letter-spacing: 0.06em;
     color: var(--xc-text-inverted);
     text-transform: uppercase;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-sm);
     background: linear-gradient(180deg, #22c55e, #16a34a);
 }
 

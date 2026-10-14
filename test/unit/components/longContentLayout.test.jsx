@@ -15,6 +15,7 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 import { formatAtomicAmount } from '../../../packages/core/src/shared/utils/amountFormat.js';
 
 const balanceCss = readFileSync('packages/core/src/shared/components/BalanceList.module.css', 'utf8');
+const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
 const historyCss = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
 const tokenDetailCss = readFileSync('packages/core/src/shared/routes/TokenDetail.module.css', 'utf8');
 const walletPickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
@@ -44,31 +45,39 @@ afterEach(() => {
 });
 
 describe('long content layout', () => {
-    it('ellipsizes balance labels while fitting every digit of a huge amount', () => {
+    it('gives every digit of a 15-digit balance priority at 360px', () => {
         const displayName = 'A token name long enough to occupy every narrow balance-row label lane';
-        const quantity = '12345678901234567890123456789012345678901234567890';
-        const formattedQuantity = formatAtomicAmount(quantity, 0);
+        const quantity = '100000000000000';
+        const formattedQuantity = formatAtomicAmount(quantity, 7);
 
         render(
-            <BalanceList
-                rows={[{
-                    chainId: 'bitcoin-mainnet',
-                    tick: 'EXTRAORDINARILYLONGTICKER',
-                    kind: 'token',
-                    displayName,
-                    quantity,
-                    divisibility: 0,
-                    fiatRate: null,
-                }]}
-                onSelectToken={() => {}}
-            />,
+            <div style={{ width: 360 }}>
+                <BalanceList
+                    rows={[{
+                        chainId: 'bitcoin-mainnet',
+                        tick: 'EXTRAORDINARILYLONGTICKER',
+                        kind: 'token',
+                        displayName,
+                        quantity,
+                        divisibility: 7,
+                        fiatRate: null,
+                    }]}
+                    onSelectToken={() => {}}
+                />
+            </div>,
         );
 
+        expect(formattedQuantity.replace(/\D/g, '')).toHaveLength(15);
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByTitle('EXTRAORDINARILYLONGTICKER')).toBeInTheDocument();
         expect(screen.getByTitle(formattedQuantity)).toHaveTextContent(formattedQuantity);
         expect(rule(balanceCss, '.name')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(balanceCss, '.amountFitInner')).toMatch(/transform-origin:\s*right center/);
+        // The shared row keeps the amount column at its full width and lets the label column yield.
+        expect(rule(listRowCss, '.content')).toMatch(/flex:\s*1 1 auto;[^}]*min-width:\s*0/s);
+        expect(listRowCss).toMatch(/\.trailing,[^{]*\{[^}]*flex:\s*0 0 auto/);
+        expect(rule(balanceCss, '.amounts')).toMatch(/min-width:\s*0/);
+        expect(rule(balanceCss, '.qty')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+        expect(rule(balanceCss, '.amountFit')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(balanceCss, '.qty')).not.toMatch(/text-overflow:\s*ellipsis/);
     });
 
@@ -84,10 +93,11 @@ describe('long content layout', () => {
                             action: 'SEND',
                             actionIndex: 'pending-long',
                             chainId: 'bitcoin-mainnet',
-                            source: address,
+                            source: 'bc1qsource',
                             status: 'pending',
                             pending: { direction: 'out' },
-                            raw: { destination: 'bc1qdestination', amount, tick: 'BTC' },
+                            // History rows identify a send by its counterparty, so the long address is the destination.
+                            raw: { destination: address, amount, tick: 'BTC' },
                         }}
                         selected={false}
                         showConnector={false}

@@ -28,11 +28,36 @@ describe('<Button>', () => {
         expect(onClick).toHaveBeenCalledOnce();
     });
 
-    it('loading implies disabled and aria-busy', () => {
-        render(<Button loading>Signing</Button>);
+    it('loading disables re-submit while preserving the accessible label and layout content', () => {
+        render(<Button loading icon={<SendIcon />}>Signing</Button>);
         const btn = screen.getByRole('button');
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+
         expect(btn).toBeDisabled();
         expect(btn).toHaveAttribute('aria-busy', 'true');
+        expect(btn).toHaveAccessibleName('Signing');
+        expect(btn.querySelector(`.${styles.spinner}`)).toHaveAttribute('aria-hidden', 'true');
+        expect(btn.querySelector(`.${styles.icon}`)).toBeInTheDocument();
+        expect(btn.querySelector(`.${styles.label}`)).toHaveTextContent('Signing');
+        // Button overlays the kit Spinner through .busySpinner so the shared .spinner stays an inline loader.
+        expect(css).toMatch(/\.busySpinner\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0/s);
+        expect(css).toMatch(/\.spinnerStatus\s*\{[^}]*align-items:\s*center[^}]*justify-content:\s*center/s);
+        expect(css).toMatch(/\.loading \.icon,\s*\.loading \.label\s*\{[^}]*opacity:\s*0/s);
+    });
+
+    it('keeps audited route action labels stable while their kit buttons are busy', () => {
+        const readSource = (path) => readFileSync(`packages/core/src/shared/${path}`, 'utf8');
+        const order = readSource('components/PlaceOrderPanel.jsx');
+        const dispenser = readSource('routes/DispenserForm.jsx');
+        const vote = readSource('routes/CreatePollForm.jsx');
+        const create = readSource('routes/CreateWallet.jsx');
+        const imported = readSource('routes/ImportWallet.jsx');
+
+        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{singleEncode \? `Place \$\{side\} order` : 'Review'\}/);
+        expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create\s*<\/Button>/);
+        expect(vote).not.toMatch(/actionConfirm\.composing \? 'Preparing review/);
+        expect(create).toMatch(/<Button loading icon=\{<Icon\.CheckIcon \/>\}>Create wallet<\/Button>/);
+        expect(imported).not.toMatch(/\{busy \? t\('importWallet\.(?:importing|restoring)'\)/);
     });
 
     it('explicit disabled works independently of loading', () => {
@@ -53,6 +78,37 @@ describe('<Button>', () => {
     it('forwards arbitrary props like aria-label', () => {
         render(<Button aria-label="Advance">→</Button>);
         expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Advance');
+    });
+
+    it('gives link actions the shared inline-link treatment', () => {
+        render(<Button variant="link" icon={null}>Learn more</Button>);
+        const button = screen.getByRole('button');
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+        const linkRule = /\.link\s*\{([^}]*)\}/.exec(css)?.[1];
+
+        expect(button).toHaveClass(styles.btn, styles.link);
+        expect(linkRule).toMatch(/color:\s*var\(--xc-accent-text\)/);
+        expect(linkRule).toMatch(/text-decoration:\s*underline/);
+        expect(linkRule).toMatch(/text-underline-offset:\s*0\.15em/);
+        expect(linkRule).toMatch(/min-height:\s*var\(--xc-tap-min\)/);
+    });
+
+    it.each([
+        'shared/components/DraftDiscardButton.jsx',
+        'shared/components/LearnNote.jsx',
+        'shared/routes/BetFeedDetail.jsx',
+        'shared/routes/ContactsList.jsx',
+        'shared/routes/CreateOrderForm.jsx',
+        'shared/routes/Locked.jsx',
+    ])('%s uses the link variant for its text action', (path) => {
+        const source = readFileSync(`packages/core/src/${path}`, 'utf8');
+
+        expect(source).toMatch(/<Button\b[^>]*variant="link"[^>]*icon=\{null\}/);
+    });
+
+    it('keeps kit styles when a caller adds a contextual class', () => {
+        render(<Button className="context-action">Go</Button>);
+        expect(screen.getByRole('button')).toHaveClass(styles.btn, styles.md, 'context-action');
     });
 
     it('uses the shared size scale and hides decorative icons', () => {
@@ -78,59 +134,129 @@ describe('<Button>', () => {
         expect(screen.getByTestId('sm')).toHaveClass(styles.sm);
         expect(screen.getByTestId('md')).toHaveClass(styles.md);
         expect(screen.getByTestId('lg')).toHaveClass(styles.lg);
-        const sizes = [['sm', '32'], ['md', '40'], ['lg', '48']];
+        const sizes = [['sm', '28'], ['md', '36'], ['lg', '44']];
         const followsSharedScale = (candidate) => sizes.every(([size, height]) => new RegExp(
             `\\.${size}\\s*\\{[^}]*min-height:\\s*var\\(--xc-control-h-${size},\\s*${height}px\\)`,
             's',
         ).test(candidate));
-        const iconSizes = { sm: 'sm', md: 'md', lg: 'md' };
         for (const [size] of sizes) {
             expect(css).toMatch(new RegExp(
                 `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`
-                + `[^}]*--xc-icon-size:\\s*var\\(--xc-icon-${iconSizes[size]}\\)`,
+                + `[^}]*--xc-button-font-size:\\s*var\\(--xc-control-font-${size},\\s*\\d+(?:\\.\\d+)?(?:px|rem)\\)`
+                + `[^}]*--xc-button-padding-x:\\s*var\\(--xc-button-pad-x-${size},\\s*\\d+px\\)`
+                + `[^}]*--xc-icon-size:\\s*var\\(--xc-control-icon-${size},\\s*\\d+px\\)`,
                 's',
             ));
         }
         expect(followsSharedScale(css)).toBe(true);
         const shortened = css.replace(
-            'min-height: var(--xc-control-h-sm, 32px)',
+            'min-height: var(--xc-control-h-sm, 28px)',
             'min-height: 20px',
         );
         expect(shortened).not.toBe(css);
         expect(followsSharedScale(shortened)).toBe(false);
-        expect(css).toMatch(/\.btn\s*\{[^}]*padding:\s*0 var\(--xc-control-pad-x\)/s);
-        expect(css).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
-        expect(css).toMatch(/\.btn\s*\{[^}]*font-size:\s*var\(--xc-control-font\)/s);
-        expect(css).not.toMatch(/min-height:\s*(?:28|36)px/);
+        expect(css).toMatch(/\.btn\s*\{[^}]*padding-block:\s*0[^}]*padding-inline:\s*var\(--xc-button-padding-x,\s*16px\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius,\s*8px\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*font-size:\s*var\(--xc-button-font-size,\s*14px\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*line-height:\s*var\(--xc-control-line,\s*1\.25\)/s);
     });
 
-    it('passes shared icon tokens through controls, adornments, rows, and tabs', () => {
+    it('aligns picker and address controls to the shared size tokens', () => {
         const readCss = (path) => readFileSync(`packages/core/src/${path}`, 'utf8');
-        const sizedControls = [
-            {
-                css: readCss('ui/ChainPicker.module.css'),
-                forwardedToken: '--chain-picker-icon-size',
-            },
-            {
-                css: readCss('shared/components/NetworkFilter.module.css'),
-                forwardedToken: '--network-filter-icon-size',
-            },
-        ];
-        const expectedSizes = { sm: 'sm', md: 'md', lg: 'md' };
+        const chainPickerCss = readCss('ui/ChainPicker.module.css');
+        const iconSelectCss = readCss('ui/IconSelect.module.css');
 
-        for (const { css, forwardedToken } of sizedControls) {
-            for (const [controlSize, iconSize] of Object.entries(expectedSizes)) {
-                const block = css.match(new RegExp(`\\.${controlSize}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
-                expect(block).toMatch(new RegExp(`--xc-icon-size:\\s*var\\(--xc-icon-${iconSize}\\)`));
-                expect(block).toMatch(new RegExp(`${forwardedToken}:\\s*var\\(--xc-icon-size\\)`));
-            }
+        for (const size of ['sm', 'md', 'lg']) {
+            const chainBlock = chainPickerCss.match(
+                new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'),
+            )?.[0] || '';
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+            ));
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-icon-size:\\s*var\\(--xc-control-icon-${size},`,
+            ));
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-padding-x:\\s*var\\(--xc-control-pad-x-${size},`,
+            ));
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-font-size:\\s*var\\(--xc-control-font-${size},`,
+            ));
+
+            const iconSelectBlock = iconSelectCss.match(
+                new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'),
+            )?.[0] || '';
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+            ));
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-icon-size:\\s*var\\(--xc-control-icon-${size},`,
+            ));
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-padding-x:\\s*var\\(--xc-control-pad-x-${size},`,
+            ));
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-font-size:\\s*var\\(--xc-control-font-${size},`,
+            ));
         }
 
-        for (const path of ['ui/AddressField.module.css', 'ui/AddressCombobox.module.css']) {
-            const iconButton = readCss(path).match(/\.iconButton\s*\{[^}]*\}/s)?.[0] || '';
-            expect(iconButton).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
+        const chainTrigger = chainPickerCss.match(/\.trigger\s*\{[^}]*\}/s)?.[0] || '';
+        expect(chainTrigger).toMatch(/box-sizing:\s*border-box/);
+        expect(chainTrigger).toMatch(/height:\s*var\(--chain-picker-control-height\)/);
+        expect(chainTrigger).toMatch(/padding:\s*0 var\(--chain-picker-padding-x\)/);
+        expect(chainTrigger).toMatch(/font-size:\s*var\(--chain-picker-font-size\)/);
+        expect(chainTrigger).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
+
+        const iconSelectTrigger = iconSelectCss.match(/\.trigger\s*\{[^}]*\}/s)?.[0] || '';
+        expect(iconSelectTrigger).toMatch(/box-sizing:\s*border-box/);
+        expect(iconSelectTrigger).toMatch(/height:\s*var\(--xc-control-height\)/);
+        expect(iconSelectTrigger).toMatch(/min-height:\s*var\(--xc-control-height\)/);
+        expect(iconSelectCss).not.toMatch(/(?:width|height):\s*26px/);
+
+        for (const component of ['AddressField', 'AddressCombobox']) {
+            const css = readCss(`ui/${component}.module.css`);
+            const source = readFileSync(`packages/core/src/ui/${component}.jsx`, 'utf8');
+            expect(source).toMatch(/styles\[size\] \|\| ''/);
+            expect(source).toMatch(
+                /paddingInlineEnd: 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
+            );
+            for (const size of ['sm', 'md', 'lg']) {
+                const block = css.match(new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
+                expect(block).toMatch(new RegExp(
+                    `--address-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+                ));
+                expect(block).toMatch(new RegExp(
+                    `--xc-icon-size:\\s*var\\(--xc-control-icon-${size},`,
+                ));
+            }
+            const iconButton = css.match(/\.iconButton\s*\{[^}]*\}/s)?.[0] || '';
             expect(iconButton).toMatch(/align-items:\s*center/);
             expect(iconButton).toMatch(/justify-content:\s*center/);
+            if (component === 'AddressField') {
+                // AddressField wraps the kit Button, which takes its square box from the size prop.
+                expect(source).toMatch(/<Button[\s\S]*?size=\{size\}/);
+                continue;
+            }
+            expect(iconButton).toMatch(/width:\s*var\(--address-control-height\)/);
+            expect(iconButton).toMatch(/height:\s*var\(--address-control-height\)/);
+            expect(iconButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
+            expect(iconButton).toMatch(/align-items:\s*center/);
+            expect(iconButton).toMatch(/justify-content:\s*center/);
+        }
+
+        const addressFieldCss = readCss('ui/AddressField.module.css');
+        const readOnlyValue = addressFieldCss.match(/\.readOnlyValue\s*\{[^}]*\}/s)?.[0] || '';
+        expect(readOnlyValue).toMatch(/inset-inline-start:\s*var\(--address-control-padding-x\)/);
+        expect(readOnlyValue).toMatch(/font-size:\s*var\(--address-control-font-size\)/);
+
+        const networkFilterCss = readCss('shared/components/NetworkFilter.module.css');
+        const expectedNetworkIcons = { sm: 'sm', md: 'md', lg: 'md' };
+        for (const [size, iconSize] of Object.entries(expectedNetworkIcons)) {
+            const block = networkFilterCss.match(
+                new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'),
+            )?.[0] || '';
+            expect(block).toMatch(new RegExp(`--xc-icon-size:\\s*var\\(--xc-icon-${iconSize}\\)`));
+            expect(block).toMatch(/--network-filter-icon-size:\s*var\(--xc-icon-size\)/);
         }
 
         const tabCss = readCss('shared/components/BottomTabBar.module.css');
@@ -151,8 +277,22 @@ describe('<Button>', () => {
         const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 
         expect(button).toHaveClass(styles.sm, styles.iconOnly);
+        expect(button).toHaveAttribute('title', 'Send');
         expect(css).toMatch(/\.iconOnly\s*\{[^}]*width:\s*var\(--xc-button-height\)[^}]*min-width:\s*var\(--xc-button-height\)/s);
-        expect(css).toMatch(/@media \(pointer:\s*coarse\)[\s\S]*?\.btn::after\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s);
+        expect(css).toMatch(/@media \(pointer:\s*coarse\), \(hover:\s*none\)[\s\S]*?\.sm::before\s*\{[^}]*width:\s*max\(100%,\s*var\(--xc-control-hit-min,\s*24px\)\)[^}]*height:\s*max\(100%,\s*var\(--xc-control-hit-min,\s*24px\)\)/s);
+    });
+
+    it('rejects an icon-only button without an accessible name', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const preventExpectedError = (event) => event.preventDefault();
+        window.addEventListener('error', preventExpectedError);
+        try {
+            expect(() => render(<Button icon={<SendIcon />} />))
+                .toThrow('Icon-only Button requires an aria-label or aria-labelledby.');
+        } finally {
+            window.removeEventListener('error', preventExpectedError);
+            consoleError.mockRestore();
+        }
     });
 
     it('centres an icon-only button icon with no label span or gap beside it', () => {

@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 import { NETWORKS, NETWORK_DEFAULT } from '../../schemas/settings.js';
+import { writeLastView } from './lastViewMemory.js';
+import { t } from '../../i18n/index.js';
 
 export const ACTIVE_NETWORK_OPTIONS = /** @type {const} */ ([
     { value: 'mainnet', label: 'Mainnet' },
@@ -50,6 +52,21 @@ export function activeNetworkOptions({ developerMode = false, current } = {}) {
 }
 
 /**
+ * Describe the reload, data boundary, and required unlock consistently.
+ *
+ * @param {unknown} current
+ * @param {unknown} next
+ */
+export function activeNetworkSwitchCopy(current, next) {
+    const from = activeNetworkLabel(current);
+    const to = activeNetworkLabel(next);
+    return {
+        title: t('settings.network.switchTitle', { network: to }),
+        message: t('settings.network.switchMessage', { nextNetwork: to, currentNetwork: from }),
+    };
+}
+
+/**
  * Confirm the reload and the visible data boundary before switching networks.
  *
  * @param {unknown} current
@@ -80,6 +97,9 @@ export async function persistActiveNetwork({ messaging, update, walletId, networ
     if (!NETWORKS.includes(network)) throw new Error('A valid active network is required.');
     if (typeof messaging?.setActiveNetwork === 'function' && walletId) {
         const result = await messaging.setActiveNetwork({ walletId, network });
+        // Start network reloads from Home instead of restoring a route whose
+        // content belongs to the network the user just left.
+        writeLastView(walletId, 'home');
         if (result?.addresses?.skipped === 'no-signer') {
             if (typeof messaging.lockWallet !== 'function') {
                 throw new Error('Unlock your wallet to finish switching networks.');
@@ -90,7 +110,9 @@ export async function persistActiveNetwork({ messaging, update, walletId, networ
         return result;
     }
     if (typeof update === 'function') {
-        return { settings: await update({ activeNetwork: network }) };
+        const settings = await update({ activeNetwork: network });
+        if (walletId) writeLastView(walletId, 'home');
+        return { settings };
     }
     throw new Error('Active network switching is not available in this shell.');
 }

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
@@ -908,19 +908,16 @@ export function AddressList({
                             <strong>Not covered by your recovery phrase.</strong>{' '}
                             Keep a copy of the WIF, or a current backup file (Settings &gt; Backup).
                         </p>
-                        <label className={wifStyles.wifAck}>
-                            {/* Checkbox stays native because the kit has no checkbox field. */}
-                            <input
-                                type="checkbox"
-                                checked={wifWarningAck}
-                                onChange={(e) => {
-                                    setWifWarningAck(e.target.checked);
-                                    if (wifError) setWifError(null);
-                                }}
-                                disabled={wifBusy}
-                            />
-                            <span>I understand this key is not backed up by my recovery phrase.</span>
-                        </label>
+                        <Checkbox
+                            className={wifStyles.wifAck}
+                            label="I understand this key is not backed up by my recovery phrase."
+                            checked={wifWarningAck}
+                            onChange={(e) => {
+                                setWifWarningAck(e.target.checked);
+                                if (wifError) setWifError(null);
+                            }}
+                            disabled={wifBusy}
+                        />
                 </FormPage>
             </Screen>
         );

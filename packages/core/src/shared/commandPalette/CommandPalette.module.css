@@ -17,7 +17,10 @@
 }
 
 .panel {
+    box-sizing: border-box;
     width: 100%;
+    min-width: 0;
+    min-height: 0;
     max-width: 560px;
     max-height: min(70vh, 100%);
     min-height: 0;
@@ -28,6 +31,50 @@
     border-radius: var(--xc-radius-lg);
     box-shadow: var(--xc-shadow-md);
     overflow: hidden;
+}
+
+.header {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr) var(--xc-control-h-md);
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+    min-height: var(--xc-control-h-md);
+    padding: var(--xc-space-2) var(--xc-space-4);
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.title {
+    grid-column: 2;
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.close {
+    grid-column: 3;
+    display: inline-flex;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+}
+
+.handle {
+    position: absolute;
+    top: var(--xc-space-2);
+    /* Equal logical insets plus auto margins centre the handle in either direction. */
+    inset-inline: 0;
+    display: none;
+    width: 2.25rem;
+    height: 4px;
+    margin-inline: auto;
+    border-radius: var(--xc-radius-xs);
+    background: var(--xc-border);
 }
 
 .searchRow {
@@ -54,9 +101,8 @@
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
-    /* slice 2: the search field's own box was 19px tall, under the
-       24px pointer-target floor. It is the palette's only text entry and
-       the first thing a touch user reaches for. */
+    /* The palette's only text entry meets the pointer-target floor because
+       it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);
 }
 
@@ -160,11 +206,19 @@
     max-height: min(85%, var(--xc-viewport-h, 100vh));
     border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
     border-bottom: 0;
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
 }
 
 :global([data-xc-tier='compact']) .escHint {
     display: none;
+}
+
+:global([data-xc-tier='compact']) .handle {
+    display: block;
+}
+
+:global([data-xc-tier='compact']) .header {
+    padding-top: var(--xc-space-4);
 }
 
 @media not all and (min-width: 640px) {
@@ -178,10 +232,18 @@
         max-height: min(85%, var(--xc-viewport-h, 100vh));
         border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
         border-bottom: 0;
-        padding-bottom: env(safe-area-inset-bottom, 0);
+        padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
     }
 
     .escHint {
         display: none;
+    }
+
+    .handle {
+        display: block;
+    }
+
+    .header {
+        padding-top: var(--xc-space-4);
     }
 }

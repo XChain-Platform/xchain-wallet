@@ -91,9 +91,9 @@ describe('shared settings row semantics', () => {
         const toggle = screen.getByRole('switch', { name: 'Protect previews' });
         expect(toggle.checked).toBe(true);
         expect(describedText(toggle)).toBe('Requires confirmation before opening a preview.');
-        expect(toggle.style.appearance).toBe('none');
-        expect(toggle.style.borderRadius).toBe('999px');
-        expect(toggle.style.backgroundColor).toBe('var(--xc-accent-primary)');
+        expect(toggle).toHaveAttribute('type', 'checkbox');
+        expect(toggle.className).toMatch(/input/);
+        expect(toggle.closest('label')).toHaveTextContent('Protect previews');
 
         fireEvent.click(screen.getByText('Protect previews'));
         expect(onChange).toHaveBeenCalledWith(false);
@@ -149,6 +149,10 @@ describe('shared settings row semantics', () => {
         expect(describedText(rate)).toContain('sat/vB');
         expect(describedText(bump)).toMatch(/raise the fee later/i);
         expect(bump.checked).toBe(true);
+        expect(bump).toHaveAttribute(
+            'aria-label',
+            'Bitcoin allow fee bump (Replace-by-Fee)',
+        );
 
         fireEvent.change(rate, { target: { value: '' } });
         fireEvent.blur(rate);

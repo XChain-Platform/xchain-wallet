@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -906,18 +906,11 @@ export function PublishFileForm({ walletId, onBack }) {
                         autoComplete="off"
                     />
 
-                    <label className={styles.checkRow}>
-                        {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
-                        <input
-                            type="checkbox"
-                            checked={ackForever}
-                            onChange={(e) => setAckForever(e.target.checked)}
-                        />
-                        <span>
-                            I understand the published bytes are on-chain forever
-                            and cannot be deleted.
-                        </span>
-                    </label>
+                    <Checkbox
+                        label="I understand the published bytes are on-chain forever and cannot be deleted."
+                        checked={ackForever}
+                        onChange={(e) => setAckForever(e.target.checked)}
+                    />
 
                     {feeTiers ? (
                         <FeeSelector

@@ -20,7 +20,7 @@ import { Screen, PageHeader, FormPage, FormSection, ListPage, EmptyState, Sectio
 
 Two parts go inside them: `<EmptyState>` is the one empty state (a list that loaded with nothing in it), and `<SectionHeader>` titles a group of content (it is also FormSection's heading). A detail screen with an Edit button is a ListPage; the edit screen it opens is a FormPage.
 
-### The single page gutter
+### The page gutter and vertical rhythm
 
 `Screen.body` owns the only page inset. It applies `padding-inline: var(--xc-page-gutter)` and `padding-block-start: var(--xc-page-top)`. The responsive values are:
 
@@ -33,6 +33,10 @@ Two parts go inside them: `<EmptyState>` is the one empty state (a list that loa
 
 Page templates and route content do not add another outer horizontal inset. `ListPage` stretches across the complete content box. `FormPage` is bare below 600px and becomes one centered 560px card at 600px and up. The global `AppHeader`, `Screen.header`, and `Screen.footer` are chrome, not page content, so they keep their own padding and do not consume either page token.
 
+Use the semantic rhythm tokens at their named level: `--xc-label-gap` and `--xc-help-gap` (4px) inside a field, `--xc-form-gap` (16px) between fields, `--xc-section-gap` (24px) between form sections, and `--xc-space-8` (32px) for a page-level break between content groups. The page top inset always comes from `--xc-page-top`; do not recreate it with a first-child margin.
+
+**Do:** let `<Screen>` provide `--xc-page-gutter` and use `<FormPage>` or `<ListPage>` directly inside it. **Do not:** add `padding-inline: 16px` to a route wrapper or stack arbitrary `margin-top` values between fields.
+
 ### The form rule: narrow is bare, wide is one card
 
 One rule on every platform (phone, extension popup, desktop app, browser), decided by **viewport width with a CSS media query at 600px**:
@@ -43,6 +47,8 @@ One rule on every platform (phone, extension popup, desktop app, browser), decid
 - **The action row** (`actions`) sits at the end of the form, after the last field or the last section card, and wraps. Each button grows to share the row, so a lone button is full width; put the primary action last so it lands on the right. Errors go in `status`, just above the actions.
 
 The breakpoint is a viewport media query, not a container query. Chrome 102, the oldest Android WebView engine we support, has no container queries. Do not choose the layout from the shell: a phone browser gets the narrow form and a wide desktop window gets the card. The sidebar nav appears at 640px, so 600 to 639px shows the bottom tab bar with a carded form; that is expected.
+
+**Do:** render the same `<FormPage>` markup at every width and let CSS make it bare or carded. **Do not:** branch on `screenVariantFor(shell)` or wrap wide forms in a route-local `.card`.
 
 ### Viewport width scale
 
@@ -66,6 +72,12 @@ The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `
 
 `<ListPage>` fills the Screen content box from `--xc-page-gutter` on the left to the page gutter and reserved scrollbar gutter on the right. Do not wrap it in a card or add a centered maximum width: lists, tables and card grids use all available content width at compact, rail, and full widths. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
 
+### ListRow versus a card
+
+Use `<ListRow>` for repeated, full-width items that share one reading order: optional leading identity, title and subtitle, trailing value, then one row-level navigation or action. Use a card when one item is a self-contained content group with its own hierarchy, several related values, or multiple internal actions. A card is content inside a `ListPage`, not a replacement for the page template or page gutter.
+
+**Do:** render each history transaction as a `<ListRow title="Sent XCH" trailing="-12.50 XCH" onClick={openTransaction} />`. **Do not:** put every transaction in its own card, or compress a portfolio summary with several actions into one `ListRow`.
+
 ### Props
 
 | component | props |
@@ -73,7 +85,7 @@ The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `
 | `FormPage` | `onSubmit`, `actions`, `status`, `intro`, `sectioned`, `label` (accessible name), `noValidate` (default `true`), `className`, `ref` (the form), `children`, and other form attributes |
 | `FormSection` | `title`, `description`, `headingLevel` (`h2` default), `className`, `children` |
 | `ListPage` | `toolbar`, `intro`, `className`, `children`, and other root attributes such as `aria-label` |
-| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `titleAs` (`h2` default), `role` (`status` default), `className` |
+| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `secondaryActionLabel` + `onSecondaryAction`, `secondaryActionIcon`, `titleAs` (`h2` default), `role` (`status` default), `className`, and other root attributes |
 | `SectionHeader` | `title`, `as` (`h2` default), `id`, `description`, `trailing`, `className` |
 
 ```jsx
@@ -135,15 +147,27 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 
 ## Buttons
 
-Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes: `md` (36px minimum height, default) and `sm` (28px minimum height). `block` makes it full width, `loading` shows a spinner and disables it, `disabled` disables it, and `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
+Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes follow the shared `sm` / `md` / `lg` control scale below. `block` makes it full width, `loading` shows a spinner and disables it, `disabled` disables it, and `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
 
 For dialogs use the shared `NoticeModal` (one OK) from `@xchain-wallet/core/shared/components/NoticeModal.jsx` and `ConfirmModal` (Cancel / Confirm, `danger` for destructive confirms) from `@xchain-wallet/core/shared/components/ConfirmModal.jsx`, never `alert()` or `confirm()`.
 
 For icon-only buttons inside layouts (e.g. an action overlaid in an input box), a plain `<button>` is fine, but make it transparent (no background, no border) so it reads as an icon affordance, not a tappable rectangle. The hover state should change icon color only, not paint a fill.
 
+### Control sizes: sm, md and lg
+
+Buttons and field primitives share one visual height scale. Pass the component's `size` prop instead of copying a height or padding rule, and keep controls that sit in the same row on the same size.
+
+| size | token and height | use it when | do | do not |
+|---|---|---|---|---|
+| `sm` | `--xc-control-h-sm`, 28px (36px on touch) | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
+| `md` | `--xc-control-h-md`, 36px (44px on touch) | the control is a normal button, field, select, tab, or segmented choice; this is the default | omit `size` on a routine `<Input label="Memo" />` | invent a nearby route-local height such as 40px |
+| `lg` | `--xc-control-h-lg`, 44px (48px on touch) | the control is the main entry or prominent action in a focused flow | use `size="lg"` for Send's To and Amount fields | make every field large or mix `lg` and `md` in one aligned field stack |
+
+On coarse-pointer or no-hover devices the tokens step up to 36/44/48px, so touch controls meet the 44px target at the default size. The painted `sm` control can also have a larger transparent pointer target there. Do not increase its visible height to manufacture a touch target.
+
 ## Inputs
 
-Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `md` (36px minimum height, default) or `lg` (48px minimum height with a larger, weightier label). `Select`, `Textarea`, `AmountField`, and `AddressCombobox` use the same `md` / `lg` contract.
+Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px with a weightier label), stepping up to 36/44/48px on touch. `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same size contract.
 
 **Primary entry inputs** (the To / Amount fields on Send) use `size="lg"`:
 
@@ -152,6 +176,28 @@ Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-thr
 ```
 
 Use `md` for normal inputs. Do not duplicate the `lg` font, padding, or height with inline styles.
+
+## Selection controls
+
+### Chip versus SegmentedControl versus Tabs
+
+Choose these by what the selection changes, not by which shape fits the available space.
+
+| control | use it when | do | do not |
+|---|---|---|---|
+| `<Chip>` | a compact filter or preset can be toggled, or short metadata needs a static pill | use toggle chips for a Watchlist filter and a static chip for `BTC / LTC` | use a chip for a submit action or page navigation |
+| `<SegmentedControl>` | exactly one of two or three short options sets an inline mode or view of the same content | use `Grouped / Flat` for history grouping | use it for independent booleans, long labels, or unrelated actions |
+| `<Tabs>` | the choice replaces the primary panel inside the current routed page | use `Balances / Activity / DeFi` above one connected tab panel | use tabs as data filters, nest tab strips, or place them in `PageHeader` |
+
+### Checkbox versus Switch versus RadioGroup
+
+Use `<ChoiceControl>` for the checkbox and radio inputs. A settings switch is the switch treatment shown by `ToggleRow`; it remains a checkbox in the DOM with `role="switch"`.
+
+| control | use it when | do | do not |
+|---|---|---|---|
+| Checkbox | each boolean can be selected independently, or an acknowledgement is submitted with a form | use checkboxes for `Include spam` and `Include testnet` when either, both, or neither may be checked | use checkboxes when exactly one answer is required |
+| Switch | one independent setting takes effect immediately when toggled | use a switch for `Hide balances` and save the change on toggle | use a switch for a choice that waits for a Save or Continue action |
+| RadioGroup | exactly one answer from a visible set is submitted as one form value | use a labelled group for `Low / Normal / Fast` default fee priority | use radios for multiple selections or hide a long option list behind dozens of radio rows |
 
 ### Required and optional fields
 
@@ -316,6 +362,11 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-text-lg` | 1rem | large-input text, section titles, page title |
 | `--xc-text-xl` | 1.25rem | asset hero name, panel headings |
 | `--xc-text-2xl` | 1.5rem | hero figures and prominent asset tickers |
+| `--xc-control-h-sm` | 28px | compact control visual height; 36px on touch |
+| `--xc-control-h-md` | 36px | default control visual height; 44px on touch |
+| `--xc-control-h-lg` | 44px | hero control visual height; 48px on touch |
+| `--xc-control-font` | `var(--xc-text-md)` | shared control text |
+| `--xc-control-pad-x` | `var(--xc-space-3)` | shared control inline padding |
 
 ### Icon sizes, radii, shadows and stacking
 
@@ -330,6 +381,18 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-radius-md` | 8px |
 | `--xc-radius-lg` | 12px |
 | `--xc-radius-pill` | 9999px |
+| `--xc-control-radius` | `var(--xc-radius-md)` |
+| `--xc-badge-height-sm` | 24px |
+| `--xc-badge-height-md` | 32px |
+| `--xc-badge-radius` | `var(--xc-radius-pill)` |
+| `--xc-badge-font-size-sm` | `var(--xc-text-xs)` |
+| `--xc-badge-font-size-md` | `var(--xc-text-sm)` |
+| `--xc-badge-font-weight` | 700 |
+| `--xc-badge-icon-size-sm` | `var(--xc-icon-sm)` |
+| `--xc-badge-icon-size-md` | `var(--xc-icon-xl)` |
+| `--xc-badge-gap` | `var(--xc-space-1)` |
+| `--xc-badge-padding-inline-sm` | `var(--xc-space-2)` |
+| `--xc-badge-padding-inline-md` | `var(--xc-space-3)` |
 | `--xc-shadow-sm` | 0 1px 2px rgba(15, 23, 42, 0.06) |
 | `--xc-shadow-md` | 0 4px 12px rgba(15, 23, 42, 0.08) |
 | `--xc-z-base` | 1 |

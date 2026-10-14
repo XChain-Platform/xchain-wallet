@@ -14,6 +14,7 @@ import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import bottomBarStyles from '../../../packages/core/src/shared/components/BottomTabBar.module.css';
 import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
+import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
 import toastStyles from '../../../packages/core/src/shared/components/ToastHost.module.css';
 
 vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
@@ -27,6 +28,7 @@ const h = React.createElement;
 
 const bottomBarCss = read('packages/core/src/shared/components/BottomTabBar.module.css');
 const layoutCss = read('packages/core/src/shared/components/LeftNav.module.css');
+const overlayCss = read('packages/core/src/shared/components/OverlaySurface.module.css');
 const toastCss = read('packages/core/src/shared/components/ToastHost.module.css');
 const initialWidth = window.innerWidth;
 
@@ -108,9 +110,10 @@ describe('viewport surfaces keep content inside device safe areas', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
         const sheet = screen.getByRole('dialog', { name: 'More' });
-        const sheetRules = computedClassRules(sheet, bottomBarStyles, bottomBarCss);
+        const sheetRules = computedClassRules(sheet, overlayStyles, overlayCss);
+        const sheetSurfaceRules = computedClassRules(sheet.firstElementChild, overlayStyles, overlayCss);
         expect(sheetRules).toMatch(new RegExp(inset('right')));
-        expect(sheetRules).toMatch(/env\(safe-area-inset-bottom,\s*var\(--xc-space-3\)\)/);
+        expect(sheetSurfaceRules).toMatch(new RegExp(`padding-bottom:[\\s\\S]*${inset('bottom')}`));
         expect(sheetRules).toMatch(new RegExp(inset('left')));
     });
 
@@ -127,7 +130,7 @@ describe('viewport surfaces keep content inside device safe areas', () => {
 
     it.each([
         ['Alerts overlay', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.overlay'],
-        ['Notice modal', 'packages/core/src/shared/components/NoticeModal.module.css', '.overlay'],
+        ['Notice modal', 'packages/core/src/shared/components/OverlaySurface.module.css', '.dialogOverlay'],
         ['Gated file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.overlay'],
         ['Contacts modal', 'packages/core/src/shared/routes/ContactsList.module.css', '.modalOverlay'],
     ])('%s pads all four viewport edges', (_name, path, selector) => {

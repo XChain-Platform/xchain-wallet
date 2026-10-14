@@ -13,6 +13,13 @@
     display: inline-flex;
 }
 
+.trigger > button {
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
 .trigger > button[data-active='true'] {
     color: var(--xc-accent-text);
     border-color: var(--xc-accent-primary);
@@ -38,7 +45,7 @@
     inset-inline-end: 0;
     z-index: var(--xc-z-dropdown);
     width: 320px;
-    max-width: calc(100vw - 24px);
+    max-width: calc(100vw - (2 * var(--xc-space-3)));
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-lg);
@@ -66,14 +73,14 @@
 
 .networkSelect {
     width: 100%;
-    min-height: 36px;
+    min-height: var(--xc-control-h-md);
     padding: var(--xc-space-1) var(--xc-space-2);
     border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
+    border-radius: var(--xc-control-radius);
     color: var(--xc-text);
     background: var(--xc-bg);
     font: inherit;
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font);
 }
 
 .empty {
@@ -106,6 +113,7 @@
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     width: 100%;
+    min-height: var(--xc-control-h-md);
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);

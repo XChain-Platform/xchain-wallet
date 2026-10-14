@@ -27,10 +27,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     EmptyState,
+    FormPage,
+    FormSection,
     Icon,
     Input,
     SectionHeader,
     Select,
+    Switch,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
@@ -48,7 +51,7 @@ import {
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { ROW, ROW_COPY, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { EMBEDDED_ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
@@ -315,16 +318,19 @@ export function DisplaySection() {
     };
 
     return (
-        <div style={STACK}>
+        <FormPage as="div" sectioned label="Display settings">
+            <FormSection title="Display options">
             <SectionHeader as="h3" title="Balance display" />
-            <ToggleRow
-                label="Hide small balances"
-                hint="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
-                checked={settings.privacy?.hideSmallBalances === true}
-                onChange={(next) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: next } })}
-            />
+            <div style={EMBEDDED_ROW}>
+                <Switch
+                    label="Hide small balances"
+                    description="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
+                    checked={settings.privacy?.hideSmallBalances === true}
+                    onChange={(event) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: event.target.checked } })}
+                />
+            </div>
             <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
                     <span style={ROW_HINT}>Use each network&apos;s relay limit for dust and 0.0001 units for divisible tokens, while applying other choices in whole asset units.</span>
@@ -342,7 +348,7 @@ export function DisplaySection() {
                 </Select>
                 <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
             </div>
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
                     <span style={ROW_HINT}>Change displayed formatting without changing stored or submitted values.</span>
@@ -366,19 +372,23 @@ export function DisplaySection() {
                 title="Row affordances"
                 description="Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active."
             />
-            <ToggleRow
-                label="Show pin button on rows"
-                hint="Display a star on each balance row for pinning or unpinning the token on Home."
-                checked={showPinAffordance}
-                onChange={setPinAffordance}
-            />
+            <div style={EMBEDDED_ROW}>
+                <Switch
+                    label="Show pin button on rows"
+                    description="Display a star on each balance row for pinning or unpinning the token on Home."
+                    checked={showPinAffordance}
+                    onChange={(event) => setPinAffordance(event.target.checked)}
+                />
+            </div>
             <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
-            <ToggleRow
-                label="Show hide button on rows"
-                hint="Display a hide affordance on each balance row to collapse the token into the Hidden section."
-                checked={showHideAffordance}
-                onChange={setHideAffordance}
-            />
+            <div style={EMBEDDED_ROW}>
+                <Switch
+                    label="Show hide button on rows"
+                    description="Display a hide affordance on each balance row to collapse the token into the Hidden section."
+                    checked={showHideAffordance}
+                    onChange={(event) => setHideAffordance(event.target.checked)}
+                />
+            </div>
             <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
 
             <SectionHeader
@@ -387,7 +397,7 @@ export function DisplaySection() {
                 title={`Watched tokens (${watched.length})`}
                 description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
             />
-            <form style={ROW} onSubmit={addWatchedToken}>
+            <form style={EMBEDDED_ROW} onSubmit={addWatchedToken}>
                 <Select
                     aria-label="Token chain"
                     value={watchChainId}
@@ -405,6 +415,7 @@ export function DisplaySection() {
                     ))}
                 </Select>
                 <Input
+                    size="md"
                     aria-label="Token ticker"
                     value={watchTicker}
                     onChange={(event) => {
@@ -422,7 +433,7 @@ export function DisplaySection() {
             </form>
             {watchMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{watchMessage}</span> : null}
             {watched.map((key) => (
-                <div key={key} style={ROW}>
+                <div key={key} style={EMBEDDED_ROW}>
                     <span style={KEY_TEXT} title={key}>{key}</span>
                     <Button
                         size="sm"
@@ -437,10 +448,11 @@ export function DisplaySection() {
             ))}
 
             {(pinned.length > 0 || hidden.length > 0) ? (
-                <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <Input
                             ref={tokenSearchRef}
+                            size="md"
                             type="search"
                             value={tokenQuery}
                             onChange={(event) => setTokenQuery(event.target.value)}
@@ -453,7 +465,7 @@ export function DisplaySection() {
                         />
                     </div>
                     {tokenQuery ? (
-                        <Button size="sm" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label="Clear settings token search">
+                        <Button size="md" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label="Clear settings token search">
                             <Icon.XIcon />
                         </Button>
                     ) : null}
@@ -484,7 +496,7 @@ export function DisplaySection() {
                     filteredPinned.map((key) => {
                         const idx = pinned.indexOf(key);
                         return (
-                            <div key={key} style={ROW} data-token-setting-result="true">
+                            <div key={key} style={EMBEDDED_ROW} data-token-setting-result="true">
                                 <span style={KEY_TEXT} title={key}>{key}</span>
                                 <div style={ACTIONS}>
                                     <Button
@@ -544,7 +556,7 @@ export function DisplaySection() {
                 ) : (
                     <>
                         {filteredHidden.map((key) => (
-                            <div key={key} style={ROW} data-token-setting-result="true">
+                            <div key={key} style={EMBEDDED_ROW} data-token-setting-result="true">
                                 <span style={KEY_TEXT} title={key}>{key}</span>
                                 <div style={ACTIONS}>
                                     <Button
@@ -559,7 +571,7 @@ export function DisplaySection() {
                                 </div>
                             </div>
                         ))}
-                        <div style={ROW}>
+                        <div style={EMBEDDED_ROW}>
                             <span style={ROW_LABEL}>{hidden.length} hidden</span>
                             <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
                                 Unhide all
@@ -575,7 +587,7 @@ export function DisplaySection() {
                 title="List preferences"
                 description={'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."'}
             />
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Saved chain filters</span>
                     {resetMessage ? (
@@ -588,7 +600,7 @@ export function DisplaySection() {
             </div>
 
             <SectionHeader as="h3" className={layoutStyles.sectionHeader} title="Defaults" />
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>
                     <span style={ROW_HINT}>Restores balance display options and clears watched, pinned, hidden, and saved list preferences.</span>
@@ -606,7 +618,8 @@ export function DisplaySection() {
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
-        </div>
+            </FormSection>
+        </FormPage>
     );
 }
 

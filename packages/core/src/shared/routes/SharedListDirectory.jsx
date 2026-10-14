@@ -31,7 +31,7 @@ import {
     shortOwner,
 } from '../utils/sharedListRows.js';
 import styles from './IssueTokenForm.module.css';
-import listStyles from './MyLists.module.css';
+import local from './SharedListDirectory.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const PAGE_SIZE = 20;
@@ -171,20 +171,24 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     if (!directory) return wrap(<p className={styles.hint}>Loading shared lists…</p>);
 
     const toolbar = (
-        <Input
-            type="search"
-            className={listStyles.search}
-            placeholder="Search"
-            value={query}
-            onChange={(event) => {
-                setQuery(event.target.value);
-                setVisibleLimit(PAGE_SIZE);
-            }}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            aria-label="Search shared lists"
-        />
+        <div className={local.filterRow}>
+            <div className={local.searchControl}>
+                <Input
+                    type="search"
+                    size="md"
+                    placeholder="Search"
+                    value={query}
+                    onChange={(event) => {
+                        setQuery(event.target.value);
+                        setVisibleLimit(PAGE_SIZE);
+                    }}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search shared lists"
+                />
+            </div>
+        </div>
     );
 
     const filteredType = listType(filterType);

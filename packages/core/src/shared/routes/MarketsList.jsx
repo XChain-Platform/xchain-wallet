@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { Button, Chip, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -20,6 +20,7 @@ import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -468,7 +469,10 @@ export function MarketsList({
                             </ul>
                             {displayMarkets.length > visibleMarketCount ? (
                                 <div className={marketsStyles.pagination} aria-live="polite">
-                                    <span className={marketsStyles.paginationCount}>
+                                    <span
+                                        className={marketsStyles.paginationCount}
+                                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                                    >
                                         {visibleMarketCount.toLocaleString('en-US')} of {displayMarkets.length.toLocaleString('en-US')} markets shown
                                     </span>
                                     <Button
@@ -553,6 +557,9 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
             <ListRow
                 type="button"
                 className={marketsStyles.marketButton}
+                style={{
+                    fontVariantNumeric: 'tabular-nums',
+                }}
                 onClick={onOpen}
                 disabled={openDisabled}
                 aria-label={`Open ${otherName || otherTick} market`}
@@ -563,20 +570,29 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                     <span
                         style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}
                     >
-                        <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
+                        <Chip>
+                            <span>{tick1}</span>
+                            <span aria-hidden="true">{' / '}</span>
+                            <span>{tick2}</span>
+                        </Chip>
                         {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
                             <span>{otherName}</span>
                         ) : null}
                         <DispenserBadge chainId={chainId} tick={otherTick} />
                     </span>
                 )}
-                subtitle={lastPrice ? <span>last {lastPrice}</span> : null}
+                subtitle={lastPrice ? (
+                    <span>
+                        last {formatDecimalAmount(lastPrice)} {tick2}
+                    </span>
+                ) : null}
                 trailing={(
                     <span style={{
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'flex-end',
                         gap: '2px',
+                        fontVariantNumeric: 'tabular-nums',
                     }}>
                         {change24h ? (
                             <span

@@ -20,9 +20,9 @@
     color: var(--xc-text);
 }
 
-/* Skip-to-content link (WCAG 2.4.1): the sidebar sits ahead of the page in tab
-   order, so a keyboard user would otherwise Tab past every destination on
-   every screen. Parked above the window until it takes focus. */
+/* Skip-to-content link (WCAG 2.4.1): persistent navigation and header chrome
+   sit around every route at all widths. Park the link above the window until
+   it takes focus, then expose the direct path to the active screen. */
 .skipLink {
     position: absolute;
     inset-inline-start: var(--xc-space-3);
@@ -91,7 +91,19 @@
    the header row. They are the part that can grow, so the cap lives here
    rather than on .header. */
 .notices {
+    composes: scrollArea from '../../ui/Screen.module.css';
     flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    /* Each tier publishes a notice inset beside its page gutter, so stacked
+       notices line up with route content; compact keeps the base gutter. */
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-notice-inset, var(--xc-space-3));
+}
+
+.notices > * {
+    margin: 0;
 }
 
 /* Keep stacked notices from consuming the route on phone-sized layouts. */
@@ -167,6 +179,7 @@
 }
 
 .nav {
+    composes: scrollArea from '../../ui/Screen.module.css';
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -179,7 +192,6 @@
     padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-color: var(--xc-border) var(--xc-surface-raised);
 }
 
 .nav > .brand,
@@ -275,14 +287,16 @@
 /* Unread/attention count pill pinned to the right of a nav row. */
 .badge {
     flex: 0 0 auto;
-    min-width: 1.1rem;
-    padding: 0 0.35rem;
-    border-radius: var(--xc-radius-pill);
+    box-sizing: border-box;
+    min-width: var(--xc-badge-height-sm);
+    height: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
+    border-radius: var(--xc-badge-radius);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.25rem;
+    font-size: var(--xc-badge-font-size-sm);
+    font-weight: var(--xc-badge-font-weight);
+    line-height: 1;
     text-align: center;
 }
 
@@ -430,10 +444,8 @@
     position: absolute;
     top: 2px;
     inset-inline-end: 6px;
-    min-width: 0.9rem;
-    padding: 0 0.25rem;
-    font-size: 9px;
-    line-height: 0.9rem;
+    min-width: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
 }
 
 .layout[data-xc-tier='rail'] .divider {

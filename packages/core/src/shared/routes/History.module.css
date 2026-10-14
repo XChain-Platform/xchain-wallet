@@ -148,9 +148,9 @@
     margin: 0;
     padding: var(--xc-space-1);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
-    box-shadow: var(--xc-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+    box-shadow: var(--xc-shadow-md);
 }
 
 .chainPickerOption {
@@ -226,51 +226,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
-}
-
-.segGroup {
-    display: inline-flex;
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border);
-    overflow: hidden;
-    align-self: flex-start;
-}
-
-.segBtn {
-    appearance: none;
-    background: var(--xc-bg);
-    border: none;
-    color: var(--xc-text);
-    padding: var(--xc-space-1) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    /*
-     * The 24px pointer-target floor (WCAG 2.2 AA 2.5.8), stated
-     * rather than arrived at. Height here used to be 4px + 4px of padding
-     * plus whatever line box the platform font produced for 13px text: 24px
-     * on macOS with -apple-system, 23px on the CI runner's fallback font.
-     * So these two buttons met an accessibility floor on one operating
-     * system and missed it by a pixel on another, and the e2e walk caught it
-     * only once it ran somewhere other than a Mac.
-     *
-     * min-height makes the floor a property instead of a coincidence, and
-     * the flex centring keeps the label centred when it applies.
-     */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.segBtn:not(:first-child) {
-    border-inline-start: 1px solid var(--xc-border);
-}
-
-.segBtnActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent, #fff);
 }
 
 .dateRow {
@@ -361,24 +316,24 @@
 
 .row {
     position: relative;
-    border: 1px solid var(--xc-border);
+    border: 1px solid var(--xc-control-border);
     background: var(--xc-surface-raised);
     margin: var(--xc-space-1) 0;
 }
 
 .row:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-selected);
 }
 
 .row:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
+    outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: 2px;
 }
 
 .rowSelected {
-    border-color: var(--xc-accent-primary);
-    background: var(--xc-bg-muted);
+    border-color: var(--xc-control-selected);
+    background: var(--xc-control-bg-hover);
 }
 
 .rowHeader {
@@ -418,6 +373,7 @@
     min-width: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .rowSummary {
@@ -813,7 +769,7 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--xc-shadow-md);
     z-index: 20;
     display: flex;
     flex-direction: column;

@@ -307,7 +307,6 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 actions={(
                     <Button
                         type="submit"
-                        size="sm"
                         variant="secondary"
                         disabled={!paste.trim() || stopped}
                     >

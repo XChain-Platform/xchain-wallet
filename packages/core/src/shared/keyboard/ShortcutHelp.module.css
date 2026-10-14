@@ -7,7 +7,7 @@
     inset: 0;
     box-sizing: border-box;
     max-height: var(--xc-viewport-h, 100vh);
-    z-index: var(--xc-z-overlay);
+    z-index: var(--xc-z-modal);
     background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: flex-start;
@@ -29,7 +29,7 @@
     background: var(--xc-surface-raised, var(--xc-surface));
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
+    box-shadow: var(--xc-shadow-modal);
     overflow: hidden;
 }
 
@@ -45,21 +45,8 @@
 
 .close {
     display: inline-flex;
-    background: transparent;
-    border: 0;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    padding: var(--xc-space-1);
-    border-radius: var(--xc-radius-sm);
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    min-width: var(--xc-tap-min);
-    align-items: center;
-    justify-content: center;
 }
 
-.close:hover, .close:focus-visible { color: var(--xc-text); outline: none; }
 .close svg { width: 18px; height: 18px; }
 
 .body {
@@ -112,13 +99,4 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     margin: var(--xc-space-3) 0 0;
-}
-
-/* Box-shadow focus rings are not painted in forced-colors mode, so give
- * this control a real outline there (WCAG 2.4.7). */
-@media (forced-colors: active) {
-    .close:focus-visible {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
 }

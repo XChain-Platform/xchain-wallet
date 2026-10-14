@@ -9,21 +9,23 @@
  * contact legal@dankest.llc.
  */
 
-.search {
-    flex: 1 1 0;
-    min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+/* Inbox toolbar: search + network filter, each 50% wide, matching the
+   addresses page, the contacts list, and the Send address-book picker. */
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    /* The half-grid addition aligns the toolbar with its neighboring route controls. */
+    margin-bottom: calc(var(--xc-space-1) + 2px);
 }
 
-.search::placeholder {
-    color: var(--xc-text-muted);
+.toolbar > * {
+    flex: 1 1 12rem;
+    min-width: 0;
+    margin-bottom: 0;
 }
 
 /* Encrypted-session requests: counterparties who published their key to one of
@@ -99,7 +101,7 @@
     font-size: var(--xc-text-xs);
     font-weight: 700;
     color: var(--xc-accent-text);
-    scroll-margin-top: 56px;
+    scroll-margin-top: calc(var(--xc-control-h-lg) + var(--xc-space-2));
 }
 
 .unreadDivider::before,
@@ -138,17 +140,18 @@
 
 .attachmentLink svg {
     flex: 0 0 auto;
-    width: 1rem;
-    height: 1rem;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 .messageMeta {
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
+    /* The half-grid top inset visually separates metadata from message copy. */
     margin: 2px 0.3rem 0;
     color: var(--xc-text-muted);
-    font-size: 0.65rem;
+    font-size: var(--xc-text-xs);
 }
 
 /* Docked thread composer: lives in the Screen footer, which flex-pins it to
@@ -182,8 +185,8 @@
     border: 1px solid var(--xc-border-strong);
     border-inline-end: none;
     border-radius: 0;
-    border-start-start-radius: var(--xc-radius-md);
-    border-end-start-radius: var(--xc-radius-md);
+    border-start-start-radius: var(--xc-control-radius);
+    border-end-start-radius: var(--xc-control-radius);
 }
 
 /* Replace the browser focus ring (which outlines only the input half and
@@ -208,6 +211,7 @@
 .convItem {
     display: flex;
     flex-direction: column;
+    /* Half-grid spacing keeps the two conversation lines visually connected. */
     gap: 2px;
     width: 100%;
     text-align: start;
@@ -258,8 +262,8 @@
    iOS-Messages style. Cleared once the thread is opened. */
 .unreadDot {
     flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
     border-radius: 50%;
     background: var(--xc-accent-primary);
     /* Nudge onto the text center so it reads as inline with the name. */

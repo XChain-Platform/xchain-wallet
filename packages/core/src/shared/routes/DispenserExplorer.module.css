@@ -5,24 +5,14 @@
 }
 
 .searchModes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-2);
 }
 
 .searchModes > div {
-    flex-direction: row-reverse;
+    flex-flow: row wrap;
     align-items: center;
-    justify-content: flex-end;
+    gap: var(--xc-space-2);
     margin-bottom: 0;
-}
-
-.searchModeInput {
-    width: 1rem;
-    min-width: 1rem;
-    min-height: 1rem;
-    padding: 0;
 }
 
 .chainSelect {
@@ -32,10 +22,30 @@
     box-sizing: border-box;
 }
 
-.searchActions {
+.filterRow {
     display: flex;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    align-items: flex-end;
     gap: var(--xc-space-2);
+}
+
+.chainControl {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.queryControl {
+    flex: 2 1 18rem;
+    min-width: 0;
+}
+
+.chainControl > *,
+.queryControl > * {
+    margin-bottom: 0;
+}
+
+.searchHint {
+    margin: var(--xc-space-1) 0 0;
 }
 
 .resultGroup {

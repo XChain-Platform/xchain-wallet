@@ -9,6 +9,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import { readFileSync } from 'node:fs';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
+import { Screen as LayoutScreen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 import {
     registerLocale,
@@ -104,7 +105,7 @@ describe('ConfirmActionModal', () => {
         const { rerender } = render(<ConfirmActionModal {...base()} />);
         expect(screen.queryByText(/A hardware device verifies native outputs/i)).toBeNull();
 
-        rerender(<ConfirmActionModal {...base({ isHardwareSigner: true })} />);
+        rerender(<ConfirmActionModal {...base({ hardwareSigner: true })} />);
         expect(screen.getByText(/A hardware device verifies native outputs/i)).toBeTruthy();
     });
 
@@ -348,7 +349,7 @@ describe('ConfirmActionModal', () => {
         expect(screen.queryByTestId('confirm-total')).toBeNull();
     });
 
-    it.each([320, 412])('keeps long Send review values readable and reachable at %ipx', (width) => {
+    it.each([360, 412])('keeps long Send review values readable and its actions pinned at %ipx', (width) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
         const address = 'bc1pqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
         const longToken = 'A-VERY-LONG-TOKEN-NAME-THAT-MUST-NOT-HIDE-VALUES';
@@ -417,6 +418,11 @@ describe('ConfirmActionModal', () => {
         const approve = screen.getByTestId('confirm-approve');
         expect(approve).toBeVisible();
         expect(approve).toHaveTextContent(`Send 12,345,678.12345678 ${longToken}`);
+        const reviewMain = screen.getByTestId('confirm-modal').closest('main');
+        const actionFooter = approve.closest('footer');
+        expect(actionFooter).toBe(reviewMain.nextElementSibling);
+        expect(actionFooter).toContainElement(screen.getByTestId('confirm-reject'));
+        expect(reviewMain).not.toContainElement(approve);
 
         const intentCss = readFileSync(
             'packages/core/src/shared/components/ActionIntentSummary.module.css',
@@ -434,7 +440,6 @@ describe('ConfirmActionModal', () => {
         expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
         expect(modalCss).not.toMatch(/@container|container-type/);
         expect(modalCss).toMatch(/\.credentials dd\s*\{[^}]*white-space:\s*pre-wrap/s);
-        expect(modalCss).toMatch(/\.page\s*\{[^}]*padding-bottom:\s*var\(--xc-bottom-bar-h, 0px\)/s);
         expect(modalCss).toMatch(/\.footer > button\s*\{[^}]*white-space:\s*normal/s);
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
@@ -462,6 +467,22 @@ describe('ConfirmActionModal', () => {
     it('does not claim a requesting site for a wallet-initiated action', () => {
         render(<ConfirmActionModal {...base()} />);
         expect(screen.queryByTestId('confirm-request-origin')).toBeNull();
+    });
+
+    it('shows the hardware verification caveat only for hardware signers', () => {
+        const copy = /A hardware device verifies native outputs and destinations only/;
+        const { rerender } = render(<ConfirmActionModal {...base()} />);
+
+        expect(screen.queryByText(copy)).toBeNull();
+
+        rerender(<ConfirmActionModal {...base({ hardwareSigner: true })} />);
+        expect(screen.getByText(copy)).toBeInTheDocument();
+
+        const adapter = readFileSync(
+            'packages/core/src/shared/components/ActionConfirmScreen.jsx',
+            'utf8',
+        );
+        expect(adapter).toMatch(/hardwareSigner=\{Boolean\(hwSource\)\}/);
     });
 
     // #40. The page that is the last check before signing did not say who was
@@ -540,6 +561,41 @@ describe('ConfirmActionModal', () => {
         render(<ConfirmActionModal {...base()} />);
         expect(screen.getByText('Confirm')).toBeTruthy();
         expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    it('opens each review at the top with focus on its heading', () => {
+        const firstComposed = { psbt: 'first' };
+        const { rerender } = render(
+            <ScrollRestoration routeKey="send">
+                <LayoutScreen><button type="button">Open review</button></LayoutScreen>
+            </ScrollRestoration>,
+        );
+        const composeScroller = screen.getByRole('main');
+        composeScroller.scrollTop = 480;
+        screen.getByRole('button', { name: 'Open review' }).focus();
+
+        rerender(
+            <ScrollRestoration routeKey="send">
+                <ConfirmActionModal {...base({ composed: firstComposed })} />
+            </ScrollRestoration>,
+        );
+        const heading = screen.getByRole('heading', { name: 'Confirm' });
+        const scroller = screen.getByRole('main');
+
+        expect(scroller.scrollTop).toBe(0);
+        expect(heading).toHaveFocus();
+        scroller.scrollTop = 480;
+        screen.getByTestId('confirm-approve').focus();
+
+        rerender(
+            <ScrollRestoration routeKey="send">
+                <ConfirmActionModal {...base({ composed: { psbt: 'second' } })} />
+            </ScrollRestoration>,
+        );
+
+        expect(scroller.scrollTop).toBe(0);
+        expect(heading).toHaveFocus();
+        expect(screen.getByTestId('confirm-approve')).not.toHaveFocus();
     });
 
     it('the header back arrow rejects in the ready phase', () => {

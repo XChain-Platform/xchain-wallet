@@ -33,6 +33,15 @@
     flex: 0 0 auto;
 }
 
+.right > button,
+.actionSlot > button,
+.actionTrigger > button {
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
 .bar [data-network-status-trigger] {
     width: auto;
     min-width: 38px;
@@ -109,6 +118,7 @@
 }
 
 .rowIcon {
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     position: relative;
     width: 24px;
     height: 24px;

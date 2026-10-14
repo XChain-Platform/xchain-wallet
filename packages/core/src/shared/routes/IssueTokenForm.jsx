@@ -17,7 +17,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- NetworkField,  Icon, StatusMessage, FeeSelector, AddressField, FormErrorSummary,} from '@xchain-wallet/core/ui';
+ NetworkField,  Icon, StatusMessage, FeeSelector, AddressField, FormErrorSummary, Switch,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1001,14 +1001,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                 onChange={(e) => setMaxMint(e.target.value)}
                 autoComplete="off"
             />
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={divisible}
-                    onChange={(e) => setDivisible(e.target.checked)}
-                />
-                <span>{t('issue.divisible')}</span>
-            </label>
+            <Switch
+                label={t('issue.divisible')}
+                checked={divisible}
+                onChange={(e) => setDivisible(e.target.checked)}
+            />
             <Input
                 label={t('issue.descriptionOptional')}
                 hint={t('issue.descriptionHint')}
@@ -1017,14 +1014,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
                 maxLength={250}
             />
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={lockSupply}
-                    onChange={(e) => setLockSupply(e.target.checked)}
-                />
-                <span>{t('issue.lockSupply')}</span>
-            </label>
+            <Switch
+                label={t('issue.lockSupply')}
+                checked={lockSupply}
+                onChange={(e) => setLockSupply(e.target.checked)}
+            />
             {lockSupply && mintHeadroom ? (
                 // Locking minting alongside a partial initial mint strands the
                 // remainder forever: the cap says one thing, the token can only

@@ -12,6 +12,9 @@ import { Send } from '../../packages/core/src/shared/routes/Send.jsx';
 import { Receive } from '../../packages/core/src/shared/routes/Receive.jsx';
 import { Settings } from '../../packages/core/src/shared/routes/Settings.jsx';
 import { createDefaultSettings } from '../../packages/core/src/schemas/settings.js';
+import { Button } from '../../packages/core/src/ui/Button.jsx';
+import { ChainBadge } from '../../packages/core/src/ui/ChainBadge.jsx';
+import { Chip } from '../../packages/core/src/ui/Chip.jsx';
 import {
     getLocale,
     registerLocale,
@@ -28,6 +31,10 @@ import {
 
 const readCss = (path) => readFileSync(path, 'utf8');
 const buttonCss = readCss('packages/core/src/ui/Button.module.css');
+const chainBadgeCss = readCss('packages/core/src/ui/ChainBadge.module.css');
+const chipCss = readCss('packages/core/src/ui/Chip.module.css');
+const dispensersCss = readCss('packages/core/src/shared/routes/DispensersList.module.css');
+const stakingCss = readCss('packages/core/src/shared/routes/StakingList.module.css');
 const pageHeaderCss = readCss('packages/core/src/ui/PageHeader.module.css');
 const homeCss = readCss('packages/core/src/shared/routes/Home.module.css');
 const sendCss = readCss('packages/core/src/shared/routes/Send.module.css');
@@ -44,8 +51,6 @@ function rule(css, selector) {
 }
 
 const SHARED_TEXT_RULES = [
-    [buttonCss, '.btn'],
-    [buttonCss, '.label'],
     [pageHeaderCss, '.title'],
 ];
 
@@ -83,8 +88,6 @@ const SCREEN_TEXT_RULES = {
 };
 
 const BUTTON_TEXT_RULES = [
-    [buttonCss, '.btn'],
-    [buttonCss, '.label'],
     [homeCss, '.quickAction'],
     [homeCss, '.quickActionMoreItem'],
     [sendCss, '.detailsToggle'],
@@ -291,5 +294,46 @@ describe('pseudo-long narrow layouts', () => {
         expect(englishText.every((text) => text.startsWith(PSEUDO_LONG_MARKER))).toBe(true);
         expectNoFixedWidthTextClipping(container, name);
         auditClassRules(name);
+    });
+
+    it('keeps compact control labels whole at 320px', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        const { getByRole, getByText } = render(
+            <div style={{ width: 320 }}>
+                <Button>Claim rewards</Button>
+                <Chip>Closing soon</Chip>
+                <ChainBadge descriptor={{
+                    id: 'bitcoin-mainnet',
+                    coin: 'BTC',
+                    color: '#F7931A',
+                    displayName: 'Bitcoin',
+                    networkKind: 'mainnet',
+                }} />
+            </div>,
+        );
+
+        expect(window.innerWidth).toBe(320);
+        expect(getByRole('button', { name: 'Claim rewards' })).toBeVisible();
+        expect(getByText('Closing soon')).toBeVisible();
+        expect(getByText('Bitcoin')).toBeVisible();
+        for (const [css, selector] of [
+            [chipCss, '.chip'],
+            [chainBadgeCss, '.badge'],
+        ]) {
+            expect(rule(css, selector)).toMatch(/flex-shrink:\s*0/);
+            expect(rule(css, selector)).toMatch(/white-space:\s*nowrap/);
+        }
+        // A button never shrinks below its label in a row, but a label wider
+        // than the whole column wraps inside the button rather than spilling out.
+        expect(rule(buttonCss, '.btn')).toMatch(/flex-shrink:\s*0/);
+        expect(rule(buttonCss, '.btn')).toMatch(/white-space:\s*normal/);
+        for (const listCss of [dispensersCss, stakingCss]) {
+            expect(rule(listCss, '.row')).toMatch(/min-width:\s*0/);
+            expect(rule(listCss, '.body')).toMatch(/min-width:\s*0/);
+            expect(rule(listCss, '.status')).toMatch(/white-space:\s*nowrap/);
+        }
+        expect(rule(stakingCss, '.claimable > :first-child'))
+            .toMatch(/flex:\s*1 1 auto[\s\S]*min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
     });
 });

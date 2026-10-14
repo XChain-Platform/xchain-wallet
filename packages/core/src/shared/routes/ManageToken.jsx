@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -445,11 +445,6 @@ export function ManageToken({
         return { delta: d, pct: p };
     }, [chartSeries]);
 
-    function shortAddress(a) {
-        if (typeof a !== 'string' || a.length <= 14) return a || '';
-        return `${a.slice(0, 6)}…${a.slice(-4)}`;
-    }
-
     // Issuer-only vs anyone-with-balance actions. Mint / Description /
     // Transfer / Broadcast / Lock require the calling address to match
     // the on-chain creator. Dispenser / Airdrop / Destroy operate on a
@@ -600,7 +595,7 @@ export function ManageToken({
                                 <>
                                     <span className={styles.heroDot}>·</span>
                                     <span>Owned by</span>
-                                    <span className={styles.heroOwner} title={owner}>{shortAddress(owner)}</span>
+                                    <AddressText address={owner} className={styles.heroOwner} />
                                     <CopyButton value={owner} ariaLabel="Copy owner address" />
                                 </>
                             ) : null}
@@ -736,7 +731,7 @@ export function ManageToken({
                         This wallet doesn't hold the token's issuer address.
                         Mint, Mint settings, Lock, Description, Artwork,
                         Transfer, Broadcast, and Dividend require signing
-                        from {shortAddress(owner)}.
+                        from <AddressText address={owner} />.
                     </p>
                 ) : null}
 
@@ -779,6 +774,7 @@ export function ManageToken({
                                             key={a.id}
                                             type="button"
                                             role="menuitem"
+                                            data-destructive={a.danger ? 'true' : undefined}
                                             variant={a.danger ? 'danger' : 'ghost'}
                                             size="sm"
                                             block
@@ -886,9 +882,7 @@ export function ManageToken({
                                     <>
                                         <dt>Issuer</dt>
                                         <dd className={styles.copyableGenesis}>
-                                            <span className={styles.genesisMono} title={genesisInfo.source}>
-                                                {shortAddress(genesisInfo.source)}
-                                            </span>
+                                            <AddressText address={genesisInfo.source} className={styles.genesisMono} />
                                             <CopyButton value={genesisInfo.source} ariaLabel="Copy genesis issuer address" />
                                         </dd>
                                     </>
@@ -1084,9 +1078,10 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
                         <tr key={`${h.address || h.holder || i}`}>
                             <td className={tableStyles.cell} data-label="Address">
                                 <span className={styles.holderAddress}>
-                                    <span className={styles.rowMono} title={h.address || h.holder || undefined}>
-                                        {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
-                                    </span>
+                                    <AddressText
+                                        address={h.address || h.holder || '-'}
+                                        className={styles.rowMono}
+                                    />
                                     {(h.address || h.holder) ? (
                                         <CopyButton
                                             value={h.address || h.holder}

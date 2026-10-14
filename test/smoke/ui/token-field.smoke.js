@@ -46,9 +46,19 @@ assert.match(cmp, /\$\{styles\[size\]/, 'applies the size class to the field wra
 
 // --- CSS: chrome matches Input at both sizes ---------------------------
 
-assert.match(css, /\.control\s*\{[^}]*min-height:\s*36px/s, 'md control is 36px like Input');
+assert.match(css, /\.field\s*\{[^}]*--token-field-control-height:\s*var\(--xc-control-h-md\)/s,
+    'TokenField defaults to the md control height token');
+assert.match(css, /\.control\s*\{[^}]*height:\s*var\(--token-field-control-height\)/s,
+    'control renders the selected height token');
 assert.match(css, /\.control\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s, 'control borrows Input border chrome');
-assert.match(css, /\.lg \.control\s*\{[^}]*min-height:\s*48px/s, 'lg control is 48px');
+assert.match(css, /\.lg\s*\{[^}]*--token-field-control-height:\s*var\(--xc-control-h-lg\)/s,
+    'lg control uses the hero height token');
+assert.match(css, /\.control\s*\{[^}]*padding:\s*0 var\(--xc-control-pad-x\)/s,
+    'control uses shared horizontal padding');
+assert.match(css, /\.control\s*\{[^}]*font-size:\s*var\(--xc-control-font\)/s,
+    'control uses the shared font');
+assert.match(css, /\.control\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s,
+    'control uses the shared radius');
 for (const cls of ['field', 'label', 'control', 'text', 'tick', 'chain', 'placeholder', 'caret']) {
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }

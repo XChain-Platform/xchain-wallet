@@ -49,7 +49,7 @@ describe('route page-top ownership', () => {
         const screen = read('packages/core/src/ui/Screen.module.css');
         // The shell owns the tier values, so the notice reads its inset.
         const shell = read('packages/core/src/shared/components/LeftNav.module.css');
-        expect(rule(banner, '.banner')).toMatch(/margin-inline:\s*var\(--xc-notice-inset,\s*var\(--xc-space-3\)\)/);
+        expect(shell).toMatch(/\.notices\s*\{[^}]*padding-inline:\s*var\(--xc-notice-inset,\s*var\(--xc-space-3\)\)/);
         expect(banner).not.toMatch(/@media \([^)]*width/);
         expect(shell).toMatch(/data-xc-tier='rail'\] \.notices\s*\{[^}]*--xc-notice-inset:\s*var\(--xc-space-4\)/);
         expect(shell).toMatch(/data-xc-tier='full'\] \.notices\s*\{[^}]*--xc-notice-inset:\s*var\(--xc-space-6\)/);

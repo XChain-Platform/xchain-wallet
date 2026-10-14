@@ -116,9 +116,58 @@ export function measureInPage(opts = {}) {
             push('unreachable', { el: desc(el), top: Math.round(T), bottom: Math.round(B) });
         }
     }
+    res.layout = measureLayout();
     res.narrow = measureNarrowLists();
     if (opts.contrast) measureContrast();
     return res;
+
+    // The route contract is measured from the main scroller's inner border.
+    // This keeps a left navigation rail out of page-gutter coordinates and
+    // puts the right measurement against the scrollbar's real leading edge.
+    function measureLayout() {
+        const main = document.getElementById('xc-main');
+        if (!main) return null;
+        const mcs = getComputedStyle(main);
+        const mr = main.getBoundingClientRect();
+        const borderL = main.clientLeft;
+        const borderR = parseFloat(mcs.borderRightWidth) || 0;
+        const padL = parseFloat(mcs.paddingLeft) || 0;
+        const padR = parseFloat(mcs.paddingRight) || 0;
+        const frameLeft = mr.left + borderL;
+        const scrollbarWidth = Math.max(0, mr.width - borderL - borderR - main.clientWidth);
+        const scrollbarLeft = mr.right - borderR - scrollbarWidth;
+        const contentLeft = frameLeft + padL;
+        const contentRight = frameLeft + main.clientWidth - padR;
+        const expectedGutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        const visible = (el) => {
+            const cs = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            return cs.display !== 'none' && cs.visibility !== 'hidden'
+                && cs.position !== 'absolute' && cs.position !== 'fixed'
+                && r.width >= 1 && r.height >= 1;
+        };
+        const first = [...main.children].find(visible) || null;
+        const fr = first?.getBoundingClientRect();
+        const form = first && (first.tagName === 'FORM' || first.getAttribute('role') === 'group');
+        const shell = main.parentElement;
+        const header = shell ? [...shell.children].find((el) => el.tagName === 'HEADER' && visible(el)) : null;
+        const headerFirst = header ? [...header.children].find(visible) : null;
+        const hr = headerFirst?.getBoundingClientRect();
+        const round = (value) => Math.round(value * 100) / 100;
+        return {
+            expectedGutter,
+            contentLeft: round(contentLeft - frameLeft),
+            contentRightGap: round(scrollbarLeft - contentRight),
+            first: first ? {
+                el: desc(first),
+                kind: form ? 'form' : 'list',
+                left: round(fr.left - frameLeft),
+                rightGap: round(scrollbarLeft - fr.right),
+                topGap: round(fr.top - mr.top + main.scrollTop - main.clientTop),
+            } : null,
+            headerLeft: hr ? round(hr.left - frameLeft) : null,
+        };
+    }
 
     // Dark-mode legibility. WCAG 2.x contrast of each visible text element's
     // computed colour against the nearest opaque ancestor background (alpha
@@ -313,6 +362,117 @@ export function measureInPage(opts = {}) {
     }
 }
 
+/** Returns inconsistent interactive controls that occupy the same visual row. */
+export function measureControlRows() {
+    const selector = [
+        'button', 'a[href]', 'input:not([type="hidden"])', 'select', 'textarea', 'summary',
+        '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]',
+        '[role="switch"]', '[role="combobox"]', '[role="tab"]', '[role="menuitem"]',
+    ].join(',');
+    const visible = (el) => {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0'
+            && r.width >= 1 && r.height >= 1
+            && !el.matches(':disabled, [aria-disabled="true"]');
+    };
+    // Nested interactive markup represents one control even when both the
+    // wrapper and its implementation carry an interactive role.
+    const controls = [...document.querySelectorAll(selector)].filter((el) => (
+        visible(el) && !el.parentElement?.closest(selector)
+    ));
+    const records = controls.map((el) => {
+        const rect = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        const text = (el.innerText ?? el.textContent ?? '').trim();
+        const buttonLike = el.tagName === 'BUTTON' || el.getAttribute('role') === 'button';
+        const name = el.getAttribute('aria-label') || text.replace(/\s+/g, ' ').slice(0, 48)
+            || el.getAttribute('name') || el.tagName.toLowerCase();
+        return {
+            el,
+            rect,
+            height: rect.height,
+            radius: cs.borderRadius,
+            fontSize: cs.fontSize,
+            iconOnly: buttonLike && text.length === 0,
+            desc: `${el.tagName.toLowerCase()} "${name}"`,
+        };
+    });
+    const sameRow = (a, b) => {
+        const horizontallySeparate = a.rect.right <= b.rect.left + 1 || b.rect.right <= a.rect.left + 1;
+        const overlap = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
+        return horizontallySeparate && overlap >= Math.min(a.rect.height, b.rect.height) / 2;
+    };
+    const commonAncestor = (a, b) => {
+        const ancestors = new Set();
+        for (let el = a.parentElement; el; el = el.parentElement) ancestors.add(el);
+        for (let el = b.parentElement; el; el = el.parentElement) if (ancestors.has(el)) return el;
+        return null;
+    };
+    const isRowContainer = (el, a, b) => {
+        if (!el || el === document.body || el === document.documentElement) return false;
+        const cs = getComputedStyle(el);
+        const role = el.getAttribute('role');
+        if (['group', 'toolbar', 'tablist', 'radiogroup', 'menu', 'navigation'].includes(role)) return true;
+        if (['NAV', 'FIELDSET'].includes(el.tagName)) return true;
+        if (cs.display === 'grid' || cs.display === 'inline-grid') return true;
+        if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexDirection !== 'column') return true;
+        return a.el.parentElement === el && b.el.parentElement === el;
+    };
+
+    const grouped = new Map();
+    for (let i = 0; i < records.length; i += 1) {
+        for (let j = i + 1; j < records.length; j += 1) {
+            const a = records[i];
+            const b = records[j];
+            if (!sameRow(a, b)) continue;
+            const container = commonAncestor(a.el, b.el);
+            if (!isRowContainer(container, a, b)) continue;
+            let rows = grouped.get(container);
+            if (!rows) {
+                rows = [];
+                grouped.set(container, rows);
+            }
+            let row = rows.find((candidate) => [...candidate].some((item) => sameRow(item, a) || sameRow(item, b)));
+            if (!row) {
+                row = new Set();
+                rows.push(row);
+            }
+            row.add(a);
+            row.add(b);
+        }
+    }
+
+    const findings = [];
+    const signatures = new Set();
+    for (const rows of grouped.values()) {
+        for (const row of rows) {
+            const items = [...row].sort((a, b) => a.rect.left - b.rect.left);
+            const heights = items.map((item) => item.height);
+            const styled = items.filter((item) => !item.iconOnly);
+            const problems = [];
+            if (Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
+            if (styled.length > 1 && new Set(styled.map((item) => item.radius)).size > 1) problems.push('border-radius');
+            if (styled.length > 1 && new Set(styled.map((item) => item.fontSize)).size > 1) problems.push('font-size');
+            if (problems.length === 0) continue;
+            const signature = `${problems.join(',')}|${items.map((item) => item.desc).join('|')}`;
+            if (signatures.has(signature)) continue;
+            signatures.add(signature);
+            findings.push({
+                problems,
+                controls: items.map((item) => ({
+                    el: item.desc,
+                    height: Number(item.height.toFixed(2)),
+                    borderRadius: item.radius,
+                    fontSize: item.fontSize,
+                    iconOnly: item.iconOnly,
+                })),
+            });
+        }
+    }
+    return findings;
+}
+
 /** Applies a venue's root font size before app code runs on every document. */
 export function installRootFontSize(page, rootFontSize) {
     if (!rootFontSize) return Promise.resolve();
@@ -321,9 +481,54 @@ export function installRootFontSize(page, rootFontSize) {
     }, rootFontSize);
 }
 
+/** Returns the route labels and layout-contract failures from a completed sweep. */
+export function layoutSweepFailures(screens) {
+    const failures = [];
+    const topGaps = { form: new Set(), list: new Set() };
+    const close = (actual, expected) => Math.abs(actual - expected) <= 1;
+    for (const { label, layout, vw } of screens) {
+        if (!layout) {
+            failures.push(`${label}: missing #xc-main layout measurement`);
+            continue;
+        }
+        const gutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        const { first } = layout;
+        if (!close(layout.contentLeft, gutter)) {
+            failures.push(`${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
+        }
+        if (layout.contentRightGap + 1 < gutter) {
+            failures.push(`${label}: content right gap ${layout.contentRightGap}px, expected at least ${gutter}px`);
+        }
+        if (layout.headerLeft !== null && !close(layout.headerLeft, gutter)) {
+            failures.push(`${label}: header left ${layout.headerLeft}px, expected ${gutter}px`);
+        }
+        if (!first) {
+            failures.push(`${label}: missing first content block`);
+            continue;
+        }
+        // Wide forms intentionally centre their card inside the guttered
+        // content lane. Every other first block starts on the lane edge.
+        if ((first.kind !== 'form' || vw < 600) && !close(first.left, gutter)) {
+            failures.push(`${label}: first content left ${first.left}px, expected ${gutter}px`);
+        }
+        if (first.rightGap + 1 < gutter) {
+            failures.push(`${label}: first content right gap ${first.rightGap}px, expected at least ${gutter}px`);
+        }
+        topGaps[first.kind].add(first.topGap);
+    }
+    if (topGaps.form.size && topGaps.list.size) {
+        const forms = [...topGaps.form].sort((a, b) => a - b);
+        const lists = [...topGaps.list].sort((a, b) => a - b);
+        if (forms.length !== lists.length || forms.some((gap, i) => !close(gap, lists[i]))) {
+            failures.push(`form top gaps [${forms.join(', ')}] do not match list top gaps [${lists.join(', ')}]`);
+        }
+    }
+    return failures;
+}
+
 /** A sweep bound to one page, one venue and one output directory. */
 export function createSweep(page, {
-    venue, outDir, restart = () => page.goto('/'), onScreen = null, contrast = false, rootFontSize,
+    venue, outDir, restart = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, rootFontSize,
 }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
@@ -350,6 +555,7 @@ export function createSweep(page, {
             await page.screenshot({ path: join(outDir, `${slug}.png`) });
         } catch { /* a screenshot failure is not a finding */ }
         appendFileSync(linesPath, `${JSON.stringify({ venue, n, label, shot: `${slug}.png`, ...result })}\n`);
+        if (onResult) await onResult({ label, ...result });
         return result;
     }
 

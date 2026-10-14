@@ -66,7 +66,6 @@ const CONSUMERS = [
     ['shared/routes/Send.module.css', 'the Advanced disclosure (was 21px tall)'],
     ['shared/commandPalette/CommandPalette.module.css', 'the palette search field (was 19px tall)'],
     ['shared/routes/MarketsList.jsx', 'the watchlist star (was 18x18)'],
-    ['shared/components/settings/_settingsPrimitives.jsx', 'every settings switch (was 20px tall)'],
 ];
 
 for (const [rel, what] of CONSUMERS) {

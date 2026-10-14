@@ -69,6 +69,8 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
         const action = await screen.findByRole('button', { name: /search/i });
 
+        expect(screen.getByRole('form', { name: 'Find open dispensers' })).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Find open dispensers' })).toBeTruthy();
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         expect(action).toBeDisabled();
         expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');

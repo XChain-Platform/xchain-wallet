@@ -13,6 +13,8 @@ import { registry as registryLib } from '../../index.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { activeNetworkLabel, normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './NetworkStatusIndicator.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -53,8 +55,11 @@ function serviceSummary(chain) {
 export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork }) {
     const { overall, perChain } = useReachability();
     const [open, setOpen] = useState(false);
+    const [hovered, setHovered] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const visible = open || hovered;
+    const popoverPlacement = useAnchoredPopover(visible, triggerRef);
     const state = overall === 'degraded' || overall === 'offline' || overall === 'normal'
         ? overall
         : 'unknown';
@@ -81,12 +86,16 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
     } : undefined);
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!visible) return undefined;
         const onPointerDown = (event) => {
-            if (!wrapRef.current?.contains(event.target)) setOpen(false);
+            if (!wrapRef.current?.contains(event.target)) {
+                setHovered(false);
+                setOpen(false);
+            }
         };
         const onKeyDown = (event) => {
             if (event.key !== 'Escape') return;
+            setHovered(false);
             setOpen(false);
             triggerRef.current?.focus();
         };
@@ -96,30 +105,43 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
             window.removeEventListener('mousedown', onPointerDown);
             window.removeEventListener('keydown', onKeyDown);
         };
-    }, [open]);
+    }, [visible]);
 
     return (
         <div
             ref={wrapRef}
             className={styles.wrap}
             data-state={state}
-            data-open={open ? 'true' : 'false'}
+            data-open={visible ? 'true' : 'false'}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
         >
             <button
                 ref={triggerRef}
                 type="button"
                 className={styles.trigger}
                 data-network-status-trigger
-                onClick={() => setOpen((value) => !value)}
+                onClick={() => {
+                    setHovered(false);
+                    setOpen((value) => !value);
+                }}
                 aria-label={triggerLabel}
                 aria-haspopup="dialog"
-                aria-expanded={open ? 'true' : 'false'}
+                aria-expanded={visible ? 'true' : 'false'}
                 title={triggerLabel}
             >
                 <span className={styles.dot} aria-hidden="true" />
                 <span data-network-name>{networkName}</span>
             </button>
-            <div className={styles.popover} role="dialog" aria-label="Network status">
+            <OverlaySurface
+                variant="popover"
+                surfaceRef={popoverPlacement.ref}
+                style={popoverPlacement.style}
+                className={styles.popover}
+                aria-label="Network status"
+                hidden={!visible}
+                inert={!visible ? '' : undefined}
+            >
                 <div className={styles.title}>{label}</div>
                 {state === 'normal' ? (
                     <div className={styles.detail}>All selected chains are reachable.</div>
@@ -139,11 +161,15 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
                 <button
                     type="button"
                     className={styles.settings}
-                    onClick={() => { setOpen(false); onOpenNetworkSettings(); }}
+                    onClick={() => {
+                        setHovered(false);
+                        setOpen(false);
+                        onOpenNetworkSettings();
+                    }}
                 >
                     Network settings
                 </button>
-            </div>
+            </OverlaySurface>
         </div>
     );
 }

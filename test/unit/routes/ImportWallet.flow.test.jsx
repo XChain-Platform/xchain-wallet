@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
@@ -95,9 +95,39 @@ function fillPhrase(value) {
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 }
 
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
+}
+
 afterEach(cleanup);
 
 describe('wallet import flow', () => {
+    it('keeps the action label stable and blocks repeat import while busy', async () => {
+        const pending = deferred();
+        const importMnemonic = vi.fn(() => pending.promise);
+        render(
+            <ImportFlow messaging={{
+                importMnemonic,
+                listWallets: vi.fn(async () => []),
+            }} />,
+        );
+
+        fillPhrase(PHRASE);
+
+        const button = screen.getByRole('button', { name: 'Import' });
+        await waitFor(() => expect(button).toBeDisabled());
+        expect(button).toHaveAttribute('aria-busy', 'true');
+        expect(button).toHaveAccessibleName('Import');
+        fireEvent.click(button);
+        expect(importMnemonic).toHaveBeenCalledOnce();
+
+        await act(async () => pending.resolve({}));
+    });
+
     it('identifies an invalid recovery word without importing', async () => {
         const messaging = mountFlow();
         fillPhrase(PHRASE.replace(/about$/, 'notaword'));

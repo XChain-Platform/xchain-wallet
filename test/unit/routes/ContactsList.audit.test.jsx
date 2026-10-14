@@ -176,7 +176,10 @@ describe('ContactsList audited behavior', () => {
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-        expect(await screen.findByText('This address is already saved for Alice.')).toBeTruthy();
+        const error = await screen.findByText('This address is already saved for Alice.');
+        const address = screen.getByLabelText('Address');
+        expect(address).toHaveAttribute('aria-invalid', 'true');
+        expect(address.getAttribute('aria-describedby').split(' ')).toContain(error.id);
         expect(messaging.saveContact).not.toHaveBeenCalled();
     });
 

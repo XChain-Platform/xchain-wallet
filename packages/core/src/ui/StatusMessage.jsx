@@ -11,12 +11,14 @@
 import styles from './StatusMessage.module.css';
 
 /**
- * §53.3 / G169: shared status / error / success row that every form can
+ * §53.3 / G169: shared info / warning / error / success row that every form can
  * use in place of an unannounced `<p>` or `<div>`. Picks the right
  * `role` + `aria-live` per variant so screen readers announce the
  * message exactly once when it appears.
  *
- *   variant="status"   role="status" aria-live="polite"  (neutral progress / informational copy)
+ *   variant="status"   role="status" aria-live="polite"  (alias for informational copy)
+ *   variant="info"     role="status" aria-live="polite"  (informational copy)
+ *   variant="warning"  role="status" aria-live="polite"  (caution / degraded state)
  *   variant="error"    role="alert"  aria-live="assertive" (validation failure / runtime error)
  *   variant="success"  role="status" aria-live="polite"  (confirmation copy after a successful action)
  *
@@ -31,7 +33,7 @@ import styles from './StatusMessage.module.css';
  * together with the diagnostic.
  *
  * @param {object} props
- * @param {'status' | 'error' | 'success'} [props.variant]   default 'status'
+ * @param {'status' | 'info' | 'warning' | 'error' | 'success'} [props.variant]   default 'status'
  * @param {string} [props.id]
  * @param {import('react').ReactNode} props.children
  * @param {string} [props.className]                          appended after the variant class so callers can space-suffix layout adjustments
@@ -40,16 +42,21 @@ import styles from './StatusMessage.module.css';
  */
 export function StatusMessage({ variant = 'status', id, children, className, details, recovery }) {
     if (children === null || children === undefined || children === '') return null;
-    const role = variant === 'error' ? 'alert' : 'status';
-    const live = variant === 'error' ? 'assertive' : 'polite';
-    const variantClass = variant === 'error'
-        ? styles.error
-        : variant === 'success'
-            ? styles.success
-            : styles.status;
+    const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
+    const role = presentation.tone === 'error' ? 'alert' : 'status';
+    const live = presentation.tone === 'error' ? 'assertive' : 'polite';
+    const variantClass = styles[presentation.tone];
     const classNames = [styles.row, variantClass, className].filter(Boolean).join(' ');
     return (
-        <div role={role} aria-live={live} aria-atomic="true" id={id} className={classNames}>
+        <div
+            role={role}
+            aria-live={live}
+            aria-atomic="true"
+            id={id}
+            className={classNames}
+            data-variant={presentation.tone}
+        >
+            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <div className={styles.text}>
                 <span>{children}</span>
                 {details ? (
@@ -76,3 +83,11 @@ export function StatusMessage({ variant = 'status', id, children, className, det
         </div>
     );
 }
+
+const STATUS_PRESENTATION = {
+    status: { tone: 'info', icon: 'ℹ' },
+    info: { tone: 'info', icon: 'ℹ' },
+    warning: { tone: 'warning', icon: '⚠' },
+    error: { tone: 'error', icon: '✕' },
+    success: { tone: 'success', icon: '✓' },
+};

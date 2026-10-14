@@ -6,6 +6,7 @@
 }
 
 .logo {
+    /* The brand mark has no matching size token at its default presentation width. */
     width: 96px;
     height: auto;
     margin-bottom: var(--xc-space-3);
@@ -23,6 +24,7 @@
     }
 
     .logo {
+        /* The brand mark has no matching size token at its wide presentation width. */
         width: 120px;
     }
 }
@@ -82,13 +84,14 @@
     --xc-icon-size: var(--xc-icon-md);
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
+    /* This half-grid inset keeps the toggle centered inside the input border. */
     inset-inline-end: 2px;
     top: calc(var(--xc-text-sm) + var(--xc-space-2));
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    min-height: 32px;
+    width: calc(var(--xc-control-h-md) - var(--xc-space-1));
+    min-height: var(--xc-control-h-sm);
     padding: 0;
     color: var(--xc-text-muted);
     background: transparent;
@@ -110,10 +113,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    width: 100%;
-}
-
-.unlockActions > button {
     width: 100%;
 }
 
@@ -143,29 +142,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-}
-
-.forgotLink {
-    align-self: center;
-    background: none;
-    border: none;
-    padding: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    font-family: inherit;
-}
-
-.forgotLink:hover {
-    color: var(--xc-text);
-}
-
-.forgotLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
 }
 
 .wipeConfirm {
@@ -217,6 +193,7 @@
     }
 
     .logo {
+        /* The compact brand mark has no matching size token. */
         width: 40px;
         margin-bottom: 0;
     }
@@ -257,6 +234,7 @@
 }
 
 :global(html[data-xc-keyboard='open']) .logo {
+    /* The compact brand mark has no matching size token. */
     width: 40px;
     margin-bottom: 0;
 }

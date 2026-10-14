@@ -616,7 +616,7 @@ describe('Send flow with mocked messaging', () => {
             prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
         }));
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
         // The ToastHost notifications viewport is its own status region, so the
         // success screen's announcement is looked up inside the screen's main.
@@ -763,7 +763,7 @@ describe('Send flow with mocked messaging', () => {
         await approveWithPassword(messaging);
 
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
         expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
@@ -777,9 +777,15 @@ describe('Send flow with mocked messaging', () => {
 
     it('reviews the payment and builds an unsigned PSBT in watcher mode', async () => {
         const messaging = mount({ walletMode: 'watcher' });
-        await fillSendForm();
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        const scroller = screen.getByRole('main');
+        scroller.scrollTop = 420;
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
+        expect(scroller.scrollTop).toBe(0);
+        expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
         expect(review).toHaveTextContent('Chain');
         expect(review).toHaveTextContent('Bitcoin');

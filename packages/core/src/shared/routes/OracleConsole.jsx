@@ -319,7 +319,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
 
     return wrap(
         <ListPage toolbar={(
-            <Button type="button" variant="ghost" disabled={refreshing} onClick={() => load(true)}>
+            <Button type="button" variant="ghost" size="md" disabled={refreshing} onClick={() => load(true)}>
                 {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
             </Button>
         )}>
@@ -386,11 +386,11 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             ) : null}
                             <div className={`${styles.actions} ${consoleStyles.actionRow}`}>
                                 {onOpenMarket ? (
-                                    <Button variant="ghost" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>
+                                    <Button variant="ghost" size="md" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>
                                 ) : null}
                                 {/* Terms stay immutable. This path copies them into a new market. */}
                                 {onDuplicate ? (
-                                    <Button variant="ghost" onClick={() => onDuplicate(f.chainId, f.action_index)}>Copy to a new market</Button>
+                                    <Button variant="ghost" size="md" onClick={() => onDuplicate(f.chainId, f.action_index)}>Copy to a new market</Button>
                                 ) : null}
                             </div>
 
@@ -399,6 +399,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     {canEdit ? (
                                         <Button
                                             variant="ghost"
+                                            size="md"
                                             onClick={() => {
                                                 setActive({ ...f, mode: 'edit' });
                                                 setOutcome(null);
@@ -410,10 +411,10 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         </Button>
                                     ) : null}
                                     {canCancel ? (
-                                        <Button variant="danger" onClick={() => { setActive({ ...f, mode: 'cancel' }); setOutcome(null); }}>Cancel and refund</Button>
+                                        <Button variant="danger" size="md" onClick={() => { setActive({ ...f, mode: 'cancel' }); setOutcome(null); }}>Cancel and refund</Button>
                                     ) : null}
                                     {canResolve ? (
-                                        <Button variant="primary" onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>Resolve</Button>
+                                        <Button variant="primary" size="md" onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>Resolve</Button>
                                     ) : null}
                                 </div>
                             ) : null}
@@ -462,9 +463,9 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     {/* Same colour-only selection as the place-bet picker, and worse
                                         consequences: this choice pays the whole pot out one way and
                                         cannot be undone. The selected outcome has to be announced. */}
-                                    <div role="group" aria-label="Winning outcome" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', margin: '0.35rem 0' }}>
+                                    <div role="group" aria-label="Winning outcome" className={consoleStyles.outcomeRow}>
                                         {labels.map((l, i) => (
-                                            <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{l}</Button>
+                                            <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} size="md" aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{l}</Button>
                                         ))}
                                     </div>
                                     {!isWatcherMode && !isHw && !signerReady ? (

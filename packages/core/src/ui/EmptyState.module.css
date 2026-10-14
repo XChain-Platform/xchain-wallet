@@ -17,6 +17,7 @@
 }
 
 .icon {
+    --xc-icon-size: var(--xc-icon-xl);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -24,8 +25,8 @@
 }
 
 .icon svg {
-    width: 32px;
-    height: 32px;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
 }
 
 .title {
@@ -38,13 +39,16 @@
 
 .body {
     margin: 0;
-    max-width: 40ch;
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-type-body-size);
     font-weight: var(--xc-type-body-weight);
     line-height: 1.4;
     color: var(--xc-text-muted);
 }
 
-.action {
+.actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--xc-space-2);
 }

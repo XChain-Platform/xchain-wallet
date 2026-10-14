@@ -136,7 +136,7 @@ async function fill({ feed, body, value, fee, timestamp }) {
         fireEvent.change(screen.getByLabelText(/^Feed fee/), { target: { value: fee } });
     }
     if (timestamp) {
-        fireEvent.click(screen.getByLabelText(/Prepend UTC timestamp/));
+        fireEvent.click(screen.getByRole('switch', { name: 'Prepend UTC timestamp to memo' }));
     }
 }
 
@@ -302,7 +302,7 @@ describe('BroadcastForm validates decimal fields before compose', () => {
 
 describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
     async function openRawTransaction(raw) {
-        fireEvent.click(await screen.findByLabelText('Signed transaction'));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Signed transaction' }));
         fireEvent.change(screen.getByLabelText('Signed transaction hex'), { target: { value: raw } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
     }

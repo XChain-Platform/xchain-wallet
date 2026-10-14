@@ -94,7 +94,9 @@ describe('CreateWallet security options', () => {
     it('warns that the enabled BIP39 passphrase is required and exact', async () => {
         draw();
         fillPasswords();
-        fireEvent.click(screen.getByLabelText(/^Use a BIP39 passphrase \(advanced\)/));
+        fireEvent.click(screen.getByRole('switch', {
+            name: /^Use a BIP39 passphrase \(advanced\)/,
+        }));
 
         expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /missing or mistyped passphrase opens a different wallet without warning/,
@@ -203,7 +205,8 @@ describe('MnemonicGrid narrow layout', () => {
 
         expect(onboardingCss).toMatch(/\.actionsFull\s*\{[^}]*width:\s*100%;/s);
         expect(onboardingCss).toMatch(/@media \(max-height:\s*520px\)/);
-        expect(createCss).toMatch(/\.wordCountOption\s*\{[^}]*flex-wrap:\s*wrap;/s);
+        // The word-count choice is the kit RadioGroup, whose option text column shrinks and wraps.
+        expect(css('packages/core/src/ui/RadioGroup.module.css')).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(createCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
         expect(createCss).toMatch(/\.confirmRow\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);

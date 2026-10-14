@@ -9,12 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Icon } from '@xchain-wallet/core/ui';
 import {
     formatBadgeCount,
     isNavItemActive,
     LEFT_NAV_VIEW_GROUPS,
 } from './LeftNav.jsx';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -200,6 +201,25 @@ export function BottomTabBar({
         tabs[next].click();
     };
 
+    const onSheetKeyDown = (e) => {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const current = e.target.closest?.('[data-xc-menu-item]');
+        if (!current || !sheetRef.current?.contains(current)) return;
+        const rows = Array.from(sheetRef.current.querySelectorAll(
+            '[data-xc-menu-item]:not(:disabled):not([aria-disabled="true"])',
+        ));
+        const index = rows.indexOf(current);
+        if (index < 0 || rows.length === 0) return;
+        let next = null;
+        if (e.key === 'ArrowDown') next = (index + 1) % rows.length;
+        if (e.key === 'ArrowUp') next = (index - 1 + rows.length) % rows.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = rows.length - 1;
+        if (next === null) return;
+        e.preventDefault();
+        rows[next]?.focus();
+    };
+
     return (
         <>
             <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
@@ -251,40 +271,21 @@ export function BottomTabBar({
             </nav>
 
             {sheetOpen ? (
-                <>
-                    <div
-                        className={styles.scrim}
-                        onClick={() => setSheetOpen(false)}
-                        aria-hidden="true"
-                        role="presentation"
-                        tabIndex={-1}
-                    />
-                    <div
-                        ref={sheetRef}
-                        id="xc-bottom-sheet"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="xc-bottom-sheet-title"
-                        className={styles.sheet}
-                    >
-                        <div className={styles.sheetHeader}>
-                            <div className={styles.handle} aria-hidden="true" />
-                            <div className={styles.sheetTitleRow}>
-                                <h2 className={styles.sheetTitle}>More</h2>
-                                <span className={styles.sheetClose}>
-                                    <Button
-                                        variant="secondary"
-                                        icon={<Icon.XIcon />}
-                                        onClick={() => setSheetOpen(false)}
-                                        aria-label="Close more navigation"
-                                    />
-                                </span>
-                            </div>
-                        </div>
-                        <div className={styles.sheetBody}>
+                <OverlaySurface
+                    variant="sheet"
+                    surfaceRef={sheetRef}
+                    id="xc-bottom-sheet"
+                    title={<h2 className={styles.sheetTitle}>More</h2>}
+                    titleId="xc-bottom-sheet-dialog-title"
+                    aria-labelledby="xc-bottom-sheet-dialog-title"
+                    closeLabel="Close more navigation"
+                    onClose={() => setSheetOpen(false)}
+                    onBackdrop={() => setSheetOpen(false)}
+                    onKeyDown={onSheetKeyDown}
+                >
                             {/* Navigation rows stay native buttons to preserve full-row menu semantics. */}
                             {/* Safari needs an explicit list role because this class removes list styling. */}
-                            <ul className={styles.sheetList} role="list">
+                            <ul className={styles.sheetList} role="list" data-xc-menu-list="rows">
                                 {sheetRows.map((row) => {
                                     const active = isNavItemActive(row.id, currentView);
                                     return (
@@ -292,6 +293,7 @@ export function BottomTabBar({
                                             <button
                                                 type="button"
                                                 className={`${styles.sheetItem} ${active ? styles.sheetItemActive : ''}`}
+                                                data-xc-menu-item
                                                 aria-current={active ? 'page' : undefined}
                                                 onClick={() => {
                                                     setSheetOpen(false);
@@ -314,12 +316,13 @@ export function BottomTabBar({
                             </ul>
                             <div className={styles.sheetDivider} />
                             {/* Safari needs an explicit list role because this class removes list styling. */}
-                            <ul className={styles.sheetList} role="list">
+                            <ul className={styles.sheetList} role="list" data-xc-menu-list="rows">
                                 {onCommandPalette ? (
                                     <li>
                                         <button
                                             type="button"
                                             className={styles.sheetItem}
+                                            data-xc-menu-item
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onCommandPalette();
@@ -337,6 +340,7 @@ export function BottomTabBar({
                                         <button
                                             type="button"
                                             className={styles.sheetItem}
+                                            data-xc-menu-item
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onOpenWalletPicker();
@@ -354,6 +358,7 @@ export function BottomTabBar({
                                         <button
                                             type="button"
                                             className={styles.sheetItem}
+                                            data-xc-menu-item
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onOpenSettings();
@@ -371,6 +376,8 @@ export function BottomTabBar({
                                         <button
                                             type="button"
                                             className={styles.sheetItem}
+                                            data-xc-menu-item
+                                            data-destructive="true"
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onLock();
@@ -389,6 +396,7 @@ export function BottomTabBar({
                                         <li key={site.key}>
                                             <a
                                                 className={styles.sheetItem}
+                                                data-xc-menu-item
                                                 href={site.href}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
@@ -403,9 +411,7 @@ export function BottomTabBar({
                                         </li>
                                     )) : null}
                             </ul>
-                        </div>
-                    </div>
-                </>
+                </OverlaySurface>
             ) : null}
         </>
     );

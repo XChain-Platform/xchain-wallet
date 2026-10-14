@@ -22,17 +22,19 @@
 
 .assetCard:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) * 0.5);
 }
 
 .assetIconWrap {
     position: relative;
     flex: 0 0 auto;
+    /* Asset artwork stays 48px because the icon scale stops at 24px. */
     width: 48px;
     height: 48px;
 }
 
 .assetIcon {
+    /* Asset artwork stays 48px because the icon scale stops at 24px. */
     width: 48px;
     height: 48px;
     display: block;
@@ -42,19 +44,21 @@
 
 .assetChainOverlay {
     position: absolute;
-    bottom: -2px;
-    inset-inline-end: -2px;
-    width: 20px;
-    height: 20px;
+    bottom: calc(var(--xc-space-1) * -0.5);
+    inset-inline-end: calc(var(--xc-space-1) * -0.5);
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
     border-radius: 50%;
     /* raw-color-ok: fixed white preserves transparent chain artwork. */
     background: #FFFFFF;
+    /* A 1.5px ring separates transparent artwork without a heavy border. */
     box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
     object-fit: cover;
     display: block;
 }
 
 .assetIconFallback {
+    /* Asset artwork stays 48px because the icon scale stops at 24px. */
     width: 48px;
     height: 48px;
     display: flex;
@@ -71,6 +75,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    /* The compact two-line label needs a 2px gap below the spacing scale. */
     gap: 2px;
 }
 
@@ -94,24 +99,18 @@
 .assetChevron {
     flex: 0 0 auto;
     color: var(--xc-text-muted);
-    font-size: 20px;
+    font-size: var(--xc-icon-lg);
     line-height: 1;
 }
 
 .qrBox {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: var(--xc-space-3);
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    /* raw-color-ok: fixed white preserves QR scanner contrast. */
-    background: #FFFFFF;
-    border-radius: var(--xc-radius-md);
-    border: 1px solid var(--xc-border);
+    margin: 0;
+}
+
+.receiveQrDisplay {
+    --xc-qr-frame-size: 20rem;
+
     margin-bottom: var(--xc-space-3);
-    overflow: hidden;
 }
 
 .qrSurface {
@@ -173,9 +172,13 @@
 .labelEditor {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
+    align-items: center;
     gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-3);
+}
+
+.labelEditor > * {
+    margin-bottom: 0;
 }
 
 @media (max-width: 480px) {
@@ -197,9 +200,7 @@
 }
 
 .qrActions {
-    display: flex;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-3);
+    margin-top: 0;
 }
 
 .qrActions > * {
@@ -233,23 +234,6 @@
     display: flex;
     justify-content: flex-end;
     margin-bottom: var(--xc-space-3);
-}
-
-/* The phone hero keeps the complete address and its actions above the fold.
-   Tablet and desktop retain the field-first request layout above 420px. */
-@media (max-width: 420px) {
-    .receiveQrBox {
-        width: 100%;
-        max-width: 14rem;
-        margin-inline: auto;
-        padding: var(--xc-space-2);
-        margin-bottom: var(--xc-space-2);
-    }
-
-    .qrActions {
-        margin-top: 0;
-        margin-bottom: var(--xc-space-3);
-    }
 }
 
 /* §17.6 hardware receive-address confirmation block. */

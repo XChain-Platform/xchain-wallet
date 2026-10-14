@@ -49,6 +49,7 @@ import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduat
 import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
+import { persistActiveNetwork } from '@xchain-wallet/core/shared/utils/activeNetworkSwitch.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -498,7 +499,7 @@ function AppInner() {
     // only destination-network addresses, balances, and history.
     const handleActiveNetworkChange = useCallback(async (network) => {
         if (!activeWalletId) throw new Error('An active wallet is required to switch networks.');
-        await messaging.setActiveNetwork({ walletId: activeWalletId, network });
+        await persistActiveNetwork({ messaging, walletId: activeWalletId, network });
         window.location.reload();
     }, [activeWalletId]);
     // Unread-message count for the active wallet + account, surfaced as a badge
@@ -694,6 +695,20 @@ function AppInner() {
                     errorKind: vaultErrorKind(err),
                 }),
             );
+    }, []);
+
+    const finishFreshWalletCreation = useCallback(() => {
+        const next = { hasWallet: true, hasSession: true, state: 'unlocked' };
+        const launchView = launchRouteState.current.takeForSession(next);
+        setOnboardingStep('welcome');
+        setUnlockedView(launchView || 'home');
+        nativeSuspendedRef.current = false;
+        setStatus(next);
+        if (typeof window !== 'undefined') {
+            try {
+                window.dispatchEvent(new CustomEvent('xc:session-changed'));
+            } catch { /* CustomEvent unsupported: non-fatal */ }
+        }
     }, []);
 
     function clearTransientActionState() {
@@ -1018,7 +1033,7 @@ function AppInner() {
                     <Suspense fallback={<Loading />}>
                         <CreateWallet
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={finishFreshWalletCreation}
                         />
                     </Suspense>
                 );
@@ -3092,7 +3107,7 @@ function AppInner() {
                             style={{
                                 position: 'absolute',
                                 inset: 0,
-                                zIndex: 50,
+                                zIndex: 'var(--xc-z-overlay)',
                                 background: 'var(--xc-bg)',
                                 display: 'flex',
                                 flexDirection: 'column',

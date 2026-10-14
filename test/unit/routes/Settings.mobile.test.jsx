@@ -7,9 +7,12 @@ import React from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { seedSettingsForChains } from '../../../packages/core/src/flows/seedSettings.js';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+import { readLastView, writeLastView } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
 
 let settings;
 let update;
@@ -26,6 +29,18 @@ const settingsCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/Settings.module.css'),
     'utf8',
 ).replace(/\/\*[\s\S]*?\*\//g, '');
+const createWalletCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/CreateWallet.module.css'),
+    'utf8',
+);
+const radioGroupCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/RadioGroup.module.css'),
+    'utf8',
+);
+const onboardingCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/Onboarding.module.css'),
+    'utf8',
+);
 
 const CONNECTED_SITE = {
     id: 'site-1',
@@ -58,7 +73,6 @@ const INLINE_SECTIONS = [
 const DRILLDOWN_SECTIONS = [
     ['this-wallet', 'This wallet', () => screen.getByRole('button', { name: 'Remove…' })],
     ['display', 'Display', () => screen.getByRole('button', { name: 'Reset to defaults' })],
-    ['keyboard', 'Keyboard', () => screen.getByRole('button', { name: 'Reset all shortcuts' })],
     ['privacy', 'Privacy', () => screen.getByRole('spinbutton', { name: 'Clipboard auto-clear seconds' })],
     ['safety', 'Safety', () => screen.getByRole('button', { name: 'Activate' })],
     ['wallet-mode', 'Wallet mode', () => screen.getByRole('radio', { name: /Normal/ })],
@@ -103,8 +117,10 @@ function buildMessaging() {
     });
 }
 
-function renderSettings(initialSubpageId = null) {
-    const messaging = buildMessaging();
+function renderSettings(initialSubpageId = null, {
+    messaging = buildMessaging(),
+    reload = () => {},
+} = {}) {
     return render(
         <MessagingContext.Provider value={{ shell: 'popup', messaging }}>
             <Settings
@@ -114,7 +130,7 @@ function renderSettings(initialSubpageId = null) {
                 onOpenWalletPicker={() => {}}
                 onOpenAccountPicker={() => {}}
                 initialSubpageId={initialSubpageId}
-                reload={() => {}}
+                reload={reload}
             />
         </MessagingContext.Provider>,
     );
@@ -157,6 +173,7 @@ function expectNoFixedWidthOverflow(container) {
 }
 
 beforeEach(() => {
+    localStorage.clear();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: VIEWPORT_WIDTH });
     settings = {
         ...createDefaultSettings(),
@@ -177,6 +194,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    localStorage.clear();
     vi.clearAllMocks();
     if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
 });
@@ -191,7 +209,42 @@ describe('Settings at a 320px viewport', () => {
         }
         expect(screen.getByRole('button', { name: /Accounts & addresses/ })).toBeVisible();
         expect(screen.getByRole('button', { name: /Automatic donation system/ })).toBeVisible();
+        expect(screen.queryByRole('button', { name: /^Keyboard/ })).toBeNull();
         expectNoFixedWidthOverflow(container);
+    });
+
+    it('keeps placeholder prose and onboarding choices readable without forced word breaks', () => {
+        settings = seedSettingsForChains(settings, defaultRegistry(), ['bitcoin-mainnet']);
+        const { container } = renderSettings('ads');
+        // The visible placeholder is short; the full explanation stays in its accessible description.
+        const placeholder = screen.getByText('Not available yet.');
+        expect(placeholder).toHaveAttribute('aria-description', expect.stringMatching(/A donation address for Bitcoin arrives/));
+
+        expect(placeholder.style.fontFamily).toBe('inherit');
+        expect(placeholder.style.wordBreak).toBe('normal');
+        expect(placeholder.style.overflowWrap).toBe('break-word');
+        expect(container).toContainElement(placeholder);
+        // The word-count choice is the kit RadioGroup; its option copy wraps instead of overflowing.
+        expect(radioGroupCss).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
+        expect(radioGroupCss).toMatch(/\.label\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+        expect(createWalletCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;/s);
+        expect(onboardingCss).toMatch(/\.licenseParagraph\s*\{[^}]*text-align:\s*start;[^}]*hyphens:\s*none;/s);
+    });
+
+    it('clears the previous route before reloading into a different network', async () => {
+        const messaging = buildMessaging();
+        const reload = vi.fn();
+        messaging.setActiveNetwork = vi.fn().mockResolvedValue({ settings: { activeNetwork: 'testnet' } });
+        writeLastView('wallet-1', 'contacts');
+        renderSettings(null, { messaging, reload });
+
+        fireEvent.change(screen.getByRole('combobox', { name: 'Active network' }), {
+            target: { value: 'testnet' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(reload).toHaveBeenCalledOnce());
+        expect(readLastView('wallet-1')).toBeNull();
     });
 
     it.each(DRILLDOWN_SECTIONS)(

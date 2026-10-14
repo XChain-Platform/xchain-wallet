@@ -149,6 +149,7 @@ export function PriceAlertForm({
                 </Select>
                 <span aria-hidden="true">{symbol}</span>
                 <Input
+                    size="md"
                     type="text"
                     inputMode="decimal"
                     enterKeyHint="go"

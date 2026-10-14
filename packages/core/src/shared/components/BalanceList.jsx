@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
@@ -245,6 +245,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
         : null;
+    const artworkUrl = isNative ? chainIconUrl : tokenImageUrl;
+    const [failedArtworkUrl, setFailedArtworkUrl] = useState(null);
+    const showArtwork = artworkUrl && failedArtworkUrl !== artworkUrl;
     // App-wide privacy toggle: when on, replace the per-row qty and
     // fiat values with dots so navigating to / from the row leaks
     // nothing. Distinct from the per-row `hidden` prop above, which
@@ -301,9 +304,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     }, [clickable, onSelect, row.chainId, row.tick, row.kind, row.displayName,
         row.divisibility, row.fiatRate, row.fiatRateSource, row.quantity, tokenImageUrl]);
     const handleClick = clickable ? handleClickCallback : undefined;
-    const handleImageError = useCallback((event) => {
-        event.currentTarget.style.display = 'none';
-    }, []);
+    const handleImageError = useCallback(() => {
+        setFailedArtworkUrl(artworkUrl);
+    }, [artworkUrl]);
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
     const handleTogglePin = useCallback((event) => {
@@ -348,27 +351,14 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                 tabIndex={roving ? getTabIndex(row) : undefined}
                 data-balance-option={roving ? pinKey : undefined}
                 leading={<span className={styles.iconWrap}>
-                    <span
-                        className={styles.iconLetter}
-                        style={{ background: tickerColor(row.tick) }}
-                        aria-hidden="true"
-                    >
-                        {row.tick.slice(0, 1) || '?'}
-                    </span>
-                    {isNative && chainIconUrl ? (
+                    {!showArtwork ? (
+                        <span className={styles.iconLetter} aria-hidden="true">
+                            {row.tick.slice(0, 1) || '?'}
+                        </span>
+                    ) : null}
+                    {showArtwork ? (
                         <img
-                            src={chainIconUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.iconImg}
-                            loading="lazy"
-                            decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                            onError={handleImageError}
-                        />
-                    ) : tokenImageUrl ? (
-                        <img
-                            src={tokenImageUrl}
+                            src={artworkUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
@@ -461,28 +451,28 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                 </span>}
             />
             {showPin ? (
-                <button
-                    type="button"
-                    className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
+                <Button
+                    className={styles.pinBtn}
+                    size="sm"
+                    variant={pinned ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
                     aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
                     title={pinned ? 'Unpin' : 'Pin to top'}
                     onClick={handleTogglePin}
-                >
-                    {pinned ? '★' : '☆'}
-                </button>
+                />
             ) : null}
             {typeof onToggleHide === 'function' ? (
-                <button
-                    type="button"
-                    className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
+                <Button
+                    className={styles.hideBtn}
+                    size="sm"
+                    variant={hidden ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
                     aria-pressed={hidden}
                     aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
                     title={hidden ? 'Unhide' : 'Hide'}
                     onClick={handleToggleHide}
-                >
-                    {hidden ? '⊕' : '⊘'}
-                </button>
+                />
             ) : null}
         </div>
     );
@@ -511,50 +501,9 @@ function shallowEqualRow(previous, next) {
 }
 
 function FitAmount({ children, title }) {
-    const containerRef = useRef(null);
-    const innerRef = useRef(null);
-    const [scale, setScale] = useState(1);
-
-    useLayoutEffect(() => {
-        const container = containerRef.current;
-        const inner = innerRef.current;
-        if (!container || !inner) return undefined;
-        let cancelled = false;
-        const measure = () => {
-            if (cancelled) return;
-            inner.style.transform = 'scale(1)';
-            const available = Math.max(0, container.clientWidth - 2);
-            const required = inner.scrollWidth;
-            const next = available > 0 && required > available ? available / required : 1;
-            inner.style.transform = `scale(${next})`;
-            setScale(next);
-        };
-        measure();
-        document.fonts?.ready?.then(measure);
-        if (typeof ResizeObserver === 'undefined') {
-            window.addEventListener('resize', measure);
-            return () => {
-                cancelled = true;
-                window.removeEventListener('resize', measure);
-            };
-        }
-        const observer = new ResizeObserver(measure);
-        observer.observe(container);
-        return () => {
-            cancelled = true;
-            observer.disconnect();
-        };
-    }, [children]);
-
     return (
-        <span ref={containerRef} className={styles.amountFit} title={title}>
-            <span
-                ref={innerRef}
-                className={styles.amountFitInner}
-                style={{ transform: `scale(${scale})` }}
-            >
-                {children}
-            </span>
+        <span className={styles.amountFit} title={title}>
+            {children}
         </span>
     );
 }
