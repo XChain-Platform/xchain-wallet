@@ -32,9 +32,10 @@ const LTC = 'litecoin-mainnet';
 const address = (id, value) => ({
     id, address: value, publicKey: '02ab', derivationPath: "m/44'/0'/0'/0/0", source: 'hd', signerId: 's1',
 });
-const BTC_ADDRESS = address('btc-a', 'bc1qexample');
-const DOGE_ADDRESS = address('doge-a', 'DExample');
-const LTC_ADDRESS = address('ltc-a', 'ltc1qexample');
+const BTC_ADDRESS = address('btc-a', 'bc1qdevmock02ab');
+const DOGE_ADDRESS = address('doge-a', 'Ddevmock02ab');
+const LTC_ADDRESS = address('ltc-a', 'ltc1qdevmock02ab');
+const BTC_RECIPIENT = 'bc1qdevmockabcdef';
 
 afterEach(() => {
     cleanup();
@@ -44,6 +45,7 @@ afterEach(() => {
 function messaging({
     walletMode = 'watcher',
     divisibility = {},
+    balances = {},
     byChain = { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] },
     getNewestAddress,
     buildActionPsbtRequest,
@@ -54,7 +56,21 @@ function messaging({
         getNewestAddress: getNewestAddress || vi.fn().mockImplementation((_walletId, chainId) => (
             Promise.resolve((byChain[chainId] || [])[0] || null)
         )),
-        getWalletBalances: vi.fn().mockResolvedValue({}),
+        getWalletBalances: vi.fn().mockResolvedValue(Object.fromEntries(
+            Object.entries(byChain).map(([chainId, addrs]) => [chainId, addrs.map((entry) => ({
+                address: entry.address,
+                balances: {
+                    tokens: ['ALPHA', 'BETA'].map((tick) => {
+                        const balance = String(balances[`${chainId}:${tick}`] ?? '100');
+                        return {
+                            tick,
+                            quantity: balance.includes('.') ? balance : `${balance}.0`,
+                            divisibility: divisibility[`${chainId}:${tick}`] ?? 8,
+                        };
+                    }),
+                },
+            }))]),
+        )),
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'watcher' }),
@@ -112,6 +128,48 @@ describe('swap review editing', () => {
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
+    it('blocks a same-chain give amount above the exact available balance', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging({
+                balances: { [`${BTC}:ALPHA`]: '1.000000000000000001' },
+            })}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Give amount (ALPHA)', '1.000000000000000002');
+        setAmount('Get amount (BETA)', '1');
+
+        expect(await screen.findByText('Give amount is above your available ALPHA balance.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    });
+
+    it('blocks a malformed same-chain recipient and an empty custom expiry', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging()}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Give amount (ALPHA)', '2');
+        setAmount('Get amount (BETA)', '3');
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (receive address, lists)' }));
+        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'not an address' } });
+        expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: BTC_ADDRESS.address } });
+        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
+            .toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    });
+
     it('returns from the same-chain review to the populated form', async () => {
         render(
             <MessagingProvider shell="desktop" messaging={messaging()}>
@@ -153,9 +211,10 @@ describe('swap review editing', () => {
         expect(screen.queryByText('1 ALPHA = 0 BETA')).toBeNull();
     });
 
-    it('shows every same-chain offer term on the watcher review', async () => {
+    it('shows every same-chain offer term from the exact built values on watcher review', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: 'aa00' });
         render(
-            <MessagingProvider shell="desktop" messaging={messaging()}>
+            <MessagingProvider shell="desktop" messaging={messaging({ buildActionPsbtRequest })}>
                 <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
             </MessagingProvider>,
         );
@@ -167,7 +226,8 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options (receive address, lists)' }));
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bc1qrecipient' } });
+        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: `  ${BTC_RECIPIENT}  ` } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '  exact memo  ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         const giveValue = await screen.findByText('2 ALPHA');
@@ -176,11 +236,24 @@ describe('swap review editing', () => {
         expect(within(details).getByText('2 ALPHA')).toBeInTheDocument();
         expect(within(details).getByText('3 BETA')).toBeInTheDocument();
         expect(within(details).getByText(new Date('2099-01-02T03:04').toLocaleString())).toBeInTheDocument();
-        expect(within(details).getByText('bc1qrecipient')).toBeInTheDocument();
+        expect(within(details).getByLabelText(BTC_RECIPIENT)).toBeInTheDocument();
+        expect(within(details).getByText('exact memo')).toBeInTheDocument();
         expect(within(details).getAllByText('None')).toHaveLength(2);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
+            actionData: expect.objectContaining({
+                params: expect.objectContaining({
+                    GIVE_AMOUNT: '2',
+                    GET_AMOUNT: '3',
+                    GET_ADDRESS: BTC_RECIPIENT,
+                    MEMO: 'exact memo',
+                }),
+            }),
+        })));
     });
 
-    it('returns from the cross-chain review to the populated form', async () => {
+    it('cross-chain watcher review matches built normalized values and Edit keeps form values', async () => {
         render(
             <MessagingProvider shell="desktop" messaging={messaging()}>
                 <CrossChainSwapForm walletId="w" onBack={() => {}} />
@@ -193,6 +266,8 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '4');
         setAmount('Get amount (BETA)', '5');
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: `  ${BTC_ADDRESS.address}  ` } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '  exact memo  ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         const edit = await screen.findByRole('button', { name: 'Edit' });
@@ -200,10 +275,14 @@ describe('swap review editing', () => {
         expect(screen.getByText('Give chain')).toBeInTheDocument();
         expect(screen.getByText('Get chain')).toBeInTheDocument();
         expect(screen.getByText('Protocol fee')).toBeInTheDocument();
+        expect(screen.getByLabelText(BTC_ADDRESS.address)).toBeInTheDocument();
+        expect(screen.getByText('exact memo')).toBeInTheDocument();
         expect(screen.getByText(/Paid transaction fees are not refunded/)).toBeInTheDocument();
         fireEvent.click(edit);
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('4');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('5');
+        expect(screen.getByLabelText('Receive at')).toHaveValue(`  ${BTC_ADDRESS.address}  `);
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('  exact memo  ');
     });
 
     it('clears chain-scoped tokens, amounts, and the receive address when either chain changes', async () => {
@@ -294,6 +373,36 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '1');
 
         expect(await screen.findByText('Give amount must be a positive decimal number.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    });
+
+    it('blocks cross-chain balance, recipient, and empty-expiry gaps before review', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging({
+                balances: { [`${DOGE}:ALPHA`]: '1' },
+            })}>
+                <CrossChainSwapForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Give amount (ALPHA)', '2');
+        setAmount('Get amount (BETA)', '3');
+        expect(await screen.findByText('Give amount is above your available ALPHA balance.')).toBeInTheDocument();
+
+        setAmount('Give amount (ALPHA)', '1');
+        await waitFor(() => expect(screen.queryByText('Give amount is above your available ALPHA balance.')).toBeNull());
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: 'not an address' } });
+        expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: BTC_ADDRESS.address } });
+        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
+            .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
