@@ -13,7 +13,7 @@ vi.mock('../../../packages/desktop/renderer/deepLinkRoute.js', () => ({
     deepLinkRoute: mocks.deepLinkRoute,
 }));
 
-function installChrome(sessionReply) {
+function installChrome(sessionReply, tabs) {
     const listeners = new Set();
     const runtime = {
         lastError: undefined,
@@ -24,6 +24,7 @@ function installChrome(sessionReply) {
     };
     vi.stubGlobal('chrome', {
         runtime,
+        tabs,
         storage: {
             onChanged: {
                 addListener: (listener) => listeners.add(listener),
@@ -51,6 +52,59 @@ afterEach(() => {
 });
 
 describe('popup App defensive branches', () => {
+    it('shows a plain note when the side panel active tab has no content bridge', async () => {
+        window.history.replaceState(null, '', '/sidepanel.html');
+        const onActivated = { addListener: vi.fn(), removeListener: vi.fn() };
+        const onUpdated = { addListener: vi.fn(), removeListener: vi.fn() };
+        let sendFailed = false;
+        const tabs = {
+            query: vi.fn((_query, callback) => callback([{ id: 7 }])),
+            sendMessage: vi.fn((_tabId, _message, callback) => {
+                sendFailed = true;
+                callback(undefined);
+            }),
+            onActivated,
+            onUpdated,
+        };
+        const runtime = installChrome({ ok: true, result: { state: 'unlocked' } }, tabs);
+        Object.defineProperty(runtime, 'lastError', {
+            configurable: true,
+            get: () => (sendFailed
+                ? { message: 'Could not establish connection. Receiving end does not exist.' }
+                : undefined),
+        });
+
+        render(<App />);
+
+        expect(await screen.findByRole('status')).toHaveTextContent(
+            'XChain Wallet cannot connect to this page.',
+        );
+        expect(runtime.sendMessage).not.toHaveBeenCalled();
+        expect(tabs.sendMessage).toHaveBeenCalledWith(
+            7,
+            { type: 'xchain.contentProbe' },
+            expect.any(Function),
+        );
+    });
+
+    it('loads the wallet in the side panel when the active tab answers the probe', async () => {
+        window.history.replaceState(null, '', '/sidepanel.html');
+        const tabs = {
+            query: vi.fn((_query, callback) => callback([{ id: 8 }])),
+            sendMessage: vi.fn((_tabId, _message, callback) => callback({ available: true })),
+            onActivated: { addListener: vi.fn(), removeListener: vi.fn() },
+            onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
+        };
+        installChrome({ ok: true, result: { state: 'no-wallet' } }, tabs);
+
+        render(<App />);
+
+        expect(await screen.findByRole('button', { name: 'Create new wallet' }))
+            .toBeInTheDocument();
+        expect(screen.queryByText('XChain Wallet cannot connect to this page.'))
+            .not.toBeInTheDocument();
+    });
+
     it('shows the generic startup failure for a permission refusal', async () => {
         installChrome({
             ok: false,
