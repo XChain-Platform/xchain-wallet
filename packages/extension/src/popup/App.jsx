@@ -548,6 +548,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     }, [extensionHandoff]);
 
     function clearTransientActionState() {
+        setUnlockedView('home');
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
         setTokenDetailRef(null);
@@ -636,8 +637,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
+            clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);
+            setWallets([]);
             return;
         }
         let cancelled = false;
