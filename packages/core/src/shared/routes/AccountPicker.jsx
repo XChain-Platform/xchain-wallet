@@ -75,7 +75,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         />
     );
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
-    const footer = (
+    const actions = (
         <div className={pickerStyles.footerActions}>
             <Button variant="primary" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
                 {t('accountPicker.add')}
@@ -93,7 +93,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
     );
 
     return (
-        <Screen variant={variant} header={header} footer={footer}>
+        <Screen variant={variant} header={header}>
             <ListPage>
                 {error ? (
                     <StatusMessage
@@ -152,6 +152,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                             {onRenameAccount ? (
                                 <Button
                                     type="button"
+                                    icon={<Icon.PencilIcon />}
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('accountPicker.renameLabel', { label })}
                                     title={t('accountPicker.renameTitle')}
@@ -159,13 +160,12 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                         e.stopPropagation();
                                         runRouteAction(onRenameAccount, a);
                                     }}
-                                >
-                                    <Icon.PencilIcon />
-                                </Button>
+                                />
                             ) : null}
                         </div>
                     );
                 })}
+                {actions}
             </ListPage>
         </Screen>
     );

@@ -94,7 +94,7 @@ export const en = {
     // --- account picker ------------------------------------------
     'accountPicker.title': 'Accounts',
     'accountPicker.add': 'Add account',
-    'accountPicker.manage': 'Manage account',
+    'accountPicker.manage': 'Manage',
     'accountPicker.defaultName': 'Account {number}',
     'accountPicker.renameLabel': 'Rename {label}',
     'accountPicker.renameTitle': 'Rename account',
