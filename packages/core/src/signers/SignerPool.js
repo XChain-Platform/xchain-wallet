@@ -121,15 +121,16 @@ export class SignerPool {
      *
      * @param {object} opts
      * @param {import('../storage/Vault.js').Vault} opts.vault
-     * @param {string} opts.password
+     * @param {string} [opts.password]   required for wallets whose KDF differs from masterKeyKdfParams
      * @param {string} [opts.bip39Passphrase]   the §15.6 25th word, applied only to wallets that
      *   have none stored yet, and checked against each one's stored addresses
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
-     * @param {Uint8Array} [opts.masterKey]   a key the caller already derived from THIS `password`
-     *   under `masterKeyKdfParams` (the vault key, at unlock). Handed to every wallet whose own
-     *   kdfParams equal those, so that wallet skips its Argon2id round; any other wallet derives
-     *   as usual. Never copied, kept or zeroed here: each signer copies it, the caller zeroes it
+     * @param {Uint8Array} [opts.masterKey]   a key already derived under `masterKeyKdfParams`
+     *   (the vault key, at unlock). Handed to every wallet whose own kdfParams equal those, so
+     *   that wallet skips its Argon2id round without needing the password; any other wallet
+     *   derives from password when one is supplied. Never copied, kept or zeroed here: each
+     *   signer copies it, the caller zeroes it
      * @param {import('../crypto/kdf.js').KdfParams} [opts.masterKeyKdfParams]  the params `masterKey`
      *   was derived with; required with it
      * @returns {Promise<PopulateSummary>}
@@ -166,16 +167,25 @@ export class SignerPool {
                 summary.passphraseCaptureNames.push(w.name || '');
                 continue;
             }
+            const hasMatchingMasterKey = masterKey !== undefined
+                && kdfParamsEqual(w.kdfParams, masterKeyKdfParams);
+            // A restored desktop session holds the vault key, not the user's
+            // password. It can reopen wallets sealed with that same key, while
+            // wallets with independent KDF params stay out of the pool and
+            // trigger the normal unlock fallback at the network switch.
+            if (!hasMatchingMasterKey
+                && (typeof password !== 'string' || password.length === 0)) {
+                summary.skipped.push(w.id);
+                continue;
+            }
             let signer;
             try {
                 signer = await unlockWalletRecord({
                     wallet: w,
                     password,
-                    // Same password and identical params derive the same key,
-                    // so the caller's one serves; anything else derives its own.
-                    masterKey: masterKey !== undefined && kdfParamsEqual(w.kdfParams, masterKeyKdfParams)
-                        ? masterKey
-                        : undefined,
+                    // Identical params make the supplied key valid for this
+                    // wallet; anything else derives from the password.
+                    masterKey: hasMatchingMasterKey ? masterKey : undefined,
                     bip39Passphrase,
                     chainRegistry,
                     sdkRegistry,

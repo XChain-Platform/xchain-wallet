@@ -79,7 +79,15 @@ export function confirmActiveNetworkSwitch(current, next, confirm = globalThis.c
 export async function persistActiveNetwork({ messaging, update, walletId, network }) {
     if (!NETWORKS.includes(network)) throw new Error('A valid active network is required.');
     if (typeof messaging?.setActiveNetwork === 'function' && walletId) {
-        return messaging.setActiveNetwork({ walletId, network });
+        const result = await messaging.setActiveNetwork({ walletId, network });
+        if (result?.addresses?.skipped === 'no-signer') {
+            if (typeof messaging.lockWallet !== 'function') {
+                throw new Error('Unlock your wallet to finish switching networks.');
+            }
+            await messaging.lockWallet();
+            return { ...result, requiresUnlock: true };
+        }
+        return result;
     }
     if (typeof update === 'function') {
         return { settings: await update({ activeNetwork: network }) };

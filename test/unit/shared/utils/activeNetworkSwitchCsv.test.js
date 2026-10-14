@@ -109,6 +109,34 @@ describe('active network helpers', () => {
         await expect(persistActiveNetwork({ network: 'mainnet' }))
             .rejects.toThrow('Active network switching is not available in this shell.');
     });
+
+    it('locks a restored session before reload when address setup has no signer', async () => {
+        const setActiveNetwork = vi.fn(async () => ({
+            settings: { activeNetwork: 'regtest' },
+            addresses: { created: [], existing: [], failed: [], skipped: 'no-signer' },
+        }));
+        const lockWallet = vi.fn(async () => ({ locked: true }));
+
+        await expect(persistActiveNetwork({
+            messaging: { setActiveNetwork, lockWallet },
+            walletId: 'wallet-1',
+            network: 'regtest',
+        })).resolves.toMatchObject({ requiresUnlock: true });
+
+        expect(lockWallet).toHaveBeenCalledOnce();
+    });
+
+    it('uses user-facing copy when a shell cannot lock a signerless session', async () => {
+        const setActiveNetwork = vi.fn(async () => ({
+            addresses: { skipped: 'no-signer' },
+        }));
+
+        await expect(persistActiveNetwork({
+            messaging: { setActiveNetwork },
+            walletId: 'wallet-1',
+            network: 'testnet',
+        })).rejects.toThrow('Unlock your wallet to finish switching networks.');
+    });
 });
 
 describe('CSV helpers', () => {

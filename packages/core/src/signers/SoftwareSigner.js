@@ -113,13 +113,14 @@ export class SoftwareSigner extends Signer {
      * plaintext is not a valid mnemonic in the declared format.
      *
      * @param {Object} opts
-     * @param {string} opts.password
+     * @param {string} [opts.password]   required when masterKey is omitted
      * @param {string} [opts.bip39Passphrase]   required iff format='bip39', passphraseEnabled, and no passphrase is stored yet; ignored when one is
      * @param {Uint8Array} [opts.masterKey]     already-derived key for this wallet's kdfParams, used instead of deriving from the password. Copied before use (here on the wif-only path, inside decryptWalletSeed on the seed path) and never zeroed here; the caller zeroes its own buffer. A wrong key fails exactly as a wrong password does.
      */
     async unlock({ password, bip39Passphrase = '', masterKey: suppliedMasterKey }) {
-        if (typeof password !== 'string' || password.length === 0) {
-            throw new Error('SoftwareSigner.unlock: password is required');
+        if (suppliedMasterKey === undefined
+            && (typeof password !== 'string' || password.length === 0)) {
+            throw new Error('SoftwareSigner.unlock: either password or masterKey is required');
         }
         const enc = this._walletEncryption;
         const format = enc.format ?? 'bip39';
