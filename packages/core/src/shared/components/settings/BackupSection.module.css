@@ -1,10 +1,7 @@
 /* An opened Backup row keeps the bordered row frame, so its form reads as
    that row expanded, as This wallet's forms do. */
 .formSection {
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    composes: card from '../../../ui/Card.module.css';
 }
 
 .formSection > div:last-child {

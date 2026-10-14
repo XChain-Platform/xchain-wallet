@@ -36,13 +36,10 @@
 }
 
 .fromLine {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     margin-bottom: var(--xc-space-3);
 }
 
@@ -88,15 +85,12 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
     gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-1);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {

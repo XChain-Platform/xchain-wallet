@@ -1,6 +1,3 @@
 .endpointCard {
-    padding: var(--xc-card-pad);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-card-radius);
+    composes: card from '../../../ui/Card.module.css';
 }

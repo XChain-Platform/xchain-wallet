@@ -55,6 +55,7 @@ import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { writeLastView } from '../utils/lastViewMemory.js';
 import actionStyles from './ActionsMenu.module.css';
 import settingsStyles from './Settings.module.css';
+import cardStyles from '../../ui/Card.module.css';
 
 const row = (title, terms = '', target = title) => ({ title, terms, target });
 
@@ -955,11 +956,7 @@ function PanelBlock({ title, description, children }) {
 
 function ComingSoon() {
     return (
-        <div style={{
-            padding: 'var(--xc-space-3) var(--xc-space-4)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px dashed var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
+        <div className={cardStyles.card} style={{
             color: 'var(--xc-text-muted)',
             fontSize: 'var(--xc-text-sm)',
             fontStyle: 'italic',

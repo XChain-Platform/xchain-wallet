@@ -4,12 +4,13 @@
     gap: var(--xc-settings-row-gap);
 }
 
-.panel,
+.panel {
+    composes: card from '../../../ui/Card.module.css';
+}
+
 .keyPanel {
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    composes: card from '../../../ui/Card.module.css';
+    margin-top: var(--xc-space-2);
 }
 
 .panel,
@@ -20,11 +21,10 @@
     gap: var(--xc-space-2);
 }
 
-.keyPanel {
-    margin-top: var(--xc-space-2);
-}
-
-.dangerPanel {
+.panel.dangerPanel {
+    /* The remove-wallet card keeps the card shape and names its danger in the
+       border colour; two classes so it outranks the composed card border
+       whatever order the stylesheets load in. */
     border-color: var(--xc-danger-fg);
 }
 

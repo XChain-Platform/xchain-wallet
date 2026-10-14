@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { ToggleRow, ROW, ROW_HINT } from './settings/_settingsPrimitives.jsx';
+import { ToggleRow, ROW_LAYOUT, ROW_HINT } from './settings/_settingsPrimitives.jsx';
+import cardStyles from '../../ui/Card.module.css';
 import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
 
 /**
@@ -84,7 +85,7 @@ export function NativeFeeToggle({
     // choice between two ways of paying nothing.
     if (copy.variant === 'statement') {
         return (
-            <div style={ROW}>
+            <div className={cardStyles.card} style={ROW_LAYOUT}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
                         {copy.label}

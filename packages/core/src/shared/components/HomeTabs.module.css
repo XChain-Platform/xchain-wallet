@@ -150,10 +150,8 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+/* Unboxed, like the plain EmptyState. */
 .placeholder {
-    background: var(--xc-surface);
-    border: 1px dashed var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
     padding: var(--xc-space-5) var(--xc-space-4);
     text-align: center;
 }
@@ -191,14 +189,11 @@
    matching the Tokens / Coins list layout so all five tabs share the
    same visual rhythm. */
 .demoList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
