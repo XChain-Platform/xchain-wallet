@@ -92,6 +92,10 @@
     min-height: var(--xc-control-h-md, 40px);
 }
 
+.footerActions button > span:last-child {
+    white-space: nowrap;
+}
+
 @media not all and (min-width: 360px) {
     .footerActions {
         grid-template-columns: 1fr;
