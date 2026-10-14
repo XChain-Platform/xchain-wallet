@@ -19,8 +19,8 @@ import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
     { width: 360, height: 640, gutter: 12 },
-    { width: 768, height: 1024, gutter: 16 },
-    { width: 1440, height: 900, gutter: 24 },
+    { width: 768, height: 1024, gutter: 12 },
+    { width: 1440, height: 900, gutter: 12 },
 ];
 
 const ROUTES = [
@@ -92,8 +92,8 @@ async function geometry(page) {
             firstRight: firstBox.right,
             firstWidth: firstBox.width,
             pageHeaderLeft: pageHeader?.getBoundingClientRect().left ?? null,
-            // Balanced scrollbar lanes reserve a start-edge gutter inside the
-            // scroller; the fixed header above it has no scrollbar to balance.
+            // The scrollbar lane sits on the end edge only, so the start edge
+            // carries just the scroller border.
             startGutter: main.clientLeft,
             scrollbarGutter: borderWidth - main.clientLeft,
             directForms: Array.from(main.children)

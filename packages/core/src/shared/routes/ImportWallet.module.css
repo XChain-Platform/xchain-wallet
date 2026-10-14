@@ -75,7 +75,9 @@
     flex-wrap: wrap;
     justify-content: space-between;
     gap: var(--xc-space-1) var(--xc-space-2);
-    margin: calc(var(--xc-space-2) * -1) 0 var(--xc-space-2);
+    /* Sits under the textarea's own hint, so it keeps the help gap below
+       it; a negative top margin here drew the count over that hint. */
+    margin: var(--xc-help-gap) 0 var(--xc-space-2);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }

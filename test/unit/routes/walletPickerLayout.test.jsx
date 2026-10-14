@@ -53,6 +53,9 @@ describe('WalletPicker row layout', () => {
         expect(nameRule).toMatch(/overflow:\s*hidden/);
         expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
         expect(nameRule).toMatch(/white-space:\s*nowrap/);
+        // The identity ring is a box-shadow; the clip box must leave room for it on every side.
+        expect(nameRule).toMatch(/padding-inline:\s*var\(--xc-space-1\)/);
+        expect(nameRule).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
     });
 
     it('marks the current wallet and keeps add and manage actions in the footer', async () => {
