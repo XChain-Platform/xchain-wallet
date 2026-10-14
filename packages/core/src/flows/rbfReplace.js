@@ -85,8 +85,7 @@ export function isReplaceCallAvailable(messaging) {
  *
  * Replaceable when:
  *   - blockIndex === 0 (still in mempool)
- *   - action is a coin-moving kind (SEND / SWEEP / DISPENSE / DIVIDEND
- *     / AIRDROP / EXECUTE / DEPOSIT / WITHDRAW)
+ *   - action is SEND
  *   - txHash is present
  *   - the chain's descriptor declares `feeStrategy.rbfSupported: true`
  *     (Dogecoin declares false, and the same cap governs Send and
@@ -94,9 +93,7 @@ export function isReplaceCallAvailable(messaging) {
  *     the transaction could signal replaceability
  *   - the pending record says the signed transaction enabled RBF; a missing
  *     flag refuses because the wallet cannot prove the transaction signalled
- *
- * Phase 4 adds support for additional action kinds; the kind list is
- * deliberately conservative for now.
+ *   - the local record is neither failed nor already replaced
  *
  * @param {{ action?: string, blockIndex?: number, txHash?: string, chainId?: string }} entry
  * @param {{ descriptor?: { displayName?: string, feeStrategy?: { rbfSupported?: boolean } } | null }} [opts]
@@ -120,11 +117,7 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
         return { ok: false, reason: t('flows.rbf.alreadyConfirmed') };
     }
     const action = String(entry.action || '').toUpperCase();
-    const REPLACEABLE_ACTIONS = new Set([
-        'SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP',
-        'EXECUTE', 'DEPOSIT', 'WITHDRAW',
-    ]);
-    if (!REPLACEABLE_ACTIONS.has(action)) {
+    if (action !== 'SEND') {
         return { ok: false, reason: t('flows.rbf.actionUnsupported', { action }) };
     }
     if (descriptor?.feeStrategy?.rbfSupported !== true) {
@@ -132,6 +125,9 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
         return { ok: false, reason: t('send.rbf.unsupported', { chain }) };
     }
     if ((entry.pending?.rbf ?? entry.rbf) !== true) {
+        return { ok: false, reason: t('flows.rbf.notAllowed') };
+    }
+    if (entry.pending?.failed === true || entry.pending?.replaced === true) {
         return { ok: false, reason: t('flows.rbf.notAllowed') };
     }
     return { ok: true };

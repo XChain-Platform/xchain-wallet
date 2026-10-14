@@ -3134,6 +3134,9 @@ export function createBackgroundHost(deps) {
         ));
         const conflictRecord = recordFor(originalTxHash);
         if (!conflictRecord) throw new Error('tx.replace: transaction is not a pending transaction in this wallet');
+        if (conflictRecord.chainConfirmed === true || conflictRecord.status === 'indexed') {
+            throw new Error('This transaction is already confirmed.');
+        }
         if (!['broadcast', 'broadcasting'].includes(conflictRecord.status)) {
             throw new Error('tx.replace: transaction is no longer replaceable');
         }
