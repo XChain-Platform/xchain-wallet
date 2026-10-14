@@ -31,6 +31,7 @@ import {
 import { __setNativeVaultForTests } from '../../../packages/web/src/storage/nativeVault.js';
 
 const RETRY_EXHAUSTED_DETAIL = 'biometric authentication failed repeatedly';
+const PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your wallet password.';
 
 function provider(overrides = {}) {
     return {
@@ -107,6 +108,8 @@ describe('Locked biometric unlock', () => {
         mount(unavailable);
         await waitFor(() => expect(unavailable.isSupported).toHaveBeenCalledOnce());
         expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.getByText(PASSWORD_FALLBACK)).toBeTruthy();
+        expect(screen.getByLabelText('Password')).toHaveFocus();
 
         cleanup();
         const notEnrolled = provider({ isRegistered: vi.fn(() => false) });
@@ -133,9 +136,11 @@ describe('Locked biometric unlock', () => {
 
         await waitFor(() => expect(activeProvider.isSupported).toHaveBeenCalledOnce());
         expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.getByText(PASSWORD_FALLBACK)).toBeTruthy();
+        expect(screen.getByLabelText('Password')).toHaveFocus();
     });
 
-    it('returns to the working password field when the native prompt is cancelled', async () => {
+    it('falls back once to the working password field when the native prompt is cancelled', async () => {
         const { plugin, messaging } = await mountNative({
             status: 'LOCKED',
             detail: BIOMETRIC_CANCELLED_DETAIL,
@@ -149,9 +154,10 @@ describe('Locked biometric unlock', () => {
         fireEvent.click(button);
 
         await waitFor(() => expect(document.activeElement).toBe(password));
-        expect(button).toBeEnabled();
+        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
         expect(plugin.biometricUnlock).toHaveBeenCalledOnce();
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
+        expect(screen.getAllByText(PASSWORD_FALLBACK)).toHaveLength(1);
         expect(document.body.textContent).not.toMatch(/prompt cancelled|unlock failed/i);
         expect(getLockoutState().failedAttempts).toBe(0);
 
@@ -159,32 +165,36 @@ describe('Locked biometric unlock', () => {
         await waitFor(() => expect(messaging.unlockWallet).toHaveBeenCalledWith('typed password'));
     });
 
-    it('explains retry exhaustion returned by the mocked native plugin', async () => {
-        const { messaging } = await mountNative({
+    it('falls back once to the password field after the sensor locks out', async () => {
+        const { plugin, messaging } = await mountNative({
             status: 'LOCKED',
             detail: RETRY_EXHAUSTED_DETAIL,
         });
 
         fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
 
-        expect(await screen.findByText(/did not recognize you after several attempts/i))
-            .toBeTruthy();
-        expect(screen.getByText(/unlock with your wallet password/i)).toBeTruthy();
+        expect(await screen.findByText(PASSWORD_FALLBACK)).toBeTruthy();
+        expect(screen.getAllByText(PASSWORD_FALLBACK)).toHaveLength(1);
+        expect(screen.getByLabelText('Password')).toHaveFocus();
+        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(plugin.biometricUnlock).toHaveBeenCalledOnce();
         expect(document.body.textContent).not.toMatch(/not supported|failed repeatedly/i);
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
         expect(getLockoutState().failedAttempts).toBe(0);
     });
 
-    it('hides a stale button and advises password re-enrolment', async () => {
+    it('falls back once to the password field when device enrollment changed', async () => {
         const activeProvider = provider({
             unlock: vi.fn(async () => { throw new BiometricNotRegisteredError(); }),
         });
         const { messaging } = mount(activeProvider);
         fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
 
-        expect(await screen.findByText(/unlock with your password, then re-enrol it in Settings/i))
-            .toBeTruthy();
+        expect(await screen.findByText(PASSWORD_FALLBACK)).toBeTruthy();
+        expect(screen.getAllByText(PASSWORD_FALLBACK)).toHaveLength(1);
+        expect(screen.getByLabelText('Password')).toHaveFocus();
         expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(activeProvider.unlock).toHaveBeenCalledOnce();
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
         expect(getLockoutState().failedAttempts).toBe(0);
     });

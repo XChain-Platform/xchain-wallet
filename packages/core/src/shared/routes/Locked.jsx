@@ -44,6 +44,8 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './Locked.module.css';
 
+const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your wallet password.';
+
 /**
  * Unlock screen. Reads the shell from context and picks the matching
  * Screen variant (360×600 popup vs flexible full-page). The web shell
@@ -220,9 +222,9 @@ export function Locked({ onUnlocked }) {
         setActiveWalletName(name);
     }), []);
 
-    // Probe for biometric availability + a registered credential. The
-    // button only renders when both are true; otherwise the user sees
-    // the password form unchanged.
+    // Probe for biometric availability plus a registered credential. A
+    // previously enrolled but unavailable device returns to the password
+    // field instead of leaving a biometric action that cannot succeed.
     useEffect(() => {
         let cancelled = false;
         if (!isBiometricRegistered()) {
@@ -234,7 +236,12 @@ export function Locked({ onUnlocked }) {
             // Re-read it after the asynchronous boundary so an out-of-band
             // fingerprint change cannot leave a stale unlock button visible.
             if (!cancelled) {
-                setBiometricAvailable(Boolean(ok) && isBiometricRegistered());
+                const available = Boolean(ok) && isBiometricRegistered();
+                setBiometricAvailable(available);
+                if (!available) {
+                    setError(BIOMETRIC_PASSWORD_FALLBACK);
+                    inputRef.current?.focus();
+                }
             }
         });
         return () => { cancelled = true; };
@@ -420,29 +427,11 @@ export function Locked({ onUnlocked }) {
             const reply = await messaging.unlockWallet(unwrapped);
             afterUnlock(reply, unwrapped);
         } catch (err) {
-            // A closed prompt is a choice: back to the password field, quietly.
-            if (err?.name === 'BiometricCancelledError') {
-                finishFailedUnlock();
-                return;
-            }
-            if (err?.name === 'BiometricNotRegisteredError') {
-                setBiometricAvailable(false);
-                setError(
-                    'Biometric unlock needs to be set up again. Unlock with your password,'
-                    + ' then re-enrol it in Settings.',
-                );
-                haptic.error();
-                finishFailedUnlock();
-                return;
-            }
-            // The native retry message is authored for this screen. Every
-            // other biometric failure gets fixed copy instead of provider text.
-            setError(err?.message === 'Biometrics did not recognize you after several attempts. '
-                + 'Try again or unlock with your wallet password.'
-                ? err.message
-                : 'Biometric unlock failed. Unlock with your wallet password, '
-                    + 'then set up biometrics again in Settings.');
-            haptic.error();
+            // End the biometric path after any refusal so cancellations,
+            // lockouts, and changed enrollment cannot reopen prompt loops.
+            setBiometricAvailable(false);
+            setError(BIOMETRIC_PASSWORD_FALLBACK);
+            if (err?.name !== 'BiometricCancelledError') haptic.error();
             finishFailedUnlock();
         } finally {
             unlockInFlightRef.current = false;
