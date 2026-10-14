@@ -72,6 +72,8 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * @property {string | null} [tick]     v2: the token this tx moves (null for native-only / multi-tick)
  * @property {string | null} [amount]   v2: decimal-string amount moved (NEVER a JS number, §4.5)
  * @property {object | null} [params]   v2: raw action params snapshot (optional)
+ * @property {Array<{tick: string, amount: string}>} [balanceDebits]  outgoing SEND amounts at human scale
+ * @property {string | null} [nativeDebitSats]  exact native debit, including fees and excluding owned change
  * @property {string | null} [mempoolSeenAt]  v3: when the NETWORK first told us
  *          it holds this transaction (ISO). Null from creation until a mempool
  *          reports it, which is the whole point: null is the honest reading
@@ -109,6 +111,7 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * @param {string} [input.tick]     v2: token moved (optional)
  * @param {string} [input.amount]   v2: decimal-string amount moved (optional)
  * @param {object} [input.params]   v2: raw action params snapshot (optional)
+ * @param {Array<{tick: string, amount: string}>} [input.balanceDebits]
  * @param {boolean} [input.rbf]     whether the send signalled replaceability (optional)
  * @returns {PendingTx}
  */
@@ -136,6 +139,13 @@ export function createPendingTx(input) {
         tick: input.tick === undefined ? null : String(input.tick),
         amount: input.amount === undefined || input.amount === null ? null : String(input.amount),
         params: input.params === undefined ? null : input.params,
+        balanceDebits: Array.isArray(input.balanceDebits)
+            ? input.balanceDebits.map((debit) => ({
+                tick: String(debit.tick),
+                amount: String(debit.amount),
+            }))
+            : [],
+        nativeDebitSats: null,
         // v3: no network has seen a transaction that has not been broadcast
         // yet, so this is null at creation for every record without exception.
         // It is stamped later, by whatever sees it first (an own-address
@@ -189,6 +199,21 @@ export function validatePendingTx(record) {
     check(errors, 'tick', r.tick === undefined || isNullableString(r.tick), 'must be null or a string');
     check(errors, 'amount', r.amount === undefined || isNullableString(r.amount), 'must be null or a string');
     check(errors, 'params', r.params === undefined || isNullableObject(r.params), 'must be null or an object');
+    check(
+        errors,
+        'balanceDebits',
+        r.balanceDebits === undefined || (Array.isArray(r.balanceDebits) && r.balanceDebits.every((debit) => (
+            isPlainObject(debit) && isNonEmptyString(debit.tick) && isNonEmptyString(debit.amount)
+        ))),
+        'must be an array of tick/amount strings',
+    );
+    check(
+        errors,
+        'nativeDebitSats',
+        r.nativeDebitSats === undefined || r.nativeDebitSats === null
+            || (typeof r.nativeDebitSats === 'string' && /^\d+$/.test(r.nativeDebitSats)),
+        'must be null or a non-negative integer string',
+    );
     // v3 additive field, same undefined-tolerance as the v2 three above: the
     // migration seeds it, and a reader that predates it must not be broken by
     // a record it wrote itself.
