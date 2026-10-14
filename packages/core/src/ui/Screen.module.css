@@ -106,8 +106,10 @@
 /* Route chrome and camera previews yield vertical space on landscape phones.
    The main body remains the single scroll container for everything below. */
 @media (orientation: landscape) and (max-height: 480px) {
-    .body {
-        scrollbar-gutter: auto;
+    @supports (scrollbar-gutter: auto) {
+        .body {
+            scrollbar-gutter: auto;
+        }
     }
 
     .header,
