@@ -275,7 +275,8 @@ export function Settings({
         if (subpageId || !pendingFocusRestore.current) return;
         const openerId = pendingFocusRestore.current;
         pendingFocusRestore.current = null;
-        sectionOpenerRefs.current.get(openerId)?.focus();
+        // The Screen restores the list offset; focusing must not scroll it.
+        sectionOpenerRefs.current.get(openerId)?.focus({ preventScroll: true });
     }, [subpageId]);
 
     useEffect(() => {
