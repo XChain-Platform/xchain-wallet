@@ -83,13 +83,9 @@ function answerRecoveryQuiz() {
 }
 
 async function openAddWallet() {
-    let trigger;
-    await waitFor(() => {
-        trigger = screen.getAllByRole('button', { name: 'Settings' })
-            .find((button) => button.getAttribute('aria-haspopup') === 'dialog');
-        expect(trigger).toBeTruthy();
-    });
-    fireEvent.click(trigger);
+    // The condensed header keeps Settings inside its action menu.
+    fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Settings' }));
     const settings = await screen.findByRole('dialog', { name: 'Wallet settings' });
     fireEvent.click(within(settings).getByRole('button', { name: /First Wallet/ }));
     await screen.findByRole('heading', { name: 'Wallets' });

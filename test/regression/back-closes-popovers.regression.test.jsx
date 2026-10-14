@@ -98,7 +98,7 @@ describe('regression/back-closes-popovers', () => {
     it('[REGRESSION P1] closes the network status popover before navigation or exit', () => {
         const navigateAway = watchUnderlyingBackActions();
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
-        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        const trigger = screen.getByRole('button', { name: /Network connected/ });
         fireEvent.click(trigger);
         expect(screen.getByRole('dialog', { name: 'Network status' })).toBeVisible();
 
