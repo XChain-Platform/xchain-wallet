@@ -42,6 +42,11 @@ import {
 import styles from './IssueTokenForm.module.css';
 import detailStyles from './PollDetail.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -136,8 +141,16 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const validPollIndex = /^[1-9]\d*$/.test(String(pollIndex ?? '').trim());
 
     useEffect(() => {
+        if (!validPollIndex) {
+            setPoll(null);
+            setResults(null);
+            setCurrentHeight(null);
+            setLoadError('Poll number must be a positive whole number.');
+            return undefined;
+        }
         let cancelled = false;
         let firstLoad = true;
         setPoll(null); setResults(null); setCurrentHeight(null); setLoadError(null);
@@ -175,7 +188,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     setResults(null);
                 }
             } catch (err) {
-                if (!cancelled && firstLoad) setLoadError(err?.message || 'Failed to load poll.');
+                if (!cancelled && firstLoad) {
+                    setLoadError(
+                        explorerReadFailure(err, 'load this poll')?.message
+                        || userFacingMessage(err, 'Could not load this poll. Try again.'),
+                    );
+                }
             } finally {
                 firstLoad = false;
             }
@@ -183,7 +201,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         refreshPoll();
         const refreshTimer = setInterval(refreshPoll, 30_000);
         return () => { cancelled = true; clearInterval(refreshTimer); };
-    }, [chainId, pollIndex, messaging]);
+    }, [chainId, pollIndex, messaging, validPollIndex]);
 
     useEffect(() => {
         let cancelled = false;
@@ -201,7 +219,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     }, [walletId, chainId, messaging]);
 
     useEffect(() => {
-        if (!addressesByChain) return undefined;
+        if (!addressesByChain || !validPollIndex) return undefined;
         let cancelled = false;
         const addresses = addressesByChain[chainId] || [];
         setWalletVotes(null);
@@ -220,7 +238,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 }
             });
         return () => { cancelled = true; };
-    }, [addressesByChain, chainId, pollIndex, messaging]);
+    }, [addressesByChain, chainId, pollIndex, messaging, validPollIndex]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -231,6 +249,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const voteBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: poll?.tick || '',
+    });
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -403,10 +428,15 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No address on this chain to vote from.'); return; }
+        const voteBalanceComparison = compareDecimalStrings(voteBalance, '0');
+        if (voteBalanceComparison !== null && voteBalanceComparison !== 1) {
+            setFormError(`This address must hold some ${poll.tick || 'governance token'} to vote.`);
+            return;
+        }
         if (isSplit) {
             const enteredShares = Object.values(splitShares).filter((share) => String(share).trim() !== '');
-            if (enteredShares.some((share) => !Number.isFinite(Number(share)) || Number(share) <= 0)) {
-                setFormError('Each split share must be a positive number.');
+            if (enteredShares.some((share) => !/^\d+(?:\.\d+)?$/.test(String(share).trim()) || Number(share) <= 0)) {
+                setFormError('Each split share must be a positive plain number.');
                 return;
             }
             if (enteredShares.length > maxSel) {
@@ -416,6 +446,8 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         }
         const ballot = buildBallot();
         if (!ballot.length) { setFormError('Choose at least one option.'); return; }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -671,6 +703,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Your choice</dt>
                     <dd className={styles.detailsValue}>{shown}</dd>
+                    {memo.trim() ? (<><dt className={styles.detailsLabel}>Memo</dt><dd className={styles.detailsValue}>{memo.trim()}</dd></>) : null}
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -735,7 +768,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         ))}
                     </div>
                     {options.length === 0 ? <p className={styles.hint}>This poll has no voting options.</p> : null}
-                    <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                    <Input label="Memo (optional)" hint={MEMO_HINT} value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
                     {feeTiers ? (
                         <FeeSelector
                             label="Network fee"

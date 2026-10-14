@@ -163,6 +163,11 @@ async function clickSubmit(utils) {
     });
 }
 
+function expectStoppedBeforeCompose(utils, calls, message) {
+    expect(utils.getByText(message)).toBeTruthy();
+    expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
+}
+
 describe('OracleForm submit payload', () => {
     it('composes PRICE v1 with the chain coin and an upper-cased ticker', async () => {
         const { utils, calls } = await mountForm();
@@ -229,6 +234,68 @@ describe('OracleForm submit payload', () => {
         const shown = utils.container.textContent || '';
         expect(shown).toMatch(/has not published any prices yet/i);
         expect(calls.some((c) => c.method === 'oracleFeeds')).toBe(false);
+    });
+});
+
+describe('OracleForm pre-review validation', () => {
+    it.each([
+        ['', /Enter a positive price with at most 8 decimal places/i],
+        ['0', /Enter a positive price with at most 8 decimal places/i],
+        ['-0.1', /Enter a positive price with at most 8 decimal places/i],
+        ['0.123456789', /Enter a positive price with at most 8 decimal places/i],
+    ])('stops the invalid price %j before compose', async (value, message) => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { value });
+        await preview(utils);
+        expectStoppedBeforeCompose(utils, calls, message);
+    });
+
+    it.each([
+        ['^abc', /Token ticker can be a name, or \^ followed by the token's number/i],
+        ['BAD/TICK', /Token ticker can only use letters, numbers, dots/i],
+    ])('stops the malformed ticker or id %j before compose', async (tick, message) => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { tick });
+        await preview(utils);
+        expectStoppedBeforeCompose(utils, calls, message);
+    });
+
+    it.each([
+        ['-0.01'],
+        ['1.000000000000000001'],
+        ['0.0000000000000000001'],
+    ])('stops the invalid usage fee %j before compose', async (fee) => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { fee });
+        await preview(utils);
+        expectStoppedBeforeCompose(
+            utils,
+            calls,
+            /The usage fee is a fraction between 0 and 1/i,
+        );
+    });
+
+    it('stops an overlong UTF-8 memo before compose', async () => {
+        const { utils, calls } = await mountForm();
+        await fill(utils);
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText(/^Memo/), { target: { value: '€'.repeat(84) } });
+            await drainMicrotasks();
+        });
+        await preview(utils);
+        expectStoppedBeforeCompose(
+            utils,
+            calls,
+            /Memo is 252 bytes; the network accepts at most 250 bytes/i,
+        );
+    });
+
+    it('accepts zero as an explicit no-charge usage fee', async () => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { fee: '0' });
+        await preview(utils);
+        await clickSubmit(utils);
+        expect(calls.find((call) => call.method === 'oraclePriceAction').args.params.FEE).toBe('0');
     });
 });
 

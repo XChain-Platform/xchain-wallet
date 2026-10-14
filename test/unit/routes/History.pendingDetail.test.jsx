@@ -318,6 +318,25 @@ describe('History offers replacement only where it can still work', () => {
         expect(replaceTx.mock.calls[1][0]).not.toHaveProperty('preview');
     });
 
+    it('plainly reports a send that confirms after fee review', async () => {
+        const replaceTx = vi.fn()
+            .mockResolvedValueOnce({
+                originalFee: '0.00001',
+                replacementFee: '0.00002',
+                feeIncrease: '0.00001',
+            })
+            .mockRejectedValueOnce(new Error('This transaction is already confirmed.'));
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
+        const region = await openRow(view, 'not-seen');
+        fireEvent.click(within(region).getByText('More'));
+        fireEvent.click(within(region).getByText('Speed up'));
+
+        const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
+        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+
+        expect(await within(region).findByText('This transaction is already confirmed.')).toBeTruthy();
+    });
+
     it('withdraws the offer once the transaction has been replaced', async () => {
         const { view } = mountHistory({
             pendingTxs: [staleLocalSend({

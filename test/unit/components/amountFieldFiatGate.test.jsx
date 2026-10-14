@@ -36,6 +36,7 @@ beforeAll(() => {
     registerLocale('de-DE', {});
     registerLocale('fr-FR', {});
     registerLocale('hi-IN', {});
+    registerLocale('ar-EG', {});
 });
 
 afterEach(async () => {
@@ -214,7 +215,8 @@ describe('AmountField input contract', () => {
         ['de-DE', '12,34,567.89', '1.234.567,89'],
         ['fr-FR', '1.234.567,89', '1\u202f234\u202f567,89'],
         ['hi-IN', '1\u202f234\u202f567,89', '12,34,567.89'],
-    ])('uses %s separators for display while accepting another locale\'s paste style', async (
+        ['ar-EG', '١٬٢٣٤٬٥٦٧٫٨٩ BTC', '١٬٢٣٤٬٥٦٧٫٨٩'],
+    ])('uses %s separators for display while accepting localized paste', async (
         locale,
         pasted,
         displayed,

@@ -262,6 +262,8 @@ export const en = {
         'You are offline. Showing cached balances and their last synced time. Network actions will be available when your connection returns.',
     'home.offline.empty': 'You are offline. Connect to load balances and use network actions.',
     'home.updatingBalances': 'Updating balances…',
+    'home.interruptedAction':
+        'A {action} was interrupted. Nothing was submitted automatically. Check Activity before trying again.',
     'home.loadingBalances': 'Loading balances',
     'home.retryBalances': 'Retry',
     'home.pendingAirdrops': 'Pending airdrops',
@@ -275,6 +277,7 @@ export const en = {
     'home.exchange': 'Exchange',
     'home.exchangeOffline': 'Exchange needs a network connection',
     'home.createToken': 'Create token',
+    'home.createTokenOffline': 'Creating a token needs a network connection',
     'home.markets': 'Markets',
     'home.messaging': 'Messaging',
     'home.addresses': 'Addresses',
@@ -787,6 +790,8 @@ export const en = {
     'history.filters.anyDate': 'any date',
     'history.filters.clearDateRange': 'Clear date range',
     'history.detail.label': 'Action detail',
+    'history.detail.copyCounterparty': 'Copy counterparty address',
+    'history.detail.openInExplorer': 'Open in explorer',
     'history.detail.options': 'Action options',
     'history.detail.more': 'More',
     'history.detail.noAdditionalActions': 'No additional actions',
@@ -928,7 +933,12 @@ export const en = {
 
     // --- browser extension ---------------------------------------
     'extension.approval.loading': 'Loading approval request…',
+    'extension.approval.interrupted':
+        'This approval was interrupted. Return to the site and try again.',
     'extension.approval.unsupported': 'Unsupported approval request type.',
+    'extension.popup.checkingPage': 'Checking page availability…',
+    'extension.popup.unsupportedPage': "XChain Wallet can't connect to this page.",
+    'extension.popup.unsupportedPageHint': 'Open a regular website to use the wallet.',
     'extension.approval.reject': 'Reject',
     'extension.approval.requestingSite': 'Requesting site',
 

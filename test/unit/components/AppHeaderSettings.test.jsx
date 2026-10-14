@@ -568,7 +568,7 @@ describe('HeaderSettingsButton section gating', () => {
 
         fireEvent.click(gear());
         const select = screen.getByLabelText('Active network in header');
-        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
+        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet']);
         fireEvent.change(select, { target: { value: 'testnet' } });
         const dialog = screen.getByRole('dialog', { name: 'Switch to Testnet?' });
         fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));

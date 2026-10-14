@@ -32,6 +32,7 @@ import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { latestEffectiveStakingRow } from '../../flows/stakingDashboard.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -89,6 +90,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [prefillError, setPrefillError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -114,7 +116,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your staking addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -128,6 +130,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         const addr = (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId);
         if (!addr) return;
         let cancelled = false;
+        setPrefillError(null);
         Promise.all([
             messaging.getDelegationsForAddress({ chainId, address: addr.address }),
             typeof messaging.getIndexerWatermark === 'function'
@@ -143,7 +146,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     setPubkey(pk.toLowerCase());
                 }
             })
-            .catch(() => { /* user will paste manually */ });
+            .catch((err) => {
+                if (!cancelled) setPrefillError(
+                    `${readFailureMessage(err, 'load the current delegation')} Enter the signing public key manually.`,
+                );
+            });
         return () => { cancelled = true; };
     }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging]);
 
@@ -248,6 +255,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRateValid = feePick.mode !== 'custom'
+        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     const actionParams = useMemo(() => {
         const pk = pubkey.trim().toLowerCase();
@@ -271,8 +280,18 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             return;
         }
         const pk = pubkey.trim();
+        if (!pk) {
+            setFormError(isDelegate
+                ? 'Enter the new signing public key.'
+                : 'Enter the signing public key to revoke.');
+            return;
+        }
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
             setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
+            return;
+        }
+        if (!customFeeRateValid) {
+            setFormError('Enter a custom network fee rate greater than zero.');
             return;
         }
         setFormError(null);
@@ -533,15 +552,15 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         <FormPage
             label={verb}
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || prefillError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError || prefillError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !pubkey.trim() || actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing}
                 >
                     {singleEncode ? verb : 'Preview'}
                 </Button>
@@ -575,7 +594,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     ? '64-character hex-encoded Ed25519 public key. Replaces any currently-active delegation for this address.'
                     : '64-character hex-encoded Ed25519 public key. Pre-filled with your most recent active delegation; change it to revoke a specific older key.'}
                 value={pubkey}
-                onChange={(e) => setPubkey(e.target.value)}
+                onChange={(e) => {
+                    setPubkey(e.target.value);
+                    setFormError(null);
+                    setPrefillError(null);
+                }}
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"

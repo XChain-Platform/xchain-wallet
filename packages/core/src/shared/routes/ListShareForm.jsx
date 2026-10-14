@@ -39,6 +39,7 @@ import { currentListMemberCount, findListOwner } from '../../flows/listMembershi
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -88,6 +89,7 @@ export function ListShareForm(props) {
 function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const chainId = listRef.chainId;
     const listActionIndex = String(listRef.actionIndex);
+    const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
@@ -150,7 +152,10 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             setSharedRows(rowsFromSharedLists(shared));
             setOwner(nextOwner);
         }).catch((err) => {
-            if (!cancelled) setLoadError(err?.message || `Failed to load list #${listActionIndex}.`);
+            if (!cancelled) setLoadError(
+                explorerReadFailure(err, `load list #${listActionIndex}`)?.message
+                || `Couldn't load list #${listActionIndex}. Try again.`,
+            );
         });
         return () => { cancelled = true; };
     }, [chainId, listActionIndex, messaging]);
@@ -215,6 +220,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     });
 
     function validate() {
+        if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
         if (!eligibility.ok) { setFormError(eligibility.reasons[0].text); return false; }
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }

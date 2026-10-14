@@ -13,6 +13,7 @@ import {
     normalizePsbtInput,
     PsbtSignForm,
     psbtInputError,
+    psbtReviewError,
 } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { encodeBbqrPsbtFrames } from '../../../packages/core/src/uri/bbqrPsbt.js';
 
@@ -32,6 +33,8 @@ const BTC = 'bitcoin-regtest';
 const LTC = 'litecoin-testnet';
 const PSBT_HEX = '70736274ff01020304';
 const PSBT_BASE64 = 'cHNidP8BAgME';
+// A bitcoinjs-serialized PSBT with one finalScriptWitness input field.
+const FINALIZED_PSBT_HEX = '70736274ff010052020000000101010101010101010101010101010101010101010101010101010101010101010000000000ffffffff0184030000000000001600142222222222222222222222222222222222222222000000000001011fe803000000000000160014111111111111111111111111111111111111111101080201000000';
 
 const ADDRESSES = Object.freeze({
     [BTC]: [{
@@ -61,6 +64,7 @@ function messagingFor(overrides = {}) {
             action: null,
             actionDecodeReason: 'NO_OP_RETURN',
         }),
+        signPsbtUserInitiated: vi.fn().mockResolvedValue({ signedPsbtHex: PSBT_HEX }),
         ...overrides,
     };
     return new Proxy(target, {
@@ -69,6 +73,18 @@ function messagingFor(overrides = {}) {
             return vi.fn().mockResolvedValue({});
         },
     });
+}
+
+function decomposedFor(address) {
+    return {
+        inputs: [{
+            address,
+            value: 1_000,
+            prevTxHash: '00'.repeat(32),
+            prevTxIndex: 0,
+        }],
+        outputs: [{ address: 'bc1qrecipient', value: 900 }],
+    };
 }
 
 function mount(messaging = messagingFor()) {
@@ -109,7 +125,130 @@ describe('PSBT text and file input', () => {
     });
 });
 
+describe('PSBT review validation', () => {
+    const valid = {
+        inputs: [{ address: 'input-address', value: 100 }],
+        outputs: [{ address: 'output-address', value: 90 }],
+    };
+
+    it.each([
+        [{ inputs: [], outputs: valid.outputs }, /no inputs/i],
+        [{ inputs: valid.inputs, outputs: [] }, /no outputs/i],
+        [{ ...valid, inputs: [{ address: 'input-address', value: 0 }] }, /greater than zero/i],
+        [{ ...valid, inputs: [{ address: 'input-address', value: -1 }] }, /invalid amount/i],
+        [{ ...valid, outputs: [{ address: 'output-address', value: '1.5' }] }, /invalid amount/i],
+        [{ ...valid, outputs: [{ address: 'output-address', value: 101 }] }, /more than its inputs/i],
+        [{ ...valid, outputs: [{ address: '', value: 90 }] }, /invalid address/i],
+    ])('rejects malformed parser output before review', (decomposed, message) => {
+        expect(psbtReviewError(decomposed)).toMatch(message);
+    });
+
+    it('allows a zero-value data output while still verifying the exact fee', () => {
+        expect(psbtReviewError({
+            inputs: [{ address: 'input-address', value: 100 }],
+            outputs: [
+                { address: 'output-address', value: 90 },
+                { address: null, value: 0 },
+            ],
+        })).toBeNull();
+    });
+
+    it('shows a plain parser-output error and keeps signing disabled', async () => {
+        mount(messagingFor({
+            parsePsbtRequest: vi.fn().mockResolvedValue({
+                decomposed: {
+                    inputs: [{ address: ADDRESSES[BTC][0].address, value: 100 }],
+                    outputs: [{ address: 'recipient', value: 101 }],
+                },
+                action: null,
+                actionDecodeReason: 'NO_OP_RETURN',
+            }),
+        }));
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+            target: { value: PSBT_HEX },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This transaction spends more than its inputs contain.',
+        );
+        expect(screen.getByRole('button', { name: 'Sign transaction' })).toBeDisabled();
+    });
+});
+
 describe('PSBT form input controls', () => {
+    it.each([
+        [`${PSBT_HEX}0`, /complete byte pairs/i],
+        ['cHNidP8!', /base64 is incomplete or malformed/i],
+    ])('shows one plain error for malformed pasted input %s and never signs', async (value, copy) => {
+        const messaging = mount();
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+
+        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value } });
+
+        const alerts = screen.getAllByRole('alert');
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0].textContent).toMatch(copy);
+        expect(messaging.parsePsbtRequest).not.toHaveBeenCalled();
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [`${PSBT_HEX}0`, /complete byte pairs/i],
+        ['cHNidP8!', /base64 is incomplete or malformed/i],
+    ])('shows one plain error for malformed PSBT-like QR input %s and never signs', async (value, copy) => {
+        const messaging = mount();
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        fireEvent.click(screen.getByRole('button', { name: 'Scan transaction' }));
+        globalThis.__PSBT_SCAN_FRAME__ = value;
+
+        fireEvent.click(screen.getByTestId('fake-psbt-scan'));
+
+        const alerts = screen.getAllByRole('alert');
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0].textContent).toMatch(copy);
+        expect(messaging.parsePsbtRequest).not.toHaveBeenCalled();
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [`${PSBT_HEX}0`, 'bad-hex.psbt'],
+        ['cHNidP8!', 'bad-base64.psbt'],
+    ])('shows one plain error for malformed transaction file %s and never signs', async (value, name) => {
+        const messaging = mount();
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        const input = screen.getByLabelText(/Unsigned transaction/);
+
+        fireEvent.drop(input, {
+            dataTransfer: {
+                files: [new File([value], name, { type: 'application/octet-stream' })],
+            },
+        });
+        await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(1));
+        expect(screen.getByRole('alert').textContent).toMatch(/does not contain a valid PSBT/i);
+        expect(messaging.parsePsbtRequest).not.toHaveBeenCalled();
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized transaction file before reading or signing it', async () => {
+        const messaging = mount();
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        const input = screen.getByLabelText(/Unsigned transaction/);
+        fireEvent.change(input, { target: { value: PSBT_HEX } });
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/this transaction has no inputs/i));
+
+        fireEvent.drop(input, {
+            dataTransfer: {
+                files: [new File([new Uint8Array((2 * 1024 * 1024) + 1)], 'huge.psbt', {
+                    type: 'application/octet-stream',
+                })],
+            },
+        });
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/file is too large/i));
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
     it('lets the user change the chain and parses the paste for that chain', async () => {
         const messaging = mount();
         const picker = await screen.findByRole('button', { name: /Chain: Bitcoin/ });
@@ -124,6 +263,65 @@ describe('PSBT form input controls', () => {
             psbtHex: PSBT_HEX,
         }));
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
+    it('rejects a PSBT parsed on another network when this wallet owns no inputs', async () => {
+        const messaging = mount(messagingFor({
+            parsePsbtRequest: vi.fn().mockResolvedValue({
+                decomposed: decomposedFor(ADDRESSES[BTC][0].address),
+                action: null,
+                actionDecodeReason: 'NO_OP_RETURN',
+            }),
+        }));
+        const picker = await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        fireEvent.click(picker);
+        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+            target: { value: PSBT_HEX },
+        });
+
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no inputs this wallet can sign/i));
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(true);
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
+    it('rejects a PSBT with no wallet-owned inputs with one message', async () => {
+        const messaging = mount(messagingFor({
+            parsePsbtRequest: vi.fn().mockResolvedValue({
+                decomposed: decomposedFor('bc1qsomeoneelse'),
+                action: null,
+                actionDecodeReason: 'NO_OP_RETURN',
+            }),
+        }));
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+            target: { value: PSBT_HEX },
+        });
+
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no inputs this wallet can sign/i));
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(true);
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
+    it('rejects an already finalized PSBT with one message', async () => {
+        const messaging = mount(messagingFor({
+            parsePsbtRequest: vi.fn().mockResolvedValue({
+                decomposed: decomposedFor(ADDRESSES[BTC][0].address),
+                action: null,
+                actionDecodeReason: 'NO_OP_RETURN',
+            }),
+        }));
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+            target: { value: FINALIZED_PSBT_HEX },
+        });
+
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/already finalized/i));
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(true);
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 
     it('counts unique BBQr frames and closes the scanner after assembly', async () => {

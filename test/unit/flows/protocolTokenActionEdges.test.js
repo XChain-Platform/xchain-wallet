@@ -64,6 +64,51 @@ describe('protocol token action input edges', () => {
         expect(submitAction).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['zero dividend amount', dividendAction,
+            { TICK: 'SHARES', DIVIDEND_TICK: 'UNIT', AMOUNT: '0' },
+            'dividendAction: params.AMOUNT must be a positive decimal'],
+        ['negative dividend amount', dividendAction,
+            { TICK: 'SHARES', DIVIDEND_TICK: 'UNIT', AMOUNT: '-1' },
+            'dividendAction: params.AMOUNT must be a positive decimal'],
+        ['malformed dividend amount', dividendAction,
+            { TICK: 'SHARES', DIVIDEND_TICK: 'UNIT', AMOUNT: '.' },
+            'dividendAction: params.AMOUNT must be a positive decimal'],
+        ['malformed dividend token id', dividendAction,
+            { TICK: 'SHARES', DIVIDEND_TICK: '^0', AMOUNT: '1' },
+            "dividendAction: Dividend ticker can be a name, or ^ followed by the token's number (^123)."],
+        ['malformed dividend holder id', dividendAction,
+            { TICK: '^0', DIVIDEND_TICK: 'UNIT', AMOUNT: '1' },
+            "dividendAction: Holder-of ticker can be a name, or ^ followed by the token's number (^123)."],
+        ['invalid dividend memo', dividendAction,
+            { TICK: 'SHARES', DIVIDEND_TICK: 'UNIT', AMOUNT: '1', MEMO: 'bad|memo' },
+            'dividendAction: params.MEMO cannot contain | or ; characters'],
+        ['zero airdrop amount', airdropAction,
+            { TICK: 'UNIT', AMOUNT: '0', LIST_ACTION_INDEX: '9' },
+            'airdropAction: params.AMOUNT must be a positive decimal'],
+        ['negative airdrop amount', airdropAction,
+            { TICK: 'UNIT', AMOUNT: '-1', LIST_ACTION_INDEX: '9' },
+            'airdropAction: params.AMOUNT must be a positive decimal'],
+        ['malformed airdrop amount', airdropAction,
+            { TICK: 'UNIT', AMOUNT: '.', LIST_ACTION_INDEX: '9' },
+            'airdropAction: params.AMOUNT must be a positive decimal'],
+        ['malformed airdrop list id', airdropAction,
+            { TICK: 'UNIT', AMOUNT: '1', LIST_ACTION_INDEX: '9x' },
+            'airdropAction: params.LIST_ACTION_INDEX must be a positive integer'],
+        ['zero airdrop list id', airdropAction,
+            { TICK: 'UNIT', AMOUNT: '1', LIST_ACTION_INDEX: '0' },
+            'airdropAction: params.LIST_ACTION_INDEX must be a positive integer'],
+        ['malformed airdrop token id', airdropAction,
+            { TICK: '^0', AMOUNT: '1', LIST_ACTION_INDEX: '9' },
+            "airdropAction: Token ticker can be a name, or ^ followed by the token's number (^123)."],
+        ['invalid airdrop memo', airdropAction,
+            { TICK: 'UNIT', AMOUNT: '1', LIST_ACTION_INDEX: '9', MEMO: 'bad;memo' },
+            'airdropAction: params.MEMO cannot contain | or ; characters'],
+    ])('rejects %s before the encoder', async (_name, action, params, message) => {
+        await expect(action(opts(params))).rejects.toThrow(message);
+        expect(submitAction).not.toHaveBeenCalled();
+    });
+
     it('describes an ISSUE configuration without a maximum supply or transfer', async () => {
         const params = { TICK: 'UNIT', MAX_SUPPLY: '' };
         await issueToken(opts(params));

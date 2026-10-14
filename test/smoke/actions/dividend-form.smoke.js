@@ -120,8 +120,10 @@ assert.ok(
 assert.ok(/Holder-of token is required/.test(src), 'validation: empty TICK');
 assert.ok(/Dividend ticker is required/.test(src), 'validation: empty DIVIDEND_TICK');
 assert.ok(
-    /Per-unit amount must be a positive number/.test(src),
-    'validation: zero amount',
+    /Per-unit amount is required/.test(src)
+        && /Per-unit amount must be greater than zero/.test(src)
+        && /Per-unit amount must be a positive decimal number/.test(src),
+    'validation: empty, zero/negative, and malformed amount',
 );
 // Both ticker fields go through the shared reference grammar (the chain's full
 // TICK_CHARACTERS plus the ^ID form), not a local A-Z regex.

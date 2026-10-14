@@ -24,7 +24,7 @@
 // shell does; the extension popup and desktop app do not, because a menu of
 // websites is not what a user opens their wallet extension to find.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../ui/index.js';
 import LINKS from '../platform-links.json';
 import styles from './PlatformSwitcher.module.css';
@@ -46,9 +46,6 @@ export function PlatformSwitcher({ current }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
-    // The system Back gesture and Escape close this before it leaves the
-    // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
     const menuRef = useRef(null);
     const initialFocusRef = useRef('first');
 
@@ -57,10 +54,13 @@ export function PlatformSwitcher({ current }) {
         setOpen(true);
     };
 
-    const closeMenu = (restoreFocus = false) => {
+    const closeMenu = useCallback((restoreFocus = false) => {
         setOpen(false);
         if (restoreFocus) triggerRef.current?.focus();
-    };
+    }, []);
+    // The system Back gesture and Escape close this before it leaves the
+    // screen; the shared stack consumes Escape, so focus goes back here.
+    useBackHandler(open ? () => closeMenu(true) : undefined);
 
     // Same dismissal contract as the header's other dropdowns: outside click
     // or Escape.
@@ -68,21 +68,11 @@ export function PlatformSwitcher({ current }) {
         if (!open) return undefined;
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
-            setOpen(false);
-            triggerRef.current?.focus();
+            closeMenu(true);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
+        return () => window.removeEventListener('mousedown', onClick);
+    }, [closeMenu, open]);
 
     useEffect(() => {
         if (!open) return;
@@ -161,7 +151,7 @@ export function PlatformSwitcher({ current }) {
                             target="_blank"
                             rel="noopener noreferrer"
                             tabIndex={-1}
-                            onClick={() => closeMenu()}
+                            onClick={() => closeMenu(true)}
                         >
                             <span>{p.label}</span>
                             <span className={styles.itemIcon} aria-hidden="true">

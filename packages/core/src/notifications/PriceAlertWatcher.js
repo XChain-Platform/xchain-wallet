@@ -25,6 +25,7 @@
 //   1. settings.privacy.priceDataEnabled !== false  (the telemetry opt-out)
 //   2. settings.notifications.priceAlerts            (the feature toggle)
 //   3. at least one armed alert exists               (nothing to watch)
+//   4. the alert belongs to the active network        (the network filter)
 // With no armed alerts it never touches the network; an idle user with the
 // toggle on but no alerts set leaks nothing.
 
@@ -35,11 +36,19 @@ import { taggedLogger } from './taggedLogger.js';
 // in-memory cache rather than issuing a fresh CoinGecko request.
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const FIRED_CAP = 500;
+const MAX_PRICE_AGE_MS = 5 * 60 * 1000;
+const NETWORK_NAMES = new Set(['mainnet', 'testnet', 'regtest']);
+
+function isOnActiveNetwork(chainId, activeNetwork) {
+    if (!activeNetwork || typeof chainId !== 'string') return true;
+    const network = chainId.split('-').pop();
+    return !NETWORK_NAMES.has(network) || network === activeNetwork;
+}
 
 export class PriceAlertWatcher {
     /**
      * @param {Object} deps
-     * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
+     * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null, fetchedAt?: number }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
      *   the price source (typically a priceOracle.getNativePrices wrapper)
      * @param {() => Promise<import('../schemas/priceAlert.js').PriceAlert[]>} deps.listArmedAlerts
      *   the user's alerts; the watcher filters to status === 'armed'
@@ -141,7 +150,7 @@ export class PriceAlertWatcher {
             const featureOn = Boolean(settings && settings.notifications && settings.notifications.priceAlerts);
             if (!privacyOk || !featureOn) return;
 
-            // Gate 3: nothing armed → no network.
+            // Gates 3 + 4: nothing armed on the active network → no request.
             let armed;
             try {
                 armed = (await this._listArmedAlerts()) || [];
@@ -158,6 +167,7 @@ export class PriceAlertWatcher {
                 this._fired.delete(id);
                 this._firedDirty = true;
             }
+            armed = armed.filter((a) => isOnActiveNetwork(a.chainId, settings?.activeNetwork));
             for (const alert of armed) {
                 if (!this._pendingTriggered.has(alert.id)) continue;
                 if (await this._persistTriggered(alert.id)) {
@@ -187,11 +197,11 @@ export class PriceAlertWatcher {
                     this._log.error('PriceAlertWatcher: getNativePrices failed', e);
                     continue;
                 }
-                if (!result || result.disabled || !result.prices) continue;
+                if (!result || result.disabled || result.error || !result.prices) continue;
 
                 for (const alert of alerts) {
                     const entry = result.prices[alert.chainId];
-                    const price = entry && typeof entry.priceFiat === 'number' && Number.isFinite(entry.priceFiat)
+                    const price = this._isFreshPrice(entry)
                         ? entry.priceFiat
                         : null;
                     if (price == null) continue; // no price data for this chain (testnet/regtest/unmapped)
@@ -209,6 +219,14 @@ export class PriceAlertWatcher {
         if (alert.direction === 'above') return price >= alert.targetFiat;
         if (alert.direction === 'below') return price <= alert.targetFiat;
         return false;
+    }
+
+    _isFreshPrice(entry) {
+        if (!entry || typeof entry.priceFiat !== 'number' || !Number.isFinite(entry.priceFiat)) return false;
+        if (entry.fetchedAt === undefined) return true;
+        if (typeof entry.fetchedAt !== 'number' || !Number.isFinite(entry.fetchedAt)) return false;
+        const ageMs = this._now() - entry.fetchedAt;
+        return ageMs >= 0 && ageMs <= MAX_PRICE_AGE_MS;
     }
 
     /**

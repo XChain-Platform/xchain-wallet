@@ -35,7 +35,12 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import styles from './IssueTokenForm.module.css';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 
@@ -117,12 +122,13 @@ export function SignMessageForm({ walletId, onBack }) {
         ])
             .then(([byChain, active, chainSettings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (Object.keys(byChain || {}).length === 0) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before signing.',
-                    );
+                if (Object.keys(signingByChain).length === 0) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any chain yet. Use Receive to generate one before signing.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
@@ -130,7 +136,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 // forever. Open on the last-used chain instead, ahead of the
                 // first-key fallback, exactly as Send does. A restored draft
                 // (restoreDraft) still overrides this afterward.
-                setChainId((prev) => pickDefaultChainId(byChain, {
+                setChainId((prev) => pickDefaultChainId(signingByChain, {
                     explicitChainId: prev,
                     settings: chainSettings,
                 }));

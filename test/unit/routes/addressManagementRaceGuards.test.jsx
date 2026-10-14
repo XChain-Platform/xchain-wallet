@@ -10,6 +10,7 @@ import { ToastHost } from '../../../packages/core/src/shared/components/ToastHos
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { AddAddressModal } from '../../../packages/core/src/shared/routes/AddAddressModal.jsx';
 import { AddressList } from '../../../packages/core/src/shared/routes/AddressList.jsx';
+import { makeHost, byChain } from '../background/_addressesByChainFixture.js';
 
 const CHAIN = 'bitcoin-regtest';
 const ACCOUNT = { id: 'account-1', index: 0, walletId: 'wallet-1' };
@@ -54,6 +55,42 @@ afterEach(() => {
 });
 
 describe('address management async guards', () => {
+    it('clears old addresses immediately and ignores their late response after a wallet switch', async () => {
+        const nextAddresses = deferred();
+        const oldLate = deferred();
+        const messaging = addressMessaging({
+            getAddressesByChain: vi.fn((walletId) => {
+                if (walletId === 'wallet-1') return Promise.resolve({
+                    [CHAIN]: [{ id: 'old-address', address: FIRST, source: 'hd', role: 'receive' }],
+                });
+                return nextAddresses.promise;
+            }),
+            getWalletBalances: vi.fn((walletId) => (
+                walletId === 'wallet-1' ? oldLate.promise : Promise.resolve({})
+            )),
+        });
+        const tree = (walletId) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <AddressList walletId={walletId} accountId={ACCOUNT.id} onBack={() => {}} />
+                </ToastHost>
+            </MessagingProvider>
+        );
+        const view = render(tree('wallet-1'));
+        expect(await screen.findByText(FIRST)).toBeInTheDocument();
+
+        view.rerender(tree('wallet-2'));
+
+        expect(screen.queryByText(FIRST)).toBeNull();
+        expect(screen.getByRole('status', { name: 'Loading addresses' })).toBeInTheDocument();
+        await act(async () => oldLate.resolve({
+            [CHAIN]: [{ address: FIRST, balances: { native: { tick: 'BTC', quantity: '1' } } }],
+        }));
+        expect(screen.queryByText(FIRST)).toBeNull();
+        await act(async () => nextAddresses.resolve({}));
+        expect(await screen.findByText('No addresses yet')).toBeInTheDocument();
+    });
+
     it('keeps a completed label save attached to its original address', async () => {
         const save = deferred();
         const messaging = addressMessaging({ setAddressLabel: vi.fn(() => save.promise) });
@@ -73,11 +110,29 @@ describe('address management async guards', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: `View address ${SECOND}` }));
 
-        await act(async () => save.resolve({ ok: true }));
+        await act(async () => save.resolve({ ok: true, label: 'Renamed first' }));
 
         expect(messaging.setAddressLabel).toHaveBeenCalledWith('address-1', 'Renamed first');
         expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('Second');
         expect(screen.getByText(SECOND)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(screen.getByRole('button', { name: `View address ${FIRST}` }))
+            .toHaveTextContent('Renamed first');
+    });
+
+    it('restores the generated label when a persisted label is cleared', async () => {
+        const host = makeHost();
+
+        const response = await host.handle({
+            type: 'addresses.setLabel',
+            request: { id: 'addr-hd', label: '   ' },
+        });
+
+        expect(response).toMatchObject({ ok: true, result: { ok: true, label: 'BTC Address #1' } });
+        const records = await byChain(host, { walletId: 'w1' });
+        expect(records[CHAIN].find((record) => record.id === 'addr-hd')?.label)
+            .toBe('BTC Address #1');
     });
 
     it('keeps row identity and multisig matching scoped to a chain', async () => {

@@ -191,6 +191,22 @@ describe('MultisigCosignerShare key details', () => {
         );
     });
 
+    it('rejects keys returned for an address other than the selected address', async () => {
+        messaging.getMultisigCosignerInfo.mockResolvedValue({
+            ...INFO,
+            addressId: 'address-2',
+            address: 'bc1qwrongaddress',
+        });
+        mount({ networkKind: 'mainnet' });
+        selectAddress('address-1');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'The wallet returned cosigner keys for a different address.',
+        );
+        expect(screen.queryByLabelText('Cosigner share payload')).toBeNull();
+        expectNoValues();
+    });
+
     it('loads and displays every returned value for the chosen address', async () => {
         mount();
         selectAddress('address-2');

@@ -56,6 +56,7 @@ export function NetworkFilter({
         setQuery('');
         if (restoreFocus) triggerRef.current?.querySelector('button')?.focus();
     }, []);
+    useBackHandler(open ? () => closeFilter(true) : undefined);
 
     useBackHandler(open ? () => closeFilter(true) : undefined);
 
@@ -64,19 +65,10 @@ export function NetworkFilter({
         const onClick = (e) => {
             if (triggerRef.current?.contains(e.target)) return;
             if (popoverRef.current?.contains(e.target)) return;
-            closeFilter();
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
             closeFilter(true);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
+        return () => window.removeEventListener('mousedown', onClick);
     }, [closeFilter, open]);
 
     const entries = useMemo(() => {

@@ -98,9 +98,9 @@ export function useLastView({
             lastPersistedFor.current = walletId;
             return;
         }
-        // An unsafe route resolves to Home instead of leaving an older safe
-        // route behind for the next unlock.
-        writeLastView(walletId, resumableView ? currentView : 'home', normalizedParams);
+        // Unsafe transaction routes leave a one-shot Home note while every
+        // other unsafe route simply clears the older resumable destination.
+        writeLastView(walletId, currentView, normalizedParams, { markInterrupted: true });
     }, [walletId, currentView, routeKey, sessionActive]);
 
     // Session history stores the same validated route payload as reload

@@ -149,16 +149,19 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(screen.getByRole('button', { name: /^Select Dogecoin\b/ })).toBeInTheDocument();
     });
 
-    it('filters by display name and reports an empty search result', async () => {
+    it('searches ticker, name, and chain-scoped asset id case-insensitively', async () => {
         mount();
         const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
         await screen.findByText(LONG_NAME);
 
-        fireEvent.change(search, { target: { value: 'wrp123' } });
+        fireEvent.change(search, { target: { value: 'WrP123' } });
         expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
         expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
 
-        fireEvent.change(search, { target: { value: 'wrap cleanly' } });
+        fireEvent.change(search, { target: { value: 'WrAp ClEaNlY' } });
+        await waitFor(() => expect(screen.getByText(LONG_NAME)).toBeInTheDocument());
+
+        fireEvent.change(search, { target: { value: 'BiTcOiN-MaInNeT:wRp123' } });
         await waitFor(() => expect(screen.getByText(LONG_NAME)).toBeInTheDocument());
 
         fireEvent.change(search, { target: { value: 'missing asset' } });
@@ -170,6 +173,41 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(search).toHaveValue('');
         expect(screen.queryByRole('button', { name: 'Clear token search' })).toBeNull();
         expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
+    });
+
+    it('sorts held assets before zero-balance assets for Receive', async () => {
+        mount({ purpose: 'receive' });
+
+        await screen.findByText('Zero Bitcoin token');
+        expect(screen.getAllByRole('listitem').map((item) => item.dataset.balanceKey))
+            .toEqual([
+                'bitcoin-mainnet:BTC',
+                'bitcoin-mainnet:WRP123',
+                'litecoin-mainnet:LTC',
+                'bitcoin-mainnet:ZERO',
+                'litecoin-mainnet:LZERO',
+                'dogecoin-mainnet:DOGE',
+            ]);
+    });
+
+    it('collapses zero balances when the small-balance setting is enabled', async () => {
+        mount({
+            purpose: 'receive',
+            messaging: makeMessaging({
+                getSettings: vi.fn().mockResolvedValue({
+                    privacy: { hideSmallBalances: true },
+                    smallBalanceThreshold: 'dust',
+                }),
+            }),
+        });
+
+        expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
+        expect(screen.queryByText('Zero Bitcoin token')).toBeNull();
+        expect(screen.queryByText('Zero Litecoin token')).toBeNull();
+        const toggle = await screen.findByRole('button', { name: 'Show 4 small balances' });
+        fireEvent.click(toggle);
+        expect(screen.getByText('Zero Bitcoin token')).toBeInTheDocument();
+        expect(screen.getByText('Zero Litecoin token')).toBeInTheDocument();
     });
 
     it('keeps long names on one line and ellipsizes them', () => {

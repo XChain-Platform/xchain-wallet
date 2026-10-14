@@ -36,7 +36,7 @@ describe('RelativeTime', () => {
         vi.spyOn(Date.prototype, 'toLocaleString').mockReturnValue('Jan 15, 2026, 3:58 AM PST');
 
         render(<RelativeTime timestamp={NOW.getTime() - 2 * 60_000} />);
-        const time = screen.getByText('2 min ago');
+        const time = screen.getByText('2 minutes ago');
 
         expect(time).toHaveAttribute('title', 'Jan 15, 2026, 3:58 AM PST');
         expect(time).toHaveAttribute('dateTime', '2026-01-15T11:58:00.000Z');
@@ -54,12 +54,12 @@ describe('RelativeTime', () => {
             .mockReturnValue('Jan 15, 2026, 3:57 AM PST');
 
         const { rerender } = render(<RelativeTime timestamp={NOW.getTime() - 2 * 60_000} />);
-        fireEvent.pointerDown(screen.getByText('2 min ago'), { pointerType: 'touch' });
+        fireEvent.pointerDown(screen.getByText('2 minutes ago'), { pointerType: 'touch' });
 
         rerender(<RelativeTime timestamp={NOW.getTime() - 3 * 60_000} />);
         act(() => vi.advanceTimersByTime(500));
 
-        expect(screen.getByText('3 min ago')).toBeTruthy();
+        expect(screen.getByText('3 minutes ago')).toBeTruthy();
         expect(screen.queryByText('Jan 15, 2026, 3:57 AM PST')).toBeNull();
     });
 });

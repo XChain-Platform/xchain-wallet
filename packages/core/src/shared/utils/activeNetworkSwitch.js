@@ -40,15 +40,21 @@ export function activeNetworkLabel(value) {
 }
 
 /**
- * Keep Regtest developer-only while always offering an exit from it.
+ * Keep non-Mainnet choices developer-only while preserving a recovery path
+ * for an older persisted Regtest selection.
  *
  * @param {{ developerMode?: boolean, current?: unknown }} opts
  */
 export function activeNetworkOptions({ developerMode = false, current } = {}) {
-    const showRegtest = developerMode || normalizeActiveNetwork(current) === 'regtest';
-    return showRegtest
-        ? ACTIVE_NETWORK_OPTIONS
-        : ACTIVE_NETWORK_OPTIONS.filter((option) => option.value !== 'regtest');
+    if (developerMode || normalizeActiveNetwork(current) === 'regtest') {
+        return ACTIVE_NETWORK_OPTIONS;
+    }
+    // Callers without a loaded network retain the loading-time list. Once
+    // settings resolve, Developer Mode controls every non-Mainnet choice.
+    if (current === undefined || !NETWORKS.includes(current)) {
+        return ACTIVE_NETWORK_OPTIONS.filter((option) => option.value !== 'regtest');
+    }
+    return ACTIVE_NETWORK_OPTIONS.filter((option) => option.value === 'mainnet');
 }
 
 /**

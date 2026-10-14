@@ -33,6 +33,9 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -249,7 +252,21 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         event.preventDefault();
         if (!fromAddress) { setFormError('No source address available.'); return; }
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
+        const tickError = tickerReferenceError(tick, { noun: 'Governance token' });
+        if (tickError) { setFormError(tickError); return; }
         if (!isClear && !delegateTo.trim()) { setFormError('Delegate-to address is required.'); return; }
+        if (!isClear && (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
+            delegateTo.trim(), descriptor.coin, descriptor.networkKind,
+        ))) {
+            setFormError(`Delegate-to address is not valid for ${descriptor?.displayName || chainId}.`);
+            return;
+        }
+        if (!isClear && delegateTo.trim().toLowerCase() === fromAddress.address.toLowerCase()) {
+            setFormError('Delegate-to address must be different from the source address.');
+            return;
+        }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         setFormError(null);
         if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
@@ -368,14 +385,17 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode ? `Create unsigned transaction: ${verb.toLowerCase()}` : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()}` : verb}
-                    </Button>
+                    <>
+                        <Button type="button" variant="ghost" onClick={() => { setSubmitError(null); setStage('form'); }} disabled={stage === 'submitting'}>Back</Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode ? `Create unsigned transaction: ${verb.toLowerCase()}` : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()}` : verb}
+                        </Button>
+                    </>
                 )}
             >
                 <dl className={styles.detailsList}>
@@ -395,6 +415,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                             <dd className={styles.detailsValue}><AddressText address={delegateTo} /></dd>
                         </>
                     ) : null}
+                    {memo.trim() ? (<><dt className={styles.detailsLabel}>Memo</dt><dd className={styles.detailsValue}>{memo.trim()}</dd></>) : null}
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -542,6 +563,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
 
             <Input
                 label="Memo (optional)"
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"

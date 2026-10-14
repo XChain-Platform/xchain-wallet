@@ -17,7 +17,8 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { addressValidationError } from '../utils/addressValidation.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -27,12 +28,18 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import {
@@ -57,10 +64,11 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
-const isPlainPositive = (value) => {
-    const text = String(value).trim();
-    return /^\d+(\.\d+)?$/.test(text) && /[1-9]/.test(text);
-};
+const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
+    && compareDecimalStrings(String(value).trim(), '0') === 1;
+
+const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
+    && /[1-9]/.test(String(value));
 
 function withFormattedExpiration(confirmAction) {
     const decoded = confirmAction?.composed?.decoded;
@@ -112,6 +120,7 @@ function withFormattedExpiration(confirmAction) {
  */
 export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, initialGiveOwnership }) {
     const { messaging, shell } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -178,16 +187,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain, settings);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (!Object.keys(byChain)[0]) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before creating a swap.',
-                    );
+                if (!Object.keys(signingByChain)[0]) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any chain yet. Use Receive to generate one before creating a swap.');
                     return;
                 }
                 // Don't clobber a caller-seeded chain (ManageToken sell flow).
-                setChainId((c) => pickDefaultChainId(byChain, { explicitChainId: c, settings }));
+                setChainId((c) => pickDefaultChainId(signingByChain, { explicitChainId: c, settings }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -245,7 +255,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     });
 
     const expError = useMemo(() => {
-        if (expMode !== 'custom' || !expInput.trim()) return null;
+        if (expMode !== 'custom') return null;
+        if (!expInput.trim()) return 'Pick an expiration date and time, or switch to the default window.';
         const ms = Date.parse(expInput.trim());
         if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
         if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
@@ -278,6 +289,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 noun: 'Give amount',
             });
             if (precisionError) return precisionError;
+            if (giveBalance !== null && compareDecimalStrings(giveAmount, giveBalance) === 1) {
+                return `Give amount is above your available ${giveTick.trim().toUpperCase()} balance.`;
+            }
         }
         if (!getOwnership && getAmount) {
             const precisionError = tokenAmountPrecisionError(getAmount, {
@@ -287,11 +301,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             });
             if (precisionError) return precisionError;
         }
-        if (getAddress.includes('|') || getAddress.includes(';')) return 'Receive address is invalid.';
+        if (getAddress.trim()) {
+            const addressError = addressValidationError(getAddress, descriptor);
+            if (addressError) return addressError;
+        }
+        if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
+        if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         return null;
     }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,
-        giveTokenInfo?.divisibility, getTokenInfo?.divisibility, getAddress, memo]);
+        giveTokenInfo?.divisibility, getTokenInfo?.divisibility, giveBalance, getAddress,
+        descriptor, allowListIdx, blockListIdx, memo]);
 
     const rate = !giveOwnership && !getOwnership
         ? divideDecimalStrings(getAmount, giveAmount, 8)
@@ -381,6 +401,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        if (!networkAvailable) return;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -433,17 +454,18 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // and are only reachable after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
+        if (!networkAvailable) return;
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError || expError) return;
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
             || (!getOwnership && !getAmount)) {
             setFormError('Enter the give and get tickers and amounts before reviewing.');
             return;
         }
+        if (validationError || expError) return;
         setFormError(null);
         if (singleEncode) {
             if (submitPendingRef.current) return;
@@ -456,6 +478,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     async function handleSubmit(event) {
         event.preventDefault();
+        if (!networkAvailable) return;
         if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
         if (validationError || expError) return;
@@ -540,6 +563,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
+            {!networkAvailable ? (
+                <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
+            ) : null}
             {children}
         </Screen>
     );
@@ -598,11 +624,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // --- Review / submitting screen -------------------------------------
     if (stage === 'review' || stage === 'submitting') {
         const giveSide = giveOwnership
-            ? `ownership of ${giveTick.trim().toUpperCase()}`
-            : `${giveAmount} ${giveTick.trim().toUpperCase()}`;
+            ? `ownership of ${swapParams.GIVE_TICK.toUpperCase()}`
+            : `${swapParams.GIVE_AMOUNT} ${swapParams.GIVE_TICK.toUpperCase()}`;
         const getSide = getOwnership
-            ? `ownership of ${getTick.trim().toUpperCase()}`
-            : `${getAmount} ${getTick.trim().toUpperCase()}`;
+            ? `ownership of ${swapParams.GET_TICK.toUpperCase()}`
+            : `${swapParams.GET_AMOUNT} ${swapParams.GET_TICK.toUpperCase()}`;
         const feeLabel = feeEstimate
             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
             : 'Estimate unavailable';
@@ -667,13 +693,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     />
                     <DetailRow
                         label="Receive at"
-                        value={getAddress.trim()
-                            ? <AddressText address={getAddress.trim()} />
+                        value={swapParams.GET_ADDRESS
+                            ? <AddressText address={swapParams.GET_ADDRESS} />
                             : 'Source address (default)'}
                     />
-                    <DetailRow label="Allow list" value={allowListIdx ? `#${allowListIdx}` : 'None'} />
-                    <DetailRow label="Block list" value={blockListIdx ? `#${blockListIdx}` : 'None'} />
-                    {memo.trim() ? <DetailRow label="Memo" value={memo.trim()} /> : null}
+                    <DetailRow label="Allow list" value={swapParams.ALLOW_LIST ? `#${swapParams.ALLOW_LIST}` : 'None'} />
+                    <DetailRow label="Block list" value={swapParams.BLOCK_LIST ? `#${swapParams.BLOCK_LIST}` : 'None'} />
+                    {swapParams.MEMO ? <DetailRow label="Memo" value={swapParams.MEMO} /> : null}
                     <DetailRow label="Network fee" value={feeLabel} />
                     <DetailRow
                         label="Protocol fee"
@@ -841,7 +867,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || !networkAvailable}
+                    title={!networkAvailable ? 'Swapping needs a network connection' : undefined}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'

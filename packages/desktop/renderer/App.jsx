@@ -575,6 +575,7 @@ function AppInner() {
     useDemoAutoWipe(activeWalletId, refresh);
 
     function clearTransientActionState() {
+        setUnlockedView('home');
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
         setTokenDetailRef(null);
@@ -633,6 +634,7 @@ function AppInner() {
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
+            clearTransientActionState();
             pendingActiveWalletId.current = null;
             walletListRef.current = [];
             setActiveWalletId(null);

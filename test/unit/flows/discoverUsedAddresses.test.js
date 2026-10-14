@@ -189,6 +189,60 @@ it('continues through the gap after a used address, honours account and change, 
     ]);
 });
 
+it('applies the full gap limit independently to every supported address type', async () => {
+    const multiType = {
+        id: 'bitcoin-mainnet',
+        defaultAddressType: 'p2wpkh',
+        addressTypes: ['p2pkh', 'p2wpkh', 'p2tr'],
+    };
+    const probesByType = new Map();
+    const result = await discover({
+        chainRegistry: {
+            supportedChains: () => [multiType],
+            get: () => multiType,
+            derivationPathFor: (_id, type, _account, _change, index) => `${type}/${index}`,
+        },
+        sdkRegistry: {
+            get: () => ({ wallet: { deriveAddress: (key) => key } }),
+        },
+        addressTypes: 'all',
+        gapLimit: 2,
+        isUsedProbe: vi.fn(async (_sdk, address) => {
+            const [type, rawIndex] = address.split('/');
+            const index = Number(rawIndex);
+            probesByType.set(type, (probesByType.get(type) || 0) + 1);
+            return { used: index === 1 };
+        }),
+    });
+
+    expect(result.perChain.map(({ addressType, highestUsedIndex, scannedCount }) => ({
+        addressType,
+        highestUsedIndex,
+        scannedCount,
+    }))).toEqual([
+        { addressType: 'p2pkh', highestUsedIndex: 1, scannedCount: 4 },
+        { addressType: 'p2wpkh', highestUsedIndex: 1, scannedCount: 4 },
+        { addressType: 'p2tr', highestUsedIndex: 1, scannedCount: 4 },
+    ]);
+    expect(Object.fromEntries(probesByType)).toEqual({ p2pkh: 4, p2wpkh: 4, p2tr: 4 });
+});
+
+it('stops at the maximum derivation index when the gap limit cannot be completed', async () => {
+    const maxIndex = 0x7fffffff;
+    const result = await discover({
+        startIndex: maxIndex,
+        gapLimit: 2,
+        isUsedProbe: async () => ({ used: false }),
+    });
+
+    expect(result.perChain[0]).toMatchObject({
+        scannedCount: 1,
+        incomplete: true,
+        error: `derivation index limit ${maxIndex} reached before the gap limit`,
+    });
+    expect(result.perChain[0].addresses.map(({ index }) => index)).toEqual([maxIndex]);
+});
+
 it('records a failed probe as unknown without letting it satisfy the gap', async () => {
     const probe = vi.fn()
         .mockRejectedValueOnce(new Error('explorer unavailable'))

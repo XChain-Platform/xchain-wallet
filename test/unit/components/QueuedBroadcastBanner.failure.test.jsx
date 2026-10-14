@@ -106,6 +106,21 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         expect(toasts).toHaveLength(0);
     });
 
+    it('states the retry delay without exposing the node error', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        broadcastImpl = async () => {
+            const err = named('BroadcastFailedTransientError', 'Encoder RPC error: ETIMEDOUT');
+            err.retryAfterMs = 2_100;
+            throw err;
+        };
+        pressBroadcast();
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toBe(
+            'Sending failed, and the transaction is still queued. Try again in 3 seconds.',
+        );
+        expect(alert.textContent).not.toMatch(/Encoder RPC|ETIMEDOUT/);
+    });
+
     it('drops a row the host refused as no longer queued without telling the user to compose again', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         broadcastImpl = async ({ id }) => {
@@ -182,6 +197,20 @@ describe('QueuedBroadcastBanner actions and announcements', () => {
 
         expect(screen.getByText('Current wallet send')).toBeTruthy();
         expect(screen.queryByText('Old wallet send')).toBeNull();
+    });
+
+    it('hides the previous wallet queue while the next wallet list is pending', async () => {
+        let resolveSecond;
+        listImpl = ({ walletId }) => walletId === 'w1'
+            ? Promise.resolve([entry('old', 'Old wallet send')])
+            : new Promise((resolve) => { resolveSecond = resolve; });
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        expect(await screen.findByText('Old wallet send')).toBeTruthy();
+
+        view.rerender(<QueuedBroadcastBanner walletId="w2" intervalMs={0} />);
+
+        expect(screen.queryByText('Old wallet send')).toBeNull();
+        await act(async () => { resolveSecond([]); });
     });
 
     it('does not refresh or toast after a broadcast finishes following unmount', async () => {

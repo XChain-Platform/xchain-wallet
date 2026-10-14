@@ -77,6 +77,9 @@ export const WALLET_LOCAL_KEYS = Object.freeze([
     'xchain.signThrottle',          // background/signThrottleStorage.js
     'xchain.broadcastQueue',        // background/broadcastQueueStorage.js
     'xchain.logConsole',            // background/logConsoleStorage.js
+    'xchain.governancePolls.seen',  // background.js governance watcher
+    'xchain.deadlines.seen',        // background.js deadline watcher
+    'xchain.dispenserEscrow.seen',  // background.js dispenser watcher
 ]);
 
 /**

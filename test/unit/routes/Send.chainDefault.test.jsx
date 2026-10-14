@@ -105,12 +105,16 @@ describe('Send opens on the last-used chain', () => {
         await waitFor(() => expect(fromField().value).toBe(DOGE_FROM));
     });
 
-    it('a prefilled chain (a token context) wins over the last-used chain', async () => {
-        mount({ settings: { lastUsedChain: { mainnet: DOGE } }, prefill: { chainId: BTC } });
-        await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+    it('a token selected on another chain switches Send from the last-used chain', async () => {
+        mount({
+            settings: { lastUsedChain: { mainnet: DOGE } },
+            prefill: { chainId: LTC, tick: 'LTCASSET' },
+        });
+        await waitFor(() => expect(fromField().value).toBe(LTC_FROM));
+        expect(screen.getByLabelText('Token')).toHaveValue('LTCASSET');
         // And stays: the load must not re-point a prefilled form.
         await new Promise((r) => { setTimeout(r, 50); });
-        expect(fromField().value).toBe(BTC_FROM);
+        expect(fromField().value).toBe(LTC_FROM);
     });
 
     it('falls back to the first chain when the last-used chain has no addresses any more', async () => {

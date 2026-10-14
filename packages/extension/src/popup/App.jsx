@@ -183,6 +183,11 @@ import {
     shellForExtensionView,
 } from './launchState.js';
 import { usePopupPaletteData } from './usePopupPaletteData.js';
+import {
+    activeTabSupportsWallet,
+    isSidePanelView,
+    watchActiveTab,
+} from './activeTabSupport.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -227,6 +232,44 @@ const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
 export function App() {
     const shell = shellForExtensionView();
     const canOpenInTab = isToolbarPopupView();
+    const sidePanel = isSidePanelView();
+    const [activeTabSupport, setActiveTabSupport] = useState(
+        sidePanel ? 'checking' : 'supported',
+    );
+    useEffect(() => {
+        if (!sidePanel) return undefined;
+        let disposed = false;
+        let requestId = 0;
+        const refresh = async () => {
+            const currentRequest = ++requestId;
+            const supported = await activeTabSupportsWallet();
+            if (!disposed && currentRequest === requestId) {
+                setActiveTabSupport(supported ? 'supported' : 'unsupported');
+            }
+        };
+        const stopWatching = watchActiveTab(refresh);
+        void refresh();
+        return () => {
+            disposed = true;
+            stopWatching();
+        };
+    }, [sidePanel]);
+
+    if (activeTabSupport === 'checking') {
+        return (
+            <main role="status" aria-live="polite">
+                <p>{t('extension.popup.checkingPage')}</p>
+            </main>
+        );
+    }
+    if (activeTabSupport === 'unsupported') {
+        return (
+            <main role="status" aria-live="polite">
+                <p>{t('extension.popup.unsupportedPage')}</p>
+                <p>{t('extension.popup.unsupportedPageHint')}</p>
+            </main>
+        );
+    }
     return (
         <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
@@ -548,6 +591,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     useDemoAutoWipe(activeWalletId, refresh);
 
     function clearTransientActionState() {
+        setUnlockedView('home');
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
         setTokenDetailRef(null);
@@ -636,8 +680,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
+            clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);
+            setWallets([]);
             return;
         }
         let cancelled = false;

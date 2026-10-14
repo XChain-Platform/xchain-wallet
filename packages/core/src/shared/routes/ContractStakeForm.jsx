@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands, sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+import { formatWithThousands, sumDecimalStrings, trimAmountTail, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -40,6 +40,8 @@ import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
 import { compareAmounts } from '../../market/orderMath.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -198,7 +200,7 @@ export function ContractStakeForm({
                 });
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load contract metadata.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load contract metadata'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, contractActionIndex, messaging]);
@@ -221,6 +223,8 @@ export function ContractStakeForm({
         address: fromAddress?.address,
         tick: tick,
     });
+    const tokenInfo = useTokenInfo({ chainId, tick, skip: !tick.trim() });
+    const tokenDivisibility = tokenInfo?.divisibility ?? 8;
 
     // Unstake mode's "available" is the STAKED balance on this contract
     // (per pubkey when one is entered), not the wallet token balance;
@@ -320,6 +324,10 @@ export function ContractStakeForm({
             setFormError('No Bitcoin address available to stake from.');
             return;
         }
+        if (!/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) {
+            setFormError('Contract ID must be a positive whole number.');
+            return;
+        }
         if (!contractMeta?.valid) {
             setFormError('Target contract is not stakeable (no cooldown configured at deploy time).');
             return;
@@ -338,6 +346,14 @@ export function ContractStakeForm({
                 setFormError('Amount must be a positive decimal.');
                 return;
             }
+            const precisionError = tokenAmountPrecisionError(actionParams.AMOUNT, {
+                divisibility: tokenDivisibility,
+                tick,
+            });
+            if (precisionError) {
+                setFormError(precisionError);
+                return;
+            }
             if (tickAmtBalance != null && compareAmounts(actionParams.AMOUNT, tickAmtBalance) === 1) {
                 setFormError(
                     `Amount exceeds the ${formatWithThousands(String(tickAmtBalance))} `
@@ -350,6 +366,14 @@ export function ContractStakeForm({
             const amt = amount.trim();
             if (!/^[0-9]+(\.[0-9]+)?$/.test(amt) || compareAmounts(amt, '0') !== 1) {
                 setFormError('Amount must be a positive decimal (or leave it blank to unstake everything).');
+                return;
+            }
+            const precisionError = tokenAmountPrecisionError(amt, {
+                divisibility: tokenDivisibility,
+                tick,
+            });
+            if (precisionError) {
+                setFormError(precisionError);
                 return;
             }
             if (stakedAvailable != null && compareAmounts(amt, stakedAvailable) === 1) {
@@ -825,6 +849,7 @@ export function ContractStakeForm({
                         : 'How much to unstake. Leave blank (or use Max) to unstake the full staked balance; the rest stays staked.'}
                     amount={amount}
                     tick={tick}
+                    divisibility={tokenDivisibility}
                     onAmountFieldChange={(rawValue) => {
                         const stripped = String(rawValue).replace(/,/g, '');
                         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;

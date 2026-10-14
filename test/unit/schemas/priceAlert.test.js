@@ -103,14 +103,16 @@ describe('validatePriceAlert', () => {
 
 describe('priceAlertKey', () => {
     it('builds the canonical key', () => {
-        expect(priceAlertKey(createPriceAlert(BASE_INPUT))).toBe('bitcoin-mainnet::above::70000');
+        expect(priceAlertKey(createPriceAlert(BASE_INPUT))).toBe('bitcoin-mainnet::above::70000::usd');
     });
 
-    it('differs by direction and target', () => {
+    it('differs by direction, target, and currency', () => {
         const above = priceAlertKey({ chainId: 'bitcoin-mainnet', direction: 'above', targetFiat: 70000 });
         const below = priceAlertKey({ chainId: 'bitcoin-mainnet', direction: 'below', targetFiat: 70000 });
         const other = priceAlertKey({ chainId: 'bitcoin-mainnet', direction: 'above', targetFiat: 80000 });
+        const eur = priceAlertKey({ chainId: 'bitcoin-mainnet', direction: 'above', targetFiat: 70000, fiatCurrency: 'EUR' });
         expect(above).not.toBe(below);
         expect(above).not.toBe(other);
+        expect(above).not.toBe(eur);
     });
 });

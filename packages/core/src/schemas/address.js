@@ -40,8 +40,30 @@ import {
     result,
 } from './validate.js';
 import { randomUUID } from '../util/uuid.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 
 export const CURRENT_VERSION = 4;
+
+/**
+ * Return the generated name an address receives when it has no custom label.
+ * The derivation path's final segment is the zero-based address index.
+ *
+ * @param {Partial<Address>} record
+ * @returns {string}
+ */
+export function defaultAddressLabel(record) {
+    if (record?.source === 'imported-wif') return 'Imported Address';
+
+    const ticker = tickerForCoin(record?.chain);
+    const prefix = ticker ? `${ticker} ` : '';
+    const finalSegment = String(record?.derivationPath || '').split('/').pop();
+    const index = /^\d+$/.test(finalSegment || '') ? Number(finalSegment) : null;
+    const number = index === null ? '' : ` #${index + 1}`;
+
+    if (record?.role === 'change') return `${prefix}Change${number}`;
+    if (record?.role === 'dispenser') return `${prefix}Dispenser${number}`;
+    return `${prefix}Address${number}`;
+}
 
 /**
  * @typedef {Object} Address

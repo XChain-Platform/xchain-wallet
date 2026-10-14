@@ -49,6 +49,7 @@ import qrStyles from '../../ui/QrDisplay.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
+const TOKEN_AMOUNT_MAX_DECIMALS = 18;
 const QR_FALLBACK_PIXEL_SIZE = 512;
 
 export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
@@ -107,7 +108,7 @@ function newestAddressOfType(addresses, addressType) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, scopes addresses + new-receive derivation to that account
- * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, divisibility?: number, imageUrl?: string | null }} [props.prefill]
+ * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, divisibility?: number | null, imageUrl?: string | null }} [props.prefill]
  *        Selection from ReceivePicker. `chainId` becomes the active
  *        chain; `tick` pre-fills the Token field unless it matches the
  *        chain's native ticker (no point encoding `?tick=BTC` on a
@@ -506,8 +507,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const requestDivisibility = isNativeRequest
         ? NATIVE_COIN_DECIMALS
         : Number.isInteger(selectedDivisibility) && selectedDivisibility >= 0
-            ? selectedDivisibility
+            ? Math.min(selectedDivisibility, TOKEN_AMOUNT_MAX_DECIMALS)
             : NATIVE_COIN_DECIMALS;
+
     useEffect(() => {
         if (!reqAmount.includes('.')) return;
         const fraction = reqAmount.split('.')[1] || '';
@@ -596,16 +598,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (!address || !descriptor || !activeChainId) return null;
         const amount = reqAmount.trim();
         const tick = reqTick.trim().toUpperCase();
-        const hasRequestDetails = !!(amount || tick);
         return uriLib.encodeBip21Uri({
             scheme: descriptor.uriScheme,
             address: address.address,
             amount,
-            label: hasRequestDetails ? (address.label || undefined) : undefined,
-            params: hasRequestDetails ? {
+            label: address.label || undefined,
+            params: {
                 chain: activeChainId,
                 ...(tick ? { tick } : {}),
-            } : {},
+            },
         });
     }, [address, descriptor, activeChainId, reqAmount, reqTick]);
 
@@ -693,17 +694,20 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setLabelSave({ request, addressId });
         setLabelError(null);
         try {
-            await messaging.setAddressLabel(addressId, next);
+            const result = await messaging.setAddressLabel(addressId, next);
             if (labelRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
+            const savedLabel = typeof result?.label === 'string'
+                ? result.label
+                : (next || 'Address');
             setAddress((current) => (
-                current?.id === addressId ? { ...current, label: next } : current
+                current?.id === addressId ? { ...current, label: savedLabel } : current
             ));
             setChainsByWallet((current) => Object.fromEntries(
                 Object.entries(current || {}).map(([chainId, records]) => [
                     chainId,
                     Array.isArray(records)
                         ? records.map((record) => record?.id === addressId
-                            ? { ...record, label: next }
+                            ? { ...record, label: savedLabel }
                             : record)
                         : records,
                 ]),

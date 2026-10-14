@@ -79,7 +79,13 @@ function valueBeside(label) {
 describe('detail screens with sparse records', () => {
     it('uses placeholders for sparse token metadata', async () => {
         const messaging = messagingWith({
-            getTokenInfo: vi.fn().mockResolvedValue({}),
+            getTokenInfo: vi.fn().mockResolvedValue({
+                creator: 'undefined',
+                description: 'NaN',
+                totalSupply: Number.NaN,
+                divisibility: Number.NaN,
+                locked: null,
+            }),
             getSupplyHistory: vi.fn().mockResolvedValue([]),
         });
         const view = mount(
@@ -88,7 +94,9 @@ describe('detail screens with sparse records', () => {
                 chainId={CHAIN}
                 tick="SPARSE"
                 kind="token"
-                quantity="0"
+                quantity={Number.NaN}
+                divisibility={Number.NaN}
+                fiatRate={12}
                 onBack={() => {}}
             />,
             messaging,
@@ -96,9 +104,49 @@ describe('detail screens with sparse records', () => {
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
         await waitFor(() => expect(valueBeside('Total supply')).toHaveTextContent('-'));
+        expect(valueBeside('Divisibility')).toHaveTextContent('-');
+        expect(valueBeside('Current balance')).toHaveTextContent(/^-$/);
         expect(valueBeside('Estimated value')).toHaveTextContent('-');
+        expect(valueBeside('Creator')).toHaveTextContent('-');
         expect(valueBeside('Status')).toHaveTextContent('-');
         expectNoEmptyDetailCells(view.container);
+    });
+
+    it('uses indexed divisibility for supply, balance, and holder quantities', async () => {
+        const messaging = messagingWith({
+            getTokenInfo: vi.fn().mockResolvedValue({
+                creator: ADDRESS,
+                totalSupply: '1234.56',
+                divisibility: 2,
+                locked: false,
+            }),
+            getSupplyHistory: vi.fn().mockResolvedValue([]),
+            getHoldersForToken: vi.fn().mockResolvedValue({
+                data: [{ address: ADDRESS, quantity: '123456' }],
+            }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+        });
+        mount(
+            <TokenDetail
+                walletId="wallet"
+                chainId={CHAIN}
+                tick="PRECISE"
+                kind="token"
+                quantity="123456"
+                divisibility={8}
+                onBack={() => {}}
+            />,
+            messaging,
+        );
+
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
+        await waitFor(() => expect(valueBeside('Divisibility')).toHaveTextContent('2'));
+        expect(valueBeside('Total supply')).toHaveTextContent('1,234.56');
+        expect(valueBeside('Current balance')).toHaveTextContent('1,234.56 PRECISE');
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        const holders = await screen.findByRole('table', { name: 'Holder balances' });
+        expect(within(holders).getByText('1,234.56')).toBeTruthy();
     });
 
     it('uses placeholders for a sparse dispenser record', async () => {
@@ -174,7 +222,7 @@ describe('detail screens with sparse records', () => {
         );
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
-        for (const label of ['To', 'Memo', 'Quantity']) {
+        for (const label of ['To', 'Memo', 'Amount']) {
             expect(valueBeside(label)).toHaveTextContent('-');
         }
         expectNoEmptyDetailCells(view.container);

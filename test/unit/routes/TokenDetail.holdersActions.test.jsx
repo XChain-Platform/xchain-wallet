@@ -154,6 +154,22 @@ describe('TokenDetail holders', () => {
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(CREATOR));
     });
 
+    it('renders dashes for holder rows with missing or non-numeric data', async () => {
+        mount({
+            holders: {
+                data: [
+                    { address: null, amount: undefined },
+                    { address: 'undefined', quantity: 'NaN' },
+                ],
+            },
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        const table = await screen.findByRole('table', { name: 'Holder balances' });
+        expect(within(table).getAllByText('-', { exact: true })).toHaveLength(4);
+        expect(table.textContent).not.toMatch(/undefined|NaN/);
+    });
+
     it('contains synchronous metadata and holder bridge failures', async () => {
         const getTokenInfo = vi.fn(() => { throw new Error('metadata bridge unavailable'); });
         const getHoldersForToken = vi.fn(() => { throw new Error('holders bridge unavailable'); });

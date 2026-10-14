@@ -74,8 +74,8 @@ export function bindingPollErrors(fields) {
     const errors = [];
 
     const contract = String(fields.callbackContract).trim();
-    if (!/^\d+$/.test(contract)) {
-        errors.push('The contract to call must be a contract number (its deploy action index).');
+    if (!/^[1-9]\d*$/.test(contract)) {
+        errors.push('The contract to call must be a positive contract number (its deploy action index).');
     }
 
     if (isBlank(fields.callbackMethod)) {
@@ -95,8 +95,8 @@ export function bindingPollErrors(fields) {
     }
 
     if (!isBlank(fields.gasEscrow)) {
-        const n = Number(String(fields.gasEscrow).trim());
-        if (!Number.isFinite(n) || n < 0) {
+        const amount = String(fields.gasEscrow).trim();
+        if (!/^\d+(?:\.\d+)?$/.test(amount)) {
             errors.push('The escrow that funds the call must be a non-negative amount.');
         }
     }
@@ -112,8 +112,9 @@ export function bindingPollErrors(fields) {
     if (isBlank(fields.quorum)) {
         errors.push('A binding poll needs a quorum: the smallest share of the supply that must vote for the result to count.');
     } else {
-        const q = Number(String(fields.quorum).trim());
-        if (!Number.isFinite(q) || q <= 0 || q > 1) {
+        const amount = String(fields.quorum).trim();
+        const q = Number(amount);
+        if (!/^\d+(?:\.\d+)?$/.test(amount) || q <= 0 || q > 1) {
             errors.push('Quorum must be a share above 0 and no more than 1, e.g. 0.2 for 20%.');
         }
     }

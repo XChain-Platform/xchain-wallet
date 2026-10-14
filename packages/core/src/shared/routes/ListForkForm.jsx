@@ -36,6 +36,7 @@ import { listLabel } from '../utils/listLabel.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -112,6 +113,7 @@ export function ListForkForm(props) {
 
 function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers = {} }) {
     const { chainId, actionIndex: oldIndex, type: listType, items: currentItems } = listRef;
+    const listActionIndexValid = /^[1-9][0-9]*$/.test(String(oldIndex));
     // true / false from the explorer, null when it does not say.
     const resolution = typeof listRef.editResolutionActive === 'boolean' ? listRef.editResolutionActive : null;
     const { messaging, shell } = useMessaging();
@@ -184,7 +186,14 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             })
             .then((detail) => findListOwner({ detail, readList }))
             .then((o) => { if (!cancelled) setOwner(o); })
-            .catch(() => { if (!cancelled) setOwner(null); });
+            .catch((err) => {
+                if (!cancelled) {
+                    setLoadError(
+                        explorerReadFailure(err, `load list #${oldIndex}`)?.message
+                        || `Couldn't load list #${oldIndex}. Try again.`,
+                    );
+                }
+            });
         return () => { cancelled = true; };
     }, [chainId, oldIndex, listRef.source, listRef.parentIndex, messaging]);
 
@@ -508,7 +517,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
      * screen was opened with, else null. The network applies the edit to the
      * list's newest valid edit at that moment, so a change made in between
      * would be carried into this edit without the user ever seeing it.
-     * Best-effort: an unreadable list is no claim either way.
+     * An unreadable list blocks review because the form cannot establish the
+     * membership that this edit will change.
      *
      * @returns {Promise<string | null>}
      */
@@ -517,8 +527,9 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         let fresh;
         try {
             fresh = currentListItems(await messaging.getListByActionIndex({ chainId, actionIndex: String(oldIndex) }));
-        } catch {
-            return null;
+        } catch (err) {
+            return explorerReadFailure(err, `check list #${oldIndex}`)?.message
+                || `Couldn't check list #${oldIndex}. Try again.`;
         }
         if (!Array.isArray(fresh)) return null;
         const asKey = (xs) => xs.map(String).sort().join('\n');
@@ -529,7 +540,15 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
 
     async function handleReview(event) {
         event.preventDefault();
+        if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (feePick.mode === 'custom' && feePerKb === null) {
+            const rate = Number(feePick.customRate);
+            setFormError(rate > 0
+                ? 'Custom fee rate can have no more than 8 decimal places.'
+                : 'Custom fee rate must be greater than zero.');
+            return;
+        }
         if (additions.invalid.length > 0) {
             const noun = isTick
                 ? (additions.invalid.length === 1 ? 'token name' : 'token names')

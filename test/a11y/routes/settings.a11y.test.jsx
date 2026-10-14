@@ -32,7 +32,7 @@ const DRILLDOWN_SECTIONS = [
 const INLINE_SECTIONS = [
     { query: 'theme reduced motion', title: 'Appearance', component: 'AppearanceSection' },
     { query: 'fiat locale custom iso', title: 'Language & region', component: 'LanguageRegionSection' },
-    { query: 'active mainnet testnet', title: 'Network', component: 'NetworkSection' },
+    { query: 'active mainnet', title: 'Network', component: 'NetworkSection' },
     { query: 'desktop permission quiet hours', title: 'Notifications', component: 'NotificationsSection' },
     { query: 'contacts address book export import', title: 'Contacts', component: 'ContactsSection' },
 ];

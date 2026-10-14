@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as branding from '../branding/branding.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
+import { useBackHandler } from './backStack.js';
 import styles from './ChainPicker.module.css';
 
 /**
@@ -58,25 +59,17 @@ export function ChainPicker({
         setQuery('');
         if (restoreFocus) triggerRef.current?.focus();
     }, []);
+    useBackHandler(open ? () => closePicker(true) : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (triggerRef.current?.contains(e.target)) return;
             if (popoverRef.current?.contains(e.target)) return;
-            closePicker();
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
             closePicker(true);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
+        return () => window.removeEventListener('mousedown', onClick);
     }, [closePicker, open]);
 
     const entries = useMemo(() => {

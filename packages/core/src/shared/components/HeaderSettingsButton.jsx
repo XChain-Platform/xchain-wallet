@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { ConfirmModal } from './ConfirmModal.jsx';
@@ -90,10 +90,13 @@ export function HeaderSettingsButton({
     const confirmDialog = useConfirmModal();
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
-    const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus();
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); focusTrigger(); } : undefined);
+    const closePopover = useCallback(() => {
+        setOpen(false);
+        triggerRef.current?.querySelector('button')?.focus();
+    }, []);
+    useBackHandler(open ? closePopover : undefined);
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
@@ -102,25 +105,18 @@ export function HeaderSettingsButton({
         if (!open) return undefined;
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            setOpen(false);
-            focusTrigger();
+            closePopover();
         };
         const onFocusIn = (event) => {
             if (event.target.closest?.('#xc-main')) setOpen(false);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
         window.addEventListener('focusin', onFocusIn);
         return () => {
             window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
             window.removeEventListener('focusin', onFocusIn);
         };
-    }, [open]);
+    }, [closePopover, open]);
 
     // The Network section needs all four pieces to render anything
     // useful; NetworkFilter dereferences the registry and maps over the
@@ -147,7 +143,7 @@ export function HeaderSettingsButton({
     const accountLabel = activeAccount?.name
         || (Number.isInteger(activeAccount?.index) ? `Account ${activeAccount.index + 1}` : null);
     const navigate = (handler) => {
-        setOpen(false);
+        closePopover();
         onNavigate?.();
         handler();
     };

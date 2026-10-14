@@ -74,7 +74,7 @@ export function HeaderActionMenu({
     useEffect(() => {
         if (!open) return undefined;
         const onPointerDown = (event) => {
-            if (!wrapRef.current?.contains(event.target)) close();
+            if (!wrapRef.current?.contains(event.target)) close(true);
         };
         const onKeyDown = (event) => {
             if (event.key !== 'Escape') return;
@@ -101,8 +101,10 @@ export function HeaderActionMenu({
         item?.focus();
     }, [open]);
 
+    // Transient menus hand focus back to their trigger before acting, so a
+    // row that opens nothing new leaves keyboard users where they started.
     const invoke = (handler) => {
-        close();
+        close(true);
         handler();
     };
     const platformLinks = platformCurrent

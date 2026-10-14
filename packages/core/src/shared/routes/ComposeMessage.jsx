@@ -186,8 +186,9 @@ function ComposeMessageForm({
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [pubkeyState, setPubkeyState] = useState(
-        /** @type {'idle' | 'checking' | 'found' | 'missing'} */ ('idle'),
+        /** @type {'idle' | 'checking' | 'found' | 'missing' | 'error'} */ ('idle'),
     );
+    const [pubkeyError, setPubkeyError] = useState(/** @type {string | null} */ (null));
     const [sendUnencrypted, setSendUnencrypted] = useState(fixedEncryption === 'plaintext');
     // Encryption choice when the recipient's pubkey is known: 'ecies' (default,
     // only the recipient can read) or 'ecdh' (a shared session key both parties
@@ -292,20 +293,29 @@ function ComposeMessageForm({
         const addr = toAddress.trim();
         if (!destChainId || !addr || !isValidAddressAnyNetwork(addr)) {
             setPubkeyState('idle');
+            setPubkeyError(null);
             if (!fixedEncryption) setSendUnencrypted(false);
             return undefined;
         }
         let cancelled = false;
         setPubkeyState('checking');
+        setPubkeyError(null);
         const handle = setTimeout(() => {
             messaging.getRecipientPubkey({ chainId: destChainId, address: addr })
                 .then((pubkey) => {
                     if (cancelled) return;
                     setPubkeyState(pubkey ? 'found' : 'missing');
+                    setPubkeyError(null);
                     if (pubkey && !fixedEncryption) setSendUnencrypted(false);
                 })
-                .catch(() => {
-                    if (!cancelled) setPubkeyState('missing');
+                .catch((err) => {
+                    if (cancelled) return;
+                    setPubkeyState('error');
+                    setPubkeyError(submitFailureMessage(err, {
+                        chainId: destChainId,
+                        verb: 'check the recipient encryption key',
+                        fallback: "Couldn't check the recipient's encryption key. Check your connection and try again.",
+                    }));
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
@@ -399,6 +409,20 @@ function ComposeMessageForm({
         && Number.isFinite(selectedFeeEstimate.rateValue) && selectedFeeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
         : null;
+    const customFeeRate = Number(feePick.customRate);
+    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
+    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
+    const customFeeDecimals = Math.max(
+        0,
+        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
+    );
+    const feeValidationError = feePick.mode !== 'custom'
+        ? null
+        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
+            ? 'Enter a custom fee rate greater than zero.'
+            : customFeeDecimals > 8 || !customEstimate
+                ? 'Custom fee rate can have at most 8 decimal places.'
+                : null;
 
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
@@ -608,9 +632,13 @@ function ComposeMessageForm({
         }
         if (messageLengthError) return;
         if (addressInvalid) return;
+        if (feeValidationError) {
+            setSubmitError(feeValidationError);
+            return;
+        }
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
-        if (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking')) return;
+        if (!sendUnencrypted && pubkeyState !== 'found') return;
         setSubmitError(null);
         // On the confirm-page path the password is collected IN the modal, so
         // the credential guards below (which the legacy review stage relies on)
@@ -627,7 +655,8 @@ function ComposeMessageForm({
         if (!fromAddress || !chainId || !toAddress.trim() || (!message.trim() && !attachment)) return;
         if (messageLengthError) return;
         if (addressInvalid) return;
-        if (!sendUnencrypted && pubkeyState === 'missing') return;
+        if (feeValidationError) return;
+        if (!sendUnencrypted && pubkeyState !== 'found') return;
         if (!hw && !signerReady && password.length === 0) return;
         if (hw && hwStatus !== 'available') return;
 
@@ -680,6 +709,7 @@ function ComposeMessageForm({
             } else if (name === 'PubkeyNotFoundError') {
                 setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
                 setPubkeyState('missing');
+                setPubkeyError(null);
             } else {
                 // Same translation, and the same fallback, as the confirm path
                 // above. The helper's own header names this exact trap: a form
@@ -720,6 +750,10 @@ function ComposeMessageForm({
     // rather than sending an (impossible to encrypt) message.
     async function handleRequestSession() {
         if (handshakeBusy || !fromAddress || !chainId || !toAddress.trim()) return;
+        if (feeValidationError) {
+            setHandshakeError(feeValidationError);
+            return;
+        }
         setHandshakeBusy(true);
         setHandshakeError(null);
         try {
@@ -749,7 +783,12 @@ function ComposeMessageForm({
             setHandshakeSent(true);
         } catch (err) {
             if (!isUserRejection(err)) {
-                setHandshakeError(err?.message || 'Could not send the key request.');
+                setHandshakeError(submitFailureMessage(err, {
+                    chainId,
+                    coinTicker: nativeTicker,
+                    verb: 'send the key request',
+                    fallback: 'Could not send the key request. Check your connection and try again.',
+                }));
             }
         } finally {
             setHandshakeBusy(false);
@@ -995,6 +1034,7 @@ function ComposeMessageForm({
                     setToAddress(e.target.value);
                     setHandshakeSent(false);
                     setHandshakeError(null);
+                    setPubkeyError(null);
                     if (submitError) setSubmitError(null);
                 }}
                 onIconClick={() => setContactsPickerOpen(true)}
@@ -1116,6 +1156,11 @@ function ComposeMessageForm({
                     )}
                 </div>
             ) : null}
+            {pubkeyState === 'error' && encryptionValue !== 'plaintext' ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    {pubkeyError}
+                </StatusMessage>
+            ) : null}
 
             {/* 4. Delivery network */}
             <IconSelect
@@ -1137,7 +1182,11 @@ function ComposeMessageForm({
                     formatFiat={fiatForFee}
                     tiers={feeTiers}
                     value={feePick}
-                    onChange={setFeePick}
+                    onChange={(next) => {
+                        setFeePick(next);
+                        if (submitError) setSubmitError(null);
+                        if (handshakeError) setHandshakeError(null);
+                    }}
                     customEstimate={feePick.mode === 'custom' ? customEstimate : null}
                 />
             ) : null}

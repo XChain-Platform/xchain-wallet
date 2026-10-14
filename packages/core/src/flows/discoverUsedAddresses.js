@@ -391,6 +391,11 @@ async function scanChainType({
         throwIfAborted(signal);
 
         if (consecutiveUnused >= gapLimit) break;
+        if (index === MAX_DERIVATION_INDEX) {
+            incomplete = true;
+            error = `derivation index limit ${MAX_DERIVATION_INDEX} reached before the gap limit`;
+            break;
+        }
     }
 
     if (incomplete) {

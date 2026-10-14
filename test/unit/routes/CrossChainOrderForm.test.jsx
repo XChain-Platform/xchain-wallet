@@ -19,13 +19,14 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const DOGE = 'dogecoin-mainnet';
 const BTC = 'bitcoin-mainnet';
 
 const DOGE_ADDRESS = Object.freeze({
     id: 'addr-doge-0',
-    address: 'DExampleDogeAddressxxxxxxxxxxxxxxxx',
+    address: 'Ddevmock02aabbcc',
     publicKey: '02aabbcc',
     derivationPath: "m/44'/3'/0'/0/0",
     source: 'hd',
@@ -33,7 +34,7 @@ const DOGE_ADDRESS = Object.freeze({
 });
 const BTC_ADDRESS = Object.freeze({
     id: 'addr-btc-0',
-    address: 'bc1qexampleexampleexampleexampleexampleex',
+    address: 'bc1qdevmock02ddeeff',
     publicKey: '02ddeeff',
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
@@ -45,6 +46,7 @@ const COMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    __clearTokenInfoCache();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -361,6 +363,109 @@ describe('CrossChainOrderForm', () => {
         });
         expect(utils.container.textContent).toMatch(/Receive address on .* is required/);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('validates token precision and the exact give balance before compose', async () => {
+        const { utils, calls } = await mount({ initialChainId: DOGE }, {
+            getTokenInfo: ({ tick }) => Promise.resolve({ divisibility: tick === 'JDOG' ? 0 : 8 }),
+            getWalletBalances: () => Promise.resolve({
+                [DOGE]: [{
+                    address: DOGE_ADDRESS.address,
+                    balances: { tokens: [{ tick: 'JDOG', quantity: '5', divisibility: 0 }] },
+                }],
+            }),
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            vi.advanceTimersByTime(450);
+            await drainMicrotasks();
+        });
+
+        await domAct(async () => {
+            setValue(utils, /^Give amount/, '1.5');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('Give amount must be a whole number because JDOG is indivisible.');
+
+        await domAct(async () => {
+            setValue(utils, /^Give amount/, '6');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('Give amount is above your available JDOG balance.');
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('blocks malformed token IDs, recipients, and empty custom expiry before compose', async () => {
+        const { utils, calls } = await mount({ initialChainId: DOGE });
+        await fillPair(utils);
+
+        await domAct(async () => {
+            setValue(utils, 'Give token', '^0');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain("Give token can be a name, or ^ followed by the token's number (^123).");
+
+        await domAct(async () => {
+            setValue(utils, 'Give token', 'JDOG');
+            setValue(utils, /^Give amount/, '10');
+            setValue(utils, 'Receive at', 'not an address');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('This address has a typo. Check it and try again.');
+
+        await domAct(async () => {
+            setValue(utils, 'Receive at', BTC_ADDRESS.address);
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('Pick an expiration date and time, or switch to the default window.');
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('watcher review matches built normalized values and Edit keeps the form values', async () => {
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            setValue(utils, 'Receive at', `  ${BTC_ADDRESS.address}  `);
+            setValue(utils, 'Memo (optional)', '  exact memo  ');
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('10 JDOG')).toBeTruthy();
+        expect(utils.getByText('20 XCHAIN')).toBeTruthy();
+        expect(utils.getByLabelText(BTC_ADDRESS.address)).toBeTruthy();
+        expect(utils.getByText('exact memo')).toBeTruthy();
+        expect(utils.getByText('Protocol fee')).toBeTruthy();
+        expect(utils.getByText(/paid in DOGE; the network fee is separate/i)).toBeTruthy();
+
+        fireEvent.click(utils.getByRole('button', { name: 'Edit' }));
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('20');
+        expect(utils.getByLabelText('Receive at').value).toBe(`  ${BTC_ADDRESS.address}  `);
+        expect(utils.getByLabelText('Memo (optional)').value).toBe('  exact memo  ');
+    });
+
+    it('shows encoder failures as plain copy on the form', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const encoderError = Object.assign(
+            new Error('no spendable UTXOs found for the funding address'),
+            { name: 'SDKEncoderError', code: 'NO_UTXOS' },
+        );
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            composeForConfirm: () => Promise.reject(encoderError),
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.container.textContent).toMatch(/needs DOGE for the protocol fee and the network fee/i);
+        expect(utils.container.textContent).not.toMatch(/UTXO/i);
     });
 
     it('explains itself on a wallet with addresses on one chain only', async () => {

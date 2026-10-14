@@ -407,6 +407,26 @@ export async function ensureHost(runtime) {
             // Re-applies routing on any settings.update touching `privacy`,
             // so the toggle takes effect on the next request.
             onPrivacySettingsChanged: runtime.onPrivacySettingsChanged,
+            surfaceStateEvents: {
+                async publish(kind) {
+                    if (kind !== 'network') return;
+                    await runtime.notificationService?.refresh();
+                    for (const watcher of [
+                        runtime.governancePollWatcher,
+                        runtime.deadlineWatcher,
+                        runtime.dispenserEscrowWatcher,
+                    ]) {
+                        if (!watcher) continue;
+                        watcher.stop();
+                        watcher.start();
+                    }
+                    if (runtime.coinpayAutopayWatcher) {
+                        runtime.coinpayAutopayWatcher.stop();
+                        runtime.coinpayAutopayWatcher.start();
+                        await runtime.coinpayAutopayWatcher.refresh();
+                    }
+                },
+            },
         });
 
         // §46: start the live notification watcher. main/index.js injects the

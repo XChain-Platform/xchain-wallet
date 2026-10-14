@@ -60,7 +60,7 @@ function baseDetail(overrides = {}) {
     };
 }
 
-function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresses } = {}) {
+function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresses, listError = null } = {}) {
     const rows = addresses || [ACTIVE_RECORD, OWNER_RECORD];
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: rows }),
@@ -68,7 +68,10 @@ function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresse
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        getListByActionIndex: vi.fn().mockResolvedValue(detail),
+        getListByActionIndex: vi.fn().mockImplementation(async () => {
+            if (listError) throw listError;
+            return detail;
+        }),
         getSharedLists: vi.fn().mockResolvedValue(shared),
         getActionFormats: vi.fn().mockResolvedValue({
             4: 'VERSION|TYPE|NAME|DESCRIPTION|MEMO|...ITEM',
@@ -87,14 +90,14 @@ function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresse
     });
 }
 
-function mount({ supported = true, ...messagingOptions } = {}) {
+function mount({ supported = true, actionIndex = '2700', ...messagingOptions } = {}) {
     listMetaSupported.mockResolvedValue(supported);
     const messaging = makeMessaging(messagingOptions);
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ListRenameForm
                 walletId="wallet-1"
-                listRef={{ chainId: CHAIN, actionIndex: '2700' }}
+                listRef={{ chainId: CHAIN, actionIndex }}
                 onBack={() => {}}
                 onDone={() => {}}
             />
@@ -109,6 +112,29 @@ afterEach(() => {
 });
 
 describe('ListRenameForm', () => {
+    it('refuses a malformed list reference before review', async () => {
+        const messaging = mount({ actionIndex: '0' });
+        fireEvent.change(await screen.findByLabelText('Name (empty means unchanged)'), {
+            target: { value: 'Treasury' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows plain copy when the list indexer read fails', async () => {
+        mount({
+            listError: Object.assign(
+                new Error('Explorer returned HTTP 502 for /BTC/api/lists/2700'),
+                { name: 'SDKExplorerError' },
+            ),
+        });
+
+        expect(await screen.findByText(/service that reads the chain is temporarily unavailable/)).toBeTruthy();
+        expect(screen.queryByText(/\/BTC\/api\/lists/)).toBeNull();
+    });
+
     it('refuses review when the SDK does not support list metadata', async () => {
         const messaging = mount({ supported: false });
 

@@ -245,6 +245,33 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['', 'Per-recipient amount is required.'],
+        ['0', 'Per-recipient amount must be greater than zero.'],
+        ['.', 'Per-recipient amount must be a positive decimal number.'],
+    ])('keeps amount %j out of review with plain copy', async (value, message) => {
+        const messaging = mountAirdrop();
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value } });
+        fireEvent.click(submitButton());
+
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('keeps excess token precision out of review', async () => {
+        const messaging = mountAirdrop({ divisibility: 2 });
+        await pasteRecipients();
+        await flushTimers();
+        fireEvent.change(amountField(), { target: { value: '1.001' } });
+        fireEvent.click(submitButton());
+
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Per-recipient amount can have at most 2 decimal places for XCHAIN.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('keeps a fractional indivisible-token payout out of both review steps', async () => {
         const messaging = mountAirdrop({ balance: '10', divisibility: 0 });
         await pasteRecipients();
@@ -266,6 +293,20 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await expectText(/Review address list/);
     });
 
+    it('Back from recipient review keeps the amount and recipients', async () => {
+        mountAirdrop();
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '10.00' } });
+        fireEvent.click(submitButton());
+        await expectText(/Review address list/);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        expect(await amountField()).toHaveValue('10.00');
+        expect(screen.getByRole('textbox', { name: 'Recipients' }))
+            .toHaveValue(RECIPIENTS.join('\n'));
+    });
+
     it('shows distribution and both transaction fees before the first confirm', async () => {
         mountAirdrop();
         await pasteRecipients();
@@ -279,6 +320,24 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         expect(screen.getByText('Estimated network fees (2 transactions)')).toBeTruthy();
         expect(screen.getByText('Airdrop protocol fee')).toBeTruthy();
         expect(screen.getByText(/final recipient count when the airdrop executes/)).toBeTruthy();
+    });
+
+    it('shows encoder failures as plain copy without developer wording', async () => {
+        const messaging = mountAirdrop();
+        const encoderError = Object.assign(
+            new Error('no spendable UTXOs found for the funding address'),
+            { name: 'SDKEncoderError', code: 'NO_UTXOS' },
+        );
+        messaging.composeForConfirm.mockRejectedValue(encoderError);
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '10' } });
+        fireEvent.click(submitButton());
+        fireEvent.click(screen.getByRole('button', { name: /Sign address list/ }));
+        await flushTimers();
+
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent(/address needs BTC/);
+        expect(alert.textContent).not.toContain('no spendable UTXOs');
     });
 
     it('stays ungated when the balance cannot be read', async () => {

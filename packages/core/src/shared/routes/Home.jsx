@@ -39,6 +39,7 @@ import {
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
+import { takeInterruptedView } from '../utils/lastViewMemory.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
@@ -213,7 +214,24 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         /** @type {string | null} */ (null),
     );
     const activeWalletId = activeWalletIdProp ?? activeWalletIdLocal;
+    const [interruptedAction, setInterruptedAction] = useState(
+        /** @type {'send' | 'swap' | null} */ (null),
+    );
+    useEffect(() => {
+        setInterruptedAction(null);
+        if (!activeWalletId) return undefined;
+        // Normal navigation back to Home clears the marker in the parent
+        // route effect first. A restart does not, so only that marker survives
+        // until this next task and becomes a visible note.
+        const timer = setTimeout(() => {
+            setInterruptedAction(takeInterruptedView(activeWalletId));
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [activeWalletId]);
     const settings = useSettings();
+    const activeNetwork = settings.loading
+        ? null
+        : (settings.settings?.activeNetwork || 'mainnet');
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';
@@ -240,7 +258,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const initialBalanceCacheRef = useRef(/** @type {{ value: ReturnType<typeof readBalanceCache> } | undefined} */ (undefined));
     if (!initialBalanceCacheRef.current) {
         initialBalanceCacheRef.current = {
-            value: readBalanceCache(activeWalletId, activeAccountId),
+            value: readBalanceCache(activeWalletId, activeAccountId, activeNetwork),
         };
     }
     const initialBalanceCache = initialBalanceCacheRef.current.value;
@@ -270,14 +288,23 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [cachedBalancesUpdating, setCachedBalancesUpdating] = useState(
         Boolean(initialBalanceCache) && isNavigatorOnline(),
     );
-    const balanceScopeRef = useRef({ walletId: activeWalletId, accountId: activeAccountId || null });
+    const balanceScopeRef = useRef({
+        walletId: activeWalletId,
+        accountId: activeAccountId || null,
+        activeNetwork,
+    });
     const balanceScopeChanged = balanceScopeRef.current.walletId !== activeWalletId
-        || balanceScopeRef.current.accountId !== (activeAccountId || null);
+        || balanceScopeRef.current.accountId !== (activeAccountId || null)
+        || balanceScopeRef.current.activeNetwork !== activeNetwork;
     if (balanceScopeChanged) {
         // React discards this render and retries with the next scope's state,
-        // so a wallet switch never commits one frame of the prior wallet.
-        balanceScopeRef.current = { walletId: activeWalletId, accountId: activeAccountId || null };
-        const scopedCache = readBalanceCache(activeWalletId, activeAccountId);
+        // so a wallet, account or network switch never commits stale rows.
+        balanceScopeRef.current = {
+            walletId: activeWalletId,
+            accountId: activeAccountId || null,
+            activeNetwork,
+        };
+        const scopedCache = readBalanceCache(activeWalletId, activeAccountId, activeNetwork);
         setBalances(scopedCache?.balances || null);
         setActiveByChain(scopedCache?.activeByChain || {});
         setBalancesFetchedAt(scopedCache?.fetchedAt ?? null);
@@ -373,7 +400,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof action !== 'function') return;
         if (!networkActionsAvailable) {
             showToast({
-                message: `${label} needs a network connection. Your cached balances are still available.`,
+                message: `${label} needs a network connection.`,
                 variant: 'error',
             });
             return;
@@ -435,7 +462,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     useEffect(() => {
         portfolioRefreshIdRef.current += 1;
         setPortfolioRefreshing(false);
-    }, [activeWalletId, activeAccountId]);
+    }, [activeWalletId, activeAccountId, activeNetwork]);
     // §27.3 / G072: pinned tokens. Loaded from Settings on unlock; toggled
     // optimistically in the UI then persisted via messaging.updateSettings.
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
@@ -665,9 +692,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         isCancelled,
         reportError = false,
     }) => {
+        if (!activeNetwork) return;
         // The saved copy of this pair's balances; only a clean fresh read
         // replaces it. activeForCache starts from the saved active addresses.
-        let activeForCache = readBalanceCache(walletId, accountId)?.activeByChain || {};
+        let activeForCache = readBalanceCache(walletId, accountId, activeNetwork)?.activeByChain || {};
         let freshBalances = null;
         let freshFetchedAt = null;
         let freshBalancesCacheable = false;
@@ -806,11 +834,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 balances: freshBalances,
                 activeByChain: activeForCache,
                 fetchedAt: freshFetchedAt,
-            });
+            }, activeNetwork);
         }
 
         if (typeof messaging.getMultisigReceiveAddress === 'function') {
-            const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+            const btcChain = chainRegistry.byCoin('bitcoin')
+                .find((descriptor) => descriptor.networkKind === activeNetwork)?.id;
             if (btcChain) {
                 messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
                     .then((r) => {
@@ -856,7 +885,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             } catch { /* non-fatal */ }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messaging, offline]);
+    }, [messaging, offline, activeNetwork]);
 
     // The one manual refresh on Home (the hero's button): reloads balances,
     // and with them the prices, quietly over what is on screen. A failure is a
@@ -880,20 +909,25 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
         }
     }, [activeWalletId, activeAccountId, offline, loadHomeData, portfolioRefreshing]);
+    // Stable across the rate-limit countdown so the memoised portfolio tabs skip those renders.
+    const refreshPortfolioOnline = useCallback(
+        () => runNetworkAction('Refreshing balances', refreshPortfolio),
+        [runNetworkAction, refreshPortfolio],
+    );
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
     // `activeAccountId` is null (data layer returned no accounts for this
     // wallet, or pre-load), the calls fall back to wallet-wide aggregation.
     useEffect(() => {
-        if (!activeWalletId) return undefined;
+        if (!activeWalletId || !activeNetwork) return undefined;
         let cancelled = false;
         loadHomeData(activeWalletId, activeAccountId || undefined, {
             reset: true,
             isCancelled: () => cancelled,
         });
         return () => { cancelled = true; };
-    }, [activeWalletId, activeAccountId, homeReloadKey, resumeKey, loadHomeData]);
+    }, [activeWalletId, activeAccountId, activeNetwork, homeReloadKey, resumeKey, loadHomeData]);
 
     // Nothing pushes balance changes to the wallet - an incoming send, a
     // mint landing, a token someone else sent you - so Home has to ask.
@@ -990,7 +1024,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     useEffect(() => {
         rateLimitReloadCancelled.current = false;
         return () => { rateLimitReloadCancelled.current = true; };
-    }, [activeWalletId, activeAccountId]);
+    }, [activeWalletId, activeAccountId, activeNetwork]);
 
     // The rate-limit wait, ticking. While `rateLimitRetryAt` is set the banner
     // re-renders once a second off the remaining time, and when it runs out the
@@ -999,7 +1033,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // re-load takes the throttle's in-flight slot the way the beat does, so the
     // next beat does not land on top of it.
     useEffect(() => {
-        if (rateLimitRetryAt === null || !activeWalletId) return undefined;
+        if (rateLimitRetryAt === null || !activeWalletId || !activeNetwork) return undefined;
         let stopped = false;
         const walletId = activeWalletId;
         const accountId = activeAccountId || undefined;
@@ -1021,7 +1055,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             });
         }, 1000);
         return () => { stopped = true; clearInterval(id); };
-    }, [rateLimitRetryAt, activeWalletId, activeAccountId, loadHomeData]);
+    }, [rateLimitRetryAt, activeWalletId, activeAccountId, activeNetwork, loadHomeData]);
 
     // Home does not lock, in either sense. The idle timer lives
     // in each shell's AppInner via `useAutoLockPolicy`, because this
@@ -1291,6 +1325,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
                 <h1 className="sr-only">{t('home.title')}</h1>
+                {interruptedAction ? (
+                    <StatusMessage variant="warning">
+                        {t('home.interruptedAction', { action: interruptedAction })}
+                    </StatusMessage>
+                ) : null}
                 {offline ? (
                     <StatusMessage variant="warning">
                         {balances
@@ -1415,7 +1454,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onNetworkFilterChange={setNetworkFilter}
                         onTokenQueryChange={setTokenQuery}
                         multisig={isBtc ? multisig : null}
-                        multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
+                        multisigChainId={chainRegistry.byCoin('bitcoin')
+                            .find((descriptor) => descriptor.networkKind === activeNetwork)?.id}
                         onReceive={onReceive}
                         onBuy={onExchange}
                         hasAddresses={Object.keys(balances).length > 0}
@@ -1429,7 +1469,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyProofsEnabled={verifyProofsEnabled}
                         hideSmallBalances={hideSmallBalances}
-                        onRefresh={refreshPortfolio}
+                        onRefresh={refreshPortfolioOnline}
                         refreshing={portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
@@ -1461,8 +1501,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <Button
                         variant="secondary"
                         block={!isFull}
-                        onClick={onCreateToken}
+                        onClick={() => runNetworkAction('Creating a token', onCreateToken)}
                         disabled={!onCreateToken}
+                        aria-disabled={!networkActionsAvailable ? 'true' : undefined}
+                        title={!networkActionsAvailable ? t('home.createTokenOffline') : undefined}
                         icon={<Icon.TokenIcon />}
                     >
                         {t('home.createToken')}

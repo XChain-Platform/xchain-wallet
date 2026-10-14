@@ -718,6 +718,7 @@ function AppInner() {
     }, []);
 
     function clearTransientActionState() {
+        setUnlockedView('home');
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
         setTokenDetailRef(null);
@@ -830,6 +831,7 @@ function AppInner() {
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
+            clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);
             setWalletList([]);

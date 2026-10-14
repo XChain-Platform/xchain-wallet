@@ -310,6 +310,7 @@ const {
     listBlockedOrigins,
     addBlockedOrigin,
     removeBlockedOrigin,
+    isOriginBlocked,
     listBlocklistAuditLog,
     clearBlocklistAuditLog,
     refreshChainRegistry,
@@ -763,6 +764,14 @@ function permanentReleasePatch(entry, failure) {
     };
 }
 
+const QUEUED_BROADCAST_RETRY_BASE_MS = 1_000;
+const QUEUED_BROADCAST_RETRY_MAX_MS = 60_000;
+
+function queuedBroadcastRetryDelay(attempt) {
+    const exponent = Math.max(0, Math.min(16, attempt - 1));
+    return Math.min(QUEUED_BROADCAST_RETRY_MAX_MS, QUEUED_BROADCAST_RETRY_BASE_MS * (2 ** exponent));
+}
+
 async function retainReplacementPlan(vault, result, fallbackPsbtHex, requestedRbf, descriptor) {
     // Record the RBF the encoder was allowed to signal, not the one the caller asked for.
     const rbf = capRbfToDescriptor(descriptor, { rbf: requestedRbf }).rbf;
@@ -857,6 +866,16 @@ function assertReplacementPsbt({ replacement, plan, actionString, decodeActionSt
             throw new Error('tx.replace: encoder changed the replacement action');
         }
     }
+}
+
+async function cancelMatchingApprovals(approvals, matches) {
+    if (typeof approvals?.cancelOriginsMatching !== 'function') return 0;
+    return approvals.cancelOriginsMatching(matches);
+}
+
+async function emitSiteDisconnect(bridgeEvents, origin, reason = 'user-requested') {
+    if (typeof bridgeEvents?.disconnect !== 'function') return;
+    await bridgeEvents.disconnect(origin, reason);
 }
 
 /**
@@ -2080,8 +2099,8 @@ export function createBackgroundHost(deps) {
         return result;
     });
 
-    // §35.1 + §43 connected-sites maintenance. List/delete; the
-    // approval-flow record creation lives in bridge/handlers.js.
+    // §35.1 + §43 connected-sites maintenance. The approval-flow record
+    // creation lives in bridge/handlers.js.
     host.register('sites.list', async (_req, { vault }) => {
         const sites = await vault.connectedSites.list();
         return [...sites].sort((a, b) => (b.lastUsedAt || '').localeCompare(a.lastUsedAt || ''));
@@ -2091,7 +2110,22 @@ export function createBackgroundHost(deps) {
         if (typeof id !== 'string' || !id) {
             throw new Error('sites.delete: id is required');
         }
+        let site = null;
+        if (typeof vault.connectedSites.get === 'function') {
+            site = await vault.connectedSites.get(id);
+        } else if (typeof vault.connectedSites.list === 'function') {
+            site = (await vault.connectedSites.list()).find((candidate) => candidate.id === id);
+        }
+        const cancellation = site
+            ? cancelMatchingApprovals(approvals, (origin) => origin === site.origin)
+            : Promise.resolve(0);
         await vault.connectedSites.delete(id);
+        if (site) {
+            await Promise.all([
+                cancellation,
+                emitSiteDisconnect(bridgeEvents, site.origin, 'user-revoked'),
+            ]);
+        }
         return { ok: true };
     });
 
@@ -2113,6 +2147,10 @@ export function createBackgroundHost(deps) {
         if (typeof site.origin !== 'string' || !site.origin) {
             throw new Error('sites.restore: site.origin is required');
         }
+        const settings = await vault.settings.get().catch(() => null);
+        if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
+            throw new Error('sites.restore: origin is blocked');
+        }
         await vault.connectedSites.put(site);
         return { ok: true };
     });
@@ -2129,7 +2167,35 @@ export function createBackgroundHost(deps) {
         if (typeof origin !== 'string' || !origin) {
             throw new Error('sites.block: origin is required');
         }
-        return addBlockedOrigin({ vault, origin });
+        const cancelPending = () => cancelMatchingApprovals(
+            approvals,
+            (candidate) => typeof candidate === 'string'
+                && isOriginBlocked([origin], candidate),
+        );
+        const initialCancellation = cancelPending();
+        const sitesBeforeBlock = typeof vault.connectedSites.list === 'function'
+            ? await vault.connectedSites.list()
+            : [];
+        const result = await addBlockedOrigin({ vault, origin });
+        const evictedIds = new Set(result.evictedSiteIds);
+        let evictedOrigins = [...new Set(
+            sitesBeforeBlock
+                .filter((site) => evictedIds.has(site.id))
+                .map((site) => site.origin),
+        )];
+        if (evictedOrigins.length === 0
+            && evictedIds.size > 0
+            && !result.blocked.startsWith('*.')) {
+            evictedOrigins = [result.blocked];
+        }
+        await Promise.all([
+            initialCancellation,
+            cancelPending(),
+            ...evictedOrigins.map((evictedOrigin) => (
+                emitSiteDisconnect(bridgeEvents, evictedOrigin, 'blocked-by-user')
+            )),
+        ]);
+        return result;
     });
     host.register('sites.unblock', async (req, { vault }) => {
         const origin = req?.origin;
@@ -2355,16 +2421,17 @@ export function createBackgroundHost(deps) {
     host.register('addresses.setLabel', async (req, { vault }) => {
         const id = req?.id;
         if (!id) throw new Error('addresses.setLabel: id is required');
-        const label = typeof req?.label === 'string' ? req.label : '';
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
+        const requestedLabel = typeof req?.label === 'string' ? req.label.trim() : '';
+        const label = requestedLabel || schemas.address.defaultAddressLabel(rec);
         await vault.addresses.put({ ...rec, label });
         // §19.5.2 auto-sync: the label just changed on disk, so the
         // on-chain copy is stale. The scheduler batches this with every
         // other rename in the burst.
         const account = rec.accountId ? await vault.accounts.get(rec.accountId) : null;
         noteLabelChange({ vault }, account?.walletId ?? null);
-        return { ok: true };
+        return { ok: true, label };
     });
 
     // Keep hidden addresses in the vault and off the main list. The list's
@@ -3161,6 +3228,9 @@ export function createBackgroundHost(deps) {
         ));
         const conflictRecord = recordFor(originalTxHash);
         if (!conflictRecord) throw new Error('tx.replace: transaction is not a pending transaction in this wallet');
+        if (conflictRecord.chainConfirmed === true || conflictRecord.status === 'indexed') {
+            throw new Error('This transaction is already confirmed.');
+        }
         if (!['broadcast', 'broadcasting'].includes(conflictRecord.status)) {
             throw new Error('tx.replace: transaction is no longer replaceable');
         }
@@ -3371,6 +3441,18 @@ export function createBackgroundHost(deps) {
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
             const entry = q[idx];
+            const retryAfterMs = Number.isFinite(entry.nextRetryAt)
+                ? Math.ceil(entry.nextRetryAt - Date.now())
+                : 0;
+            if (retryAfterMs > 0) {
+                const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
+                const retryError = new Error(
+                    `Sending is paused after a network failure. Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+                );
+                retryError.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
+                retryError.retryAfterMs = retryAfterMs;
+                throw retryError;
+            }
             const sdk = sdkRegistry.get(entry.chainId);
             // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
             // encoder as a second argument and refuses without it ("Encoder client
@@ -3484,6 +3566,23 @@ export function createBackgroundHost(deps) {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
+                } else {
+                    const retryAttempt = Number.isSafeInteger(entry.retryAttempt) && entry.retryAttempt > 0
+                        ? entry.retryAttempt + 1
+                        : 1;
+                    const retryDelayMs = queuedBroadcastRetryDelay(retryAttempt);
+                    const cur = q.findIndex((e) => e.id === id);
+                    if (cur >= 0) {
+                        q[cur] = {
+                            ...q[cur],
+                            retryAttempt,
+                            nextRetryAt: Date.now() + retryDelayMs,
+                        };
+                        await persistQueue();
+                    }
+                    if (err && typeof err === 'object') {
+                        try { err.retryAfterMs = retryDelayMs; } catch { /* a frozen error keeps no retry hint */ }
+                    }
                 }
                 // Carry the verdict this catch just ACTED on across the messaging
                 // boundary, which keeps only { name, message }. Without it the

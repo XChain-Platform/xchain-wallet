@@ -12,7 +12,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { WatchOnlyBadge } from '../../../packages/core/src/shared/components/WatchOnlyBadge.jsx';
+import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
+import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
@@ -24,6 +28,12 @@ const ADDRESS = {
     publicKey: '02'.padEnd(66, 'a'),
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
+};
+const WATCH_ONLY_ADDRESS = {
+    ...ADDRESS,
+    id: 'watch-address',
+    derivationPath: null,
+    source: 'watch-only',
 };
 
 function watcherMessaging(overrides = {}) {
@@ -40,9 +50,34 @@ function watcherMessaging(overrides = {}) {
 function mount(ui, messaging) {
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
-            {ui}
+            <ToastHost>{ui}</ToastHost>
         </MessagingProvider>,
     );
+}
+
+function watchOnlyAccountMessaging() {
+    const target = {
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [WATCH_ONLY_ADDRESS] }),
+        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: WATCH_ONLY_ADDRESS }),
+        signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        updateSettings: vi.fn().mockResolvedValue({}),
+        listContacts: vi.fn().mockResolvedValue([]),
+        buildSendPsbtRequest: vi.fn(),
+        buildActionPsbtRequest: vi.fn(),
+        composeForConfirm: vi.fn(),
+        parsePsbtRequest: vi.fn(),
+        signMessageRequest: vi.fn(),
+    };
+    return new Proxy(target, {
+        get(object, property) {
+            if (property in object) return object[property];
+            if (typeof property !== 'string') return undefined;
+            const stub = vi.fn().mockResolvedValue(null);
+            object[property] = stub;
+            return stub;
+        },
+    });
 }
 
 afterEach(() => cleanup());
@@ -99,5 +134,25 @@ describe('watch-only mode audit', () => {
         });
         expect(await screen.findByRole('heading', { name: /unsigned transaction/i })).toBeTruthy();
         expect(screen.queryByLabelText('Password')).toBeNull();
+    });
+
+    it.each([
+        ['Send', () => <Send walletId="wallet-1" onBack={() => {}} />],
+        ['Swap', () => <SwapForm walletId="wallet-1" onBack={() => {}} />],
+        ['token actions', () => <MintForm walletId="wallet-1" onBack={() => {}} />],
+        ['token creation', () => <TokenWizard walletId="wallet-1" onBack={() => {}} />],
+        ['message signing', () => <SignMessageForm walletId="wallet-1" onBack={() => {}} />],
+        ['PSBT signing', () => <PsbtSignForm walletId="wallet-1" onBack={() => {}} />],
+    ])('refuses a watch-only account on %s before offering or building an action', async (_name, createUi) => {
+        const messaging = watchOnlyAccountMessaging();
+        mount(createUi(), messaging);
+
+        expect(await screen.findByText('This watch-only account cannot sign.')).toBeTruthy();
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(messaging.buildSendPsbtRequest).not.toHaveBeenCalled();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.parsePsbtRequest).not.toHaveBeenCalled();
+        expect(messaging.signMessageRequest).not.toHaveBeenCalled();
     });
 });

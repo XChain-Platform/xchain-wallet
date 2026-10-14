@@ -50,9 +50,33 @@ function mountWizard({
     return messaging;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    delete navigator.onLine;
+});
 
 describe('TokenWizard guided flow', () => {
+    it('blocks token composition with one plain reason while the device is offline', async () => {
+        Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+        const composeForConfirm = vi.fn();
+        mountWizard({ composeForConfirm });
+
+        fireEvent.click(await screen.findByText('Meme token'));
+        await screen.findByLabelText('Fee paid by');
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'OFFLINE' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
+        const continueButton = screen.getByRole('button', { name: 'Continue to confirmation' });
+        expect(continueButton).toBeDisabled();
+        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('supports keyboard submission, accurate progress, Back retention, and a complete review', async () => {
         mountWizard();
 
@@ -85,10 +109,10 @@ describe('TokenWizard guided flow', () => {
             'Utility token',
             'Useful Token',
             'UTILITY',
-            '1000',
+            '1000 UTILITY',
             '8',
             'Membership credits',
-            '25',
+            '25 UTILITY',
             'XCHAIN',
         ]) {
             expect(screen.getAllByText(value).length).toBeGreaterThan(0);
@@ -164,6 +188,54 @@ describe('TokenWizard guided flow', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Supply must be a whole number for an indivisible token.',
         );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it.each(['Collectible', 'Limited edition'])(
+        'requires the Image URL before reviewing the %s template',
+        async (templateName) => {
+            const messaging = mountWizard();
+            fireEvent.click(await screen.findByText(templateName));
+            await screen.findByLabelText('Fee paid by');
+            fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+            fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+                target: { value: 'ART' },
+            });
+            if (templateName === 'Limited edition') {
+                fireEvent.change(screen.getByLabelText('Edition size'), { target: { value: '10' } });
+                fireEvent.change(screen.getByLabelText('Copies per mint'), { target: { value: '1' } });
+            }
+
+            fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+            expect(await screen.findByRole('alert'))
+                .toHaveTextContent('Image URL is required for this template.');
+            expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        },
+    );
+
+    it('rejects exponent notation in a create-time callback amount', async () => {
+        const messaging = mountWizard();
+        fireEvent.click(await screen.findByText('Custom'));
+        await screen.findByLabelText('Fee paid by');
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'CALLBACK' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
+        fireEvent.click(screen.getByRole('button', { name: /Advanced settings/i }));
+        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+            target: { value: 'XCHAIN' },
+        });
+        fireEvent.change(screen.getByLabelText('Payout per unit'), {
+            target: { value: '1e2' },
+        });
+        fireEvent.change(screen.getByLabelText('Callback allowed from block'), {
+            target: { value: '1000' },
+        });
+
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Callback payout per unit must be a positive number.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 

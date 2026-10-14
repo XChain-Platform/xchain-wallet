@@ -65,6 +65,26 @@ afterEach(() => {
 });
 
 describe('dispenser async safety', () => {
+    it('shows plain validation copy for a malformed dispenser ID without querying the indexer', async () => {
+        const getDispenserByActionIndex = vi.fn();
+        const messaging = commonMessaging({
+            getDispenserByActionIndex,
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC_CHAIN]: [SOURCE] }),
+        });
+        render(provider(
+            <DispenserDetail
+                walletId="wallet-a"
+                chainId={BTC_CHAIN}
+                actionIndex="bad-id"
+                onBack={() => {}}
+            />,
+            messaging,
+        ));
+
+        expect(await screen.findByText('Dispenser ID must be a whole number.')).toBeInTheDocument();
+        expect(getDispenserByActionIndex).not.toHaveBeenCalled();
+    });
+
     it('derives only one address when Create is submitted twice in the same render', async () => {
         const generated = deferred();
         const messaging = commonMessaging({
@@ -212,13 +232,13 @@ describe('dispenser async safety', () => {
     it('clears the prior dispenser oracle quote while the next quote loads', async () => {
         const nextQuote = deferred();
         const rows = {
-            one: {
-                action_index: 'one', source: OWNER, address: OWNER, give_tick: 'XCHAIN', give_amount: '5',
+            1: {
+                action_index: '1', source: OWNER, address: OWNER, give_tick: 'XCHAIN', give_amount: '5',
                 get_coin: 'BTC', get_tick: null, get_amount: '0', fiat: 'USD', fiat_amount: null,
                 oracle_address: 'oracle-one', escrow_remaining: '100', current_status: 'open', status: 'open',
             },
-            two: {
-                action_index: 'two', source: OWNER, address: OWNER, give_tick: 'XCHAIN', give_amount: '5',
+            2: {
+                action_index: '2', source: OWNER, address: OWNER, give_tick: 'XCHAIN', give_amount: '5',
                 get_coin: 'BTC', get_tick: null, get_amount: '0', fiat: 'USD', fiat_amount: null,
                 oracle_address: 'oracle-two', escrow_remaining: '100', current_status: 'open', status: 'open',
             },
@@ -231,13 +251,13 @@ describe('dispenser async safety', () => {
                 : nextQuote.promise),
         });
         const view = render(provider(
-            <DispenserDetail walletId="wallet-a" chainId={BTC_CHAIN} actionIndex="one" onBack={() => {}} />,
+            <DispenserDetail walletId="wallet-a" chainId={BTC_CHAIN} actionIndex="1" onBack={() => {}} />,
             messaging,
         ));
         expect(await screen.findAllByText(/10 USD/)).not.toHaveLength(0);
 
         view.rerender(provider(
-            <DispenserDetail walletId="wallet-a" chainId={BTC_CHAIN} actionIndex="two" onBack={() => {}} />,
+            <DispenserDetail walletId="wallet-a" chainId={BTC_CHAIN} actionIndex="2" onBack={() => {}} />,
             messaging,
         ));
         await waitFor(() => expect(messaging.oracleFeeds).toHaveBeenCalledWith({

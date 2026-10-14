@@ -11,10 +11,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
@@ -77,6 +80,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     const [addressesReload, setAddressesReload] = useState(0);
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
+    const [inboxWarning, setInboxWarning] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
         /** @type {'pick' | 'password' | 'submitting' | 'inbox'} */ ('pick'),
     );
@@ -129,6 +133,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         setLoadError(null);
         setPassword('');
         setUnlockError(null);
+        setInboxWarning(null);
         setStage('pick');
         setMessages([]);
         setSelectedCounterparty(initialCounterparty || null);
@@ -159,7 +164,12 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 setAddressesByChain(byChain || {});
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) {
+                    setLoadError(userFacingMessage(
+                        err,
+                        'Failed to load messaging addresses. Try again.',
+                    ));
+                }
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId, addressesReload]);
@@ -236,6 +246,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         const requestId = ++inboxRequestRef.current;
         setStage('submitting');
         setUnlockError(null);
+        setInboxWarning(null);
 
         try {
             // Demo wallet: no on-chain history, fabricate a couple of threads.
@@ -255,6 +266,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             });
             if (requestId !== inboxRequestRef.current) return;
             setMessages(Array.isArray(result?.messages) ? result.messages : []);
+            const failedAddresses = Array.isArray(result?.errors) ? result.errors.length : 0;
+            setInboxWarning(failedAddresses > 0
+                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the chain service did not answer. Try again.`
+                : null);
             setStage('inbox');
             setPassword('');
         } catch (err) {
@@ -265,7 +280,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             } else if (name === 'NoKeyForAddressError') {
                 setUnlockError('This account has no decryption key in the wallet.');
             } else {
-                setUnlockError(err?.message || 'Failed to load messages.');
+                setUnlockError(submitFailureMessage(err, {
+                    verb: 'load messages',
+                    fallback: 'Failed to load messages. Check your connection and try again.',
+                }));
             }
             setStage('password');
             setTimeout(() => { passwordRef.current?.focus(); passwordRef.current?.select(); }, 0);
@@ -745,6 +763,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 </div>
             )}
         >
+            {inboxWarning ? (
+                <StatusMessage variant="warning">{inboxWarning}</StatusMessage>
+            ) : null}
             {handshakeRequesters.length > 0 ? (
                 <section aria-label="Encrypted-session requests" className={local.requestSection}>
                     <SectionHeader
@@ -901,8 +922,16 @@ function MessageContent({ content }) {
  * @param {() => void} props.onSubmit
  */
 function ThreadComposer({ value, onChange, onSubmit }) {
+    const [attempted, setAttempted] = useState(false);
+    const emptyError = attempted && !value.trim() ? 'Write a message before continuing.' : undefined;
+
     function handleSubmit(event) {
         event.preventDefault();
+        if (!value.trim()) {
+            setAttempted(true);
+            return;
+        }
+        setAttempted(false);
         onSubmit();
     }
     return (
@@ -913,9 +942,13 @@ function ThreadComposer({ value, onChange, onSubmit }) {
                 className={local.composerInput}
                 placeholder="Message"
                 value={value}
-                onChange={(e) => onChange(e.target.value)}
+                onChange={(e) => {
+                    setAttempted(false);
+                    onChange(e.target.value);
+                }}
                 autoComplete="off"
                 aria-label="Message"
+                error={emptyError}
             />
             <Button type="submit" variant="primary" size="sm" icon={null} aria-label="Send message">
                 <Icon.SendIcon />
@@ -999,7 +1032,13 @@ function SessionRequestRow({
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
                 setError('Incorrect password.');
             } else {
-                setError(err?.message || 'Could not share your key.');
+                const descriptor = chainRegistry.get(record.chainId);
+                setError(submitFailureMessage(err, {
+                    chainId: record.chainId,
+                    coinTicker: tickerForDescriptor(descriptor),
+                    verb: 'share your key',
+                    fallback: 'Could not share your key. Check your connection and try again.',
+                }));
             }
             setStage('idle');
         }

@@ -109,10 +109,10 @@ function TokenDetailContent({
     tick,
     kind = 'token',
     displayName,
-    divisibility = 8,
+    divisibility = null,
     fiatRate = null,
     fiatRateSource = null,
-    quantity = '0',
+    quantity = null,
     imageUrl: rowImageUrl = null,
     onBack,
     onSend,
@@ -147,6 +147,9 @@ function TokenDetailContent({
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
     const assetInfo = useTokenInfo({ chainId, tick, skip: isNative, demo: isDemo });
+    const resolvedDivisibility = isNative
+        ? normalizedDivisibility(divisibility)
+        : normalizedDivisibility(assetInfo?.divisibility) ?? normalizedDivisibility(divisibility);
     const [tokenMissing, setTokenMissing] = useState(false);
     useEffect(() => {
         setTokenMissing(false);
@@ -313,8 +316,8 @@ function TokenDetailContent({
 
     const fiat = useMemo(() => {
         if (typeof displayFiatRate !== 'number' || !isFinite(displayFiatRate)) return null;
-        return fiatValue(quantity, divisibility, displayFiatRate);
-    }, [quantity, divisibility, displayFiatRate]);
+        return fiatValue(quantity, resolvedDivisibility, displayFiatRate);
+    }, [quantity, resolvedDivisibility, displayFiatRate]);
 
     // Header icon picks the smallest representation available: a TIS
     // `icon`-typed image first, then any other TIS image, then the
@@ -369,8 +372,9 @@ function TokenDetailContent({
         />
     );
 
-    const showNativeStats = isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null;
-    const hasDescription = !isNative && Boolean(assetInfo?.description);
+    const nativePriceValue = positiveFiniteNumber(nativePrice.entry?.priceFiat);
+    const showNativeStats = isNative && !nativePrice.disabled && nativePriceValue !== null;
+    const hasDescription = !isNative && detailText(assetInfo?.description) !== '-';
     const hasMarketData = (isNative && showNativeStats) || (!isNative && assetInfo?.marketPrice != null);
 
     // Tabs match the Home layout pattern (Coins / Tokens / NFTs / DeFi /
@@ -424,15 +428,17 @@ function TokenDetailContent({
     // smaller styled span next to the digits (matches the Home total-
     // balance hero treatment). For BTC the code is the tick ticker;
     // for fiat the code is the wallet's preferred currency.
-    const assetAmount = formatAmount(quantity, divisibility);
-    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : 'N/A';
+    const assetAmount = formatAmount(quantity, resolvedDivisibility);
+    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : '-';
     const showFiatPrimary = primaryUnit === 'fiat' && fiatAvailable;
     const primaryAmount = showFiatPrimary ? fiatAmount : assetAmount;
     const primaryCode = showFiatPrimary ? fiatCurrency : tick;
     const secondaryAmount = showFiatPrimary ? assetAmount : fiatAmount;
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
-    const sendDisabledReason = safeBigInt(quantity) <= 0n
-        ? 'No balance to send.'
+    const atomicQuantity = parseAtomicQuantity(quantity);
+    const sendDisabledReason = atomicQuantity == null
+        ? 'Balance is unavailable.'
+        : atomicQuantity <= 0n ? 'No balance to send.'
         : !networkActionsAvailable ? 'Send needs a network connection.' : null;
     const tradeDisabledReason = !networkActionsAvailable ? 'Trade needs a network connection.' : null;
 
@@ -594,7 +600,7 @@ function TokenDetailContent({
                             {supplyHistory.loading ? (
                                 <Skeleton height={94} ariaLabel="Loading supply history" />
                             ) : supplyHistory.points.length >= 2 ? (
-                                <SupplyChart points={supplyHistory.points} divisibility={divisibility} tick={tick} />
+                                <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
                             ) : (
                                 <EmptyState
                                     title="No supply history yet"
@@ -610,10 +616,10 @@ function TokenDetailContent({
                     <NativePriceAlertEntry
                         walletId={walletId}
                         chainId={chainId}
-                        currentPrice={nativePrice.entry?.priceFiat ?? null}
+                        currentPrice={nativePriceValue}
                         fiatCurrency={fiatCurrency}
                         loading={nativePrice.loading || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error)}
-                        disabled={nativePrice.disabled}
+                        disabled={!fiatSupported || nativePrice.disabled}
                     />
                 ) : null}
 
@@ -704,7 +710,7 @@ function TokenDetailContent({
                                         assetInfo={assetInfo}
                                         loading={metadataLoading}
                                         quantity={quantity}
-                                        divisibility={divisibility}
+                                        divisibility={resolvedDivisibility}
                                         fiat={fiat}
                                         fiatCurrency={fiatCurrency}
                                     />
@@ -756,7 +762,7 @@ function TokenDetailContent({
                                         holdersMoreError={holdersMoreError}
                                         holdersTotal={holdersTotal}
                                         onLoadMore={loadMoreHolders}
-                                        divisibility={divisibility}
+                                        divisibility={resolvedDivisibility}
                                     />
                                 </>
                             ) : null}
@@ -814,7 +820,7 @@ function SupplyChart({ points, divisibility, tick }) {
             return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
         })
         .join(' ');
-    const latest = formatAmount(String(Math.round(points[points.length - 1].supply)), divisibility);
+    const latest = formatTokenQuantity(String(points[points.length - 1].supply), divisibility);
     return (
         <section aria-label="Supply over time">
             <SectionHeader title="Supply over time" />
@@ -917,13 +923,13 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
     const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
     const range = availableRanges.find((item) => item.id === rangeId) || availableRanges[0];
 
-    let priceCell = 'N/A';
+    let priceCell = '-';
     let priceLabel = 'Price';
-    let marketCapCell = 'N/A';
-    let floorCell = 'N/A';
+    let marketCapCell = '-';
+    let floorCell = '-';
     let pctLabel24h;
     let pctTone24h;
-    let pct24h = 'N/A';
+    let pct24h = '-';
     let sparkline = null;
     let hint = null;
     const nativeLoading = nativePrice.loading
@@ -936,25 +942,26 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
             hint = 'Loading market data…';
         } else if (nativePrice.entry) {
             const e = nativePrice.entry;
-            if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat, fiatCurrency);
+            const priceFiat = positiveFiniteNumber(e.priceFiat);
+            if (priceFiat !== null) priceCell = formatFiat(priceFiat, fiatCurrency);
             if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat, fiatCurrency);
-            if (e.change24hPct != null) {
-                const display = percentChangeDisplay(e.change24hPct);
-                pct24h = display?.text ?? 'N/A';
+            if (e.change24hPct != null && e.change24hPct !== '' && Number.isFinite(Number(e.change24hPct))) {
+                const display = percentChangeDisplay(Number(e.change24hPct));
+                pct24h = display?.text ?? '-';
                 pctLabel24h = display?.label;
                 pctTone24h = display?.direction;
             }
             const recordedHistory = priceHistoryForRange(e, range);
             if (recordedHistory) {
                 sparkline = recordedHistory;
-            } else if (e.priceFiat != null && isDemo) {
+            } else if (priceFiat !== null && isDemo) {
                 // Demo wallets only: no real series for this range, so
                 // synthesize a walk seeded by chain + change so the demo
                 // chart always renders. The line still ends at the current
                 // price. Real wallets fall through to the empty-state message.
                 const synth = synthesizeTokenChart(
                     `${chainId}|native|${range.id}|${(e.change24hPct ?? 0).toFixed(2)}`,
-                    e.priceFiat,
+                    priceFiat,
                     range.points,
                 );
                 sparkline = synth.sparkline;
@@ -1025,7 +1032,7 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
     void floorCell;
     const nativeTick = nativeTickerOf(chainId);
     const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
-    if (marketPriceNum != null && Number.isFinite(marketPriceNum)) {
+    if (marketPriceNum != null && Number.isFinite(marketPriceNum) && marketPriceNum > 0) {
         priceLabel = 'Price (DEX)';
         priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
@@ -1043,7 +1050,7 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
             const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
             if (synth.change24hPct != null) {
                 const display = percentChangeDisplay(synth.change24hPct);
-                pct24h = display?.text ?? 'N/A';
+                pct24h = display?.text ?? '-';
                 pctLabel24h = display?.label;
                 pctTone24h = display?.direction;
             }
@@ -1056,7 +1063,7 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
             const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
             if (synth.change24hPct != null) {
                 const display = percentChangeDisplay(synth.change24hPct);
-                pct24h = display?.text ?? 'N/A';
+                pct24h = display?.text ?? '-';
                 pctLabel24h = display?.label;
                 pctTone24h = display?.direction;
             }
@@ -1163,7 +1170,7 @@ function DetailsPanel({
                 <DetailRow label={<span>Total supply</span>}>
                     <span>
                         {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
-                        {!isNative && assetInfo ? (
+                        {!isNative && typeof assetInfo?.locked === 'boolean' ? (
                             <span className={styles.supplyState}>
                                 {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
                             </span>
@@ -1171,7 +1178,7 @@ function DetailsPanel({
                     </span>
                 </DetailRow>
                 <DetailRow label="Current balance">
-                    {balanceHidden ? '•••••' : `${formatAmount(quantity, divisibility)} ${tick}`}
+                    {balanceHidden ? '•••••' : amountWithUnit(quantity, divisibility, tick)}
                 </DetailRow>
                 <DetailRow label="Estimated value">
                     {balanceHidden
@@ -1184,12 +1191,12 @@ function DetailsPanel({
                     <DetailRow label={<span>Creator</span>}>
                         {loading ? (
                             <Skeleton shape="text" width="70%" height={20} />
-                        ) : assetInfo?.creator ? (
+                        ) : detailText(assetInfo?.creator) !== '-' ? (
                             <span className={styles.copyableValue}>
                                 <AddressText address={assetInfo.creator} className={styles.creatorCell} />
                                 <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
                             </span>
-                        ) : 'N/A'}
+                        ) : '-'}
                     </DetailRow>
                 ) : null}
                 {!isNative ? (
@@ -1829,7 +1836,7 @@ const NATIVE_SUPPLY_BY_COIN = {
 function formatTotalSupply(isNative, chainId, assetInfo, divisibility) {
     if (isNative) {
         const coin = chainId.split('-')[0];
-        return NATIVE_SUPPLY_BY_COIN[coin] || 'N/A';
+        return NATIVE_SUPPLY_BY_COIN[coin] || '-';
     }
     const totalSupply = detailText(assetInfo?.totalSupply);
     if (totalSupply === '-') return totalSupply;
@@ -2426,17 +2433,15 @@ function HoldersPanel({
             ) : null}
             <ul className={styles.holdersList} aria-label="Holder balances">
                 {renderedHolders.map((h, i) => {
-                    const address = h.address || h.ADDRESS;
-                    const balance = h.quantity != null || h.QUANTITY != null
-                        ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
-                        : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'));
+                    const address = holderAddress(h);
+                    const balance = formatHolderBalance(h, divisibility);
                     return (
                         <li key={holderIdentity(h) || `holder:${i}`}>
                             <ListRow
                                 title={(
                                     <span className={styles.holdersAddrWrap}>
-                                        <AddressText address={address || 'unknown'} className={styles.holdersAddr} />
-                                        {address ? (
+                                        <AddressText address={address === '-' ? 'unknown' : address} className={styles.holdersAddr} />
+                                        {address !== '-' ? (
                                             <CopyButton
                                                 value={address}
                                                 ariaLabel={`Copy holder address ${i + 1}`}
@@ -2470,6 +2475,18 @@ function holderIdentity(holder) {
     return holder?.address ?? holder?.ADDRESS ?? null;
 }
 
+function holderAddress(holder) {
+    return detailText(holder?.address ?? holder?.ADDRESS);
+}
+
+function formatHolderBalance(holder, divisibility) {
+    const atomic = holder?.quantity ?? holder?.QUANTITY;
+    if (atomic != null) return formatAmount(atomic, divisibility);
+    const amount = detailText(holder?.amount ?? holder?.AMOUNT);
+    if (amount === '-' || !/^-?\d+(?:\.\d+)?$/.test(amount)) return '-';
+    return formatWithThousands(amount);
+}
+
 function restoreBalanceRowFocus(chainId, tick) {
     if (typeof document === 'undefined') return;
     const key = `${chainId}:${tick}`;
@@ -2496,13 +2513,18 @@ function StatCell({ label, value, valueLabel, tone }) {
 }
 
 function formatCompactFiat(value, currency) {
-    if (value === null || value === undefined || !isFinite(value)) return 'N/A';
+    if (value === null || value === undefined || !isFinite(value)) return '-';
     const abs = Math.abs(value);
     if (abs >= 1e12) return `${formatFiat(value / 1e12, currency)}T`;
     if (abs >= 1e9) return `${formatFiat(value / 1e9, currency)}B`;
     if (abs >= 1e6) return `${formatFiat(value / 1e6, currency)}M`;
     if (abs >= 1e3) return `${formatFiat(value / 1e3, currency)}K`;
     return formatFiat(value, currency);
+}
+
+function positiveFiniteNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function kindLabel(kind) {
@@ -2516,24 +2538,38 @@ function nativeTickerOf(chainId) {
     return tickerForCoin(desc?.coin);
 }
 
-function safeBigInt(v) {
+function parseAtomicQuantity(v) {
     if (typeof v === 'bigint') return v;
-    if (typeof v === 'number') return BigInt(Math.trunc(v));
+    if (typeof v === 'number') return Number.isSafeInteger(v) ? BigInt(v) : null;
     if (typeof v === 'string') {
         const t = v.trim();
-        if (!/^-?\d+$/.test(t)) return 0n;
+        if (!/^-?\d+$/.test(t)) return null;
         return BigInt(t);
     }
-    return 0n;
+    return null;
+}
+
+function normalizedDivisibility(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 0 && parsed <= 8 ? parsed : null;
 }
 
 function formatAmount(quantityStr, divisibility) {
+    if (parseAtomicQuantity(quantityStr) == null || normalizedDivisibility(divisibility) == null) return '-';
     return formatAtomicAmount(quantityStr, divisibility);
 }
 
+function amountWithUnit(quantity, divisibility, unit) {
+    const amount = formatAmount(quantity, divisibility);
+    return amount === '-' ? '-' : `${amount} ${unit}`;
+}
+
 function fiatValue(quantityStr, divisibility, fiatRate) {
-    if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
-    const amount = decimalFromBaseUnits(safeBigInt(quantityStr), divisibility || 0);
+    const quantity = parseAtomicQuantity(quantityStr);
+    const scale = normalizedDivisibility(divisibility);
+    if (quantity == null || scale == null || typeof fiatRate !== 'number' || !isFinite(fiatRate) || fiatRate <= 0) return null;
+    const amount = decimalFromBaseUnits(quantity, scale);
     return multiplyDecimalStrings(amount, String(fiatRate));
 }
 
@@ -2545,7 +2581,7 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
 // conventions render correctly; falls back to a plain-number rendering
 // if the code is unknown to Intl.
 function formatFiatNumber(value, currency) {
-    if (value === null || value === undefined) return 'N/A';
+    if (value === null || value === undefined) return '-';
     return formatFiatAmount(String(value), currency);
 }
 

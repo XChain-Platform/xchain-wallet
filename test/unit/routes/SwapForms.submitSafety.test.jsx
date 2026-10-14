@@ -38,6 +38,7 @@ const REGTEST_ADDRESS = { ...ADDRESS, id: 'btc-regtest-a', address: 'bcrt1qexamp
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    delete navigator.onLine;
 });
 
 function deferred() {
@@ -53,7 +54,17 @@ function messaging(composeForConfirm, { walletMode = 'full', buildActionPsbtRequ
             [REGTEST]: [REGTEST_ADDRESS],
         }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getWalletBalances: vi.fn().mockResolvedValue({}),
+        getWalletBalances: vi.fn().mockResolvedValue({
+            [BTC]: [{
+                address: ADDRESS.address,
+                balances: {
+                    tokens: [
+                        { tick: 'ALPHA', quantity: '100.0', divisibility: 8 },
+                        { tick: 'BETA', quantity: '100.0', divisibility: 8 },
+                    ],
+                },
+            }],
+        }),
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
@@ -96,6 +107,41 @@ async function expectOneLockedCompose({ children, fill, actionName }) {
 }
 
 describe('swap form submit safety', () => {
+    it('blocks composition with one plain reason while the device is offline', async () => {
+        Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+        const composeForConfirm = vi.fn();
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging(composeForConfirm)}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+
+        await fillSwap();
+        expect(screen.getAllByText('Swapping needs a network connection.')).toHaveLength(1);
+        const review = screen.getByRole('button', { name: 'Review' });
+        expect(review).toBeDisabled();
+        fireEvent.submit(review.closest('form'));
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('stops preparing and shows one plain error when composition rejects', async () => {
+        const composeForConfirm = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging(composeForConfirm)}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+
+        await fillSwap();
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        const errors = screen.getAllByRole('alert');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toHaveTextContent(/connection|try again/i);
+    });
+
     it('locks and de-duplicates SwapForm while its exact terms compose', async () => {
         await expectOneLockedCompose({
             children: <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />,

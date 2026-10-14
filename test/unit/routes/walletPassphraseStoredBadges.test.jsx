@@ -148,6 +148,8 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
         let finishRemoval;
         const onExited = vi.fn();
         const utils = await renderDetails(STORED, { onRename: vi.fn(), onExited }, {
+            // A real wallet remains, so exiting the demo has a wallet to select.
+            listWallets: () => Promise.resolve([STORED, { id: 'real-1', name: 'Real wallet' }]),
             removeWallet: vi.fn(() => new Promise((resolve) => {
                 finishRemoval = resolve;
             })),

@@ -159,7 +159,7 @@ describe('staking route request safety', () => {
             messaging,
         ));
 
-        expect(await screen.findByText(/Failed to load staking positions\./)).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn't load staking positions\./)).toBeInTheDocument();
         expect(screen.queryByText(/Cannot read properties/)).toBeNull();
         expect(screen.queryByLabelText('Loading staking positions')).toBeNull();
     });

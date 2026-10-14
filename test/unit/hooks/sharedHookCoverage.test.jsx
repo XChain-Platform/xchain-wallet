@@ -19,6 +19,7 @@ import { useLastView } from '../../../packages/core/src/shared/hooks/useLastView
 import { useViewportClamp } from '../../../packages/core/src/shared/hooks/useViewportClamp.js';
 import {
     readLastViewRoute,
+    takeInterruptedView,
 } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 
@@ -250,8 +251,9 @@ describe('useLastView', () => {
         expect(options.onResume).toHaveBeenCalledWith('history');
     });
 
-    it('persists resumable views and clears an unsafe route to Home', () => {
+    it('lands unsafe transaction routes on Home with a one-shot interruption marker', () => {
         const onResume = vi.fn();
+        localStorage.setItem('xchain.broadcastQueue', '{"entries":["signed-send"]}');
         const { rerender } = renderHook(
             ({ currentView }) => useLastView(args({ currentView, onResume })),
             { initialProps: { currentView: 'home' } },
@@ -261,6 +263,18 @@ describe('useLastView', () => {
         expect(readLastViewRoute('wallet-1')).toEqual({ view: 'history', params: null });
         rerender({ currentView: 'send' });
         expect(readLastViewRoute('wallet-1')).toBeNull();
+        expect(takeInterruptedView('wallet-1')).toBe('send');
+        expect(takeInterruptedView('wallet-1')).toBeNull();
+        expect(localStorage.getItem('xchain.broadcastQueue'))
+            .toBe('{"entries":["signed-send"]}');
+
+        rerender({ currentView: 'cross-chain-swap' });
+        expect(readLastViewRoute('wallet-1')).toBeNull();
+        expect(takeInterruptedView('wallet-1')).toBe('swap');
+
+        rerender({ currentView: 'send' });
+        rerender({ currentView: 'home' });
+        expect(takeInterruptedView('wallet-1')).toBeNull();
     });
 });
 

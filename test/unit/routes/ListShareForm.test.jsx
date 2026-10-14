@@ -67,7 +67,10 @@ function baseDetail(overrides = {}) {
     };
 }
 
-function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresses } = {}) {
+function makeMessaging({
+    detail = baseDetail(), shared = { lists: [] }, addresses, listError = null,
+    listActionIndex = '2700',
+} = {}) {
     const rows = addresses || [ACTIVE_RECORD, OWNER_RECORD, ROOT_OWNER_RECORD];
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: rows }),
@@ -76,7 +79,8 @@ function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresse
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getListByActionIndex: vi.fn(async ({ actionIndex }) => {
-            if (String(actionIndex) === '2700') return detail;
+            if (listError) throw listError;
+            if (String(actionIndex) === String(listActionIndex)) return detail;
             if (String(actionIndex) === '2600') {
                 return { action_index: 2600, type: 2, source: ROOT_OWNER, list_action_index: null };
             }
@@ -103,15 +107,16 @@ function makeMessaging({ detail = baseDetail(), shared = { lists: [] }, addresse
 
 function mount({
     support = { share: true, transfer: true, union: true },
+    actionIndex = '2700',
     ...messagingOptions
 } = {}) {
     listFormatSupport.mockResolvedValue(support);
-    const messaging = makeMessaging(messagingOptions);
+    const messaging = makeMessaging({ ...messagingOptions, listActionIndex: actionIndex });
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ListShareForm
                 walletId="wallet-1"
-                listRef={{ chainId: CHAIN, actionIndex: '2700' }}
+                listRef={{ chainId: CHAIN, actionIndex }}
                 onBack={() => {}}
                 onDone={() => {}}
             />
@@ -126,6 +131,29 @@ afterEach(() => {
 });
 
 describe('ListShareForm', () => {
+    it('refuses a malformed list reference before review', async () => {
+        const messaging = mount({ actionIndex: '-1' });
+        fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), {
+            target: { value: 'SHARE' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows plain copy when the list indexer read fails', async () => {
+        mount({
+            listError: Object.assign(
+                new Error('Explorer returned HTTP 502 for /BTC/api/lists/2700'),
+                { name: 'SDKExplorerError' },
+            ),
+        });
+
+        expect(await screen.findByText(/service that reads the chain is temporarily unavailable/)).toBeTruthy();
+        expect(screen.queryByText(/\/BTC\/api\/lists/)).toBeNull();
+    });
+
     it.each([
         [
             'a union',

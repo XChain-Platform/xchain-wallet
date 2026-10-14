@@ -72,7 +72,12 @@ function recordingMessaging(chainState) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
+        getWalletBalances: () => Promise.resolve({
+            [CHAIN]: [{
+                address: SOURCE.address,
+                balances: { tokens: [{ tick: 'JDOG', quantity: '10000000000', divisibility: 8 }] },
+            }],
+        }),
         getListByActionIndex: () => Promise.resolve(null),
         getAddressPreferences: answer('getAddressPreferences', chainState.prefs),
         getDispensersForAddress: answer('getDispensersForAddress', chainState.dispensers instanceof Error

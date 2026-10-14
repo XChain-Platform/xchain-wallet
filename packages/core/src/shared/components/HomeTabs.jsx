@@ -889,7 +889,7 @@ const ACTION_ICON = {
     other:      (k) => <Icon.HistoryIcon key={k} />,
 };
 
-const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, onSelectEntry, allowRemoteImages }) {
+const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, chainTip, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
@@ -922,7 +922,14 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
                 amount={displayPrimary}
                 status={status}
                 timestamp={entry.timestamp}
-                onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry(entry) : undefined}
+                onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry({
+                    ...entry,
+                    detailContext: {
+                        chainTip: chainTip ?? null,
+                        indexerWatermark: null,
+                        walletAddresses: [...walletAddresses],
+                    },
+                }) : undefined}
                 data-activity-row
             />
         </li>
@@ -962,6 +969,22 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
         return all.sort((a, b) => b.timestamp - a.timestamp);
     }, [chainIds, networkFilter]);
 
+    // Synthetic chain tip per chainId: max blockIndex across visible entries
+    // plus a small buffer, so the detail view reads a plausible confirmation
+    // count instead of "1" for the freshest confirmed entry.
+    const chainTips = useMemo(() => {
+        /** @type {Record<string, number>} */
+        const tips = {};
+        for (const e of entries) {
+            if (!e.chainId || !e.blockIndex) continue;
+            if (!tips[e.chainId] || e.blockIndex > tips[e.chainId]) {
+                tips[e.chainId] = e.blockIndex;
+            }
+        }
+        for (const cid of Object.keys(tips)) tips[cid] += 8;
+        return tips;
+    }, [entries]);
+
     if (entries.length === 0) {
         return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any chains active." />;
     }
@@ -973,6 +996,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
                     entry={e}
                     walletAddresses={walletAddresses}
                     assetLookup={assetLookup}
+                    chainTip={chainTips[e.chainId] || null}
                     allowRemoteImages={allowRemoteImages}
                     onSelectEntry={onSelectEntry}
                 />

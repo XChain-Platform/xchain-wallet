@@ -13,13 +13,10 @@
 // advance to the lowest free index for the Receive screen's privacy
 // posture; advanced callers can request one specific free index.
 //
-// "Unused" means not held by a persisted Address record (an address that
-// has been handed out). The scan takes the LOWEST unheld index, not the
-// highest held plus one, so a deleted record at an interior index is
-// re-derived by the next Generate instead of being skipped forever with
-// whatever it holds. This doesn't check on-chain usage; the UI layer can
-// cross-reference SDK history if it wants to reuse a pre-generated-but-
-// unfunded address.
+// "Unused" means not held by a persisted Address record and not reported
+// as funded on-chain. The scan takes the LOWEST unheld, unfunded index so
+// a deleted empty record can be recovered without offering a funded
+// receive address a second time.
 
 import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
@@ -48,6 +45,23 @@ export class DerivationIndexAlreadyHeldError extends Error {
 }
 
 const MAX_DERIVATION_INDEX = 0x7fffffff;
+
+async function addressEverFunded(sdk, address) {
+    if (!sdk?.explorer || typeof sdk.explorer.getHistory !== 'function') return null;
+    let history;
+    try {
+        history = await sdk.explorer.getHistory(address, 'address', { limit: 1 });
+    } catch {
+        return null;
+    }
+    if (Array.isArray(history)) return history.length > 0;
+    if (history && typeof history === 'object') {
+        if (Array.isArray(history.data)) return history.data.length > 0;
+        if (typeof history.count === 'number') return history.count > 0;
+    }
+    if (typeof history === 'number') return history > 0;
+    return false;
+}
 
 /**
  * @typedef {Object} ReceiveAddressOpts
@@ -119,6 +133,16 @@ export async function receiveAddress({
         );
     }
 
+    let walletFormat;
+    try {
+        walletFormat = (await vault.wallets?.get(walletId))?.format;
+    } catch {
+        walletFormat = undefined;
+    }
+    if (walletFormat === 'wif-only') {
+        throw new Error('receiveAddress: imported-key wallets cannot rotate receive addresses');
+    }
+
     // Find the matching Account. Prefer `accountId` when supplied; fall
     // back to (walletId, index) lookup so legacy callers still work.
     const accounts = await vault.accounts.findBy('walletId', walletId);
@@ -135,9 +159,8 @@ export async function receiveAddress({
     }
 
     // Collect the external (change=0) indices held for this
-    // (account, chain, network, addressType) combination; nextIndex is the
-    // lowest one missing from 0 upward, so an empty set starts at 0 and a
-    // gap left by a deleted record is filled before the range grows.
+    // (account, chain, network, addressType) combination. A missing index
+    // is reusable only when its derived address has no on-chain history.
     //
     // A counterwallet-legacy wallet derives m/0'/C/I for EVERY address
     // type, so its types share one index space and the addressType filter
@@ -146,6 +169,7 @@ export async function receiveAddress({
     const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
     const held = new Set();
+    let highest = -1;
     for (const a of allAddresses) {
         if (a.accountId !== account.id) continue;
         if (a.chain !== descriptor.coin) continue;
@@ -164,13 +188,13 @@ export async function receiveAddress({
         const change = parts[parts.length - 2];
         if (change !== '0') continue;
         const idx = Number(parts[parts.length - 1]);
-        if (Number.isInteger(idx) && idx >= 0) held.add(idx);
+        if (Number.isInteger(idx) && idx >= 0) {
+            held.add(idx);
+            if (idx > highest) highest = idx;
+        }
     }
-    let nextIndex = 0;
-    while (held.has(nextIndex)) nextIndex += 1;
-    const targetIndex = derivationIndex ?? nextIndex;
-    if (derivationIndex !== undefined && held.has(targetIndex)) {
-        throw new DerivationIndexAlreadyHeldError(targetIndex);
+    if (derivationIndex !== undefined && held.has(derivationIndex)) {
+        throw new DerivationIndexAlreadyHeldError(derivationIndex);
     }
 
     const signer = providedSigner
@@ -189,14 +213,45 @@ export async function receiveAddress({
 
     const isHardware = signerKind === 'trezor' || signerKind === 'ledger';
     try {
-        const [derived] = await signer.getAddresses({
-            chainId,
-            accountIndex: resolvedAccountIndex,
-            change: 0,
-            startIndex: targetIndex,
-            count: 1,
-            addressType: type,
-        });
+        let targetIndex = derivationIndex;
+        let derived;
+        if (targetIndex === undefined) {
+            const sdk = sdkRegistry.get(chainId);
+            for (let index = 0; index <= MAX_DERIVATION_INDEX; index += 1) {
+                if (held.has(index)) continue;
+                const [candidate] = await signer.getAddresses({
+                    chainId,
+                    accountIndex: resolvedAccountIndex,
+                    change: 0,
+                    startIndex: index,
+                    count: 1,
+                    addressType: type,
+                });
+                const funded = await addressEverFunded(sdk, candidate.address);
+                // An unreadable explorer cannot prove a deleted interior
+                // gap safe. The first index beyond every held record is
+                // still the normal fresh frontier and remains available
+                // offline.
+                if (funded === false || (funded === null && index > highest)) {
+                    targetIndex = index;
+                    derived = candidate;
+                    break;
+                }
+            }
+        }
+        if (targetIndex === undefined || targetIndex > MAX_DERIVATION_INDEX) {
+            throw new RangeError('No receive-address derivation indexes remain.');
+        }
+        if (!derived) {
+            [derived] = await signer.getAddresses({
+                chainId,
+                accountIndex: resolvedAccountIndex,
+                change: 0,
+                startIndex: targetIndex,
+                count: 1,
+                addressType: type,
+            });
+        }
         if (isHardware) {
             // §17.6: a fresh HARDWARE receive address is confirmed on the
             // device's trusted screen before it is persisted, so a

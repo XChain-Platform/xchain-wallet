@@ -17,6 +17,49 @@
 // address. Owner-gated actions (mint, dividend, transfer-ownership, etc.) do
 // NOT use these: they must source from the token's owner address instead.
 
+export const WATCH_ONLY_SIGNING_MESSAGE = 'This watch-only account cannot sign.';
+
+/**
+ * Remove addresses that cannot authorize a transaction or message.
+ * Empty chains are omitted so chain pickers cannot lead to a dead signing form.
+ *
+ * Watcher-mode wallets are the exception: their addresses are all watch-only
+ * and the flows build unsigned transactions, so nothing is removed there.
+ *
+ * @param {Record<string, any[]> | null | undefined} addressesByChain
+ * @param {{ walletMode?: string } | null | undefined} [settings]
+ * @returns {Record<string, any[]>}
+ */
+export function signingAddressesByChain(addressesByChain, settings = null) {
+    if (settings?.walletMode === 'watcher') {
+        return Object.fromEntries(
+            Object.entries(addressesByChain || {})
+                .map(([chainId, addresses]) => [chainId, Array.isArray(addresses) ? addresses : []])
+                .filter(([, addresses]) => addresses.length > 0),
+        );
+    }
+    return Object.fromEntries(
+        Object.entries(addressesByChain || {})
+            .map(([chainId, addresses]) => [
+                chainId,
+                (Array.isArray(addresses) ? addresses : [])
+                    .filter((address) => address?.source !== 'watch-only'),
+            ])
+            .filter(([, addresses]) => addresses.length > 0),
+    );
+}
+
+/**
+ * Whether an address map contains at least one persisted address.
+ *
+ * @param {Record<string, any[]> | null | undefined} addressesByChain
+ * @returns {boolean}
+ */
+export function hasAnyAddress(addressesByChain) {
+    return Object.values(addressesByChain || {})
+        .some((addresses) => Array.isArray(addresses) && addresses.length > 0);
+}
+
 /**
  * The external (change=0) index a derivation path ends on, or null when the
  * path is internal or unparseable.
@@ -88,5 +131,9 @@ export function activeSourceId(addresses, activeEntry) {
  * @returns {string | null}
  */
 export function preferredSourceId(addresses, activeEntry) {
-    return activeSourceId(addresses, activeEntry) || newestHdExternalId(addresses);
+    const signingAddresses = (addresses || [])
+        .filter((address) => address?.source !== 'watch-only');
+    // A watcher-mode wallet holds only watch-only addresses; keep them selectable.
+    const pool = signingAddresses.length ? signingAddresses : (addresses || []);
+    return activeSourceId(pool, activeEntry) || newestHdExternalId(pool);
 }

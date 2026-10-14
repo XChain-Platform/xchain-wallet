@@ -82,6 +82,32 @@ describe('BIP21-style Receive payment requests', () => {
         })).toThrow(/plain decimal/);
     });
 
+    it.each(CHAINS)('%s round-trips an 18-decimal token request', (descriptor) => {
+        const amount = '0.123456789012345678';
+        const uri = encodeBip21Uri({
+            scheme: descriptor.uriScheme,
+            address: `address-for-${descriptor.id}`,
+            amount,
+            params: {
+                chain: descriptor.id,
+                tick: 'ROUNDTRIP',
+            },
+        });
+
+        expect(uri).toContain(`amount=${amount}`);
+        expect(parseBip21Uri(uri)).toMatchObject({
+            amount,
+            params: { chain: descriptor.id, tick: 'ROUNDTRIP' },
+        });
+        expect(detectQrContent(uri, { chainRegistry: registry })).toMatchObject({
+            type: 'bip21',
+            parts: {
+                amount,
+                params: { chain: descriptor.id, tick: 'ROUNDTRIP' },
+            },
+        });
+    });
+
     it.each(['1e-8', '2.1E7', '0.000000001'])('rejects unsafe amount syntax %s', (amount) => {
         expect(() => encodeBip21Uri({
             scheme: 'bitcoin',

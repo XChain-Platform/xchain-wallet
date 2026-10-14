@@ -16,7 +16,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { compareDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -40,6 +40,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -146,6 +147,8 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         address: fromAddress?.address,
         tick: tick,
     });
+    const tokenInfo = useTokenInfo({ chainId, tick, skip: !tick.trim() });
+    const tokenDivisibility = tokenInfo?.divisibility ?? 8;
 
     // D-23: a WITHDRAW spends the CONTRACT's custody, not the user's wallet, so
     // the wallet balance is the wrong ceiling for it - the form used to offer
@@ -291,6 +294,10 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             setFormError('No source address available.');
             return;
         }
+        if (!/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) {
+            setFormError('Contract ID must be a positive whole number.');
+            return;
+        }
         if (!tick.trim()) {
             setFormError('Token ticker is required.');
             return;
@@ -298,6 +305,15 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         const q = String(quantity).trim();
         if (!isPositiveDecimal(q)) {
             setFormError('Quantity must be a positive decimal.');
+            return;
+        }
+        const precisionError = tokenAmountPrecisionError(q, {
+            divisibility: tokenDivisibility,
+            tick,
+            noun: 'Quantity',
+        });
+        if (precisionError) {
+            setFormError(precisionError);
             return;
         }
         if (isDeposit && tickAmtBalance != null && compareDecimalStrings(q, tickAmtBalance) === 1) {
@@ -483,7 +499,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                             </dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
+                    <dt className={styles.detailsLabel}>{isDeposit ? 'From' : 'Recipient'}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
@@ -654,7 +670,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={withdrawRefused || !fromAddress || !tick.trim() || !quantity || actionConfirm.composing}
+                    disabled={withdrawRefused || actionConfirm.composing}
                 >
                     {singleEncode ? verb : 'Preview'}
                 </Button>
@@ -686,6 +702,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     : 'Amount to pull out of the contract. Only succeeds if the contract permits it.'}
                 amount={quantity}
                 tick={tick}
+                divisibility={tokenDivisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;

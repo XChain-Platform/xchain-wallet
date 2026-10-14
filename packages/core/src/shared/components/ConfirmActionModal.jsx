@@ -575,7 +575,14 @@ export function ConfirmActionModal({
                         with this error set, so the user retypes and re-approves
                         the SAME PSBT. Sits directly above the credentials block
                         so the message is adjacent to the field it refers to. */}
-                    {error ? (
+                    {error?.presentation === 'status' ? (
+                        <div className={styles.hwNote} role="status" data-testid="confirm-notice">
+                            {userFacingMessage(
+                                error,
+                                'The request stopped because the wallet service returned no explanation.',
+                            )}
+                        </div>
+                    ) : error ? (
                         <div className={styles.error} role="alert" data-testid="confirm-error">
                             {userFacingMessage(
                                 error,

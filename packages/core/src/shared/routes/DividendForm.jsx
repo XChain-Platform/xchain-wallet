@@ -27,7 +27,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
     perUnitMax,
     dividendPreview,
@@ -294,7 +294,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 })
                 .catch((err) => {
                     if (cancelled) return;
-                    setTickCheck({ verdict: null, error: err?.message || 'Failed to verify this token.' });
+                    setTickCheck({
+                        verdict: null,
+                        error: readFailureMessage(err, 'verify this token')
+                            .replace(/^Couldn't verify this token\.\s*/, ''),
+                    });
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
@@ -314,7 +318,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 })
                 .catch((err) => {
                     if (cancelled) return;
-                    setDividendTickCheck({ verdict: null, error: err?.message || 'Failed to verify this token.' });
+                    setDividendTickCheck({
+                        verdict: null,
+                        error: readFailureMessage(err, 'verify this token')
+                            .replace(/^Couldn't verify this token\.\s*/, ''),
+                    });
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
@@ -603,8 +611,15 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         const amt = String(amount).trim();
-        if (!amt || Number(amt) <= 0) {
-            setFormError('Per-unit amount must be a positive number.');
+        if (!amt) {
+            setFormError('Per-unit amount is required.');
+            return;
+        }
+        const amountComparison = compareDecimalStrings(amt, '0');
+        if (amountComparison !== 1) {
+            setFormError(amountComparison === null
+                ? 'Per-unit amount must be a positive decimal number.'
+                : 'Per-unit amount must be greater than zero.');
             return;
         }
         // Keep each payout within the dividend token's on-chain decimal scale.
@@ -890,7 +905,13 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         <AddressText address={fromAddress.address} />
                     </dd>
                     {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
+                        <DetailRow
+                            key={d.label}
+                            label={d.label}
+                            value={d.label === 'Per-unit amount'
+                                ? `${d.value} ${dividendTick.trim().toUpperCase()}`
+                                : d.value}
+                        />
                     ))}
                     {preview ? (
                         <>
@@ -914,6 +935,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                             : 'Estimate unavailable'}
+                    />
+                    <DetailRow
+                        label="Dividend protocol fee"
+                        value={protocolFeeText || 'Calculated from the final holder count when the dividend executes'}
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (

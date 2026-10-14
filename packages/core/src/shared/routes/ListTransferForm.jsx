@@ -31,6 +31,7 @@ import { listFormatSupport } from '../../flows/listFormatSupport.js';
 import { findListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -59,6 +60,7 @@ export function ListTransferForm(props) {
 function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const chainId = listRef.chainId;
     const listActionIndex = String(listRef.actionIndex);
+    const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
@@ -115,7 +117,12 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         initial
             .then((detail) => findListOwner({ detail, readList }))
             .then((value) => { if (!cancelled) setOwner(value); })
-            .catch(() => { if (!cancelled) setOwner(null); });
+            .catch((err) => {
+                if (!cancelled) setLoadError(
+                    explorerReadFailure(err, `load list #${listActionIndex}`)?.message
+                    || `Couldn't load list #${listActionIndex}. Try again.`,
+                );
+            });
         return () => { cancelled = true; };
     }, [chainId, listActionIndex, listRef.source, listRef.parentIndex, listRef.state, messaging]);
 
@@ -169,6 +176,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     const trimmedMemo = memo.trim();
 
     function validate() {
+        if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
         const candidates = airdropLib.parsePaste(trimmedDestination);

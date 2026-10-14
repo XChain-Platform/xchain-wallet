@@ -156,7 +156,7 @@ describe('protocol form keyboard operation', () => {
         expect(utils.getByRole('alert')).toHaveTextContent('Delegate-to address is required.');
         expect(utils.composeVoteForConfirm).not.toHaveBeenCalled();
 
-        fireEvent.change(delegateTo, { target: { value: 'bc1qdelegate' } });
+        fireEvent.change(delegateTo, { target: { value: 'bc1qdevmock03aabbcc' } });
         memo.focus();
         await user.keyboard('{Enter}');
 
@@ -180,7 +180,7 @@ describe('protocol form keyboard operation', () => {
 
         pubkey.focus();
         await user.keyboard('{Enter}');
-        expect(utils.getByRole('alert')).toHaveTextContent('Amount must be a positive number with up to 8 decimals.');
+        expect(utils.getByRole('alert')).toHaveTextContent('Enter an amount to stake.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(amount, { target: { value: '25' } });

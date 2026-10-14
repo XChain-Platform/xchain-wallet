@@ -72,6 +72,7 @@ describe('bindingPollErrors', () => {
     it('requires the contract to be a contract number, not an address or name', () => {
         expect(bindingPollErrors({ ...VALID, callbackContract: 'bcrt1qxyz' }).some((e) => /contract number/i.test(e))).toBe(true);
         expect(bindingPollErrors({ ...VALID, callbackContract: '12.5' }).some((e) => /contract number/i.test(e))).toBe(true);
+        expect(bindingPollErrors({ ...VALID, callbackContract: '0' }).some((e) => /positive contract number/i.test(e))).toBe(true);
     });
 
     it('rejects extra arguments that are not a JSON list', () => {

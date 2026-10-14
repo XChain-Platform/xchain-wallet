@@ -38,6 +38,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -173,7 +174,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your staking addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -340,6 +341,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRateValid = feePick.mode !== 'custom'
+        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -389,8 +392,20 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             return;
         }
         const amt = amount.trim();
-        if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(amt) || Number(amt) <= 0) {
-            setFormError('Amount must be a positive number with up to 8 decimals.');
+        if (!amt) {
+            setFormError('Enter an amount to stake.');
+            return;
+        }
+        if (!/^[0-9]+(\.[0-9]+)?$/.test(amt)) {
+            setFormError('Amount must be a positive number.');
+            return;
+        }
+        if (Number(amt) <= 0) {
+            setFormError('Amount must be greater than zero.');
+            return;
+        }
+        if ((amt.split('.')[1] || '').length > 8) {
+            setFormError('Amount can have at most 8 decimal places.');
             return;
         }
         if (tickAmtBalance != null && compareDecimalStrings(amt, tickAmtBalance) === 1) {
@@ -398,8 +413,16 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             return;
         }
         const pk = signingPubkey.trim();
+        if (!pk) {
+            setFormError('Enter the signing public key.');
+            return;
+        }
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
             setFormError('Signing public key must be exactly 64 hexadecimal characters (Ed25519).');
+            return;
+        }
+        if (!customFeeRateValid) {
+            setFormError('Enter a custom network fee rate greater than zero.');
             return;
         }
         setFormError(null);
@@ -585,6 +608,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>Amount</dt>
                     <dd className={styles.detailsValue}>{reviewedParams.AMOUNT} XCHAIN</dd>
+                    <dt className={styles.detailsLabel}>Activation</dt>
+                    <dd className={styles.detailsValue}>After 6 BTC blocks</dd>
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -674,7 +699,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !amount.trim() || !signingPubkey.trim() || actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing}
                 >
                     {singleEncode ? 'Stake' : 'Preview'}
                 </Button>

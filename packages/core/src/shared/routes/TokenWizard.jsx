@@ -36,7 +36,12 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listLabel } from '../utils/listLabel.js';
@@ -45,6 +50,7 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -93,6 +99,7 @@ function isValidIssueAddress(value, descriptor) {
  */
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
     const { settings } = useSettings();
@@ -195,19 +202,20 @@ export function TokenWizard({ walletId, onBack }) {
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain, settings);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (Object.keys(byChain || {}).length === 0) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before issuing a token.',
-                    );
+                if (Object.keys(signingByChain).length === 0) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any chain yet. Use Receive to generate one before issuing a token.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
                 // first key opened the wizard on the wallet's OLDEST chain
                 // forever. Open on the last-used chain instead, ahead of the
                 // first-key fallback, exactly as Send does.
-                setChainId((prev) => pickDefaultChainId(byChain, {
+                setChainId((prev) => pickDefaultChainId(signingByChain, {
                     explicitChainId: prev,
                     settings,
                 }));
@@ -454,6 +462,10 @@ export function TokenWizard({ walletId, onBack }) {
                 return;
             }
         }
+        if ((template === 'collectible' || template === 'edition') && !imageUrl.trim()) {
+            setFormError('Image URL is required for this template.');
+            return;
+        }
         // PC-06: the advanced fields share the create transaction, so a
         // bad one costs the whole token, not just the field. Pre-flight
         // them here rather than letting the indexer reject the ISSUE.
@@ -486,6 +498,7 @@ export function TokenWizard({ walletId, onBack }) {
     // Compose, tamper-check, and pre-flight run host-side after review.
     // Approve signs the byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
     async function openConfirmScreen() {
+        if (!networkAvailable) return;
         if (submitPendingRef.current) return;
         submitPendingRef.current = true;
         const from = fromAddress ? {
@@ -565,6 +578,9 @@ export function TokenWizard({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
+            {!networkAvailable ? (
+                <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
+            ) : null}
             {children}
         </Screen>
     );
@@ -789,7 +805,13 @@ export function TokenWizard({ walletId, onBack }) {
                     <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
                 ) : null}
                 actions={(
-                    <Button type="submit" variant="primary" loading={actionConfirm.composing}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={actionConfirm.composing}
+                        disabled={actionConfirm.composing || !networkAvailable}
+                        title={!networkAvailable ? 'Creating a token needs a network connection' : undefined}
+                    >
                         Continue to confirmation
                     </Button>
                 )}

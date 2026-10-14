@@ -90,6 +90,8 @@ describe('Home honours the host active wallet', () => {
         expect(loading.querySelectorAll('[aria-hidden="true"]')).not.toHaveLength(0);
         expect([...loading.querySelectorAll('[style]')].some((node) => node.style.height === '72px')).toBe(true);
 
+        // The balance read starts once the active network setting has loaded.
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
         await act(async () => { finishBalances({}); });
 
         const walletTabs = await screen.findByRole('tablist', { name: 'Wallet view' });

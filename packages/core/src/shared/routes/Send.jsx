@@ -228,7 +228,12 @@ import {
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import {
+    externalIndexOf,
+    hasAnyAddress,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 
@@ -606,13 +611,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 ? Promise.resolve(messaging.getSettings()).catch(() => null)
                 : Promise.resolve(null),
         ])
-            .then(([byChain, loadedSettings]) => {
+            .then(([loadedByChain, loadedSettings]) => {
                 if (cancelled) return;
+                const byChain = signingAddressesByChain(loadedByChain, loadedSettings);
                 setAddressesByChain(byChain);
                 if (!Object.keys(byChain)[0]) {
-                    setLoadError(
-                        'This wallet has no addresses yet. Open Receive to create one.',
-                    );
+                    setLoadError(hasAnyAddress(loadedByChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'This wallet has no addresses yet. Open Receive to create one.');
                     return;
                 }
                 // §47 Cluster L FOLLOWUP 1: a chain already set (a prefill,

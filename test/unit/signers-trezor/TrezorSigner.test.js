@@ -137,6 +137,16 @@ describe('TrezorSigner.getStatus', () => {
         expect(await s.getStatus()).toBe('disconnected');
     });
 
+    it('returns "locked" when getFeatures reports a locked device', async () => {
+        const s = makeSigner({
+            getFeatures: vi.fn().mockResolvedValue({
+                success: false,
+                payload: { code: 'Device_Locked', error: 'Device is locked' },
+            }),
+        });
+        expect(await s.getStatus()).toBe('locked');
+    });
+
     it('returns "disconnected" when a different device is attached', async () => {
         const s = makeSigner({
             getFeatures: vi.fn().mockResolvedValue({
@@ -160,6 +170,33 @@ describe('TrezorSigner.getStatus', () => {
     });
 });
 
+describe('TrezorSigner hardware failures', () => {
+    it.each([
+        ['device not found', 'Device_NotFound', 'Device not found', 'disconnected', 'HW_DEVICE_NOT_FOUND', /No Trezor was found/],
+        ['locked', 'Device_Locked', 'Device is locked', 'locked', 'HW_LOCKED', /Trezor is locked/],
+        ['wrong app', 'Failure_WrongApp', 'Wrong app is open', 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
+        ['user rejected', 'Failure_ActionCancelled', 'Action cancelled', 'cancelled', 'HW_CANCELLED', /Nothing was signed/],
+        ['cable unplugged', 'Device_Disconnected', 'Device disconnected', 'disconnected', 'HW_DISCONNECTED', /disconnected before signing finished/],
+        ['old firmware', 'Failure_FirmwareError', 'Firmware is too old', 'firmware', 'HW_FIRMWARE', /firmware is too old/],
+    ])('normalizes %s without exposing Connect detail', async (_case, vendorCode, vendorMessage, status, code, copy) => {
+        const s = makeSigner({
+            signMessage: vi.fn().mockResolvedValue({
+                success: false,
+                payload: { code: vendorCode, error: vendorMessage },
+            }),
+        });
+        const err = await s.signMessage({
+            message: 'hello',
+            chainId: 'bitcoin-mainnet',
+            path: "m/84'/0'/0'/0/0",
+        }).catch((error) => error);
+
+        expect(err).toMatchObject({ status, code });
+        expect(err.message).toMatch(copy);
+        expect(err.message).not.toContain(vendorCode);
+    });
+});
+
 describe('TrezorSigner.getAddresses', () => {
     it('returns address rows for bitcoin-mainnet (p2wpkh)', async () => {
         const s = makeSigner();
@@ -178,7 +215,7 @@ describe('TrezorSigner.getAddresses', () => {
         expect(rows[0].path).toMatch(/^m\/84'/);
     });
 
-    it('throws when getAddress call fails', async () => {
+    it('normalizes an on-device address rejection', async () => {
         const s = makeSigner({
             getAddress: vi.fn().mockResolvedValue({ success: false, payload: { error: 'User rejected' } }),
         });
@@ -189,7 +226,7 @@ describe('TrezorSigner.getAddresses', () => {
             startIndex: 0,
             count: 1,
             addressType: 'p2wpkh',
-        })).rejects.toThrow(/getAddress failed/);
+        })).rejects.toMatchObject({ status: 'cancelled', code: 'HW_CANCELLED' });
     });
 
     it('throws when getPublicKey call fails', async () => {
@@ -202,7 +239,7 @@ describe('TrezorSigner.getAddresses', () => {
             change: 0,
             startIndex: 0,
             count: 1,
-        })).rejects.toThrow(/getPublicKey failed/);
+        })).rejects.toThrow(/could not finish the request/);
     });
 
     it('uses 44 purpose for dogecoin', async () => {
@@ -243,7 +280,7 @@ describe('TrezorSigner.getPublicKey', () => {
     it('throws on failure', async () => {
         const s = makeSigner({ getPublicKey: vi.fn().mockResolvedValue({ success: false, error: { error: 'pk fail' } }) });
         await expect(s.getPublicKey({ chainId: 'bitcoin-mainnet', path: "m/84'/0'/0'" }))
-            .rejects.toThrow(/getPublicKey failed/);
+            .rejects.toThrow(/could not finish the request/);
     });
 });
 
@@ -275,7 +312,7 @@ describe('TrezorSigner.signMessage', () => {
     it('throws when signMessage call fails', async () => {
         const s = makeSigner({ signMessage: vi.fn().mockResolvedValue({ success: false, payload: { error: 'denied' } }) });
         await expect(s.signMessage({ message: 'hi', chainId: 'bitcoin-mainnet', path: "m/84'/0'/0'/0/0" }))
-            .rejects.toThrow(/signMessage failed/);
+            .rejects.toThrow(/could not finish the request/);
     });
 });
 

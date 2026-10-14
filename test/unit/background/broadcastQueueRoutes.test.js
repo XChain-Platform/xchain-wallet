@@ -181,6 +181,55 @@ describe('broadcast.queue.broadcast removes by identity after the network await'
         expect((await h.list()).map((e) => e.id)).toEqual(['A']);
     });
 
+    it('backs off transient retries across a host restart without sending twice', async () => {
+        let now = 1_000_000;
+        const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+        let snapshot = { [W]: [entry('A')] };
+        const storage = {
+            load: async () => JSON.parse(JSON.stringify(snapshot)),
+            save: async (next) => { snapshot = JSON.parse(JSON.stringify(next)); },
+            clear: async () => { snapshot = {}; },
+        };
+        try {
+            const firstBroadcast = vi.fn(async () => { throw new Error('ECONNREFUSED'); });
+            const first = makeHost({ storage, broadcastTx: firstBroadcast });
+            const rejected = await first.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+            expect(rejected.ok).toBe(false);
+            expect(rejected.error).toMatchObject({
+                name: 'BroadcastFailedTransientError',
+                retryAfterMs: 1_000,
+            });
+            expect(firstBroadcast).toHaveBeenCalledTimes(1);
+            expect(snapshot[W]).toEqual([
+                expect.objectContaining({ id: 'A', retryAttempt: 1, nextRetryAt: now + 1_000 }),
+            ]);
+
+            const restartedBroadcast = vi.fn(async () => { throw new Error('ECONNREFUSED'); });
+            const restarted = makeHost({ storage, broadcastTx: restartedBroadcast });
+            expect(await restarted.list()).toHaveLength(1);
+            expect(await restarted.list()).toHaveLength(1);
+
+            const early = await restarted.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+            expect(early.ok).toBe(false);
+            expect(early.error).toMatchObject({
+                name: 'BroadcastFailedTransientError',
+                retryAfterMs: 1_000,
+            });
+            expect(restartedBroadcast).not.toHaveBeenCalled();
+
+            now += 1_000;
+            const retried = await restarted.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+            expect(retried.ok).toBe(false);
+            expect(retried.error.retryAfterMs).toBe(2_000);
+            expect(restartedBroadcast).toHaveBeenCalledTimes(1);
+            expect(snapshot[W]).toEqual([
+                expect.objectContaining({ id: 'A', retryAttempt: 2, nextRetryAt: now + 2_000 }),
+            ]);
+        } finally {
+            nowSpy.mockRestore();
+        }
+    });
+
     it('a second broadcast of the same entry fails before it reaches the network', async () => {
         const gate = deferred();
         const broadcastTx = vi.fn(() => gate.promise);

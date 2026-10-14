@@ -40,11 +40,11 @@ function setNavigatorOnline(online) {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: online });
 }
 
-function mountHome(messaging, onSend) {
+function mountHome(messaging, onSend, props = {}) {
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
-                <Home activeWalletId={WALLET.id} onSend={onSend} onReceive={() => {}} />
+                <Home activeWalletId={WALLET.id} onSend={onSend} onReceive={() => {}} {...props} />
             </ToastHost>
         </MessagingProvider>,
     );
@@ -63,6 +63,8 @@ describe('Home offline behavior', () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         setNavigatorOnline(true);
         const onSend = vi.fn();
+        const onSwap = vi.fn();
+        const onCreateToken = vi.fn();
         const messaging = {
             listWallets: vi.fn().mockResolvedValue([WALLET]),
             listAccounts: vi.fn().mockResolvedValue([]),
@@ -71,7 +73,7 @@ describe('Home offline behavior', () => {
             getSettings: vi.fn().mockResolvedValue({}),
             getAddressesByChain: vi.fn().mockResolvedValue({}),
         };
-        mountHome(messaging, onSend);
+        mountHome(messaging, onSend, { onSwap, onCreateToken });
 
         await waitFor(() => expect(screen.getByText('BTC · Bitcoin')).toBeTruthy());
         expect(screen.getByText(/^Updated /)).toBeTruthy();
@@ -95,6 +97,14 @@ describe('Home offline behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         expect(onSend).not.toHaveBeenCalled();
         expect(screen.getByText(/Sending needs a network connection/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Swap' }));
+        expect(onSwap).not.toHaveBeenCalled();
+        expect(screen.getByText(/Swapping needs a network connection/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+        expect(onCreateToken).not.toHaveBeenCalled();
+        expect(screen.getByText(/Creating a token needs a network connection/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
         messaging.getWalletBalances.mockResolvedValue(BALANCES);
         setNavigatorOnline(true);
