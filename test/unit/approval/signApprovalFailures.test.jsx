@@ -244,12 +244,15 @@ describe('SignApproval PSBT failure branches', () => {
         });
     });
 
-    // BUG: A missing PSBT payload leaves the approval button enabled.
-    it.skip('blocks approval when the PSBT payload is missing', async () => {
+    it('blocks approval when the PSBT payload is missing', async () => {
         mount('signPsbt', { chainId: 'bitcoin-regtest', payload: {} });
 
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This request is missing the transaction to sign',
+        );
         const password = await screen.findByLabelText('Password');
         fireEvent.change(password, { target: { value: 'secret' } });
         expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expect(mocks.parsePsbt).not.toHaveBeenCalled();
     });
 });
