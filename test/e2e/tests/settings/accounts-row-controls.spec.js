@@ -26,9 +26,8 @@ async function openAccounts(page) {
 }
 
 async function expectRowControls(main, viewport) {
-    const add = main.getByRole('button', { name: 'Add account', exact: true });
-    await expect(add).toBeVisible();
-    const rows = add.locator('xpath=../preceding-sibling::*[./button]');
+    // Each account row wraps its select button and its rename control.
+    const rows = main.getByRole('button', { name: /^Rename\b/ }).locator('..');
 
     const count = await rows.count();
     expect(count, `${viewport}: demo mode rendered no account rows`).toBeGreaterThan(0);
@@ -49,11 +48,16 @@ async function expectRowControls(main, viewport) {
     }
 }
 
-async function expectCompactActions(main, viewport) {
-    const add = main.getByRole('button', { name: 'Add account', exact: true });
-    const manage = main.getByRole('button', { name: 'Manage', exact: true });
+async function expectCompactActions(page, viewport) {
+    // Add account and Manage sit in the pinned screen footer, as Add wallet
+    // and Manage wallet do on the Wallets screen.
+    const footer = page.locator('footer').filter({ has: page.getByRole('button', { name: 'Add account', exact: true }) });
+    await expect(footer, `${viewport}: Accounts actions are not in the screen footer`).toHaveCount(1);
+    const add = footer.getByRole('button', { name: 'Add account', exact: true });
+    const manage = footer.getByRole('button', { name: 'Manage', exact: true });
     await expect(add).toBeVisible();
     await expect(manage).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', { name: 'Add account', exact: true })).toHaveCount(0);
 
     const metrics = await Promise.all([add, manage].map((button) => button.evaluate((element) => {
         const label = element.querySelector('span:last-child');
@@ -78,32 +82,19 @@ async function expectCompactActions(main, viewport) {
     expect(metrics.some(({ overflows }) => overflows), `${viewport}: an action overflows its button`)
         .toBe(false);
 
-    const placement = await add.evaluate((button) => {
-        const footer = button.parentElement;
-        const lastRow = footer?.previousElementSibling;
-        const parent = footer?.parentElement;
-        const footerRect = footer?.getBoundingClientRect();
-        const rowRect = lastRow?.getBoundingClientRect();
-        return {
-            followsLastRow: lastRow?.nextElementSibling === footer,
-            previousIsAccountRow: lastRow?.querySelectorAll(':scope > button').length === 2,
-            actualGap: footerRect && rowRect ? footerRect.top - rowRect.bottom : null,
-            expectedGap: parent ? Number.parseFloat(getComputedStyle(parent).rowGap) : null,
-        };
+    // Pinned: the footer stays below the list at the bottom of the screen
+    // rather than following the last row.
+    const placement = await footer.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        // The screen body (the scrolling list region) precedes the footer.
+        const body = element.previousElementSibling?.getBoundingClientRect();
+        return { top: rect.top, mainBottom: body ? body.bottom : null };
     });
-
-    expect(placement.followsLastRow, `${viewport}: action footer does not follow the last list row`)
-        .toBe(true);
-    expect(placement.previousIsAccountRow, `${viewport}: action footer is detached from the account list`)
-        .toBe(true);
-    expect(Number.isFinite(placement.actualGap), `${viewport}: account list gap is not measurable`)
-        .toBe(true);
-    expect(Number.isFinite(placement.expectedGap), `${viewport}: account list has no resolved row gap`)
-        .toBe(true);
+    expect(placement.mainBottom, `${viewport}: no screen body to measure`).not.toBeNull();
     expect(
-        Math.abs(placement.actualGap - placement.expectedGap),
-        `${viewport}: action footer has extra space after the account list`,
-    ).toBeLessThanOrEqual(1);
+        placement.top,
+        `${viewport}: action footer is not pinned below the account list`,
+    ).toBeGreaterThanOrEqual(placement.mainBottom - 1);
 }
 
 test('account row controls and actions fit at phone and desktop widths', async ({ page }) => {
@@ -118,7 +109,7 @@ test('account row controls and actions fit at phone and desktop widths', async (
             await openAccounts(page);
             const main = page.getByRole('main');
             await expectRowControls(main, label);
-            await expectCompactActions(main, label);
+            await expectCompactActions(page, label);
         });
     }
 });

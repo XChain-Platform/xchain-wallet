@@ -129,6 +129,39 @@
     }
 }
 
+/* Textarea with in-field actions: the buttons sit in the box's bottom end
+   corner, inset from the border, and the text keeps a strip of block-end
+   padding one small control tall (plus the same inset above and below) so
+   it never runs under them. Textarea grows with its content, so that strip
+   is never scrolled through. */
+.textareaControl {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+}
+
+.textareaWithActions {
+    padding-block-end: calc(var(--xc-control-h-sm) + var(--xc-space-1) * 2);
+}
+
+.textareaActions {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-end: var(--xc-space-1);
+    inset-inline-end: var(--xc-space-1);
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    max-width: calc(100% - var(--xc-space-2));
+}
+
+.textareaActions button {
+    flex: none;
+    white-space: nowrap;
+}
+
 .invalid {
     border-color: var(--xc-danger);
 }
