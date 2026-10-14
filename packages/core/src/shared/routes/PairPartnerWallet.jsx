@@ -22,6 +22,7 @@ import {
     XCW_PREFIX,
 } from '../../uri/psbtQr.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { formatOrList } from '../../i18n/index.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -221,7 +222,9 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         }
         const wordCount = trimmed.split(' ').length;
         if (!ACCEPTED_WORD_COUNTS.includes(wordCount)) {
-            setError(`Expected ${ACCEPTED_WORD_COUNTS.join(', ')} words, got ${wordCount}.`);
+            // Copy stays inline until this screen moves to the dictionary; the
+            // list still reads "12, 15, 18, 21, or 24" like the import screen.
+            setError(`Expected ${formatOrList(ACCEPTED_WORD_COUNTS)} words, got ${wordCount}.`);
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {

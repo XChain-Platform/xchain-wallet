@@ -242,7 +242,7 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                 await expect(page.getByRole('alert'),
                     'a backup-pointer URI scanned into the recovery-phrase box was accepted as a '
                     + 'recovery phrase')
-                    .toContainText(/Expected 12, 15, 18, 21, 24 words/i, { timeout: 30_000 });
+                    .toContainText(/Expected 12, 15, 18, 21, or 24 words/i, { timeout: 30_000 });
                 await expect(unlockedShell(page), 'a non-phrase QR produced a wallet')
                     .toHaveCount(0);
             } finally {

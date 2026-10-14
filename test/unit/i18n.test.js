@@ -14,6 +14,7 @@ import { IntlMessageFormat } from 'intl-messageformat';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    formatOrList,
     getFormatLocale,
     getLocale,
     onLocaleChange,
@@ -230,6 +231,27 @@ beforeEach(async () => {
 
 afterAll(async () => {
     if (getLocale() !== 'en') await setLocale('en');
+});
+
+describe('formatOrList', () => {
+    it('joins accepted word counts as an English "or" list and leaves one value bare', () => {
+        expect(formatOrList([12, 15, 18, 21, 24])).toBe('12, 15, 18, 21, or 24');
+        expect(formatOrList([12])).toBe('12');
+    });
+
+    it('reads the word-count error through the dictionary', () => {
+        expect(t('importWallet.phrase.wrongWordCount', {
+            expected: formatOrList([12, 15, 18, 21, 24]),
+            count: 13,
+        })).toBe('Expected 12, 15, 18, 21, or 24 words, got 13.');
+    });
+
+    it('formats under a locale code Intl rejects instead of throwing', async () => {
+        // Same shape as pseudo-rtl: a 3-letter subtag after a long language.
+        registerLocale('pseudo-rtl-list', en);
+        await setLocale('pseudo-rtl-list');
+        expect(formatOrList([12, 24])).toBe('12 or 24');
+    });
 });
 
 describe('translations', () => {

@@ -155,7 +155,7 @@ for (const viewport of VIEWPORTS) {
                 await expect(details, 'wallet details do not show the wallet format')
                     .toContainText('TypeBIP39');
                 await expect(details, 'wallet details do not show the wallet origin')
-                    .toContainText('Origindemo');
+                    .toContainText('OriginCreated for demo mode');
 
                 await page.getByRole('button', { name: 'Rename wallet' }).click();
                 await expectScreen(page, 'Rename wallet', `${size} rename wallet`, { atTop: true });
