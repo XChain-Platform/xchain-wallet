@@ -86,6 +86,8 @@ function recordingMessaging({
     consumers = { supported: true, dispensers: [] },
     preflight = PASS,
     describe = false,
+    composed = COMPOSED,
+    composeError = null,
     signerStatus = 'unlocked',
 } = {}) {
     const calls = [];
@@ -101,8 +103,9 @@ function recordingMessaging({
         // `describe` stands in for the host's sdk describer of the composed bytes.
         composeForConfirm: (args) => {
             calls.push({ method: 'composeForConfirm', args });
+            if (composeError) return Promise.reject(composeError);
             return Promise.resolve({
-                ...COMPOSED,
+                ...composed,
                 ...(describe ? { decoded: decodeAction({ ...args.actionData, chainId: args.chainId }) } : {}),
             });
         },
@@ -227,6 +230,88 @@ describe('OracleForm review shows the decoder rows', () => {
 
         expect(utils.getByText('wallet QA oracle test')).toBeTruthy();
         expect(utils.getByText(/1% of a dispenser's projected proceeds/)).toBeTruthy();
+    });
+
+    it('shows the exact composed network fee instead of the form estimate', async () => {
+        const { utils } = await mountForm({
+            describe: true,
+            composed: {
+                ...COMPOSED,
+                chainId: 'bitcoin-mainnet',
+                networkFeeSats: 1234,
+            },
+        });
+        await fill(utils);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
+
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00001234 BTC');
+    });
+
+    it('keeps price and fee precision in review exactly as they are built', async () => {
+        const { utils, calls } = await mountForm({ settings: { walletMode: 'watcher' } });
+        await fill(utils, { value: '0.05000000', fee: '0.010000000000000000' });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+
+        expect(utils.getByText('0.05000000 USD')).toBeTruthy();
+        expect(utils.getByText(/0\.010000000000000000 \(1% of a dispenser's projected proceeds\)/)).toBeTruthy();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' })));
+        expect(calls.find((call) => call.method === 'buildActionPsbtRequest').args.actionData.params)
+            .toMatchObject({ VALUE: '0.05000000', FEE: '0.010000000000000000' });
+    });
+});
+
+describe('OracleForm review exits', () => {
+    it('Reject returns from confirm with every draft value kept', async () => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { tick: 'PEPECASH', value: '0.05000000', fee: '0.01', memo: 'keep this' });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
+        await step(() => fireEvent.click(utils.getByTestId('confirm-reject')));
+
+        expect(calls.some((call) => call.method === 'oraclePriceAction')).toBe(false);
+        expect(utils.getByLabelText(/^Token ticker/)).toHaveValue('PEPECASH');
+        expect(utils.getByLabelText(/^Price of one/)).toHaveValue('0.05000000');
+        expect(utils.getByLabelText(/^Usage fee/)).toHaveValue('0.01');
+        expect(utils.getByLabelText(/^Memo/)).toHaveValue('keep this');
+    });
+
+    it('Back returns from watcher review with every draft value kept', async () => {
+        const { utils } = await mountForm({ settings: { walletMode: 'watcher' } });
+        await fill(utils, { tick: 'PEPECASH', value: '0.05000000', fee: '0.01', memo: 'keep this' });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
+
+        expect(utils.getByLabelText(/^Token ticker/)).toHaveValue('PEPECASH');
+        expect(utils.getByLabelText(/^Price of one/)).toHaveValue('0.05000000');
+        expect(utils.getByLabelText(/^Usage fee/)).toHaveValue('0.01');
+        expect(utils.getByLabelText(/^Memo/)).toHaveValue('keep this');
+    });
+});
+
+describe('OracleForm compose failures', () => {
+    it.each([
+        [
+            Object.assign(new Error('no spendable UTXOs found for the funding address'), {
+                name: 'SDKEncoderError', code: 'NO_UTXOS',
+            }),
+            /This address needs BTC for the protocol fee and the network fee/i,
+            /UTXO/i,
+        ],
+        [
+            Object.assign(new Error('Explorer returned HTTP 502 for \/BTC\/api\/feequote?action=PRICE'), {
+                name: 'SDKExplorerError', code: 'EXPLORER_HTTP_502',
+            }),
+            /service that reads the chain is temporarily unavailable \(error 502\)/i,
+            /feequote|\/BTC\/api/i,
+        ],
+    ])('shows plain copy for encoder or indexer errors', async (composeError, shown, hidden) => {
+        const { utils } = await mountForm({ composeError });
+        await fill(utils);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
+
+        expect(utils.getByText(shown)).toBeTruthy();
+        expect(utils.container.textContent || '').not.toMatch(hidden);
+        expect(utils.getByLabelText(/^Token ticker/)).toHaveValue('PEPECASH');
+        expect(utils.getByLabelText(/^Price of one/)).toHaveValue('0.05');
     });
 });
 

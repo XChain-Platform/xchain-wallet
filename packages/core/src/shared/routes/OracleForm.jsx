@@ -37,6 +37,9 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
@@ -306,6 +309,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     function guardBeforeSign() {
         if (!chainId || !fromAddress) { setFormError('Pick a publishing address first.'); return false; }
         if (!tick) { setFormError('Enter the token ticker this oracle prices.'); return false; }
+        const tickerError = tickerReferenceError(tick, { noun: 'Token ticker', allowRef: true });
+        if (tickerError) { setFormError(tickerError); return false; }
         if (!FIAT_CODES.includes(fiat)) { setFormError('Pick a supported currency.'); return false; }
         const v = value.trim();
         if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(v) || Number(v) <= 0) {
@@ -313,12 +318,17 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             return false;
         }
         const f = fee.trim();
-        if (f.length > 0 && (!/^[0-9]+(\.[0-9]{1,18})?$/.test(f) || Number(f) > 1)) {
+        if (f.length > 0 && (
+            !/^[0-9]+(\.[0-9]{1,18})?$/.test(f)
+            || compareDecimalStrings(f, '1') === 1
+        )) {
             setFormError('The usage fee is a fraction between 0 and 1 (0.01 = 1%).');
             return false;
         }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
+        const memoError = memoLengthError(m);
+        if (memoError) { setFormError(memoError); return false; }
         return true;
     }
 
