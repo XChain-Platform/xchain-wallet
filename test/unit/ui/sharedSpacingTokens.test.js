@@ -23,7 +23,6 @@ const cardModules = [
     'OwnerWithdrawWarning.module.css',
     'QueuedBroadcastBanner.module.css',
     'QueuedResultPanel.module.css',
-    'ReachabilityBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
 

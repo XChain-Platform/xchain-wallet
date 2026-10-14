@@ -116,13 +116,19 @@ function scanCss(source, from = 'fixture.css') {
         || left.feature.localeCompare(right.feature));
 }
 
+// Build output (vite dist, the mobile www copy) and installed packages are not
+// source; a local build must not change what the guard counts.
+const GENERATED_DIR = /(?:^|\/)(?:node_modules|dist|www)\//;
+
 function scanPackages() {
-    return cachedSourceFiles(packagesRoot, '**/*.css').flatMap((file) => (
-        scanCss(file.source, file.path).map((issue) => ({
-            ...issue,
-            file: `packages/${file.relativePath}`,
-        }))
-    ));
+    return cachedSourceFiles(packagesRoot, '**/*.css')
+        .filter((file) => !GENERATED_DIR.test(file.relativePath.split('\\').join('/')))
+        .flatMap((file) => (
+            scanCss(file.source, file.path).map((issue) => ({
+                ...issue,
+                file: `packages/${file.relativePath}`,
+            }))
+        ));
 }
 
 function countByFeature(issues) {
