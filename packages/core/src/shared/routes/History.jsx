@@ -3750,9 +3750,6 @@ function RecipientsBlock({ entry }) {
             {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
             {recipients.length > 0 ? (
                 <div style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                    padding: 'var(--xc-space-1)',
                     fontFamily: 'monospace',
                     fontSize: 'var(--xc-text-xs)',
                     color: 'var(--xc-text)',

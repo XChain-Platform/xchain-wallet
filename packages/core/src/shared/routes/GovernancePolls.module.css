@@ -6,15 +6,12 @@
 }
 
 .pollCard {
+    composes: card from '../../ui/Card.module.css';
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    padding: var(--xc-space-4);
     text-align: start;
     color: var(--xc-text);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
     box-shadow: var(--xc-list-shadow);
     cursor: pointer;
 }

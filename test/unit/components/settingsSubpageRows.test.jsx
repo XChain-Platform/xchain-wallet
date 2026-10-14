@@ -91,8 +91,8 @@ describe('Settings action rows', () => {
     it('frames an opened Backup row like a row', () => {
         const css = readFileSync(join(SETTINGS_DIR, 'components/settings/BackupSection.module.css'), 'utf8');
         const section = css.match(/\.formSection\s*\{([^}]*)\}/)[1];
-        expect(section).toMatch(/border:\s*1px solid var\(--xc-border\)/);
-        expect(section).toMatch(/padding:\s*var\(--xc-space-3\)/);
+        // A row and an opened section are both the shared card.
+        expect(section).toMatch(/composes:\s*card from '\.\.\/\.\.\/\.\.\/ui\/Card\.module\.css'/);
     });
 });
 

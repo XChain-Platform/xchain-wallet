@@ -71,11 +71,9 @@
 }
 
 .deltas {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    padding: var(--xc-space-1);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
 }
 
