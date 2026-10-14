@@ -21,7 +21,7 @@ const requireFromVite = createRequire(
 const postcss = requireFromVite('postcss');
 const viteConfig = readFileSync(join(repo, 'packages', 'web', 'vite.config.js'), 'utf8');
 const files = execFileSync(
-    'git', ['ls-files', '*.module.css', '**/tokens.css', 'tokens.css'],
+    'git', ['ls-files', 'packages/**/*.css'],
     { cwd: repo, encoding: 'utf8' },
 ).trim().split('\n').filter(Boolean);
 
@@ -30,7 +30,7 @@ assert.match(
     /postcss:\s*\{\s*plugins:\s*\[colorMixFallback\(\)\]\s*\}/,
     'the web build applies the color-mix fallback before the compatibility audit',
 );
-assert.ok(files.length > 100, 'the Chrome 102 audit scans the complete CSS module and token inventory');
+assert.ok(files.length > 100, 'the Chrome 102 audit scans every packaged stylesheet');
 
 const failures = [];
 for (const file of files) {
