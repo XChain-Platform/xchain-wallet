@@ -933,15 +933,14 @@ export function AddressList({
                     <Button
                         type="button"
                         className={local.addBtn}
+                        icon={<Icon.PlusIcon />}
                         onClick={() => setAddMenuOpen((o) => !o)}
                         aria-haspopup="menu"
                         aria-expanded={addMenuOpen}
                         aria-label="Add or import address"
                         title="Add address"
                         data-testid="address-add-menu"
-                    >
-                        <Icon.PlusIcon />
-                    </Button>
+                    />
                     {addMenuOpen ? (
                         /* The kit has no menu-list container, so native list semantics group its menu items. */
                         <ul className={local.addMenu} role="menu">
