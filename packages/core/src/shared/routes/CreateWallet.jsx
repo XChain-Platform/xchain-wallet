@@ -25,6 +25,15 @@ import styles from './CreateWallet.module.css';
 
 const MIN_PASSWORD_LENGTH = 8;
 
+function numberedWalletName(wallets) {
+    const names = new Set(
+        wallets.map((wallet) => String(wallet?.name || '').trim().toLowerCase()),
+    );
+    let number = Math.max(2, wallets.length + 1);
+    while (names.has(`wallet ${number}`)) number += 1;
+    return `Wallet ${number}`;
+}
+
 /**
  * Multi-stage create-wallet flow (§15.3 + §19.2).
  *
@@ -68,7 +77,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
     const [quizErrorPosition, setQuizErrorPosition] = useState(/** @type {number | null} */ (null));
     const [validationAttempt, setValidationAttempt] = useState(0);
-    const [name, setName] = useState('Main Wallet');
+    const [name, setName] = useState(mode === 'add' ? 'Wallet 2' : 'Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     // §15.1: 12-word default, 24-word opt-in. 12 words = 128-bit entropy, 24 = 256-bit.
@@ -93,6 +102,23 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
     const phraseGeneratedRef = useRef(false);
     const creationInFlightRef = useRef(false);
     const createdWalletRef = useRef(/** @type {{ id: string, name: string } | null} */ (null));
+    const nameEditedRef = useRef(false);
+    const defaultNameRef = useRef(name);
+
+    useEffect(() => {
+        if (mode !== 'add' || typeof messaging.listWallets !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => messaging.listWallets())
+            .then((wallets) => {
+                if (cancelled) return;
+                const suggestedName = numberedWalletName(Array.isArray(wallets) ? wallets : []);
+                defaultNameRef.current = suggestedName;
+                if (!nameEditedRef.current) setName(suggestedName);
+            })
+            .catch(() => { /* Wallet 2 remains a safe fallback when the list is unavailable. */ });
+        return () => { cancelled = true; };
+    }, [messaging, mode]);
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
@@ -254,21 +280,22 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             const passphraseArg = showPassphrase && bip39Passphrase.length > 0
                 ? bip39Passphrase
                 : '';
+            const walletName = name.trim() || defaultNameRef.current;
             let createdWalletId = null;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                const r = await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
+                const r = await messaging.addImportedWallet({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
                 if (createdWalletId) {
                     createdWalletRef.current = {
                         id: createdWalletId,
-                        name: r?.wallet?.name || r?.walletName || name,
+                        name: r?.wallet?.name || r?.walletName || walletName,
                     };
                 }
             } else {
-                const r = await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
+                const r = await messaging.importMnemonic({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
             }
             // §19.7 / G034: record that the user just verified the seed
@@ -527,7 +554,10 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             <Input
                 label="Wallet name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                    nameEditedRef.current = true;
+                    setName(e.target.value);
+                }}
                 autoComplete="off"
             />
             <Input
