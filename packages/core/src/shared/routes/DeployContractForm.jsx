@@ -43,6 +43,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import contractStyles from './ContractScreens.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -662,6 +663,15 @@ export function DeployContractForm({ walletId, onBack }) {
             setFormError('Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
             return;
         }
+        const slashTo = slashDestination.trim();
+        if (slashTo && slashTo !== 'BURN' && !isValidAddressForChain(
+            slashTo,
+            descriptor.coin,
+            descriptor.networkKind,
+        )) {
+            setFormError(`Slash destination must be BURN or a valid address for ${descriptor.displayName || 'this network'}.`);
+            return;
+        }
         const constructorParts = String(constructorParams).split('|').map((part) => part.trim());
         if (constructorParams.trim() && constructorParts.some((part) => part === '')) {
             setFormError('Constructor arguments cannot be blank between "|" separators.');
@@ -1042,7 +1052,15 @@ export function DeployContractForm({ walletId, onBack }) {
                     {actionParams.CONSTRUCTOR_PARAMS ? (
                         <>
                             <dt className={styles.detailsLabel}>Constructor</dt>
-                            <dd className={styles.detailsValue}>{actionParams.CONSTRUCTOR_PARAMS}</dd>
+                            <dd className={styles.detailsValue}>
+                                {Array.isArray(actionParams.CONSTRUCTOR_PARAMS) ? (
+                                    <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
+                                        {actionParams.CONSTRUCTOR_PARAMS.map((value, index) => (
+                                            <li key={index} className={contractStyles.monospaceValue}>{value}</li>
+                                        ))}
+                                    </ol>
+                                ) : actionParams.CONSTRUCTOR_PARAMS}
+                            </dd>
                         </>
                     ) : null}
                     {actionParams.COOLDOWN_BLOCKS ? (
@@ -1179,7 +1197,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !code.trim() || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
                     {singleEncode ? 'Publish' : 'Preview'}
                 </Button>

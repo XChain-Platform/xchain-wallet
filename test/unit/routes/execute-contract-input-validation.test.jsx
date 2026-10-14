@@ -34,7 +34,7 @@ function rule(selector) {
     return contractCss.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
 }
 
-function mount(walletMode = 'full', abiParamName = 'config') {
+function mount(walletMode = 'full', abiParamName = 'config', overrides = {}, props = {}) {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
@@ -55,6 +55,7 @@ function mount(walletMode = 'full', abiParamName = 'config') {
                 },
             },
         }),
+        ...overrides,
     };
     const messaging = new Proxy(target, {
         get(object, property) {
@@ -68,6 +69,7 @@ function mount(walletMode = 'full', abiParamName = 'config') {
                 chainId={CHAIN}
                 contractActionIndex="49"
                 onBack={() => {}}
+                {...props}
             />
         </MessagingProvider>,
     );
@@ -108,7 +110,85 @@ describe('ExecuteContractForm argument validation', () => {
         fireEvent.change(input, { target: { value: '{"missing":' } });
 
         expect(await screen.findByText(/config contains invalid JSON:/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Call contract' })).toBeDisabled();
+        const submit = screen.getByRole('button', { name: 'Call contract' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        expect(await screen.findAllByText(/config contains invalid JSON:/)).not.toHaveLength(0);
+    });
+
+    it('shows the required method message before compose', async () => {
+        mount();
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
+        fireEvent.change(screen.getByLabelText('Method'), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Method name is required.');
+    });
+
+    it('rejects malformed declared addresses before compose', async () => {
+        mount('full', 'recipient', {
+            getContractByActionIndex: () => Promise.resolve({
+                data: {
+                    abi: {
+                        version: 1,
+                        methods: {
+                            send: { params: [{ name: 'recipient', type: 'address' }] },
+                        },
+                    },
+                },
+            }),
+        });
+        fireEvent.change(await screen.findByLabelText('recipient (address)'), {
+            target: { value: 'not-an-address' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect(await screen.findAllByText('recipient must be a valid address for Bitcoin.'))
+            .not.toHaveLength(0);
+    });
+
+    it('rejects ABI amounts with more than eight decimal places before compose', async () => {
+        mount();
+        fireEvent.change(await screen.findByLabelText('config (json)'), {
+            target: { value: '{}' },
+        });
+        fireEvent.change(screen.getByLabelText('limit (amount)'), {
+            target: { value: '1.123456789' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect(await screen.findAllByText(/limit can have at most 8 decimal places/))
+            .not.toHaveLength(0);
+    });
+
+    it('rejects a malformed contract ID before compose', async () => {
+        mount('full', 'config', {}, { contractActionIndex: '0' });
+        fireEvent.change(await screen.findByLabelText('config (json)'), {
+            target: { value: '{}' },
+        });
+        fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Contract ID must be a positive whole number.');
+    });
+
+    it('turns an encoder failure into plain copy on the form', async () => {
+        const failure = new Error('no spendable UTXOs found for the funding address');
+        failure.name = 'SDKEncoderError';
+        failure.code = 'NO_UTXOS';
+        mount('full', 'config', {
+            composeForConfirm: () => Promise.reject(failure),
+        });
+        fireEvent.change(await screen.findByLabelText('config (json)'), {
+            target: { value: '{}' },
+        });
+        fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect(await screen.findByText(/This address needs BTC for the protocol fee/))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/no spendable UTXOs/)).toBeNull();
     });
 
     it('shows blank positional arguments in manual mode', async () => {

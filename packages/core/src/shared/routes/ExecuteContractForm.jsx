@@ -47,8 +47,10 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { compareDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -57,7 +59,7 @@ function isPositiveDecimal(value) {
     return /^\d+(?:\.\d+)?$/.test(text) && /[1-9]/.test(text);
 }
 
-function abiArgumentError(param, value) {
+function abiArgumentError(param, value, descriptor) {
     const name = param?.name || 'Argument';
     const type = String(param?.type || '').toLowerCase();
     const text = String(value ?? '').trim();
@@ -67,6 +69,17 @@ function abiArgumentError(param, value) {
     }
     if (type === 'amount' && !isPositiveDecimal(text)) {
         return `${name} must be a positive decimal amount.`;
+    }
+    if (type === 'amount') {
+        const precisionError = tokenAmountPrecisionError(text, {
+            divisibility: 8,
+            noun: name,
+        });
+        if (precisionError) return precisionError;
+    }
+    if (type === 'address' && (!descriptor?.coin || !descriptor?.networkKind
+        || !isValidAddressForChain(text, descriptor.coin, descriptor.networkKind))) {
+        return `${name} must be a valid address for ${descriptor?.displayName || 'this network'}.`;
     }
     if (type === 'number' && !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) {
         return `${name} must be a decimal number.`;
@@ -343,6 +356,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         address: fromAddress?.address,
         tick: depositTick,
     });
+    const depositTokenInfo = useTokenInfo({
+        chainId,
+        tick: depositTick,
+        skip: !depositTick.trim(),
+    });
+    const depositDivisibility = depositTokenInfo?.divisibility ?? 8;
 
     // DEPOSIT first: the contract checks its balance rose when the call runs.
     async function composeBatchParams() {
@@ -459,9 +478,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const abiActive = Boolean(contractAbi) && !manualMode;
     const abiSpec = abiActive && method && contractAbi.methods[method] ? contractAbi.methods[method] : null;
     const abiParams = Array.isArray(abiSpec?.params) ? abiSpec.params : [];
-    const abiArgumentErrors = abiParams.map((param, index) => abiArgumentError(param, abiParamValues[index]));
-    const abiIncomplete = abiArgumentErrors.some(Boolean);
-
+    const abiArgumentErrors = abiParams.map((param, index) => abiArgumentError(
+        param,
+        abiParamValues[index],
+        descriptor,
+    ));
     function selectAbiMethod(name) {
         setMethod(name);
         const count = ((contractAbi.methods[name] || {}).params || []).length;
@@ -511,6 +532,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setFormError('No source address available.');
             return;
         }
+        if (!/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) {
+            setFormError('Contract ID must be a positive whole number.');
+            return;
+        }
         // The method name is the call itself; a blank one has no target.
         if (!method.trim()) {
             setFormError('Method name is required.');
@@ -553,6 +578,15 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             const q = depositQuantity.trim();
             if (!isPositiveDecimal(q)) {
                 setFormError('Deposit amount must be a positive number.');
+                return;
+            }
+            const precisionError = tokenAmountPrecisionError(q, {
+                divisibility: depositDivisibility,
+                tick: depositTick,
+                noun: 'Deposit amount',
+            });
+            if (precisionError) {
+                setFormError(precisionError);
                 return;
             }
             if (depositBalance != null && compareDecimalStrings(q, depositBalance) === 1) {
@@ -919,7 +953,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !method.trim() || (abiActive && abiIncomplete) || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
                     {singleEncode ? t('execute.callContract') : t('common.preview')}
                 </Button>
@@ -1028,6 +1062,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         })}
                         amount={depositQuantity}
                         tick={depositTick}
+                        divisibility={depositDivisibility}
                         onAmountFieldChange={(rawValue) => {
                             const stripped = String(rawValue).replace(/,/g, '');
                             if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
