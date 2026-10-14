@@ -9,17 +9,6 @@
  * contact legal@dankest.llc.
  */
 
-/* Inbox toolbar: search + network filter, each 50% wide, matching the
-   addresses page, the contacts list, and the Send address-book picker. */
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: calc(var(--xc-space-1) + 2px);
-}
-
 .search {
     flex: 1 1 0;
     min-width: 0;
@@ -203,24 +192,6 @@
 }
 
 .composerInput::placeholder {
-    color: var(--xc-text-muted);
-}
-
-/* Send-confirmation review rows: label on the left, value on the right. */
-
-.confirmRow {
-    display: flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: var(--xc-space-3);
-}
-
-.confirmLabel {
-    flex: 0 0 auto;
-    min-width: 6.5rem;
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
     color: var(--xc-text-muted);
 }
 

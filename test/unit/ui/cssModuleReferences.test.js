@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 
 import { expect, it } from 'vitest';
 
@@ -22,6 +22,15 @@ const DYNAMIC_CLASS_PREFIXES = new Map([
     ['shared/routes/DispensersList.module.css', ['status_']],
     ['shared/routes/StakingList.module.css', ['status_']],
 ]);
+
+const DYNAMIC_CLASS_NAMES = new Map([
+    ['shared/components/NetworkFilter.module.css', ['sm', 'md', 'lg']],
+    ['shared/components/NetworkFilterDropdown.module.css', ['sm', 'md', 'lg']],
+    ['shared/components/TokenField.module.css', ['lg']],
+]);
+
+const M_TO_Z_MODULE_PATTERN = /^shared\/(?:components|routes)\/[M-Z][^/]*\.module\.css$/;
+const CSS_MODULE_IMPORT_PATTERN = /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.module\.css)['"]/g;
 
 function findCoreSource() {
     let dir = process.cwd();
@@ -49,6 +58,33 @@ function referencedClassNames(source, classNames) {
         }
     }
     return referenced;
+}
+
+function escapePattern(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function moduleImporters(files) {
+    const importers = new Map();
+    for (const file of files.filter(({ relativePath }) => !relativePath.endsWith('.module.css'))) {
+        for (const match of file.source.matchAll(CSS_MODULE_IMPORT_PATTERN)) {
+            const modulePath = posix.normalize(posix.join(posix.dirname(file.relativePath), match[2]));
+            const entries = importers.get(modulePath) || [];
+            entries.push({ alias: match[1], source: file.source });
+            importers.set(modulePath, entries);
+        }
+    }
+    return importers;
+}
+
+function hasModuleReference(importers, className) {
+    const escapedClassName = escapePattern(className);
+    return importers.some(({ alias, source }) => {
+        const escapedAlias = escapePattern(alias);
+        const dotAccess = new RegExp(`\\b${escapedAlias}\\s*\\.\\s*${escapedClassName}\\b`);
+        const bracketAccess = new RegExp(`\\b${escapedAlias}\\s*\\[\\s*['"\`]${escapedClassName}['"\`]\\s*\\]`);
+        return dotAccess.test(source) || bracketAccess.test(source);
+    });
 }
 
 it('has no literal CSS module class without a source reference', () => {
@@ -88,4 +124,29 @@ it('has no literal CSS module class without a source reference', () => {
     }
 
     expect(orphaned).toEqual([]);
+});
+
+it('has no unreferenced class in M-Z route and component modules', () => {
+    const sourceRoot = findCoreSource();
+    const files = cachedSourceFiles(sourceRoot, '**/*.{js,jsx,ts,tsx,module.css}');
+    const importers = moduleImporters(files);
+    const orphaned = [];
+
+    for (const file of files.filter(({ relativePath }) => M_TO_Z_MODULE_PATTERN.test(relativePath))) {
+        const dynamicNames = DYNAMIC_CLASS_NAMES.get(file.relativePath) || [];
+        const dynamicPrefixes = DYNAMIC_CLASS_PREFIXES.get(file.relativePath) || [];
+
+        for (const rule of parseRules(file.source)) {
+            for (const match of rule.selector.matchAll(CLASS_NAME_PATTERN)) {
+                const className = match[1];
+                const dynamic = dynamicNames.includes(className)
+                    || dynamicPrefixes.some((prefix) => className.startsWith(prefix));
+                if (!dynamic && !hasModuleReference(importers.get(file.relativePath) || [], className)) {
+                    orphaned.push(`${file.relativePath}: .${className}`);
+                }
+            }
+        }
+    }
+
+    expect([...new Set(orphaned)]).toEqual([]);
 });

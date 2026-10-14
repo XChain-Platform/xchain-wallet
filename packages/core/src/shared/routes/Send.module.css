@@ -1,41 +1,3 @@
-.pickerLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin-bottom: var(--xc-space-3);
-}
-
-.picker {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.fromLine {
-    display: flex;
-    align-items: baseline;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    margin-bottom: var(--xc-space-3);
-}
-
-.fromLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
@@ -188,22 +150,6 @@
     flex-wrap: wrap;
 }
 
-.amountBlock {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-/* The shared Input component carries `margin-bottom: var(--xc-space-3)`
-   on its wrapper (Input.module.css). Inside the Send form's amount
-   block we want the footer (USD / balance / Max) flush under the
-   field, so zero that out via a structural selector; overriding the
-   CSS-module class name from outside isn't reachable. */
-.amountBlock > div:first-child,
-.amountFieldWrap > div:first-child {
-    margin-bottom: 0;
-}
-
 /* Matched contact name shown as a small pill right after the "To" label, so
    it reads as a distinct value without needing a colon after "To". */
 .toContactName {
@@ -241,53 +187,6 @@
     flex-basis: 100%;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
-}
-
-.amountFooter {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--xc-space-3);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin-top: var(--xc-space-1);
-}
-
-.amountFooterRight {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.amountUnitSwap {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    background: transparent;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.amountUnitSwap:hover,
-.amountUnitSwap:focus-visible {
-    color: var(--xc-text);
-}
-
-.amountUnitSwap svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-}
-
-.amountFieldWrap {
-    position: relative;
 }
 
 .rbfRow {

@@ -2,16 +2,6 @@
    My-dispensers list anatomy (48px icon with the chain badge overlaid in the
    lower-right corner, name/subtitle body, trailing status chip). */
 
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    /* Same tight toolbar-to-list gap as the messaging inbox. */
-    margin-bottom: calc(var(--xc-space-1) + 2px);
-}
-
 .searchField {
     flex: 1 1 0;
     min-width: 0;

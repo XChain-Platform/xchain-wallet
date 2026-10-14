@@ -29,25 +29,6 @@
     margin: var(--xc-space-2) 0;
 }
 
-.pickerLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin-bottom: var(--xc-space-3);
-}
-
-.picker {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
 .fromLine {
     display: flex;
     align-items: baseline;
@@ -57,14 +38,6 @@
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     margin-bottom: var(--xc-space-3);
-}
-
-.fromLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
 
 .templateGrid {

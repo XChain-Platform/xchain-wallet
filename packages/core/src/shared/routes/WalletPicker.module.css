@@ -34,13 +34,6 @@
     cursor: not-allowed;
 }
 
-.title {
-    font-weight: 700;
-    font-size: var(--xc-text-lg);
-    color: var(--xc-text);
-    text-align: center;
-}
-
 /* WalletDetails read-only metadata list. */
 .detailList {
     display: flex;
@@ -93,21 +86,6 @@
 .rowWrap {
     position: relative;
     width: 100%;
-}
-
-.rowText {
-    min-width: 0;
-    max-width: 100%;
-    overflow: hidden;
-}
-
-.rowText > span {
-    min-width: 0;
-    width: 100%;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .rowLabel {
