@@ -38,12 +38,31 @@ test('layout gutter assertion contract', () => {
         'lost scale: root font size 16px, expected 24px',
         'unread: root font size unread, expected 20.8px',
     ]);
+    // One 12px page gutter at every width.
     expect(layoutSweepFailures([
-        { label: 'compact', vw: 639, layout: layout(12, 'list', 12) },
-        { label: 'rail lower bound', vw: 640, layout: layout(16) },
-        { label: 'rail upper bound', vw: 899, layout: layout(16) },
-        { label: 'full', vw: 900, layout: layout(24) },
+        { label: 'compact', vw: 639, layout: layout(12) },
+        { label: 'rail', vw: 834, layout: layout(12) },
+        { label: 'full', vw: 1280, layout: layout(12) },
     ])).toEqual([]);
+    expect(layoutSweepFailures([
+        { label: 'old rail gutter', vw: 834, layout: layout(16) },
+    ])).toEqual([
+        'old rail gutter: content left 16px, expected 12px',
+        'old rail gutter: header left 16px, expected 12px',
+        'old rail gutter: first content left 16px, expected 12px',
+    ]);
+    // A wide step that centres its column passes; one pushed off-centre does not.
+    const column = (left, rightGap) => ({
+        contentLeft: 12, contentRightGap: 12, headerLeft: null, first: { kind: 'list', left, rightGap, topGap: 12 },
+    });
+    expect(layoutSweepFailures([
+        { label: 'centred', vw: 834, layout: column(177, 177) },
+        { label: 'off centre', vw: 834, layout: column(177, 60) },
+        { label: 'narrow centred', vw: 411, layout: column(40, 40) },
+    ])).toEqual([
+        'off centre: first content left 177px, expected 12px',
+        'narrow centred: first content left 40px, expected 12px',
+    ]);
     expect(layoutSweepFailures([
         {
             label: 'activity',
@@ -52,25 +71,24 @@ test('layout gutter assertion contract', () => {
                 contentLeft: 12,
                 contentRightGap: 9,
                 headerLeft: 18,
-                first: { kind: 'list', left: 11, rightGap: 8, topGap: 12 },
+                first: { kind: 'list', left: 9, rightGap: 8, topGap: 12 },
             },
         },
         {
             label: 'send',
             vw: 768,
             layout: {
-                contentLeft: 16,
-                contentRightGap: 16,
-                headerLeft: 16,
+                contentLeft: 12,
+                contentRightGap: 12,
+                headerLeft: 12,
                 first: { kind: 'form', left: 104, rightGap: 104, topGap: 16 },
             },
         },
     ])).toEqual([
-        'activity: content left 12px, expected 16px',
-        'activity: content right gap 9px, expected at least 16px',
-        'activity: header left 18px, expected 16px',
-        'activity: first content left 11px, expected 16px',
-        'activity: first content right gap 8px, expected at least 16px',
+        'activity: content right gap 9px, expected at least 12px',
+        'activity: header left 18px, expected 12px',
+        'activity: first content left 9px, expected 12px',
+        'activity: first content right gap 8px, expected at least 12px',
         'form top gaps [16] do not match list top gaps [12]',
     ]);
 });

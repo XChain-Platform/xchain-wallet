@@ -138,7 +138,9 @@ export function measureInPage(opts = {}) {
         const scrollbarLeft = mr.right - borderR - scrollbarWidth;
         const contentLeft = frameLeft + padL;
         const contentRight = frameLeft + main.clientWidth - padR;
-        const expectedGutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        // One 12px page gutter at every width (--xc-page-gutter); kept in
+        // step with PAGE_GUTTER_PX by hand, since this body runs in the page.
+        const expectedGutter = 12;
         const visible = (el) => {
             const cs = getComputedStyle(el);
             const r = el.getBoundingClientRect();
@@ -517,6 +519,12 @@ export function rootFontFailure({ label, rootFontPx, expectedRootFontPx: expecte
     return `${label}: root font size ${actual}, expected ${expected}px`;
 }
 
+/**
+ * The gutter every route keeps between its content and the window edge: one
+ * 12px gutter at every width, the --xc-page-gutter token.
+ */
+export const PAGE_GUTTER_PX = 12;
+
 /** Returns the route labels and layout-contract failures from a completed sweep. */
 export function layoutSweepFailures(screens) {
     const failures = [];
@@ -531,7 +539,7 @@ export function layoutSweepFailures(screens) {
             failures.push(`${label}: missing #xc-main layout measurement`);
             continue;
         }
-        const gutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        const gutter = PAGE_GUTTER_PX;
         const { first } = layout;
         if (!close(layout.contentLeft, gutter)) {
             failures.push(`${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
@@ -547,8 +555,10 @@ export function layoutSweepFailures(screens) {
             continue;
         }
         // Wide forms intentionally centre their card inside the guttered
-        // content lane. Every other first block starts on the lane edge.
-        if ((first.kind !== 'form' || vw < 600) && !close(first.left, gutter)) {
+        // content lane, as wide onboarding steps centre their column. Every
+        // other first block starts on the lane edge.
+        const centred = vw >= 600 && first.left > gutter * 2 && close(first.left, first.rightGap);
+        if ((first.kind !== 'form' || vw < 600) && !centred && !close(first.left, gutter)) {
             failures.push(`${label}: first content left ${first.left}px, expected ${gutter}px`);
         }
         if (first.rightGap + 1 < gutter) {
