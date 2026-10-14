@@ -114,7 +114,20 @@ export function Screen({
         }
         if (positionKey == null || !positions) return undefined;
         main.scrollTop = positions.get(positionKey) ?? 0;
-        return () => positions.set(positionKey, main.scrollTop);
+        // Keep the offset from the last scroll event as well as reading it in
+        // the cleanup: when the same Screen swaps views (a Settings section
+        // replacing the list) React has already put the new, often still
+        // loading, content in place by then, and the read comes back clamped
+        // to its height, usually 0. A clamp only ever lowers the offset, so
+        // the larger of the two is the one the user left; the read still
+        // covers an offset set since the last scroll event fired.
+        let offset = main.scrollTop;
+        const track = () => { offset = main.scrollTop; };
+        main.addEventListener('scroll', track, { passive: true });
+        return () => {
+            main.removeEventListener('scroll', track);
+            positions.set(positionKey, Math.max(offset, main.scrollTop));
+        };
     }, [positionKey, positions, restoreScroll]);
 
     useLayoutEffect(() => {
