@@ -3,13 +3,45 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import {
+    findUncoveredMotionJs,
     findUncoveredMotionCss,
     hasGlobalReducedMotionGuard,
+    hasReducedMotionMediaOverride,
     runReducedMotionAudit,
 } from '../../../packages/core/scripts/reduced-motion-audit.js';
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+const motionCssByCategory = {
+    sheets: [
+        'packages/core/src/shared/components/AlertsOverlay.module.css',
+        'packages/core/src/shared/components/GatedFileViewer.module.css',
+        'packages/core/src/shared/components/HeaderActionMenu.module.css',
+        'packages/core/src/shared/components/NoticeModal.module.css',
+    ],
+    toasts: [
+        'packages/core/src/shared/components/ToastHost.module.css',
+        'packages/core/src/shared/components/UndoSendToast.module.css',
+    ],
+    spinners: [
+        'packages/core/src/shared/components/TotalBalanceHero.module.css',
+        'packages/core/src/shared/routes/CreateWallet.module.css',
+        'packages/core/src/shared/routes/History.module.css',
+        'packages/core/src/shared/routes/Loading.module.css',
+        'packages/core/src/ui/Button.module.css',
+    ],
+    pageTransitions: [
+        'packages/core/src/shared/routes/Onboarding.module.css',
+        'packages/core/src/shared/routes/OnboardingCarousel.module.css',
+    ],
+};
 
 const guardedTokens = `
     @media (prefers-reduced-motion: reduce) {
@@ -86,7 +118,70 @@ describe('reduced-motion CSS audit', () => {
         ]);
     });
 
-    it('finds no uncovered motion in core source', () => {
-        expect(runReducedMotionAudit().uncovered).toEqual([]);
+    it.each(Object.entries(motionCssByCategory))(
+        'locally disables %s animations in the reduced-motion media query',
+        (_category, files) => {
+            for (const file of files) {
+                const source = readFileSync(join(repoRoot, file), 'utf8');
+                expect(hasReducedMotionMediaOverride(source, 'animation'), file).toBe(true);
+            }
+        },
+    );
+
+    it('locally disables page indicator transitions in the reduced-motion media query', () => {
+        const file = 'packages/core/src/shared/routes/OnboardingCarousel.module.css';
+        const source = readFileSync(join(repoRoot, file), 'utf8');
+        expect(hasReducedMotionMediaOverride(source, 'transition')).toBe(true);
+    });
+
+    it('rejects unguarded JavaScript auto-advance, smooth scroll, and Web Animations', () => {
+        const scripts = [
+            {
+                file: 'AutoAdvance.jsx',
+                source: 'setInterval(() => setIndex((value) => value + 1), 1000);',
+            },
+            {
+                file: 'SmoothScroll.jsx',
+                source: "node.scrollIntoView({ behavior: 'smooth' });",
+            },
+            {
+                file: 'WebAnimation.jsx',
+                source: 'node.animate(keyframes, { duration: 200 });',
+            },
+        ];
+        expect(findUncoveredMotionJs(scripts)).toEqual([
+            { file: 'AutoAdvance.jsx', kinds: ['auto-advance'] },
+            { file: 'SmoothScroll.jsx', kinds: ['smooth-scroll'] },
+            { file: 'WebAnimation.jsx', kinds: ['web-animation'] },
+        ]);
+    });
+
+    it('accepts JavaScript motion guarded by the shared reduced-motion resolver', () => {
+        const scripts = [
+            {
+                file: 'AutoAdvance.jsx',
+                source: 'const reducedMotion = useReducedMotion();\n'
+                    + 'if (reducedMotion) return undefined;\n'
+                    + 'setInterval(() => setIndex((value) => value + 1), 1000);',
+            },
+            {
+                file: 'SmoothScroll.jsx',
+                source: 'const reducedMotion = useReducedMotion();\n'
+                    + "node.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' });",
+            },
+            {
+                file: 'WebAnimation.jsx',
+                source: 'const reducedMotion = useReducedMotion();\n'
+                    + 'node.animate(keyframes, { duration: reducedMotion ? 0 : 200 });',
+            },
+        ];
+        expect(findUncoveredMotionJs(scripts)).toEqual([]);
+    });
+
+    it('finds no uncovered CSS or JavaScript motion in core source', () => {
+        const result = runReducedMotionAudit();
+        expect(result.uncovered).toEqual([]);
+        expect(result.motionScriptCount).toBeGreaterThanOrEqual(3);
+        expect(result.uncoveredJs).toEqual([]);
     });
 });
