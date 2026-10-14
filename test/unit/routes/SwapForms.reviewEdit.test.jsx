@@ -546,7 +546,7 @@ describe('swap review editing', () => {
 
     it('does not show a positive cross-chain rate as zero', async () => {
         render(
-            <MessagingProvider shell="desktop" messaging={messaging({ buildActionPsbtRequest })}>
+            <MessagingProvider shell="desktop" messaging={messaging()}>
                 <CrossChainSwapForm walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
