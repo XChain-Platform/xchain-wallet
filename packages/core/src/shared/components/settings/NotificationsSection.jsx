@@ -18,10 +18,9 @@
 // manager under the priceAlerts toggle, and the M4 sounds block.
 //
 // The permission row owns the one piece of delivery the user must grant:
-// the browser/OS notification permission (web + desktop renderer). It reads
-// `Notification.permission` live and is hidden where that API is absent
-// (e.g. the extension popup, whose delivery uses `chrome.notifications`,
-// granted via the manifest, no runtime prompt).
+// browser/OS notification permission on web and desktop, or the optional
+// Chrome notification permission in the extension. It refreshes the live
+// state without prompting; only its button requests access.
 //
 // The sounds block is a separate, top-level preference: `settings.sounds`
 // (never nested under `notifications`, so a single family pick doesn't
@@ -53,30 +52,48 @@ import { ROW, ROW_HINT, STACK, SettingsLoadError, Status, ToggleRow } from './_s
  * Browser/OS notification-permission affordance. The extension requests and
  * removes its optional Chrome permission here, under a direct user gesture.
  */
-function PermissionRow() {
+function PermissionRow({ permission, setPermission }) {
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
         && typeof chromePermissions?.request === 'function'
         && typeof chromePermissions?.remove === 'function';
     const webSupported = typeof Notification !== 'undefined';
-    const [permission, setPermission] = useState(extensionSupported
-        ? 'checking'
-        : (webSupported ? Notification.permission : 'unsupported'));
     const [requestError, setRequestError] = useState(/** @type {string | null} */ (null));
     const [requesting, setRequesting] = useState(false);
 
     useEffect(() => {
-        if (!extensionSupported) return undefined;
         let active = true;
-        chromePermissions.contains({ permissions: ['notifications'] })
-            .then((granted) => {
-                if (active) setPermission(granted ? 'granted' : 'default');
-            })
-            .catch(() => {
-                if (active) setRequestError('Could not check notification permission. Try again.');
-            });
-        return () => { active = false; };
-    }, [chromePermissions, extensionSupported]);
+        const refresh = () => {
+            if (extensionSupported) {
+                chromePermissions.contains({ permissions: ['notifications'] })
+                    .then((granted) => {
+                        if (active) {
+                            setPermission(granted ? 'granted' : 'default');
+                            setRequestError(null);
+                        }
+                    })
+                    .catch(() => {
+                        if (active) setRequestError('Could not check notification permission. Try again.');
+                    });
+            } else if (webSupported) {
+                setPermission(Notification.permission);
+                setRequestError(null);
+            }
+        };
+
+        refresh();
+        globalThis.addEventListener?.('focus', refresh);
+        globalThis.document?.addEventListener?.('visibilitychange', refresh);
+        chromePermissions?.onAdded?.addListener?.(refresh);
+        chromePermissions?.onRemoved?.addListener?.(refresh);
+        return () => {
+            active = false;
+            globalThis.removeEventListener?.('focus', refresh);
+            globalThis.document?.removeEventListener?.('visibilitychange', refresh);
+            chromePermissions?.onAdded?.removeListener?.(refresh);
+            chromePermissions?.onRemoved?.removeListener?.(refresh);
+        };
+    }, [chromePermissions, extensionSupported, setPermission, webSupported]);
 
     if (!extensionSupported && !webSupported) return null;
 
@@ -220,12 +237,22 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
  */
 export function NotificationsSection({ walletId } = {}) {
     const { settings, loading, error, update } = useSettings();
+    const chromePermissions = globalThis.chrome?.permissions;
+    const extensionSupported = typeof chromePermissions?.contains === 'function'
+        && typeof chromePermissions?.request === 'function'
+        && typeof chromePermissions?.remove === 'function';
+    const webSupported = typeof Notification !== 'undefined';
+    const [permission, setPermission] = useState(extensionSupported
+        ? 'checking'
+        : (webSupported ? Notification.permission : 'unsupported'));
     const [pendingKey, setPendingKey] = useState(/** @type {string | null} */ (null));
     const [toggleError, setToggleError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
+
+    const permissionBlocksDelivery = permission !== 'unsupported' && permission !== 'granted';
 
     const onToggle = async (key, label, next) => {
         setPendingKey(key);
@@ -243,14 +270,15 @@ export function NotificationsSection({ walletId } = {}) {
 
     return (
         <div style={STACK}>
-            <PermissionRow />
+            <PermissionRow permission={permission} setPermission={setPermission} />
             {NOTIFICATION_FLAGS.map((f) => (
                 <div key={f.key} style={STACK}>
                     <ToggleRow
                         label={f.label}
                         hint={f.hint}
-                        checked={f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key])}
-                        disabled={pendingKey !== null}
+                        checked={!permissionBlocksDelivery
+                            && (f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key]))}
+                        disabled={permissionBlocksDelivery || pendingKey !== null}
                         onChange={(v) => onToggle(f.key, f.label, v)}
                     />
                     <NotificationSaveError message={toggleError?.key === f.key ? toggleError.message : null} />
@@ -258,7 +286,7 @@ export function NotificationsSection({ walletId } = {}) {
                         <PriceAlertsManager
                             walletId={walletId}
                             settings={settings}
-                            enabled={Boolean(settings.notifications.priceAlerts)}
+                            enabled={!permissionBlocksDelivery && Boolean(settings.notifications.priceAlerts)}
                         />
                     ) : null}
                 </div>
