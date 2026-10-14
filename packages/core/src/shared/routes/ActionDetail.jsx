@@ -78,7 +78,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     // explorer can carry the transaction before it has a
                     // block, and swapping to that would lose the pending
                     // detail for nothing.
-                    if (built && Number(built.blockIndex) > 0) setConfirmed(built);
+                    if (built && Number(built.blockIndex) > 0) {
+                        setConfirmed({ ...built, detailContext: entryProp.detailContext });
+                    }
                 })
                 .catch(() => { /* transient; the next tick tries again */ });
         };
@@ -175,16 +177,20 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
 
     const descriptor = entry.chainId ? chainRegistry.get(entry.chainId) : null;
     const iconUrl = descriptor ? branding.chainIconSmallUrl(descriptor.id) : null;
+    const rawActionIndex = String(entry.actionIndex ?? '').trim();
+    const actionIndexLabel = /^\d+$/.test(rawActionIndex)
+        ? BigInt(rawActionIndex).toLocaleString('en-US')
+        : '';
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel={t('actionDetail.back')}
-            title={isPending
+            title={isPending || !actionIndexLabel
                 // A pending action has no index, and the fallback here
                 // rendered it as "#0", an index that belongs to a real
                 // action on every chain.
                 ? actionDisplayLabel(entry.action)
-                : `${actionDisplayLabel(entry.action)} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
+                : `${actionDisplayLabel(entry.action)} #${actionIndexLabel}`}
             titleIcon={iconUrl ? (
                 <img
                     src={iconUrl}
@@ -214,8 +220,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 <DetailCard
                     entry={entry}
                     peerCache={peerCache}
-                    chainTip={chainTip}
-                    indexerWatermark={indexerWatermark}
+                    chainTip={chainTip ?? entry.detailContext?.chainTip}
+                    indexerWatermark={indexerWatermark ?? entry.detailContext?.indexerWatermark}
+                    walletAddresses={entry.detailContext?.walletAddresses}
                     walletId={walletId}
                     networkAvailable={browserOnline}
                     onDismissFailed={typeof messaging?.dismissFailedPendingTx === 'function'

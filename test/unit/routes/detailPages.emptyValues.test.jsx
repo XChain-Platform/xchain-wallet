@@ -169,7 +169,7 @@ describe('detail screens with sparse records', () => {
         );
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
-        for (const label of ['To', 'Memo', 'Quantity']) {
+        for (const label of ['To', 'Memo', 'Amount']) {
             expect(valueBeside(label)).toHaveTextContent('-');
         }
         expectNoEmptyDetailCells(view.container);

@@ -1565,7 +1565,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // page. Falls back to the legacy inline expand for builds /
         // contexts where no handler is provided.
         if (typeof onSelectEntry === 'function') {
-            onSelectEntry(entry);
+            onSelectEntry({
+                ...entry,
+                detailContext: {
+                    chainTip: chainTipByChainId[entry.chainId] ?? null,
+                    indexerWatermark: indexerWatermarkByChainId[entry.chainId] ?? null,
+                    walletAddresses: [...walletAddressSet],
+                },
+            });
             return;
         }
         const closing = selectedKeyRef.current === entry.key;
@@ -1624,7 +1631,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     });
             }
         }
-    }, [browserOnline, messaging, onSelectEntry]);
+    }, [
+        browserOnline,
+        chainTipByChainId,
+        indexerWatermarkByChainId,
+        messaging,
+        onSelectEntry,
+        walletAddressSet,
+    ]);
 
     const onTimelineKeyDown = (event) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -2196,7 +2210,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed, networkAvailable = true }) {
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
     const { settings } = useSettings();
@@ -2303,7 +2317,13 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     );
     const explorerButtons = explorerLinksFor(entry, settings);
 
-    const fullRows = fullDetailRows(entry, balancesHidden);
+    const fullRows = fullDetailRows(
+        entry,
+        balancesHidden,
+        chainTip,
+        walletAddresses,
+        explorerButtons,
+    );
     // Redact entry + peer raw payloads before stringifying. Cheap walk;
     // returns the same shape so the JSON pretty-printer indents identically.
     const rawForDisplay = balancesHidden ? redactAmountFields(entry.raw) : entry.raw;
@@ -3005,6 +3025,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
                 {balancesHidden
                     ? '•••••'
                     : formatHistoryAmount(nativeAmount, historyAmountDirection(entry))}
+                {' '}{nativeTick}
                 {nativeFiatValue != null ? (
                     <span className={styles.rowRelativeTime}>
                         {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue, fiatCurrency)})
@@ -3137,17 +3158,42 @@ function copyLabelForDetailField(key) {
  * transaction in one place. The curated hero table at the top of the
  * page covers the most-relevant fields; this is the long-form view.
  */
-function fullDetailRows(entry, balancesHidden = false) {
+function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAddresses = null, explorerLinks = []) {
     if (!entry) return [];
     const rows = [];
     const raw = entry.raw || {};
+    const transfer = detailTransfer(entry, walletAddresses);
+    const action = String(entry.action || '').toUpperCase();
+    const rawAsset = firstPopulatedValue(raw, ['tick', 'TICK', 'token', 'TOKEN']);
+    const asset = rawAsset || (action === 'SEND' || action === 'RECEIVE'
+        ? nativeTickerForEntry(entry)
+        : null);
+    const amount = firstPopulatedValue(raw, ['amount', 'AMOUNT', 'quantity', 'QUANTITY']);
+    const fee = firstPopulatedValue(entry, ['fee', 'networkFee', 'network_fee'])
+        || firstPopulatedValue(raw, [
+            'network_fee', 'networkFee', 'miner_fee', 'minerFee', 'tx_fee', 'txFee', 'fee', 'FEE',
+        ]);
+    const nativeTicker = nativeTickerForEntry(entry);
+    const explicitConfirmations = firstPopulatedValue(entry, ['confirmations'])
+        || firstPopulatedValue(raw, ['confirmations', 'CONFIRMATIONS']);
+    const block = finitePositiveNumber(entry.blockIndex ?? raw.block_index ?? raw.blockIndex);
+    const tip = finitePositiveNumber(chainTip);
+    const confirmations = finiteNonNegativeNumber(explicitConfirmations)
+        ?? (block != null && tip != null && tip >= block ? tip - block + 1 : null);
+    const timestamp = entry.timestamp ?? raw.timestamp ?? raw.block_time ?? raw.blockTime;
+    const memo = firstPopulatedValue(raw, ['memo', 'MEMO']);
+    const primaryExplorer = Array.isArray(explorerLinks) ? explorerLinks[0] : null;
+    const actionIndex = firstPopulatedValue(entry, ['actionIndex']);
+    const txHash = firstPopulatedValue(entry, ['txHash', 'txid']);
+    const entrySource = firstPopulatedValue(entry, ['source']);
+    const walletAddress = firstPopulatedValue(entry, ['address']);
 
     if (entry.action) rows.push(['Action', actionDisplayLabel(entry.action)]);
-    if (entry.actionIndex) {
+    if (actionIndex) {
         rows.push(['Action number', (
             <CopyableValue
-                display={formatDecimalAmount(entry.actionIndex)}
-                fullValue={String(entry.actionIndex)}
+                display={formatDecimalAmount(actionIndex)}
+                fullValue={actionIndex}
                 ariaLabel={t('history.copy.actionNumber')}
             />
         )]);
@@ -3159,38 +3205,57 @@ function fullDetailRows(entry, balancesHidden = false) {
         if (coin) rows.push(['Chain', capitalize(coin)]);
         rows.push(['Network', capitalize(network)]);
     }
-    if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
-    else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
-    if (entry.timestamp) {
-        rows.push(['Time', <RelativeTime timestamp={entry.timestamp} />]);
-    }
-    if (entry.txHash) {
+    if (txHash) {
         rows.push(['Transaction ID', (
             <CopyableValue
-                display={entry.txHash}
-                fullValue={entry.txHash}
+                display={txHash}
+                fullValue={txHash}
                 ariaLabel={t('common.copyTransactionId')}
             />
         )]);
     }
-    if (entry.source) {
+    if (entrySource) {
         rows.push(['From', (
             <CopyableValue
-                display={entry.source}
-                fullValue={entry.source}
+                display={entrySource}
+                fullValue={entrySource}
                 ariaLabel={t('history.copy.fromAddress')}
             />
         )]);
     }
-    if (entry.address) {
+    if (walletAddress) {
         rows.push(['Address', (
             <CopyableValue
-                display={entry.address}
-                fullValue={entry.address}
+                display={walletAddress}
+                fullValue={walletAddress}
                 ariaLabel={t('history.copy.walletAddress')}
             />
         )]);
     }
+
+    rows.push(['Direction', transfer.label]);
+    rows.push(['Amount', amount != null && asset ? (
+        balancesHidden
+            ? `••••• ${asset}`
+            : `${formatDetailAmount(amount, transfer.amountDirection)} ${asset}`
+    ) : '-']);
+    rows.push(['Network fee', fee != null && nativeTicker ? (
+        balancesHidden ? `••••• ${nativeTicker}` : `${formatDisplayAmount(fee)} ${nativeTicker}`
+    ) : '-']);
+    rows.push(['Counterparty', transfer.counterparty ? (
+        <CopyableValue
+            display={transfer.counterparty}
+            fullValue={transfer.counterparty === 'Self' ? entry.address : transfer.counterparty}
+            ariaLabel="Copy counterparty address"
+        />
+    ) : '-']);
+    rows.push(['Confirmations', confirmations == null ? '-' : formatDecimalAmount(confirmations)]);
+    rows.push(['Block', block == null ? '-' : formatDecimalAmount(block)]);
+    rows.push(['Time', formatTimestamp(timestamp)]);
+    rows.push(['Memo', memo ?? '-']);
+    rows.push(['Explorer', primaryExplorer?.url ? (
+        <a href={primaryExplorer.url} target="_blank" rel="noopener noreferrer">Open in explorer</a>
+    ) : '-']);
 
     // Every other raw key, sorted alphabetically. Skip the
     // entry-level fields we already surfaced above so we don't print
@@ -3206,6 +3271,11 @@ function fullDetailRows(entry, balancesHidden = false) {
         'tx_hash', 'txHash', 'TX_HASH',
         'source', 'SOURCE',
         'address', 'ADDRESS',
+        'amount', 'AMOUNT', 'quantity', 'QUANTITY',
+        'memo', 'MEMO',
+        'network_fee', 'networkFee', 'miner_fee', 'minerFee',
+        'tx_fee', 'txFee', 'fee', 'FEE',
+        'confirmations', 'CONFIRMATIONS',
         'params', 'PARAMS',
     ]);
     const rawKeys = Object.keys(raw).sort();
@@ -3259,9 +3329,76 @@ function fullDetailRows(entry, balancesHidden = false) {
     return rows;
 }
 
+function firstPopulatedValue(source, keys) {
+    for (const key of keys) {
+        const value = source?.[key];
+        if (!isEmptyDetailValue(value)) return String(value).trim();
+    }
+    return null;
+}
+
+function finitePositiveNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function finiteNonNegativeNumber(value) {
+    if (isEmptyDetailValue(value)) return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function nativeTickerForEntry(entry) {
+    const coin = coinOfChainId(entry?.chainId);
+    const descriptor = chainRegistry.get(entry?.chainId) || (coin ? { coin } : null);
+    return NATIVE_TICKER_BY_COIN(descriptor) || '';
+}
+
+function formatDetailAmount(amount, direction) {
+    const formatted = formatHistoryAmount(amount, direction);
+    if (direction !== 'self' || !formatted || /^[+-]/.test(String(amount).trim())) return formatted;
+    return /[1-9]/.test(String(amount)) ? `±${formatted}` : formatted;
+}
+
+function detailTransfer(entry, walletAddresses) {
+    const raw = entry?.raw || {};
+    const source = firstPopulatedValue(raw, ['source', 'SOURCE'])
+        || firstPopulatedValue(entry, ['source']);
+    const destination = firstPopulatedValue(raw, ['destination', 'DESTINATION', 'recipient', 'RECIPIENT']);
+    const own = new Set(
+        (walletAddresses instanceof Set ? [...walletAddresses] : (walletAddresses || []))
+            .map((address) => String(address).toLowerCase()),
+    );
+    if (entry?.address) own.add(String(entry.address).toLowerCase());
+    const sourceIsOurs = Boolean(source) && own.has(source.toLowerCase());
+    const destinationIsOurs = Boolean(destination) && own.has(destination.toLowerCase());
+    const action = String(entry?.action || '').toUpperCase();
+    const peer = peerAddressOfEntry(entry);
+    const safePeer = isEmptyDetailValue(peer) ? null : peer;
+    if (action !== 'SEND' && action !== 'RECEIVE') {
+        return { label: '-', amountDirection: null, counterparty: safePeer };
+    }
+    if (sourceIsOurs && destinationIsOurs) {
+        return { label: 'Self', amountDirection: 'self', counterparty: 'Self' };
+    }
+    const pendingDirection = entry?.pending?.direction;
+    const direction = sourceIsOurs ? 'out'
+        : destinationIsOurs ? 'in'
+        : pendingDirection === 'out' || pendingDirection === 'in' ? pendingDirection
+        : source && entry?.address ? 'in'
+        : null;
+    if (direction === 'out') {
+        return { label: 'Sent', amountDirection: 'out', counterparty: destination };
+    }
+    if (direction === 'in') {
+        return { label: 'Received', amountDirection: 'in', counterparty: source };
+    }
+    return { label: '-', amountDirection: null, counterparty: safePeer };
+}
+
 function isEmptyDetailValue(value) {
     if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
-    return typeof value === 'string' && /^(?:undefined|null|nan)$/i.test(value.trim());
+    return typeof value === 'string' && /^(?:|undefined|null|nan|[+-]?infinity)$/i.test(value.trim());
 }
 
 function isRemovedAccessListValue(key, value) {
@@ -3295,16 +3432,17 @@ function formatNumberWithCommas(value) {
 function explorerLinksFor(entry, settings) {
     const links = [];
     if (!entry) return links;
-    const txHash = entry.txHash;
+    const txHash = firstPopulatedValue(entry, ['txHash', 'txid']);
+    const actionIndex = firstPopulatedValue(entry, ['actionIndex']);
     const [coin = '', networkKind = 'mainnet'] = String(entry.chainId || '').split('-');
 
     // XChain actions have their own detail page. Plain transfers keep the
     // third-party transaction links below when that network has coverage.
-    const hasActionIndex = entry.actionIndex != null && entry.actionIndex !== '';
-    const xchainUrl = hasActionIndex ? explorerPageUrl({
+    const hasActionIndex = actionIndex != null;
+    const xchainUrl = (hasActionIndex || txHash) ? explorerPageUrl({
         chainId: entry.chainId,
-        kind: 'action',
-        value: entry.actionIndex,
+        kind: hasActionIndex ? 'action' : 'transaction',
+        value: hasActionIndex ? actionIndex : txHash,
         settings,
     }) : null;
     if (xchainUrl) {
@@ -3847,6 +3985,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                     walletId={walletId}
                     showFiatInHistory={showFiatInHistory}
                     fiatCurrency={fiatCurrency}
+                    walletAddresses={walletAddresses}
                     onDismissFailed={onDismissFailed}
                     networkAvailable={networkAvailable}
                 />
