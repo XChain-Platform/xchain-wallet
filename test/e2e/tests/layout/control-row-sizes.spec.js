@@ -133,7 +133,9 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             await expectMatchingControlSizes(`Smart contracts at ${width}px`, [
                 ['contract filter', main.getByRole('searchbox', { name: 'Filter contracts' })],
                 ['all chains', main.getByRole('tab', { name: 'All', exact: true })],
-                ['publish contract', main.getByRole('button', { name: 'Publish contract' })],
+                // Empty chain sections carry their own smaller Publish buttons; the
+                // toolbar action is the first one.
+                ['publish contract', main.getByRole('button', { name: 'Publish contract' }).first()],
             ]);
         });
 
@@ -151,7 +153,10 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             await openSettingsSearch(page, 'dApp permissions');
             await main.getByRole('button', { name: /^Connected sites/ }).click();
             const origin = main.getByRole('textbox', { name: 'Origin or wildcard to block' });
-            const blockForm = main.locator('form').filter({ has: origin });
+            // A filter `has` locator resolves inside the form, so it cannot start at main.
+            const blockForm = main.locator('form').filter({
+                has: page.getByRole('textbox', { name: 'Origin or wildcard to block' }),
+            });
             await expectMatchingControlSizes(`Settings dApp permissions at ${width}px`, [
                 ['blocked origin', origin],
                 ['block', blockForm.getByRole('button', { name: 'Block', exact: true })],

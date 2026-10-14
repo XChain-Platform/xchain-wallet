@@ -136,10 +136,9 @@
     margin: var(--xc-space-2) 0;
 }
 
+/* The kit Checkbox owns its grid (box and native input share one cell), so
+   this rule only places it; a display override split the box from its input. */
 .licenseAck {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
     margin: 0;
     width: 100%;
     font-size: var(--xc-text-sm);

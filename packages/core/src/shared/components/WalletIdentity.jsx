@@ -77,7 +77,9 @@ export function IdentityAvatar({
         background: identity
             ? 'color-mix(in srgb, var(--xc-avatar-tone) 14%, var(--xc-surface))'
             : 'var(--xc-avatar-tone)',
-        color: identity ? 'var(--xc-text)' : 'var(--xc-on-accent)',
+        // Forced-colors mode repaints the tone fill as Canvas, so the stylesheet
+        // swaps the letter ink to CanvasText there.
+        color: identity ? 'var(--xc-text)' : 'var(--xc-avatar-ink, var(--xc-on-accent))',
         fontFamily: 'var(--xc-font-sans)',
         fontSize: sizing.fontSize,
         fontWeight: 700,

@@ -139,7 +139,7 @@ describe('TickerIcon', () => {
         const pip = icon.querySelector('img');
 
         expect(icon.style.width).toBe('var(--xc-avatar-size-list)');
-        expect(fallback.style.color).toBe('var(--xc-on-accent)');
+        expect(fallback.style.color).toBe('var(--xc-avatar-ink, var(--xc-on-accent))');
         expect(pip.style.background).toBe('var(--xc-surface-raised)');
     });
 });

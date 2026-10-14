@@ -7,18 +7,21 @@
 
 .sm {
     --network-filter-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
+    --network-filter-font: var(--xc-control-font-sm);
     --xc-icon-size: var(--xc-icon-sm);
     --network-filter-icon-size: var(--xc-icon-size);
 }
 
 .md {
     --network-filter-control-height: var(--xc-control-h-md, 36px);
+    --network-filter-font: var(--xc-control-font-md);
     --xc-icon-size: var(--xc-icon-md);
     --network-filter-icon-size: var(--xc-icon-size);
 }
 
 .lg {
     --network-filter-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
+    --network-filter-font: var(--xc-control-font-lg);
     --xc-icon-size: var(--xc-icon-md);
     --network-filter-icon-size: var(--xc-icon-size);
 }
@@ -29,6 +32,15 @@
     min-width: 0;
     gap: var(--xc-space-2);
     text-align: start;
+}
+
+/* The size classes publish the control height, so a filter beside a field
+   of the same size matches it in height and corner shape. The wrap prefix
+   outranks the kit Chip's own height whatever order the modules load in. */
+.wrap .trigger {
+    height: var(--network-filter-control-height, var(--xc-control-h-sm));
+    border-radius: var(--xc-control-radius);
+    font-size: var(--network-filter-font, var(--xc-control-font-sm));
 }
 
 .triggerIcon {

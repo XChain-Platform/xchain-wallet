@@ -67,7 +67,7 @@ test('kit navigation and filter controls work on populated routes', async ({ pag
 
     await test.step('History chips and the segmented view expose their selected state', async () => {
         await gotoSection(page, 'History');
-        const datePresets = page.getByRole('group', { name: 'Date presets' });
+        const datePresets = page.getByRole('group', { name: 'Date range presets' });
         const sevenDays = datePresets.getByRole('button', { name: '7 days' });
         await sevenDays.click();
         await expect(sevenDays).toHaveAttribute('aria-pressed', 'true');
@@ -83,15 +83,18 @@ test('kit navigation and filter controls work on populated routes', async ({ pag
         await expect.poll(() => rows.count()).toBeGreaterThan(groupedRowCount);
     });
 
-    await test.step('Markets chips toggle aria-pressed on the real list', async () => {
+    await test.step('Markets view tabs expose their selected state on the real list', async () => {
         await gotoSection(page, 'DEX');
-        const views = page.getByRole('group', { name: 'Markets view' });
-        const all = views.getByRole('button', { name: 'All', exact: true });
-        const popular = views.getByRole('button', { name: 'Popular', exact: true });
-        await expect(all).toHaveAttribute('aria-pressed', 'true');
+        // The Markets view is the kit Tabs control, so selection is aria-selected.
+        const views = page.getByRole('tablist', { name: 'Markets view' });
+        const all = views.getByRole('tab', { name: 'All', exact: true });
+        const popular = views.getByRole('tab', { name: 'Popular', exact: true });
+        // The demo wallet may restore another view, so select All first.
+        await all.click();
+        await expect(all).toHaveAttribute('aria-selected', 'true');
         await popular.click();
-        await expect(popular).toHaveAttribute('aria-pressed', 'true');
-        await expect(all).toHaveAttribute('aria-pressed', 'false');
+        await expect(popular).toHaveAttribute('aria-selected', 'true');
+        await expect(all).toHaveAttribute('aria-selected', 'false');
     });
 
     await test.step('Display switches retain their saved values after reload', async () => {
@@ -161,6 +164,12 @@ test('choice controls retain their values through order and Send review', async 
         await mainButton(page, 'Send').click();
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
         await page.getByTestId('confirm-reject').click();
+        // The review replaces the form, so Advanced comes back collapsed; the
+        // switch value itself is form state and must survive.
+        const advanced = main.locator('details', { has: page.locator('summary', { hasText: 'Advanced' }) });
+        if (!(await advanced.evaluate((element) => element.open))) {
+            await main.locator('summary', { hasText: 'Advanced' }).click();
+        }
         await expectChecked(rbf, expected);
     });
 });
