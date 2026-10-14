@@ -15,6 +15,10 @@
     justify-content: center;
     padding-block: min(10vh, var(--xc-space-8));
     padding-inline: var(--xc-space-4);
+    /* Now fixed to the viewport, the panel keeps clear of the notch and the
+       home indicator. */
+    padding-top: calc(min(10vh, var(--xc-space-8)) + env(safe-area-inset-top, 0));
+    padding-bottom: calc(min(10vh, var(--xc-space-8)) + env(safe-area-inset-bottom, 0));
 }
 
 .panel {

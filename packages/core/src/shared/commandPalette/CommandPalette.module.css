@@ -16,6 +16,9 @@
     /* The capped gap leaves room for results when the fitted viewport contracts. */
     padding-top: min(12vh, var(--xc-space-8));
     padding-inline: var(--xc-space-4);
+    /* Now fixed to the viewport, the panel keeps clear of the notch. The
+       narrow bottom sheet resets this and insets its own bottom edge. */
+    padding-top: calc(min(12vh, var(--xc-space-8)) + env(safe-area-inset-top, 0));
 }
 
 .panel {
