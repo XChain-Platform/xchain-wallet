@@ -90,7 +90,7 @@ async function expectSharedLineControlHeights(controls, label) {
 }
 
 function priceAlertFormControls(page) {
-    return page.getByLabel('Target price')
+    return page.getByLabel('Target price', { exact: true })
         .locator('xpath=ancestor::div[.//select and .//button][1]')
         .locator('select, input, button');
 }
@@ -144,7 +144,7 @@ for (const viewport of VIEWPORTS) {
                 priceAlertFormControls(page),
                 `${viewport.name} add price alert row`,
             );
-            await main.getByLabel('Target price').fill('71000');
+            await main.getByLabel('Target price', { exact: true }).fill('71000');
             await main.getByRole('button', { name: 'Add alert' }).click();
 
             await expect(main.getByText('Bitcoin rises above $71,000', { exact: true })).toBeVisible();
@@ -154,17 +154,17 @@ for (const viewport of VIEWPORTS) {
             await expectSharedLineControlHeights(savedRowControls, `${viewport.name} saved price alert row`);
 
             await edit.click();
-            await expect(main.getByLabel('Coin')).toHaveValue('bitcoin-mainnet');
-            await expect(main.getByLabel('Direction')).toHaveValue('above');
-            await expect(main.getByLabel('Target price')).toHaveValue('71000');
+            await expect(main.getByLabel('Coin', { exact: true })).toHaveValue('bitcoin-mainnet');
+            await expect(main.getByLabel('Direction', { exact: true })).toHaveValue('above');
+            await expect(main.getByLabel('Target price', { exact: true })).toHaveValue('71000');
             await expectSharedLineControlHeights(
                 priceAlertFormControls(page),
                 `${viewport.name} edit price alert row`,
             );
             await expectScreen(page, `${viewport.name} edit price alert`, 'Notifications');
 
-            await main.getByLabel('Direction').selectOption('below');
-            await main.getByLabel('Target price').fill('65000');
+            await main.getByLabel('Direction', { exact: true }).selectOption('below');
+            await main.getByLabel('Target price', { exact: true }).fill('65000');
             await main.getByRole('button', { name: 'Save changes' }).click();
 
             await expect(main.getByText('Bitcoin falls below $65,000', { exact: true })).toBeVisible();
