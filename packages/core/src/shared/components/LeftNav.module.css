@@ -375,6 +375,16 @@
     --xc-page-top: var(--xc-space-4);
 }
 
+/* Notices sit above Screen, so they take the tier's gutter value here
+   rather than reading the Screen-owned page gutter. */
+.layout[data-xc-tier='rail'] .notices {
+    --xc-notice-inset: var(--xc-space-4);
+}
+
+.layout[data-xc-tier='full'] .notices {
+    --xc-notice-inset: var(--xc-space-6);
+}
+
 /* The brand wordmark and the wallet switcher have no icon-only form.
    Both stay reachable from the app header at this width. */
 .layout[data-xc-tier='rail'] .brand,

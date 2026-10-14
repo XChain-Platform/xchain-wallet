@@ -12,9 +12,10 @@
     border: 1px solid;
     font-size: var(--xc-text-sm);
     margin-block: var(--xc-space-2);
-    /* The layout tier sets the page gutter, so the notice lines up with the
-       route content at every width without breakpoints of its own. */
-    margin-inline: var(--xc-page-gutter);
+    /* The shell publishes a per-tier notice inset beside its page gutter, so
+       the notice lines up with route content; the popup has no tiers and
+       keeps the compact inset. */
+    margin-inline: var(--xc-notice-inset, var(--xc-space-3));
 }
 
 .degraded {
