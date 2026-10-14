@@ -37,7 +37,9 @@ describe('K51 small-screen UI', () => {
         const rowName = rule(pickerCss, '.rowName');
 
         expect(rowName).toMatch(/padding-block:\s*var\(--xc-space-1\)/);
+        expect(rowName).toMatch(/padding-inline:\s*var\(--xc-space-1\)/);
         expect(rowName).toMatch(/margin-block:\s*calc\(0px - var\(--xc-space-1\)\)/);
+        expect(rowName).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
         expect(rowName).toMatch(/overflow:\s*hidden/);
     });
 

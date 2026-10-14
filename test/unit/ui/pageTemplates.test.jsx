@@ -169,6 +169,25 @@ describe('<FormErrorSummary>', () => {
         expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
     });
 
+    it('names the field once when the message already opens with its label', () => {
+        render(
+            <FormErrorSummary errors={[
+                { id: 'password', label: 'Password', message: 'Password must be at least 8 characters.' },
+                { id: 'w5', label: 'Word 5', message: 'Word 5 does not match your written copy.' },
+                { id: 'w1', label: 'Word 1', message: 'Word 12 is missing.' },
+                { id: 'confirm', label: 'Confirm password', message: 'Passwords do not match.' },
+            ]} focusKey={1} />,
+        );
+
+        const links = within(screen.getByRole('alert', { name: 'Form errors' })).getAllByRole('link');
+        expect(links.map((link) => link.textContent)).toEqual([
+            'Password must be at least 8 characters.',
+            'Word 5 does not match your written copy.',
+            'Word 1: Word 12 is missing.',
+            'Confirm password: Passwords do not match.',
+        ]);
+    });
+
     it('does not show a summary until the form has been submitted', () => {
         const errors = [{ id: 'amount', label: 'Amount', message: 'Amount must be positive.' }];
         const { rerender } = render(<FormErrorSummary errors={errors} focusKey={0} />);
