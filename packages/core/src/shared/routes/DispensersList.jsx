@@ -9,12 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
-import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
+import { isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { dispenserRateLabel } from '../utils/dispenserPricing.js';
@@ -69,10 +68,8 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
     const [addressesReload, setAddressesReload] = useState(0);
     const [dispensersReload, setDispensersReload] = useState(0);
-    // In-page filters: free-text search + network dropdown, mirroring the
-    // contacts / messaging toolbars.
+    // Keep the in-page search independent of the active network selected in Settings.
     const [query, setQuery] = useState('');
-    const [network, setNetwork] = useState('all');
     // Cancel block times of closing dispensers, keyed `chainId:actionIndex`.
     const [cancelTimes, setCancelTimes] = useState(/** @type {Record<string, number>} */ ({}));
     const [nowMs, setNowMs] = useState(() => Date.now());
@@ -276,16 +273,14 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         return states.some((s) => s.loading);
     }, [dispensersByChain]);
 
-    const loadErrors = useMemo(() => (
-        Object.entries(dispensersByChain)
-            .filter(([, s]) => s.error)
-            .map(([cid]) => chainRegistry.get(cid)?.displayName || cid)
-    ), [dispensersByChain]);
+    const hasLoadErrors = useMemo(
+        () => Object.values(dispensersByChain).some((state) => state.error),
+        [dispensersByChain],
+    );
 
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
         return allRows.filter((row) => {
-            if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
             if (!q) return true;
             const label = row.address ? dispenserLabels[row.address] : undefined;
             return [
@@ -294,7 +289,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 String(row.action_index ?? ''),
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
-    }, [allRows, query, network, dispenserLabels]);
+    }, [allRows, query, dispenserLabels]);
 
         const header = (
         <PageHeader
@@ -380,17 +375,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             aria-label="Search dispensers"
                         />
                     </div>
-                    <div className={local.searchField}>
-                        <NetworkFilterDropdown
-                            value={network}
-                            onChange={setNetwork}
-                            announceNetworkCount
-                        />
-                    </div>
                 </div>
             )}
         >
-            {loadErrors.length > 0 ? (
+            {hasLoadErrors ? (
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
@@ -402,14 +390,14 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         },
                     }}
                 >
-                    Couldn't load some dispensers. Failed networks: {loadErrors.join(', ')}. Try again.
+                    Couldn't load some dispensers. Try again.
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
-            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+            ) : hasLoadErrors && allRows.length === 0 ? (
                 null
             ) : visibleRows.length === 0 ? (
                 allRows.length === 0 ? (
@@ -426,7 +414,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         actionLabel="Reset filters"
                         onAction={() => {
                             setQuery('');
-                            setNetwork('all');
                         }}
                     />
                 )
@@ -457,7 +444,6 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
         : null;
-    const descriptor = chainRegistry.get(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
     // 'valid' forever, which dressed every dispenser - cancelled and drained
@@ -508,19 +494,15 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                         src={chainIconUrl}
                         alt=""
                         aria-hidden="true"
-                    title={chainRegistry.get(row.chainId)?.displayName}
-                    className={local.chainOverlay}
-                    loading="lazy"
-                    decoding="async"
+                        className={local.chainOverlay}
+                        loading="lazy"
+                        decoding="async"
                     />
                 ) : null}
             </span>}
             title={<span className={local.name}>{label ? `${label}: ` : ''}{row.give_tick || '?'}</span>}
             subtitle={(
                 <span className={local.body}>
-                    <span className={local.subtitle}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-                    </span>
                     <span className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</span>
                 {/* Escrow is only stated when it is known. The explorer's
                     dispenser LIST lane carries no escrow column (remaining is

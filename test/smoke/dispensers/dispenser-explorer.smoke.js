@@ -13,9 +13,9 @@
 //
 // Asserts:
 //   1. DispenserExplorer.jsx exists + exports a single component.
-//   2. Supports two search modes (token / address) with a chain filter
-//      (all chains vs specific). Empty-state wording asks the user to
-//      enter a search term. Regex-validates token input.
+//   2. Supports two search modes (token / address) across the active Settings
+//      network. Empty-state wording asks the user to enter a search term.
+//      Regex-validates token input.
 //   3. Token searches route through messaging.getDispensersForToken;
 //      address searches through messaging.getDispensersForAddress.
 //   4. DispenserDetail gains a buyer surface for non-owners:
@@ -64,7 +64,7 @@ assert.equal(
     'DispenserExplorer.jsx only exports the component',
 );
 
-// --- 2. Search modes + chain filter -----------------------------------
+// --- 2. Search modes + active network scope ---------------------------
 
 assert.ok(/searchMode/.test(explorerSrc), 'explorer tracks searchMode state');
 for (const mode of ["'token'", "'address'"]) {
@@ -74,13 +74,11 @@ for (const mode of ["'token'", "'address'"]) {
     );
 }
 assert.ok(
-    /chainFilter/.test(explorerSrc),
-    'explorer tracks chainFilter state',
+    /filterChainIdsByActiveNetwork/.test(explorerSrc),
+    'explorer scopes its chain fan-out to the active Settings network',
 );
-assert.ok(
-    /All chains/.test(explorerSrc),
-    'explorer offers an "All chains" option that fans out per-chain',
-);
+assert.ok(!/<Select\b|chainFilter|networkKind\}/.test(explorerSrc),
+    'explorer renders no route-level chain selector or network-kind label');
 assert.ok(
     /tickerReferenceError\(q, \{ noun: 'Token search', allowRef: true \}\)/.test(explorerSrc),
     'explorer validates token input shape through the shared reference grammar',

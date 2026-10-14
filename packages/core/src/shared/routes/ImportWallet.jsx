@@ -13,9 +13,9 @@ import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     Button,
+    ChainBadge,
     FormPage,
     Input,
-    Select,
     Textarea,
     Icon,
     ListPage,
@@ -1254,21 +1254,26 @@ export function ImportWallet({
                         spellCheck={false}
                         disabled={busy}
                     />
-                    <Select
-                        label={t('importWallet.wif.chain')}
-                        value={wifChainId}
-                        onChange={(e) => {
-                            setWifChainId(e.target.value);
-                            if (error) setError(null);
-                        }}
-                        disabled={busy}
-                    >
-                        {wifChains.map((descriptor) => (
-                            <option key={descriptor.id} value={descriptor.id}>
-                                {descriptor.displayName} ({descriptor.networkKind})
-                            </option>
-                        ))}
-                    </Select>
+                    <fieldset className={styles.chainField} disabled={busy}>
+                        <legend>{t('importWallet.wif.chain')}</legend>
+                        <div className={styles.chainChoices} role="radiogroup">
+                            {wifChains.map((descriptor) => (
+                                <button
+                                    key={descriptor.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={wifChainId === descriptor.id}
+                                    className={`${styles.chainChoice} ${wifChainId === descriptor.id ? styles.chainChoiceActive : ''}`.trim()}
+                                    onClick={() => {
+                                        setWifChainId(descriptor.id);
+                                        if (error) setError(null);
+                                    }}
+                                >
+                                    <ChainBadge descriptor={descriptor} size="sm" />
+                                </button>
+                            ))}
+                        </div>
+                    </fieldset>
                     <Input
                         label={t('renameWallet.name')}
                         value={name}

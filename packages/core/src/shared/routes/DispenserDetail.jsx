@@ -1397,7 +1397,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <ActionConfirmScreen
                 {...ownerLane.confirmProps}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 coinTicker={feeCoinTicker}
                 signerReady={signerReady}
                 hintClassName={styles.hint}
@@ -1419,7 +1419,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <ActionConfirmScreen
                 confirmAction={buyConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 coinTicker={feeCoinTicker}
                 signerReady={signerReady}
                 password={buyPassword}
@@ -1764,10 +1764,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={ownerAddress?.address || ''} />

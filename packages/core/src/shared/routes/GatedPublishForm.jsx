@@ -380,7 +380,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -494,10 +494,12 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('gatedPublish.gateToken')}</dt>
                     <dd className={styles.detailsValue}><code>{tick}</code></dd>
                     <dt className={styles.detailsLabel}>{t('gatedPublish.file')}</dt>

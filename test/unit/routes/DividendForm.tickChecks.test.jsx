@@ -141,7 +141,7 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
-        await expectText(/BTC is Bitcoin itself, not an XChain token/);
+        await expectText(/BTC is the active chain itself, not an XChain token/);
         expect(submitButton().disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -153,7 +153,7 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
-        await expectText(/No token named GHOSTTOK exists on Bitcoin\./);
+        await expectText(/No token named GHOSTTOK exists on the active chain\./);
         expect(submitButton().disabled).toBe(true);
     });
 
@@ -164,7 +164,7 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await openPicker('Dividend token');
         await pickRow('GHOSTPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
-        await expectText(/No token named GHOSTPAY exists on Bitcoin\./);
+        await expectText(/No token named GHOSTPAY exists on the active chain\./);
         expect(submitButton().disabled).toBe(true);
     });
 
