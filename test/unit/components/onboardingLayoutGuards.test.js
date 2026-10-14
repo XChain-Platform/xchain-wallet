@@ -93,8 +93,12 @@ describe('onboarding and Home layout guards', () => {
         expect(createWalletSource.match(/aria-current="step">Step [123] of 3/g)).toHaveLength(4);
         expect(importWalletSource).not.toContain('<header className={headClass}>');
         expect(importWalletSource).toContain('titleRef={headingRef}');
-        expect(carouselSource).toContain('progress={progressTabs}');
-        expect(carouselSource).toContain('actions={navigation}');
+        expect(carouselSource).toContain('<div className={styles.skipRow}>{skipAction}</div>');
+        expect(carouselSource).toContain('<div className={styles.nav}>{navigation}</div>');
+        expect(carouselCss).toMatch(/\.frameViewport\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s);
+        expect(carouselCss).toMatch(/\.skipRow\s*\{[^}]*flex:\s*0 0 auto;/s);
+        expect(carouselCss).toMatch(/\.nav\s*\{[^}]*flex:\s*0 0 auto;/s);
+        expect(carouselCss).toMatch(/\.actions\s*\{[^}]*flex:\s*0 0 auto;/s);
         expect(lockedSource).toContain('<FormPage');
         expect(resumeSource).toContain('<FormPage label={title}>');
         expect(resumeSource).not.toMatch(/<button\b/);

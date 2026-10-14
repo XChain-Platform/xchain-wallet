@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Button, FormPage, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
+import { Button, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import styles from './OnboardingCarousel.module.css';
 
@@ -183,34 +183,31 @@ export function OnboardingCarousel({
 
     // --- Reduced motion: stack every frame, no stepping, no auto-advance.
     if (reducedMotion) {
-        const [first, ...remaining] = frames;
         return (
-            <FormPage
-                as="div"
-                label={t('onboarding.carousel.steps')}
+            <div
                 className={isFull ? styles.rootFull : styles.rootPopup}
                 data-testid="onboarding-carousel"
                 data-reduced-motion="true"
-                title={first.title}
-                description={first.body}
-                visual={first.icon ? <div className={styles.frameIcon}>{first.icon}</div> : null}
-                topAction={skipAction}
-                actions={(
+            >
+                <div className={styles.skipRow}>{skipAction}</div>
+                <div className={styles.stack}>
+                    {frames.map((frame, i) => {
+                        const Heading = i === 0 ? 'h1' : 'h2';
+                        return (
+                            <section key={frame.id || i} className={styles.stackFrame}>
+                                {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
+                                <Heading className={styles.frameTitle}>{frame.title}</Heading>
+                                <p className={styles.frameBody}>{frame.body}</p>
+                            </section>
+                        );
+                    })}
+                </div>
+                <div className={styles.actions}>
                     <Button variant="primary" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
                         {t('onboarding.carousel.getStarted')}
                     </Button>
-                )}
-            >
-                <div className={styles.stack}>
-                    {remaining.map((frame, i) => (
-                        <section key={frame.id || i + 1} className={styles.stackFrame}>
-                            {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
-                            <h2 className={styles.frameTitle}>{frame.title}</h2>
-                            <p className={styles.frameBody}>{frame.body}</p>
-                        </section>
-                    ))}
                 </div>
-            </FormPage>
+            </div>
         );
     }
 
@@ -222,43 +219,34 @@ export function OnboardingCarousel({
             data-reduced-motion="false"
             onKeyDown={handleCarouselKeyDown}
         >
+            <div className={styles.skipRow}>{skipAction}</div>
+
             <div
                 className={styles.frameViewport}
                 aria-live="polite"
                 aria-atomic="true"
             >
                 {frames.map((item, i) => {
-                    const active = i === index;
+                    const Heading = i === index ? 'h1' : 'h2';
                     return (
                         <section
-                            key={active ? 'active-frame' : (item.id || i)}
+                            key={`${item.id || i}-${i === index ? 'active' : 'inactive'}`}
                             id={`${idPrefix}-panel-${i}`}
                             role="tabpanel"
                             aria-labelledby={`${idPrefix}-tab-${i}`}
-                            hidden={!active}
+                            hidden={i !== index}
                             className={styles.frame}
                         >
-                            {active ? (
-                                <FormPage
-                                    as="div"
-                                    label={item.title}
-                                    title={item.title}
-                                    description={item.body}
-                                    visual={item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
-                                    progress={progressTabs}
-                                    topAction={skipAction}
-                                    actions={navigation}
-                                />
-                            ) : (
-                                <>
-                                    <h2 className={styles.frameTitle}>{item.title}</h2>
-                                    <p className={styles.frameBody}>{item.body}</p>
-                                </>
-                            )}
+                            {item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
+                            <Heading className={styles.frameTitle}>{item.title}</Heading>
+                            <p className={styles.frameBody}>{item.body}</p>
                         </section>
                     );
                 })}
             </div>
+
+            {progressTabs}
+            <div className={styles.nav}>{navigation}</div>
         </div>
     );
 }
