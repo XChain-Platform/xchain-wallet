@@ -26,6 +26,7 @@ export const CONTROL_SIZE_LITERAL_ALLOWLIST = [
     { file: 'shared/routes/Send.module.css', selector: '.heroChainOverlay', property: 'height', value: '32px', reason: 'Send hero badge artwork is not a control height.' },
     { file: 'shared/routes/StakeDetail.module.css', selector: '.quickActionIcon', property: 'height', value: '32px', reason: 'Quick-action artwork geometry is not a control height.' },
     { file: 'shared/routes/TokenDetail.module.css', selector: '.balanceHeroEye', property: 'height', value: '28px', reason: 'Legacy icon-only privacy action pending control-token migration.' },
+    { file: 'shared/routes/TokenDetail.module.css', selector: '.officialBannerSlot', property: 'min-height', value: '38px', reason: 'The official-asset banner slot reserves its loaded height so the page does not shift; it is not a control height.' },
     { file: 'shared/routes/TokenDetail.module.css', selector: '.quickActionIcon', property: 'height', value: '32px', reason: 'Quick-action artwork geometry is not a control height.' },
     { file: 'shared/routes/WalletPicker.module.css', selector: '.rowMenuBtn', property: 'height', value: '32px', reason: 'Legacy row menu action pending shared Button adoption.' },
     { file: 'ui/Checkbox.module.css', selector: '.root', property: 'min-height', value: '44px', reason: 'The checkbox label row keeps a 44px pointer target floor; the painted box uses the control icon token.' },

@@ -21,7 +21,7 @@ const styles = Object.fromEntries(files.map((file) => [
 const rawPixelExceptions = {
     'ActionsMenu.module.css': ['260px', '1px', '2px', '2px'],
     'AddAddressModal.module.css': ['1px', '1px'],
-    'AddressList.wif.module.css': ['1px', '1px', '1px', '2px', '1px'],
+    'AddressList.wif.module.css': ['1px', '1px', '2px', '1px'],
     'ContractScreens.module.css': ['200px'],
     'CreateWallet.module.css': ['96px', '2px', '1px', '1px', '1px', '520px', '64px'],
 };
