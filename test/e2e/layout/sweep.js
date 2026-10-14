@@ -701,24 +701,30 @@ export function createSweep(page, {
 
     /**
      * Open each row of a list screen in turn, measure it, and come back.
-     * Rows are addressed by position and re-found after every return, so a
-     * row whose accessible name differs from its text is still visited.
-     * `reopen` brings the list screen back.
+     * Rows are re-found by their first text line after every return (the
+     * same line's nth occurrence, for repeated labels), so a row whose
+     * accessible name differs from its text is still visited, and a notice
+     * that comes or goes above the list does not shift every row after it.
+     * `reopen` brings the list screen back; `rows` finds its rows.
      */
-    async function crawlRows(prefix, reopen) {
-        await reopen();
-        const labels = await rowButtons().evaluateAll((els) => els.map((e) => (
+    async function crawlRows(prefix, reopen, rows = rowButtons, skip = null) {
+        const firstLines = () => rows().evaluateAll((els) => els.map((e) => (
             (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()
         )));
+        await reopen();
+        const labels = await firstLines();
         let visited = 0;
         for (let i = 0; i < labels.length; i += 1) {
             const label = labels[i];
-            if (!label || /^Back/.test(label) || DESTRUCTIVE.test(label)) continue;
+            if (!label || /^Back/.test(label) || DESTRUCTIVE.test(label) || skip?.test(label)) continue;
             try {
                 await reopen();
-                const row = rowButtons().nth(i);
-                const now = (await row.innerText({ timeout: 3_000 })).trim().split('\n')[0].trim();
-                if (now !== label) continue; // the list changed under us
+                const occurrence = labels.slice(0, i).filter((other) => other === label).length;
+                const now = await firstLines();
+                const index = now.findIndex((other, j) => other === label
+                    && now.slice(0, j).filter((prev) => prev === label).length === occurrence);
+                if (index < 0) continue; // the row is gone from the list
+                const row = rows().nth(index);
                 await row.click({ timeout: 5_000 });
                 await measure(`${prefix}: ${label}`);
                 visited += 1;
@@ -840,18 +846,21 @@ export function createSweep(page, {
             await home();
         }
 
-        // The hamburger menu screen and each of its rows.
+        // The header menu and each of its rows. Its links open the platform
+        // sites in a new window and Open in new window opens another wallet
+        // window; neither is a wallet screen, so neither is walked.
         const menu = page.getByRole('button', { name: 'Open menu' }).first();
         if (await menu.count() > 0 && await menu.isVisible()) {
+            const menuPanel = page.getByRole('menu', { name: 'Header actions' });
             await home();
             await menu.click();
             await measure('menu: list');
             await crawlRows('menu', async () => {
-                if (await page.getByText('Menu', { exact: true }).first().isVisible().catch(() => false)) return;
+                if (await menuPanel.isVisible().catch(() => false)) return;
                 await home();
                 await menu.click();
-                await page.waitForTimeout(300);
-            });
+                await menuPanel.waitFor({ state: 'visible', timeout: 5_000 });
+            }, () => menuPanel.locator('button[role="menuitem"]:visible:not([disabled])'), /new window/i);
         }
 
         // Settings and every section in it.
