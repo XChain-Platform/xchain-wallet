@@ -4011,12 +4011,32 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
+/**
+ * True when `label` is the name the wallet generated for an address
+ * ("BTC Address #1", "LTC Change #2", "Imported Address") rather than one the
+ * user chose. A generated name only repeats the coin, which the row's asset
+ * mark already shows, so a row names the receiving address only when the
+ * user named it.
+ *
+ * @param {string} label
+ * @param {string | undefined} chainId
+ * @returns {boolean}
+ */
+export function isGeneratedAddressLabel(label, chainId) {
+    let text = String(label || '').trim();
+    if (!text || text === 'Imported Address') return true;
+    const ticker = tickerForCoin(coinOfChainId(chainId) || '');
+    if (ticker && text.startsWith(`${ticker} `)) text = text.slice(ticker.length + 1);
+    return /^(Address|Change|Dispenser)( #\d+)?$/.test(text);
+}
+
 export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
     const actionKind = classifyEntryAction(entry, walletAddresses);
     const receiveLabel = entry.receiveLabel
         && actionKind === 'receive'
+        && !isGeneratedAddressLabel(entry.receiveLabel, entry.chainId)
         ? entry.receiveLabel
         : '';
     const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });

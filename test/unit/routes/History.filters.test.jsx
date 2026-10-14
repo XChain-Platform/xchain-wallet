@@ -227,6 +227,19 @@ describe('History filters', () => {
         expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
     });
 
+    it('leaves a generated address name off the row, since it only repeats the coin', async () => {
+        const sender = 'mtkxExternalSender1111111111111111111111';
+        const view = mountHistory({
+            [LTC]: [historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: sender })],
+        }, {
+            [LTC]: [{ address: LTC_ADDRESS, label: 'LTC Address #1' }],
+        }).view;
+
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+        expect(screen.queryByText(/Received at/)).toBeNull();
+        expect(view.container.textContent).not.toContain('LTC Address #1');
+    });
+
     it('combines every filter dimension and preserves the controls across a refresh poll', async () => {
         const rows = {
             [LTC]: [
