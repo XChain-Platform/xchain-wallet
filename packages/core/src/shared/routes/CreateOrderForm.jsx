@@ -15,6 +15,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -103,6 +104,7 @@ const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
  */
 export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromAddress, onManageOrders }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
 
@@ -610,6 +612,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review order"
                 onSubmit={handleSubmit}
                 noValidate
@@ -689,6 +692,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create order"
             onSubmit={handleReview}
             noValidate

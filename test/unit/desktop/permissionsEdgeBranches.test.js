@@ -6,7 +6,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
     HID_VENDOR_ALLOWLIST,
@@ -71,6 +72,42 @@ describe('HID permission wiring guards', () => {
         expect(session.handlers.check({}, 'hid', 'file://', {
             requestingUrl: appUrl,
         })).toBe(true);
+    });
+
+    it('refuses WebUSB and Web Serial on the default session, even to the app origin', () => {
+        const session = fakeSession();
+        attachHidPermissions(session, { appRoot, guard: createHidFrameGuard() });
+
+        for (const permission of ['usb', 'serial']) {
+            expect(session.handlers.check({}, permission, 'file://', {})).toBe(false);
+            expect(session.handlers.check({}, permission, 'file://', { requestingUrl: appUrl })).toBe(false);
+            expect(session.handlers.check({}, permission, 'file:///', { securityOrigin: 'file:///' })).toBe(false);
+            expect(session.handlers.check({}, permission, 'https://remote.example', {})).toBe(false);
+        }
+        // Only the device classes narrow: the shared UI's check-path grants stay.
+        for (const permission of ['notifications', 'clipboard-read', 'clipboard-sanitized-write']) {
+            expect(session.handlers.check({}, permission, 'file://', { requestingUrl: appUrl })).toBe(true);
+        }
+    });
+
+    it('cancels the WebUSB and Web Serial pickers on the default session', () => {
+        const session = fakeSession();
+        attachHidPermissions(session, { appRoot, guard: createHidFrameGuard() });
+
+        for (const [name, expected] of [['select-usb-device', undefined], ['select-serial-port', '']]) {
+            const listener = session.listeners.get(name);
+            expect(typeof listener).toBe('function');
+            const event = { preventDefault: vi.fn() };
+            const callback = vi.fn();
+            const args = name === 'select-serial-port'
+                ? [event, [{ portId: 'p1' }], {}, callback]
+                : [event, { deviceList: [{ deviceId: 'd1', vendorId: HID_VENDOR_ALLOWLIST.LEDGER }] }, callback];
+            listener(...args);
+            expect(event.preventDefault).toHaveBeenCalledTimes(1);
+            expect(callback).toHaveBeenCalledTimes(1);
+            expect(callback.mock.calls[0]).toEqual(expected === undefined ? [] : [expected]);
+        }
+        expect(typeof session.listeners.get('select-hid-device')).toBe('function');
     });
 
     it('uses the requesting frame URL for HID requests and the window URL as fallback', () => {
@@ -220,5 +257,17 @@ describe('isolated bridge HID denial', () => {
             if (expected === '') expect(callback).toHaveBeenCalledWith('');
             else expect(callback).toHaveBeenCalledWith();
         }
+    });
+});
+
+describe('HID chooser default, as the module describes it', () => {
+    it('never claims Electron auto-selects the first HID device for an un-prevented chooser', () => {
+        // Electron v44.7.0 cancels an un-prevented select-hid-device (hid_chooser_controller.cc) and documents
+        // first-device-wins only for Bluetooth, so a comment claiming otherwise contradicts the app-frame arm.
+        const src = readFileSync(fileURLToPath(new URL('../../../packages/desktop/main/permissions.js', import.meta.url)), 'utf8');
+        const prose = src.replace(/\s*\n\s*(\*|\/\/)\s*/g, ' ');
+        expect(prose).not.toMatch(/documented default for an UNHANDLED `?select-hid-device`?/i);
+        expect(prose).not.toMatch(/unhandled `?select-hid-device`? auto-selects/i);
+        expect(prose).toMatch(/left un-prevented, which Electron answers by cancelling/);
     });
 });

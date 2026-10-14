@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import {
     formatWithThousands,
@@ -119,6 +120,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // wallet holds addresses on (the address + fee sections follow along).
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     // Only for the fiat preview: the display currency, and whether the user
     // has opted out of third-party price data (§45 / privacy.priceDataEnabled).
     const { settings } = useSettings();
@@ -737,6 +739,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         const isPartial = !reviewed.full;
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -872,6 +875,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} staking`}
             onSubmit={handleReview}
             status={formError ? (

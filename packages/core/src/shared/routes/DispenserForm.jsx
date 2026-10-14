@@ -31,6 +31,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -191,6 +192,7 @@ function outsideAddressError(address, descriptor) {
  */
 export function DispenserForm({ walletId, activeAccountId, onBack, initialChainId, initialTick, initialFromAddress, reopen }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
@@ -350,8 +352,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         draft.save({
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,
@@ -420,6 +430,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The active map and the settings read are best-effort: a host without
@@ -1247,6 +1258,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review dispenser"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -1540,6 +1552,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create dispenser"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
@@ -1578,14 +1591,19 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             iconLabel="Change dispenser address"
                         />
                     ) : (
+                        // A new address does not exist until preview, so the
+                        // field says so as a placeholder; as a value the
+                        // sentence went through the address shortener and
+                        // read "New di…eview)".
                         <AddressField
                             label="Dispenser address"
                             icon="addresses"
                             value={addressMode === 'new'
-                                ? 'New dispenser address (generated at preview)'
+                                ? ''
                                 : (addressMode === 'existing' && existingAddress
                                     ? existingAddress.address
                                     : fromAddress.address)}
+                            placeholder={addressMode === 'new' ? 'New address, made at preview' : undefined}
                             readOnly
                             onChange={() => {}}
                             onIconClick={() => setAddressPickerOpen(true)}

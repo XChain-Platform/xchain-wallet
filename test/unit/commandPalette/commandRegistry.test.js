@@ -270,7 +270,7 @@ describe('buildCommands', () => {
         expect(ids.has('sign-verify')).toBe(true);
     });
 
-    it('limits demo wallets to read-only destinations and wallet utilities', () => {
+    it('keeps create and trade forms browsable for demo wallets but hides signing tools', () => {
         const commands = buildCommands({
             navigate() {},
             scan() {},
@@ -281,8 +281,7 @@ describe('buildCommands', () => {
         });
         const ids = commands.map((command) => command.id);
 
-        expect(ids.some((id) => id.startsWith('create-'))).toBe(false);
-        expect(ids.some((id) => id.startsWith('trade-'))).toBe(false);
+        expect(ids).toEqual(expect.arrayContaining(['create-token', 'create-dispenser', 'trade-swap']));
         expect(ids).not.toEqual(expect.arrayContaining([
             'nav-send',
             'nav-receive',

@@ -584,7 +584,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
             {loading ? (
                 <span role="status" style={ROW_HINT}>Loading price alerts…</span>
             ) : error ? (
-                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>
+                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
                     Could not load price alerts.{' '}
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>Try again</Button>
                 </span>
@@ -651,7 +651,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 ))
             )}
 
-            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>{actionError}</span> : null}
+            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{actionError}</span> : null}
             {!loading && !error ? (
                 <PriceAlertForm
                     key={editingAlert?.id || 'new'}

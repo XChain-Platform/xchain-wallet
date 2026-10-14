@@ -45,6 +45,7 @@
     --xc-label-gap: var(--xc-space-1);
     --xc-help-gap: var(--xc-space-1);
     --xc-section-gap: var(--xc-space-4);
+    --xc-settings-row-gap: var(--xc-space-2);
     --xc-section-header-gap: var(--xc-space-2);
     --xc-list-row-padding: var(--xc-space-3);
 
@@ -101,8 +102,11 @@
     --xc-avatar-pip-header: 14px;
     --xc-avatar-pip-list: 20px;
     --xc-avatar-pip-hero: 32px;
-    --xc-avatar-initials-header: var(--xc-text-xs);
-    --xc-avatar-initials-list: var(--xc-text-md);
+    /* The circles are fixed pixels while the initials follow the rem scale, so
+       a large text size (iOS Dynamic Type, browser zoom) would push two letters
+       past the clipped circle. The initials stop growing once they fill it. */
+    --xc-avatar-initials-header: min(var(--xc-text-xs), calc(var(--xc-avatar-size-header) * 0.4));
+    --xc-avatar-initials-list: min(var(--xc-text-md), calc(var(--xc-avatar-size-list) * 0.45));
     --xc-avatar-initials-hero: 36px;
     --xc-avatar-shape: var(--xc-radius-pill);
 
@@ -205,11 +209,11 @@
     --xc-accent-primary-hover: #156690;
     --xc-accent-secondary: #7B2C8F;
     /* Accent and danger text stay close to their fill colours while clearing
-     * AA on the muted surface. The dark palette lifts them further because
+     * AA on the muted surface and on the tinted pill and hover fills. The dark palette lifts them further because
      * the fill shades fail AA as text on a dark card. Use these for `color:`,
      * and use the plain tokens for backgrounds and borders. */
-    --xc-accent-text: #1A77AA;
-    --xc-danger-fg: #DA2525;
+    --xc-accent-text: #156690;
+    --xc-danger-fg: #CC2020;
 
     /* Light theme - default */
     --xc-bg: #FFFFFF;

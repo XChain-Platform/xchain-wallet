@@ -94,19 +94,19 @@ android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-v*
 # avoids Play deliberately and has been getting Play's restrictions anyway.
 #
 # ITS OWN LANE RATHER THAN A THIRD GLOB ON THE ANDROID ROW, and that is the
-# whole reason this could land before the artifact exists. The android row is
-# SHIPPED, so every glob on it is DEMANDED of every release from now on:
-# adding this one there would make `android SHIPPED` require an artifact
-# nothing builds yet, failing every release until a ceremony with the K9/K10
-# keystores and a real Android toolchain had run. A separate NOT-SHIPPED lane
-# claims the glob - so the optional row is not an unclaimed artifact, which is
-# also a hard failure here - while demanding nothing, exactly like the four
-# store lanes below.
+# whole reason this could land before the artifact existed. The android row is
+# SHIPPED, so every glob on it is DEMANDED of every release in its scope:
+# adding this one there would have made `android SHIPPED` require an artifact
+# nothing built yet. Until v0.341.3 this lane was NOT-SHIPPED, claiming the
+# glob - so the optional row was not an unclaimed artifact, which is also a
+# hard failure here - while demanding nothing.
 #
-# The ceremony leg that builds it is opt-in behind XCHAIN_BUILD_ANDROID_FULL=1
-# for the same reason. Flip this to SHIPPED in the commit that records the
-# first release actually carrying the file, and from then on a release that
-# omits it is a lane left behind rather than a smaller release.
+# SHIPPED since v0.341.3, the first release carrying the file. The parity gate
+# now demands it of any release whose scope includes android-full, including
+# an unscoped release, and a release in that scope that omits it is a lane left
+# behind rather than a smaller release. The ceremony leg that builds it is
+# still opt-in behind XCHAIN_BUILD_ANDROID_FULL=1; a ceremony run without it
+# yields a set that signs only as a partial `--lane android` release.
 android-full SHIPPED     store-only  xchain-wallet-v*-full.apk
 
 # iOS. Store-bound only; there is no direct-install lane on that

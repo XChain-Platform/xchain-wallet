@@ -67,6 +67,9 @@ export default defineConfig({
         '**/*.regtest.spec.js',
         '**/*.testnet.spec.js',
         '**/*.extension.spec.js',
+        // On demand through playwright.a11y-sweep.config.js: about a hundred
+        // screens per theme and size is too long for the default run.
+        '**/demo-axe-sweep.spec.js',
     ],
     outputDir: './test-results',
     fullyParallel: false,

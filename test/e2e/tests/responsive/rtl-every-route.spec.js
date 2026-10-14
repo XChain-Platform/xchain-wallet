@@ -26,12 +26,14 @@ const VIEWPORT = { width: 360, height: 800 };
 
 // Root destinations mirror ROUTE_NAV_GROUPS. Marketplace uses the command
 // palette because compact navigation intentionally keeps it out of More.
+// `tab` marks the bottom-bar tabs: the tab bar already links to them, so
+// their header shows no Back control at this width.
 const ROUTES = [
     { name: 'Home' },
-    { name: 'History', back: true },
-    { name: 'Send', back: true },
+    { name: 'History', tab: true },
+    { name: 'Send', tab: true },
     { name: 'Receive', back: true },
-    { name: 'Scan', back: true },
+    { name: 'Scan', tab: true },
     { name: 'DEX', back: true },
     { name: 'Marketplace', back: true, palette: true },
     { name: 'Dispensers', back: true },
@@ -146,6 +148,14 @@ test.describe('responsive RTL route sweep', () => {
 
                 if (route.back) {
                     await expectBackAtStartWithMirroredChevrons(page, route.name);
+                } else if (route.tab) {
+                    const heading = page.getByRole('heading', { level: 1 }).first();
+                    await expect(heading).toBeVisible();
+                    // h1 > title group > PageHeader row
+                    await expect(
+                        heading.locator('xpath=../..').locator('button:has(svg[data-xc-directional])'),
+                        `${route.name}: a bottom-bar tab shows a redundant back control`,
+                    ).toHaveCount(0);
                 } else {
                     await expect(unlockedShell(page)).toBeVisible();
                 }

@@ -79,7 +79,8 @@ assert.ok(['staking-dashboard', 'contract-deploy'].every(
 
 // --- 3. hasVmAddress gate + aria-current ---------------------------------
 
-assert.ok(/hasVmAddress\s*\?[\s\S]*?'contracts-list'/.test(navSrc),
+assert.ok(/id: 'contracts-list',[^}]*requiresVm: true/.test(navSrc)
+    && /item\.requiresVm && !hasVmAddress/.test(navSrc),
     'Contracts row only appears when hasVmAddress is true');
 assert.ok(!/hasBtcAddress/.test(navSrc),
     'LeftNav no longer carries a BTC gate (contracts is the registry VM gate)');

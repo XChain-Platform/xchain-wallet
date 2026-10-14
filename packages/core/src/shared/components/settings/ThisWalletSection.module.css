@@ -1,10 +1,9 @@
 .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
+    gap: var(--xc-settings-row-gap);
 }
 
-.row,
 .panel,
 .keyPanel {
     padding: var(--xc-space-3);

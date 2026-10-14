@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, Button, FormPage, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -125,6 +126,7 @@ export function CreateBetFeedForm({
 }) {
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const betChainIds = useBetChainIds();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -624,6 +626,7 @@ export function CreateBetFeedForm({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Open a market"
             onSubmit={submit}
             status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}

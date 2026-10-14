@@ -60,6 +60,11 @@ import { isDemoWallet } from '../../core/src/flows/demoMode.js';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
+import {
+    applySendAssetPick,
+    beginSendAssetSwitch,
+    cancelSendAssetSwitch,
+} from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 // §6 / D4. Renders nothing unless a shell installed a direct-update
@@ -73,7 +78,7 @@ import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/use
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
-import { dismissAllOverlays } from '@xchain-wallet/core/ui/backStack.js';
+import { dismissAllOverlays, useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { coinFamiliesForUser } from '../../core/src/registry/visibility.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -434,9 +439,10 @@ function AppInner() {
         active: globalScannerOpen,
         initialFocusRef: globalScannerRef,
     });
-    // The overlay covers the content area but not the navigation, so the
-    // bottom bar, the rail and the header stay live underneath it. Any
-    // navigation therefore closes it; otherwise the scanner (and the camera)
+    // Escape and the system Back gesture close the scanner like any other
+    // modal; its own Back control is a route-level handler that Escape skips.
+    useBackHandler(globalScannerOpen ? () => setGlobalScannerOpen(false) : undefined);
+    // Any view change closes the scanner; otherwise it (and the camera)
     // stayed on screen over whatever view the user had moved to (LG K51,
     // 2026-10-12: palette "Scan a QR code", then Home, then History). The nav
     // handlers also close it directly, for a tap on the view already shown.
@@ -646,8 +652,8 @@ function AppInner() {
     // `sendPrefill` above, which is what the send outcome has always done.
     const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
     // Which view Send should return to when the user hits Back. Defaults
-    // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
-    // out lands on the token list the user was just browsing.
+    // to 'home'. The asset picker is a step of Send and leaves it alone, so
+    // Send's Back still returns to whatever opened Send.
     const [sendBackTo, setSendBackTo] = useState(
         /** @type {'home' | 'send-picker' | 'token-detail' | 'contacts'} */ ('home'),
     );
@@ -1164,7 +1170,7 @@ function AppInner() {
                         }}
                         prefill={sendPrefill}
                         onChangeAsset={(carry) => {
-                            setSendPrefill({ assetSwitchDraft: carry });
+                            setSendPrefill((prev) => beginSendAssetSwitch(prev, carry));
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -1180,35 +1186,12 @@ function AppInner() {
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter
-                        onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
+                        onBack={() => {
+                            setSendPrefill(cancelSendAssetSwitch);
+                            setUnlockedView('send');
+                        }}
                         onSelect={(sel) => {
-                            setSendPrefill((prev) => ({
-                                chainId: sel.chainId,
-                                tick: sel.tick,
-                                kind: sel.kind,
-                                displayName: sel.displayName,
-                                imageUrl: sel.imageUrl,
-                                address: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? (prev.assetSwitchDraft.address || undefined)
-                                    : undefined,
-                                amount: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    && prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                        === String(sel.tick || '').trim().toUpperCase()
-                                    ? (prev.assetSwitchDraft.amount || undefined)
-                                    : undefined,
-                                feeSelection: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? prev.assetSwitchDraft.feeSelection
-                                    : undefined,
-                                assetSwitchNotice: prev?.assetSwitchDraft
-                                    ? (prev.assetSwitchDraft.chainId !== sel.chainId
-                                        ? 'Chain changed. Recipient, amount, and fee rate were reset.'
-                                        : prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                            !== String(sel.tick || '').trim().toUpperCase()
-                                            ? 'Token changed. Amount was reset for the new token precision.'
-                                            : undefined)
-                                    : undefined,
-                            }));
-                            setSendBackTo('send-picker');
+                            setSendPrefill((prev) => applySendAssetPick(prev, sel));
                             setUnlockedView('send');
                         }}
                     />
@@ -3116,23 +3099,21 @@ function AppInner() {
                             aria-modal="true"
                             aria-labelledby="xc-global-scanner-title"
                             tabIndex={-1}
-                            onKeyDown={(event) => {
-                                if (event.key !== 'Escape') return;
-                                event.stopPropagation();
-                                setGlobalScannerOpen(false);
-                            }}
                             style={{
-                                position: 'absolute',
+                                // A modal: it inerts the header and navigation, so it
+                                // covers them too rather than leaving dead controls on show.
+                                position: 'fixed',
                                 inset: 0,
+                                boxSizing: 'border-box',
+                                padding: 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)',
                                 zIndex: 'var(--xc-z-overlay)',
                                 background: 'var(--xc-bg)',
                                 display: 'flex',
                                 flexDirection: 'column',
                             }}
                         >
-                            {/* This overlay sits outside the route outlet's Suspense, so the first
-                                open (chunk not loaded yet) would suspend the whole shell into the
-                                route error screen. */}
+                            {/* ScanRoute is a lazy chunk; without its own boundary the first
+                                open suspends the whole shell into the route error screen. */}
                             <Suspense fallback={<Loading />}>
                                 <ScanRoute
                                     embedded

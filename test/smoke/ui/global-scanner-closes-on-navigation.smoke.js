@@ -31,6 +31,28 @@ assert.match(
     'the scanner dialog is a programmatic initial focus target',
 );
 
+// The scanner is modal and inerts everything outside it, so it covers the
+// header and navigation too instead of leaving them on show but dead, and
+// Escape or system Back closes it like any other modal.
+assert.match(
+    app,
+    /ref=\{globalScannerRef\}[\s\S]{0,600}?position: 'fixed',\s*inset: 0,/,
+    'the global scanner covers the whole viewport',
+);
+assert.match(
+    app,
+    /useBackHandler\(globalScannerOpen \? \(\) => setGlobalScannerOpen\(false\) : undefined\);/,
+    'Escape and system Back close the global scanner',
+);
+
+// ScanRoute is lazy; opened before its chunk loaded, the scanner suspended
+// with no boundary and the shell fell to the route error screen.
+assert.match(
+    app,
+    /ref=\{globalScannerRef\}[\s\S]{0,2000}?<Suspense fallback=\{<Loading \/>\}>\s*<ScanRoute\b/,
+    'the lazy global scanner has its own Suspense boundary',
+);
+
 assert.match(
     app,
     /useEffect\(\(\) => \{\s*setGlobalScannerOpen\(false\);\s*\}, \[unlockedView\]\);/,
@@ -42,16 +64,5 @@ assert.ok(navSelects.length >= 2, 'located the navigation onSelect handlers');
 for (const handler of navSelects) {
     assert.match(handler, /setGlobalScannerOpen\(false\)/, `navigation closes the scanner: ${handler}`);
 }
-
-assert.match(
-    app,
-    /aria-labelledby="xc-global-scanner-title"[\s\S]{0,120}?onKeyDown=\{\(event\) => \{\s*if \(event\.key !== 'Escape'\) return;[\s\S]{0,120}?setGlobalScannerOpen\(false\);/,
-    'Escape closes the global scanner',
-);
-assert.match(
-    app,
-    /<Suspense fallback=\{<Loading \/>\}>\s*<ScanRoute\s+embedded/,
-    'the lazy scan route inside the overlay has its own Suspense boundary',
-);
 
 console.log('global-scanner-closes-on-navigation smoke OK');

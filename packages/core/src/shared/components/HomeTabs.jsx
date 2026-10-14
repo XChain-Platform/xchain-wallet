@@ -28,6 +28,7 @@ import { TotalBalanceHero as TotalBalanceHeroBase } from './TotalBalanceHero.jsx
 import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
+import { BalancesUncheckedState } from './BalancesUncheckedState.jsx';
 import { ActivityRow as SharedActivityRow } from './ActivityRow.jsx';
 import {
     isDemoWallet,
@@ -173,8 +174,10 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
+ * @param {boolean} [props.balancesUnchecked] balances could not be checked: an empty tab says that instead of "nothing yet"
+ * @param {() => void} [props.onRecheckBalances] rechecks reachability and balances from that state
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
@@ -407,6 +410,16 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     }, [filteredRows]);
     const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row));
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
+    // An empty tab while balances could not be checked proves nothing, so it
+    // says that once (and the shell's stale-balances notice steps aside).
+    const showUnchecked = balancesUnchecked && !isDemo && typeof onRecheckBalances === 'function';
+    const uncheckedState = showUnchecked ? (
+        <BalancesUncheckedState
+            plain={false}
+            onRetry={onRecheckBalances}
+            onReceive={hasAddresses ? onReceive : undefined}
+        />
+    ) : null;
     const showBalanceSort = (active === 'coins' && !showFirstFunding && coins.length > 0)
         || (active === 'tokens' && filteredTokens.length > 0);
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
@@ -532,7 +545,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 role="tabpanel"
                 aria-labelledby={`${tabsId}-tab-${active}`}
             >
-                {active === 'coins' ? (
+                {active === 'coins' && showUnchecked && (showFirstFunding || coins.length === 0) ? uncheckedState : null}
+                {active === 'coins' && !(showUnchecked && (showFirstFunding || coins.length === 0)) ? (
                     showFirstFunding ? (
                         <Placeholder
                             title="Fund your wallet"
@@ -591,7 +605,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
 
                 {active === 'tokens' ? (
                     <>
-                    {filteredTokens.length === 0 ? (
+                    {filteredTokens.length === 0 && showUnchecked && !tokenQueryTrim ? uncheckedState : null}
+                    {filteredTokens.length === 0 && !(showUnchecked && !tokenQueryTrim) ? (
                         <BalanceList
                             rows={[]}
                             emptyTitle={tokenQueryTrim

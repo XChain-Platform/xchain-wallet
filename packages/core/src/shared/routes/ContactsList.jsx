@@ -588,6 +588,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     const header = (
         <PageHeader
+            nested={mode !== 'list'}
             onBack={() => {
                 if (mode !== 'list') {
                     if (mode === 'edit') leaveGuard.guardedOnBack();
@@ -669,6 +670,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     if (mode === 'scan') {
         return (
             <ScanRoute
+                nested
                 onBack={() => { setScanFromEdit(false); setMode(scanFromEdit ? 'edit' : 'list'); }}
                 onClassified={handleScanned}
                 chainRegistry={chainRegistry}
@@ -928,7 +930,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
                             <div className={picker.modalActions}>
-                                <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
+                                <Button type="button" variant="secondary" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
                             </div>
                         </div>

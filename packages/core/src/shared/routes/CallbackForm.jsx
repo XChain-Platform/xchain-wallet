@@ -16,6 +16,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -145,6 +146,7 @@ function tokenBalanceAt(byChain, chainId, address, tick) {
  */
 export function CallbackForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const lockedToken = !!(initialChainId && initialTick);
@@ -717,6 +719,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     if (stage === 'review' || stage === 'submitting') {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review callback"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -862,6 +865,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label="Execute callback"
             onSubmit={handleReview}
             status={formError ? (

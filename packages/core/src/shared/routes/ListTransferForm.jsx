@@ -21,6 +21,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { airdrop as airdropLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -61,6 +62,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     const listActionIndex = String(listRef.actionIndex);
     const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
     const signerReady = useSignerReady(walletId);
@@ -271,6 +273,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             : null;
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Transfer list"
             onSubmit={handleReview}
             status={sdkSupported === false || formError ? (

@@ -218,6 +218,7 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useUndoSend } from '../hooks/useUndoSend.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { BalancesUncheckedState } from '../components/BalancesUncheckedState.jsx';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
@@ -380,8 +381,10 @@ function normalizePastedRecipient(value) {
  */
 export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive }) {
     const { messaging, shell } = useMessaging();
-    const { overall: reachabilityOverall } = useReachability({});
+    const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
+    // The verdict behind the shell's "Some balances may be out of date".
+    const balancesUnchecked = reachabilityOverall === 'degraded' || networkOffline;
     const mountedRef = useRef(true);
     useEffect(() => {
         mountedRef.current = true;
@@ -581,8 +584,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [draftPending, setDraftPending] = useState(
         () => !hasMeaningfulSendDraft(draft.load()),
     );
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         const values = { chainId, toAddress, tick, amount, memo };
         if (hasMeaningfulSendDraft(values)) draft.save(values);
         else draft.clear();
@@ -615,6 +626,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The settings read rides the address load so the last-used chain is
@@ -1448,6 +1460,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     // Set once the first balance check settles; see the loading gate below.
     const balanceGateSettledRef = useRef(false);
+    // Bumped by Try again so the empty-chain check runs again.
+    const [balanceRecheck, setBalanceRecheck] = useState(0);
     const [chainBalanceState, setChainBalanceState] = useState(
         /** @type {{ chainId: string | null, status: 'loading' | 'funded' | 'empty' | 'unknown' }} */
         ({ chainId: null, status: 'loading' }),
@@ -1493,7 +1507,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!cancelled) setChainBalanceState({ chainId, status: 'unknown' });
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode, isDemo]);
+    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode, isDemo, balanceRecheck]);
 
     // PC-26 gated-send readiness. A tick with active gated content can
     // only be sent as BATCH(SEND, MESSAGE-with-key); the host guard
@@ -2506,6 +2520,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setPassword(''); setStage('form'); }
                 : leaveGuard.guardedOnBack}
@@ -2633,18 +2648,33 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     if (!isWatcherMode && selectedChainBalanceStatus === 'loading' && !balanceGateSettledRef.current) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
-    if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
+    if (!isWatcherMode && selectedChainBalanceStatus === 'empty' && balancesUnchecked) {
+        // A zero read while balances could not be checked proves nothing, so
+        // the page says that once instead of "Nothing to send yet" beside the
+        // stale-balances notice.
         return wrap(
-            <FormPage as="div" label={t('send.title')}>
-                <EmptyState
-                    title={t('send.empty.title')}
-                    body={t('send.empty.body')}
-                    icon={<Icon.ReceiveIcon />}
-                    actionLabel={onReceive ? t('home.receive') : undefined}
-                    onAction={onReceive}
-                    actionIcon={<Icon.ReceiveIcon />}
-                />
-            </FormPage>,
+            <BalancesUncheckedState
+                onRetry={() => {
+                    recheckReachability();
+                    setBalanceRecheck((n) => n + 1);
+                }}
+                onReceive={onReceive}
+            />,
+        );
+    }
+    if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
+        // The empty state is the page's whole content, so it sits directly in
+        // the page at full content width rather than in a form card.
+        return wrap(
+            <EmptyState
+                plain
+                title={t('send.empty.title')}
+                body={t('send.empty.body')}
+                icon={<Icon.ReceiveIcon />}
+                actionLabel={onReceive ? t('home.receive') : undefined}
+                onAction={onReceive}
+                actionIcon={<Icon.ReceiveIcon />}
+            />,
         );
     }
 

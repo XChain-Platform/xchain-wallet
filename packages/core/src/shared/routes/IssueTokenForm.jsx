@@ -30,6 +30,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -110,6 +111,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function IssueTokenForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
@@ -181,8 +183,16 @@ export function IssueTokenForm({ walletId, onBack }) {
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         draft.save({
             chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
             description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
@@ -224,6 +234,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The active map and the settings read are best-effort: a host without
@@ -747,6 +758,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('issue.reviewTokenIssue')}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -931,6 +943,7 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('issue.title')}
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}

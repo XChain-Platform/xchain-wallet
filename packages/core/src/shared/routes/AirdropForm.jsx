@@ -17,6 +17,7 @@ import {
     schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -143,6 +144,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -1402,6 +1404,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     if (stage === 'review-list') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review recipient list"
                 onSubmit={handleSignList}
                 status={(hw || singleEncode) && submitError ? (
@@ -1525,6 +1528,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     if (stage === 'review-airdrop') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review airdrop"
                 onSubmit={handleSignAirdrop}
                 status={(hw || singleEncode) && submitError ? (
@@ -1769,6 +1773,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Token airdrop"
             onSubmit={handleComposeSubmit}
             status={formError ? (
@@ -1906,14 +1911,25 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             autoComplete="off"
                         />
                     </div>
-                    <div className={styles.fromLine}>
+                    {/* The browser's own file control sat in a grey box of
+                        its own; it now opens from an outlined button, the
+                        same pattern Publish file uses. */}
+                    <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                         <Input
                             ref={fileInputRef}
                             type="file"
                             accept=".csv,.txt,text/csv,text/plain"
                             onChange={handleFile}
+                            style={{ display: 'none' }}
                             aria-label="Upload CSV of addresses"
                         />
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            Upload a CSV or text file
+                        </Button>
                     </div>
 
                     {pasteText.trim() ? (

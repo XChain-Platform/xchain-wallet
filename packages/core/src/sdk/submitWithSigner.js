@@ -405,6 +405,25 @@ export async function submitWithSigner({
             ? { ...encoderOpts, ...envelopeRequest }
             : encoderOpts;
 
+        // Step 1a: pay the recipient. Suppressing the SEND action string and
+        // adding the destination output are ONE decision, and this path made
+        // only the first half: it relied on every caller having put the payment
+        // in `customOutputs`. `sendToken` and `buildSendPsbt` do; the generic
+        // `advancedAction` route forwards pubkey/sourceAddress/change/fee opts
+        // and nothing else, so a native SEND through the parallel composer built
+        // a transaction with no OP_RETURN and no payment. Idempotent, so the
+        // callers that pre-supply it keep their bytes. Not gated on a bare
+        // payment, exactly like composeForConfirm: a native SEND carrying a
+        // MEMO keeps its action string and still pays the recipient. Folded
+        // before every fee and the donation, where composeForConfirm folds it,
+        // so both routes build one output order.
+        const paymentDescriptor = chainRegistry?.get(chainId);
+        const paidEncoderOpts = withNativePaymentOutput({
+            actionData,
+            descriptor: paymentDescriptor,
+            encoderOpts: requestedEncoderOpts,
+        });
+
         // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
         // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
         // a transaction that can't be safely priced. A failed native-fee action forfeits the fee.
@@ -412,7 +431,7 @@ export async function submitWithSigner({
         preflight = await applyNativeFeePreflight({
             sdk,
             actionData,
-            encoderOpts: requestedEncoderOpts,
+            encoderOpts: paidEncoderOpts,
             // Who is SPENDING, which the dry run behind this quote resolves the
             // holder and the balance from. `sourceAddress` is the address the SDK
             // funds from and is that spender on every flow that sets it; `change`
@@ -460,24 +479,8 @@ export async function submitWithSigner({
         // it left the reveal unable to balance.
         const feeOutput = nativeFeeOutputOf(preflight.quote);
 
-        // Step 1e: pay the recipient. Suppressing the SEND action string and
-        // adding the destination output are ONE decision, and this path made
-        // only the first half: it relied on every caller having put the payment
-        // in `customOutputs`. `sendToken` and `buildSendPsbt` do; the generic
-        // `advancedAction` route forwards pubkey/sourceAddress/change/fee opts
-        // and nothing else, so a native SEND through the parallel composer built
-        // a transaction with no OP_RETURN and no payment. Idempotent, so the
-        // callers that pre-supply it keep their bytes. Not gated on a bare
-        // payment, exactly like composeForConfirm: a native SEND carrying a
-        // MEMO keeps its action string and still pays the recipient.
-        const paymentDescriptor = chainRegistry?.get(chainId);
-        effectiveEncoderOpts = withNativePaymentOutput({
-            actionData,
-            descriptor: paymentDescriptor,
-            encoderOpts: effectiveEncoderOpts,
-        });
-        // Fail closed rather than sign a native send that pays nobody. The
-        // fold above makes this unreachable today; it is here so the next
+        // Step 1e: fail closed rather than sign a native send that pays nobody.
+        // The Step 1a fold makes this unreachable today; it is here so the next
         // route that skips it fails loudly instead of broadcasting.
         const paymentParams = actionData?.params || {};
         const owedPayment = nativePaymentOutput({
