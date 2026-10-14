@@ -98,7 +98,8 @@ describe('native share bridge regression', () => {
 
         await sharePaymentLink();
 
-        await waitFor(() => expect(copyText).toHaveBeenCalledWith('bitcoin:bcrt1qnativeshare'));
+        // The share helper passes its platform env as a second argument.
+        await waitFor(() => expect(copyText).toHaveBeenCalledWith('bitcoin:bcrt1qnativeshare', expect.anything()));
         expect(copyText).toHaveBeenCalledTimes(1);
     });
 });

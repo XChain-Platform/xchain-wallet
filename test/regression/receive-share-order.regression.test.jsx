@@ -71,8 +71,9 @@ function exposeNativePlatform(plugins) {
     };
 }
 
+// The shells expose sharing on their own App plugin; no Share plugin ships.
 function exposeNativeShare(share) {
-    exposeNativePlatform({ Share: { share } });
+    exposeNativePlatform({ App: { share } });
 }
 
 async function clickShare() {
