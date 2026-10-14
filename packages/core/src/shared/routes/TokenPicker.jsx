@@ -539,7 +539,7 @@ export function TokenPicker({
         ? `No balances match "${tokenQuery.trim()}".`
         : (networkFilter === 'all'
             ? (isReceive
-                ? 'Choose a chain to display a fresh receive address for it.'
+                ? 'Choose a network to display a fresh receive address for it.'
                 : 'Sendable coin and token balances appear here after funds are received.')
             : 'Balances on this network appear here after this wallet receives funds.');
 

@@ -118,7 +118,7 @@ export function AdsSection() {
             </div>
 
             {chainIds.length === 0 ? (
-                <Status text="No chains set up for donations yet. Each one is added automatically when you activate that chain." />
+                <Status text="No networks set up for donations yet. Each one is added automatically when you activate that network." />
             ) : null}
 
             {chainIds.map((chainId) => {
@@ -136,7 +136,7 @@ export function AdsSection() {
                 const displayName = descriptor?.displayName || chainId;
                 const donationAddress = descriptor?.adsDonationAddress || '';
                 const isPlaceholder = donationAddress === ADS_DONATION_ADDRESS_PLACEHOLDER;
-                const placeholderDescription = `A donation address for ${displayName} arrives in a future release; until then nothing is sent on this chain.`;
+                const placeholderDescription = `A donation address for ${displayName} arrives in a future release; until then nothing is sent on this network.`;
                 return (
                     <div key={chainId} style={CHAIN_BLOCK}>
                         <div style={{ fontWeight: 600, color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>

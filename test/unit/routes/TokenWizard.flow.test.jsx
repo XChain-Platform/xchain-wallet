@@ -63,7 +63,7 @@ describe('TokenWizard guided flow', () => {
 
         fireEvent.click(await screen.findByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'OFFLINE' },
         });
@@ -86,7 +86,7 @@ describe('TokenWizard guided flow', () => {
         await screen.findByLabelText('Fee paid by');
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
 
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         expect(await screen.findByText('Step 3 of 4: Details')).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'UTILITY' },
@@ -126,7 +126,7 @@ describe('TokenWizard guided flow', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByText('Step 2 of 4: Network')).toBeTruthy();
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         expect(screen.getByLabelText('Token name (ticker)').value).toBe('UTILITY');
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
         fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
@@ -139,7 +139,7 @@ describe('TokenWizard guided flow', () => {
 
         fireEvent.click(await screen.findByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'MEME' },
         });
@@ -157,7 +157,7 @@ describe('TokenWizard guided flow', () => {
         const messaging = mountWizard();
         fireEvent.click(await screen.findByText('Utility token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'UTILITY' },
         });
@@ -178,7 +178,7 @@ describe('TokenWizard guided flow', () => {
         const messaging = mountWizard();
         fireEvent.click(await screen.findByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'MEME' },
         });
@@ -197,7 +197,7 @@ describe('TokenWizard guided flow', () => {
             const messaging = mountWizard();
             fireEvent.click(await screen.findByText(templateName));
             await screen.findByLabelText('Fee paid by');
-            fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+            fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
             fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
                 target: { value: 'ART' },
             });
@@ -217,7 +217,7 @@ describe('TokenWizard guided flow', () => {
         const messaging = mountWizard();
         fireEvent.click(await screen.findByText('Custom'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'CALLBACK' },
         });
@@ -243,7 +243,7 @@ describe('TokenWizard guided flow', () => {
         mountWizard();
         fireEvent.click(await screen.findByText('Custom'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'SWITCHED' },
         });
@@ -260,7 +260,7 @@ describe('TokenWizard guided flow', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         expect(screen.queryByRole('alert')).toBeNull();
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 
@@ -280,7 +280,7 @@ describe('TokenWizard guided flow', () => {
 
         fireEvent.click(await screen.findByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'ONCE' },
         });

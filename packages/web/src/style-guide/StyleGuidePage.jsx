@@ -122,10 +122,10 @@ export const SECTIONS = [
     { id: 'amount-field',          label: 'Amount field',           Component: AmountFieldSection },
     { id: 'address-field',         label: 'Address field',          Component: AddressFieldSection, primitives: ['AddressField'] },
     { id: 'token-field',           label: 'Token field',            Component: TokenFieldSection },
-    { id: 'chain-picker',          label: 'Chain picker',           Component: ChainPickerSection, primitives: ['ChainPicker'] },
+    { id: 'chain-picker',          label: 'Network picker',           Component: ChainPickerSection, primitives: ['ChainPicker'] },
     { id: 'network-field',         label: 'Network field',          Component: NetworkFieldSection, primitives: ['NetworkField'] },
     { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection, primitives: ['FeeSelector'] },
-    { id: 'chain-badge',           label: 'Chain badge',            Component: ChainBadgeSection, primitives: ['ChainBadge'] },
+    { id: 'chain-badge',           label: 'Network badge',            Component: ChainBadgeSection, primitives: ['ChainBadge'] },
     { id: 'address-text',          label: 'Address text',           Component: AddressTextSection, primitives: ['AddressText'] },
     { id: 'copy-button',           label: 'Copy button',            Component: CopyButtonSection, primitives: ['CopyButton'] },
     { id: 'multisig-badge',        label: 'Multisig badge',         Component: MultisigBadgeSection, primitives: ['MultisigBadge'] },
@@ -418,7 +418,7 @@ export function RadioGroupSection() {
                         {
                             value: 'public',
                             label: 'Public',
-                            description: 'Stored as readable chain data.',
+                            description: 'Stored as readable network data.',
                         },
                         {
                             value: 'scheduled',

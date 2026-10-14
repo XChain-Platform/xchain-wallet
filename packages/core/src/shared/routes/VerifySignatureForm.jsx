@@ -91,7 +91,7 @@ export function VerifySignatureForm({ onBack }) {
         if (requestPendingRef.current) return;
         setError(null);
         setResult(null);
-        if (!chainId) { setError('Pick a chain.'); return; }
+        if (!chainId) { setError('Pick a network.'); return; }
         if (address.trim().length === 0) { setError('Enter an address.'); return; }
         if (message.length === 0) { setError('Enter the original message.'); return; }
         if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
@@ -117,7 +117,7 @@ export function VerifySignatureForm({ onBack }) {
             }
         } catch {
             if (requestGenerationRef.current === requestGeneration) {
-                setError('Could not verify this signature. Check the chain, address, message, and signature.');
+                setError('Could not verify this signature. Check the network, address, message, and signature.');
             }
         } finally {
             requestPendingRef.current = false;

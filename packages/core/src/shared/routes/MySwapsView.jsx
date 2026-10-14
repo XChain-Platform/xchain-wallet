@@ -689,7 +689,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             <dl className={F.detailsList}>
                 {descriptor ? (
                     <>
-                        <dt className={F.detailsLabel}>Chain</dt>
+                        <dt className={F.detailsLabel}>Network</dt>
                         <dd className={F.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                     </>
                 ) : null}

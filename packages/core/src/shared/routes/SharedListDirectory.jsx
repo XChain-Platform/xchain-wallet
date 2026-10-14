@@ -211,7 +211,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                     body={query.trim()
                         ? "Matching shared lists appear here after you change or clear the search."
                         : mode === "pick"
-                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a chain where one is published.`
+                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a network where one is published.`
                             : "Published shared lists appear here after you or someone else publishes one."}
                 />
             ) : (
@@ -277,7 +277,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
                     <dd className={styles.detailsValue}>{neutralizeControlText(entry.name)}</dd>
                 </>
             ) : null}
-            <dt className={styles.detailsLabel}>Home chain</dt>
+            <dt className={styles.detailsLabel}>Home network</dt>
             <dd className={styles.detailsValue}>
                 {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : '?'}
             </dd>
@@ -291,7 +291,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
             <dd className={styles.detailsValue}>{shortOwner(entry.owner) || '?'}</dd>
             <dt className={styles.detailsLabel}>Share block</dt>
             <dd className={styles.detailsValue}>{valueOrUnknown(entry.shareBlock)}</dd>
-            <dt className={styles.detailsLabel}>On this chain</dt>
+            <dt className={styles.detailsLabel}>On this network</dt>
             <dd className={styles.detailsValue}>{bindLabel(entry)}</dd>
             {badge ? (
                 <>

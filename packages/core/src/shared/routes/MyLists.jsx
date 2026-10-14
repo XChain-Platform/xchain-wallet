@@ -249,7 +249,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return wrap(
             <EmptyState
                 title="No supported address"
-                body="Publishing a list requires an address on a supported chain."
+                body="Publishing a list requires an address on a supported network."
                 titleAs="p"
             />,
         );

@@ -170,7 +170,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to stake from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -601,7 +601,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}

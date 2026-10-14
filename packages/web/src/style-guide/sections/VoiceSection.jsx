@@ -61,13 +61,13 @@ export function VoiceSection() {
 
             <LiveExample label="Asset terminology: coin / tick / token">
                 <Compare
-                    good={<>"<strong>Bitcoin</strong> · BTC": chain by long name; tick in uppercase for math display.</>}
+                    good={<>"<strong>Bitcoin</strong> · BTC": network by long name; tick in uppercase for math display.</>}
                     bad={<>"BITCOIN" everywhere · "asset" as a generic catch-all word in UI</>}
-                    note="There is no 'asset' field in the protocol. Use coin (BTC / LTC / DOGE) for the chain family, tick for the per-network token symbol, and 'token' only when referring to non-native tokens specifically."
+                    note="There is no 'asset' field in the protocol. Use coin (BTC / LTC / DOGE) for the network family, tick for the per-network token symbol, and 'token' only when referring to non-native tokens specifically."
                 />
                 <Compare
                     good={<>"Receive on Bitcoin" · "Sending PEPECREATURE on Bitcoin"</>}
-                    bad={<>"Choose an asset" · "Pick a chain to deposit to"</>}
+                    bad={<>"Choose an asset" · "Pick a network to deposit to"</>}
                     note="Wallet users think in coins (BTC) and tokens (PEPECREATURE). 'Asset' / 'deposit' are exchange-CEX language, not ours."
                 />
             </LiveExample>

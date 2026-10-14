@@ -264,7 +264,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one first.',
+                        'No addresses on any network yet. Use Receive to generate one first.',
                     );
                     return;
                 }
@@ -828,11 +828,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'bridge-settings') {
             if (bridgeFrozen) {
-                setFormError('Bridge settings are permanently frozen for this token. Neither the chain list nor the depth can change again.');
+                setFormError('Bridge settings are permanently frozen for this token. Neither the network list nor the depth can change again.');
                 return;
             }
             if (bridgePolicyBound && pickedBridgeChains.length > 0) {
-                setFormError('A token bound to an allow-list or block-list cannot be opened to the bridge: the copy on the other chain would carry none of that policy. Detach the policy list first.');
+                setFormError('A token bound to an allow-list or block-list cannot be opened to the bridge: the copy on the other network would carry none of that policy. Detach the policy list first.');
                 return;
             }
             const depth = String(bridgeMinDepth).trim();
@@ -841,7 +841,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
             if (!bridgeChanged) {
-                setFormError('Change a destination chain, the minimum confirmations, or the freeze before applying.');
+                setFormError('Change a destination network, the minimum confirmations, or the freeze before applying.');
                 return;
             }
         }
@@ -1094,7 +1094,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -1683,7 +1683,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {bridgePolicyBound ? (
                         <StatusMessage variant="status">
                             {`${ticker || 'This token'} is bound to an address list, and a bridged copy `
-                                + 'would carry none of that policy on the other chain. It cannot be '
+                                + 'would carry none of that policy on the other network. It cannot be '
                                 + 'opened to the bridge. Detach the policy list first.'}
                         </StatusMessage>
                     ) : null}
@@ -1697,13 +1697,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {currentBridgeChains && reachableBridgeChains.length < currentBridgeChains.length ? (
                         <StatusMessage variant="status">
                             {`The current setting names ${currentBridgeChains.filter((c) => !isReachableBridgeChain(c)).map((c) => `"${c}"`).join(', ')}, `
-                                + 'a spelling the network does not accept, so it opens no chain. '
+                                + 'a spelling the network does not accept, so it opens no network. '
                                 + (bridgeFrozen
                                     ? 'The settings are frozen, so it cannot be corrected.'
-                                    : 'Check the chains you mean and apply to correct it.')}
+                                    : 'Check the networks you mean and apply to correct it.')}
                         </StatusMessage>
                     ) : null}
-                    <span className={styles.pickerLabel}>Destination chains</span>
+                    <span className={styles.pickerLabel}>Destination networks</span>
                     {bridgeDestinations.map((coin) => (
                         <Checkbox
                             key={coin}
@@ -1722,7 +1722,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     </p>
                     <Input
                         label="Minimum confirmations (optional)"
-                        hint="Blocks to wait before copying a locked transfer to the other chain. Longer waits are safer but slower. Values below the platform default have no effect."
+                        hint="Blocks to wait before copying a locked transfer to the other network. Longer waits are safer but slower. Values below the platform default have no effect."
                         value={bridgeMinDepth}
                         onChange={(e) => setBridgeMinDepth(e.target.value)}
                         disabled={bridgeFrozen}

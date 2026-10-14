@@ -125,13 +125,13 @@ describe('DeveloperModeSection unavailable actions', () => {
         })).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Miner URL' })).toBeTruthy();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom chain…' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
 
         expect(screen.getByRole('textbox', {
-            name: 'Custom chain descriptor JSON',
+            name: 'Custom network descriptor JSON',
         })).toBeTruthy();
         expect(screen.getByRole('button', {
-            name: 'Paste custom chain descriptor',
+            name: 'Paste custom network descriptor',
         })).toBeTruthy();
     });
 
@@ -195,7 +195,7 @@ describe('DeveloperModeSection unavailable actions', () => {
         expect(screen.queryByRole('switch', { name: 'Show variant popover' })).toBeNull();
         expect(screen.queryByText('Regtest networks')).toBeNull();
         expect(screen.queryByText('Regtest faucet')).toBeNull();
-        expect(screen.queryByText('Custom chains')).toBeNull();
+        expect(screen.queryByText('Custom networks')).toBeNull();
         expect(screen.queryByRole('switch', { name: 'Auto-approve localhost dApps' })).toBeNull();
         expect(screen.queryByText('Logs and diagnostics console')).toBeNull();
 

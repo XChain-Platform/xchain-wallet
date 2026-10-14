@@ -316,7 +316,7 @@ export function BackupSection({ activeWallet }) {
 
     async function runPublish({ chainId, password }) {
         // Require a chain with a source address for the FILE action.
-        if (!chainId) { setPublishError('Choose a chain with an address to publish labels.'); return; }
+        if (!chainId) { setPublishError('Choose a network with an address to publish labels.'); return; }
         // Require the wallet credential before preparing encrypted labels.
         if (!password) { setPublishError('Enter your wallet password to publish labels.'); return; }
         if (typeof messaging?.prepareLabelsRequest !== 'function') {
@@ -392,7 +392,7 @@ export function BackupSection({ activeWallet }) {
      */
     async function runRestore({ chainId, password }) {
         if (typeof messaging?.restoreLabelsRequest !== 'function') {
-            setRestoreError('Chain restore is not wired in this shell yet.');
+            setRestoreError('Network restore is not wired in this shell yet.');
             return;
         }
         if (!activeWallet?.id) {
@@ -413,7 +413,7 @@ export function BackupSection({ activeWallet }) {
             setRestoreResult({ ...r, requestedChainId: chainId });
             setRestoreStage('result');
         } catch (err) {
-            setRestoreError(passwordStepFailure(err, 'Failed to check the chain for backed-up contacts.'));
+            setRestoreError(passwordStepFailure(err, 'Failed to check the network for backed-up contacts.'));
             setRestoreStage('form');
         }
     }
@@ -582,8 +582,8 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : (
                 <BackupRow
-                    label="Check chain for backed-up contacts"
-                    hint="Looks for labels and contacts you published earlier on the selected chain and merges anything found into this wallet, without erasing what's already here."
+                    label="Check network for backed-up contacts"
+                    hint="Looks for labels and contacts you published earlier on the selected network and merges anything found into this wallet, without erasing what's already here."
                     actionLabel="Check…"
                     disabled={!activeWallet}
                     onClick={() => { setRestoreStage('form'); setRestoreError(null); }}
@@ -820,7 +820,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
     return (
         <FormSection
             title="Test backup"
-            description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active chain from it and lists any that don't match. Nothing is saved.`}
+            description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active network from it and lists any that don't match. Nothing is saved.`}
             className={styles.formSection}
         >
             <Textarea
@@ -903,8 +903,8 @@ function DryRunReport({ result, onDone }) {
     const overall = result?.overallMatch === true;
     const perChain = Array.isArray(result?.perChain) ? result.perChain : [];
     const title = overall
-        ? '✓ Backup matches this wallet on every active chain.'
-        : '✗ Backup does NOT match this wallet on at least one chain.';
+        ? '✓ Backup matches this wallet on every active network.'
+        : '✗ Backup does NOT match this wallet on at least one network.';
     return (
         <FormSection title={title} className={styles.formSection}>
             {perChain.length > 0 ? (
@@ -915,8 +915,8 @@ function DryRunReport({ result, onDone }) {
                 </div>
             ) : (
                 <EmptyState
-                    title="No chain comparisons"
-                    body="Chain comparison results appear here after the test completes."
+                    title="No network comparisons"
+                    body="Network comparison results appear here after the test completes."
                     titleAs="h3"
                 />
             )}
@@ -1193,7 +1193,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             .catch((err) => {
                 if (cancelled) return;
                 setChains([]);
-                setChainsError(err?.message || 'Failed to load chains.');
+                setChainsError(err?.message || 'Failed to load networks.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -1208,20 +1208,20 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             className={styles.formSection}
         >
             {chains === null ? (
-                <div style={ROW_HINT}>Loading chains…</div>
+                <div style={ROW_HINT}>Loading networks…</div>
             ) : chains.length === 0 ? (
                 <EmptyState
-                    title="No chains with addresses"
-                    body={chainsError || 'No chains have addresses on this wallet. Generate one first.'}
+                    title="No networks with addresses"
+                    body={chainsError || 'No networks have addresses on this wallet. Generate one first.'}
                     titleAs="h3"
                     role={chainsError ? 'alert' : 'status'}
                 />
             ) : (
                 <Select
-                    label="Chain"
+                    label="Network"
                     value={chainId}
                     onChange={(e) => setChainId(e.target.value)}
-                    aria-label="Publish chain"
+                    aria-label="Publish network"
                 >
                     {/* Native options are the required children of the style guide Select. */}
                     {chains.map((cid) => (
@@ -1246,7 +1246,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                     onClick={() => onSubmit({ chainId, password })}
                     disabled={!canSubmit}
                 >
-                    {busy ? 'Publishing…' : loadingChains ? 'Loading chains…' : 'Publish'}
+                    {busy ? 'Publishing…' : loadingChains ? 'Loading networks…' : 'Publish'}
                 </Button>
             </div>
         </FormSection>
@@ -1283,7 +1283,7 @@ function PublishLabelsReport({ result, onDone }) {
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
                 <dt style={ROW_HINT}>Transaction ID</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
-                <dt style={ROW_HINT}>Chain</dt>
+                <dt style={ROW_HINT}>Network</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
                     {chainDisplayName(result?.chainId) || '-'}
                 </dd>
@@ -1331,7 +1331,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             .catch((err) => {
                 if (cancelled) return;
                 setChains([]);
-                setChainsError(err?.message || 'Failed to load chains.');
+                setChainsError(err?.message || 'Failed to load networks.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -1340,25 +1340,25 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
 
     return (
         <FormSection
-            title="Check chain for backed-up contacts"
-            description="Decrypts the labels + contacts FILE this wallet's seed published on the chain below, if any, and merges anything found into this wallet. Nothing already here is removed."
+            title="Check network for backed-up contacts"
+            description="Decrypts the labels + contacts FILE this wallet's seed published on the network below, if any, and merges anything found into this wallet. Nothing already here is removed."
             className={styles.formSection}
         >
             {chains === null ? (
-                <div style={ROW_HINT}>Loading chains…</div>
+                <div style={ROW_HINT}>Loading networks…</div>
             ) : chains.length === 0 ? (
                 <EmptyState
-                    title="No chains with addresses"
-                    body={chainsError || 'No chains have addresses on this wallet. Generate one first.'}
+                    title="No networks with addresses"
+                    body={chainsError || 'No networks have addresses on this wallet. Generate one first.'}
                     titleAs="h3"
                     role={chainsError ? 'alert' : 'status'}
                 />
             ) : (
                 <Select
-                    label="Chain"
+                    label="Network"
                     value={chainId}
                     onChange={(e) => setChainId(e.target.value)}
-                    aria-label="Restore chain"
+                    aria-label="Restore network"
                 >
                     {/* Native options are the required children of the style guide Select. */}
                     {chains.map((cid) => (
@@ -1406,7 +1406,7 @@ function restoreLabelsMessage(result) {
     if (result.skipped === 'wif-only') {
         return 'This wallet was imported from a private key only. There is no seed to check on-chain backups with.';
     }
-    const chainLabel = chainDisplayName(result.chainId || result.requestedChainId) || 'this chain';
+    const chainLabel = chainDisplayName(result.chainId || result.requestedChainId) || 'this network';
     if (result.restored === true) {
         const contacts = Number(result.contactsAdded || 0) + Number(result.contactsUpdated || 0);
         const labels = Number(result.addressesUpdated || 0);

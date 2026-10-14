@@ -1828,7 +1828,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -2462,7 +2462,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             ? `Paying from another ${getCoin} wallet works too: send the amount above to this address.`
                             : isFiatPriced
                                 ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
-                                : `No spendable ${getCoin} address in this wallet on this chain; use any ${getCoin} wallet to trigger the dispense.`}
+                                : `No spendable ${getCoin} address in this wallet on this network; use any ${getCoin} wallet to trigger the dispense.`}
                     </p>
                 </FormSection>
             ) : null}
@@ -2542,10 +2542,10 @@ function closeWindowNotice({ eta, escrowRemaining, giveTick, cancelledBy, heldAd
     // time reading can say the next block is that block; the device clock
     // alone cannot, since the chain's time can trail it.
     if (eta.pastDue && eta.basis === 'chain') {
-        return `Closing at the next block: the chain has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+        return `Closing at the next block: the network has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
     }
     if (eta.pastDue) {
-        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the chain's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the network's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
     }
     return `Closing in ${eta.countdown} (around ${formatLocalClock(eta.closeAtMs)}). This dispenser is in its 1-hour close window; ${escrow} returns to ${destination} with the first block after it ends. ${honored}`;
 }

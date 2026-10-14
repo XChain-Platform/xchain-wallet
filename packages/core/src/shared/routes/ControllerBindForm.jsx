@@ -145,7 +145,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 if (!cid) {
                     cid = pickDefaultChainId(byChain, { settings });
                     if (!cid) {
-                        setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                        setLoadError('No addresses on any network yet. Use Receive to generate one first.');
                         return;
                     }
                     setChainId(cid);
@@ -154,7 +154,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
                 );
                 if (addrs.length === 0) {
-                    setLoadError('No address on this chain to sign from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to sign from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(preferredSourceId(addrs, active?.[cid]));
@@ -529,7 +529,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={descriptor} size="sm" />
                             </dd>

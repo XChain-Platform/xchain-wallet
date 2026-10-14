@@ -198,7 +198,7 @@ export function DisplaySection() {
             return;
         }
         if (!watchChainId) {
-            setWatchMessage('Choose a chain.');
+            setWatchMessage('Choose a network.');
             return;
         }
         const chain = chains.find((candidate) => candidate.id === watchChainId);
@@ -413,7 +413,7 @@ export function DisplaySection() {
 
             <FormSection
                 title={`Watched tokens (${watched.length})`}
-                description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
+                description="Add a token by network and ticker to keep it in Balances even when its balance is zero."
             >
             <form className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }} onSubmit={addWatchedToken}>
                 <div style={ROW_COPY}>
@@ -421,7 +421,7 @@ export function DisplaySection() {
                 </div>
                 <div className={layoutStyles.watchControls}>
                     <Select
-                        aria-label="Token chain"
+                        aria-label="Token network"
                         value={watchChainId}
                         onChange={(event) => {
                             watchRequestRef.current += 1;
@@ -609,11 +609,11 @@ export function DisplaySection() {
 
             <FormSection
                 title="List preferences"
-                description={'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."'}
+                description={'Remember the last selected network filter for each balance and history list until you reset every list to "show all."'}
             >
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_LABEL}>Saved chain filters</span>
+                    <span style={ROW_LABEL}>Saved network filters</span>
                     {resetMessage ? (
                         <span role="status" aria-live="polite" style={ROW_HINT}>{resetMessage}</span>
                     ) : null}

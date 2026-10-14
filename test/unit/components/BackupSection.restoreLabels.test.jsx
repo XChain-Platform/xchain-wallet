@@ -48,12 +48,12 @@ function mount(restoreLabelsRequest) {
 /** Opens the restore form, waits for the chain picker, types the password. */
 async function openRestoreForm() {
     fireEvent.click(screen.getByRole('button', { name: 'Check…' }));
-    await screen.findByLabelText('Restore chain');
+    await screen.findByLabelText('Restore network');
     fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'secret' } });
 }
 
 describe('BackupSection: check chain for backed-up contacts', () => {
-    it('calls the restore path with the selected chain and reports what it merged', async () => {
+    it('calls the restore path with the selected network and reports what it merged', async () => {
         const restoreLabelsRequest = vi.fn(async () => ({
             restored: true,
             skipped: null,
@@ -85,7 +85,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         expect(await screen.findByText('Restored 2 contacts and 3 labels.')).toBeTruthy();
     });
 
-    it('reports no backed-up labels found when nothing authenticates on the chosen chain', async () => {
+    it('reports no backed-up labels found when nothing authenticates on the chosen network', async () => {
         const restoreLabelsRequest = vi.fn(async () => ({
             restored: false,
             skipped: null,

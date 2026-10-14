@@ -35,25 +35,25 @@ function mount(getAddressesByChain, onLaunch = vi.fn()) {
 afterEach(() => cleanup());
 
 describe('CrossChainTemplates states', () => {
-    it('keeps templates in a loading state until wallet chains resolve', () => {
+    it('keeps templates in a loading state until wallet networks resolve', () => {
         mount(() => new Promise(() => {}));
 
         expect(screen.getByText('Loading templates…')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Use template' })).toBeNull();
     });
 
-    it('does not launch a cross-chain template when the wallet has only one chain', async () => {
+    it('does not launch a cross-chain template when the wallet has only one network', async () => {
         const onLaunch = mount(() => Promise.resolve({
             [DOGE]: [{ address: 'DExampleAddress' }],
         }));
 
-        await screen.findByText('Two chains required');
+        await screen.findByText('Two networks required');
         expect(screen.queryByRole('button', { name: 'Use template' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
         expect(onLaunch).not.toHaveBeenCalled();
     });
 
-    it('shows templates when addresses exist on two chains', async () => {
+    it('shows templates when addresses exist on two networks', async () => {
         mount(() => Promise.resolve({
             [DOGE]: [{ address: 'DExampleAddress' }],
             [BTC]: [{ address: 'bc1qexample' }],
@@ -73,7 +73,7 @@ describe('CrossChainTemplates states', () => {
         mount(getAddressesByChain);
 
         await screen.findByText('Wallet unavailable');
-        expect(screen.queryByText('Two chains required')).toBeNull();
+        expect(screen.queryByText('Two networks required')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
         expect((await screen.findAllByRole('button', { name: 'Use template' })).length)
