@@ -362,9 +362,9 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-text-lg` | 1rem | large-input text, section titles, page title |
 | `--xc-text-xl` | 1.25rem | asset hero name, panel headings |
 | `--xc-text-2xl` | 1.5rem | hero figures and prominent asset tickers |
-| `--xc-control-h-sm` | 28px mouse, 36px touch | compact control visual height |
-| `--xc-control-h-md` | 36px mouse, 44px touch | default control visual height |
-| `--xc-control-h-lg` | 44px mouse, 48px touch | hero control visual height |
+| `--xc-control-h-sm` | 28px | compact control visual height; 36px on touch |
+| `--xc-control-h-md` | 36px | default control visual height; 44px on touch |
+| `--xc-control-h-lg` | 44px | hero control visual height; 48px on touch |
 | `--xc-control-font` | `var(--xc-text-md)` | shared control text |
 | `--xc-control-pad-x` | `var(--xc-space-3)` | shared control inline padding |
 

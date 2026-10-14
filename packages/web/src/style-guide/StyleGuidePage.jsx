@@ -13,7 +13,7 @@
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
 import { useState } from 'react';
-import { Checkbox, RadioGroup, SegmentedControl } from '@xchain-wallet/core/ui';
+import { Checkbox, ChoiceControl, RadioGroup, SegmentedControl } from '@xchain-wallet/core/ui';
 import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
 import { ComponentStateMatrix } from './ComponentStateMatrix.jsx';
 import {
@@ -96,6 +96,7 @@ export const SECTIONS = [
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
     { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
     { id: 'checkbox',              label: 'Checkbox',               Component: CheckboxSection, primitives: ['Checkbox'] },
+    { id: 'choice-control',        label: 'Choice control',         Component: ChoiceControlSection, primitives: ['ChoiceControl'] },
     { id: 'chip',                  label: 'Chip',                   Component: ChipSection, primitives: ['Chip'] },
     { id: 'switch',                label: 'Switch',                 Component: SwitchSection, primitives: ['Switch'] },
     { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
@@ -176,6 +177,40 @@ function CheckboxSection() {
                     <Checkbox label="Select all files" indeterminate />
                     <Checkbox label="Managed by your organization" disabled checked readOnly />
                     <Checkbox label="Accept terms" error="Required" />
+                </div>
+            </LiveExample>
+        </Section>
+    );
+}
+
+function ChoiceControlSection() {
+    return (
+        <Section
+            id="choice-control"
+            title="Choice control"
+            tag="CANONICAL · ChoiceControl"
+            kicker="A compact checkbox or radio whose whole label is the pointer target, for dense approval and permission lists."
+        >
+            <Guidance
+                what={<>A native <code>input</code> of type <code>checkbox</code> or <code>radio</code> wrapped in its label. Extra props pass through to the input.</>}
+                when={<>Use it inside extension approval screens where each row is one permission or account choice with a short inline label.</>}
+                whenNot={<>Use <code>Checkbox</code> when a form field needs a description or error, and <code>RadioGroup</code> for a labelled set of exclusive options.</>}
+                sizing={<>The painted box uses the control icon token and the label keeps the shared touch target on coarse pointers.</>}
+                variants={<>Checkbox or radio, checked, unchecked and disabled, in both themes.</>}
+                doRule={<>Keep the label short and specific to the permission it grants.</>}
+                dontRule={<>Do not hand-roll a label around a raw input when this control fits.</>}
+            />
+            <Markup>
+{`<ChoiceControl checked={remember} onChange={(event) => setRemember(event.target.checked)}>
+    Remember this site
+</ChoiceControl>
+<ChoiceControl type="radio" name="account" value="main">Main account</ChoiceControl>`}
+            </Markup>
+            <LiveExample label="Checkbox, radio, and disabled states">
+                <div style={{ display: 'grid', gap: 'var(--xc-space-2)' }}>
+                    <ChoiceControl defaultChecked>Remember this site</ChoiceControl>
+                    <ChoiceControl type="radio" name="sg-choice-account" value="main" defaultChecked>Main account</ChoiceControl>
+                    <ChoiceControl disabled>Managed by your organization</ChoiceControl>
                 </div>
             </LiveExample>
         </Section>

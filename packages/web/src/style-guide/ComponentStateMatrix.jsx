@@ -28,6 +28,7 @@ const componentSizes = {
     StatusMessage: FIXED_SIZE,
     Button: ALL_SIZES,
     Checkbox: FIXED_SIZE,
+    ChoiceControl: FIXED_SIZE,
     Switch: FIXED_SIZE,
     Input: FIELD_SIZES,
     Select: FIELD_SIZES,
@@ -52,6 +53,7 @@ const componentSizes = {
     ListRow: FIXED_SIZE,
     Chip: FIXED_SIZE,
     Tabs: FIXED_SIZE,
+    SegmentedControl: FIXED_SIZE,
 };
 
 export const COMPONENT_MATRIX = Object.freeze(Object.fromEntries(
@@ -125,6 +127,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.Button size={nativeSize} variant={state === 'error' ? 'danger' : 'primary'} disabled={disabled}>Continue</UI.Button>;
     case 'Checkbox':
         return <UI.Checkbox label="Publish permanently" defaultChecked disabled={disabled} error={error} />;
+    case 'ChoiceControl':
+        return <UI.ChoiceControl defaultChecked disabled={disabled}>Remember this site</UI.ChoiceControl>;
     case 'Switch':
         return <UI.Switch label="Price alerts" description="Notify when a target is reached." checked={state !== 'error'} onChange={noop} disabled={disabled} />;
     case 'Input':
@@ -181,6 +185,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.ListRow title="Treasury" subtitle="Bitcoin" trailing="0.5 BTC" chevron onClick={noop} disabled={disabled} />;
     case 'Chip':
         return <UI.Chip pressed={false} onPressedChange={noop} disabled={disabled}>Watchlist</UI.Chip>;
+    case 'SegmentedControl':
+        return <UI.SegmentedControl items={[{ id: 'buy', label: 'Buy' }, { id: 'sell', label: 'Sell', disabled }]} value='buy' onChange={noop} aria-label='Sample segments' />;
     case 'Tabs':
         return <UI.Tabs items={[{ id: 'all', label: 'All' }, { id: 'popular', label: 'Popular' }]} value="all" onChange={noop} aria-label="Sample tabs" disabled={disabled} />;
     case 'Icon': {
