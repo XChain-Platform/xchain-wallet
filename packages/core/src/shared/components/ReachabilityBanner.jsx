@@ -17,7 +17,7 @@
 import { useContext, useEffect, useId, useState } from 'react';
 import { useReachability } from '../hooks/useReachability.js';
 import { branding as brandingLib, registry as registryLib } from '../../index.js';
-import { NoticesRouteContext } from './noticesRoute.js';
+import { NoticesRouteContext, ReachabilityNoticeHiddenContext } from './noticesRoute.js';
 import styles from './ReachabilityBanner.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -42,8 +42,10 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     const routeKey = useContext(NoticesRouteContext);
     useEffect(() => { setDetailsOpen(false); }, [routeKey]);
     // A screen that already says its balances could not be checked takes
-    // the place of this notice (route key false); the probe keeps running.
-    if (routeKey === false || (overall !== 'degraded' && overall !== 'offline')) return null;
+    // the place of this notice; the probe keeps running underneath.
+    const hiddenByScreen = useContext(ReachabilityNoticeHiddenContext);
+
+    if (hiddenByScreen || (overall !== 'degraded' && overall !== 'offline')) return null;
 
     const coins = affectedCoins(perChain);
     const staleness = lastChecked

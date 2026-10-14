@@ -10,11 +10,9 @@ import { createContext } from 'react';
 
 /**
  * The current route key, provided around the layout's notices so a notice
- * can close its own disclosures when the user navigates. It is `false`
- * while the current screen states the reachability problem itself, which
- * hides the reachability notice there.
+ * can close its own disclosures when the user navigates.
  */
-export const NoticesRouteContext = createContext(/** @type {string | null | false} */ (null));
+export const NoticesRouteContext = createContext(/** @type {string | null} */ (null));
 
 /**
  * The shell's notices, published by `<FullLayoutWithNav>` to the route's
@@ -37,3 +35,6 @@ export const ShellNoticesContext = createContext(/** @type {ShellNotices | null}
 
 /** True below a Screen that already renders the shell notices. */
 export const NoticesClaimedContext = createContext(false);
+
+/** True while the current screen states the reachability problem itself. */
+export const ReachabilityNoticeHiddenContext = createContext(false);

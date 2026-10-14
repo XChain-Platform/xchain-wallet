@@ -53,7 +53,7 @@ assert.ok(
 // mounted (so a queued broadcast survives route changes) and portals them
 // into one host that the route's Screen shows at the top of its body.
 assert.ok(
-    /createPortal\(\s*<NoticesRouteContext\.Provider value=\{[^}]*routeKey \?\? null\}>[\s\S]*?\{notices\}[\s\S]*?noticesHost,\s*\)/.test(navJsx),
+    /createPortal\(\s*<NoticesRouteContext\.Provider value=\{routeKey \?\? null\}>[\s\S]*?\{notices\}[\s\S]*?noticesHost,\s*\)/.test(navJsx),
     'FullLayoutWithNav keeps the notices mounted and renders them into the shared host',
 );
 assert.ok(
