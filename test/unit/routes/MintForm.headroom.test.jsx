@@ -171,6 +171,20 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('rejects a malformed optional destination before composing', async () => {
+        const messaging = mountMint({ totalSupply: '1200' });
+        await screen.findByText(/3,800 S18PROBE available to mint/);
+        fireEvent.change(await amountField(), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText('Destination (optional)'), {
+            target: { value: 'not-an-address' },
+        });
+        fireEvent.click(submitButton());
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Destination is not valid for Bitcoin.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('lets a mint the headroom covers through to composing', async () => {
         const messaging = mountMint({ totalSupply: '1200' });
         await screen.findByText(/3,800 S18PROBE available to mint/);

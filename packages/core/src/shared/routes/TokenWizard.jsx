@@ -455,6 +455,10 @@ export function TokenWizard({ walletId, onBack }) {
                 return;
             }
         }
+        if ((template === 'collectible' || template === 'edition') && !imageUrl.trim()) {
+            setFormError('Image URL is required for this template.');
+            return;
+        }
         // PC-06: the advanced fields share the create transaction, so a
         // bad one costs the whole token, not just the field. Pre-flight
         // them here rather than letting the indexer reject the ISSUE.

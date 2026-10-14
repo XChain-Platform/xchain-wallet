@@ -157,7 +157,7 @@ function decodeActionData({ action, params, chainId, chainRegistry }) {
             summary: `Mint ${amount || '?'} ${tick || '?'}${chainSuffix}${dest ? ` to ${dest}` : ''}`,
             details: [
                 { label: 'Token', value: tick },
-                { label: 'Amount', value: amount },
+                { label: 'Amount', value: amountWithAsset(amount, tick) },
                 ...(dest ? [{ label: 'Destination', value: dest }] : [{ label: 'Destination', value: 'broadcasting address' }]),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
@@ -189,7 +189,7 @@ function decodeActionData({ action, params, chainId, chainRegistry }) {
                 summary: `Destroy ${amount || '?'} ${tick || '?'}${chainSuffix}`,
                 details: [
                     { label: 'Token', value: tick },
-                    { label: 'Amount', value: amount },
+                    { label: 'Amount', value: amountWithAsset(amount, tick) },
                     ...(memo ? [{ label: 'Memo', value: memo }] : []),
                 ],
                 warnings: [
@@ -1593,10 +1593,10 @@ function decodeIssue(p, chainName, chainSuffix) {
             summary: `Update mint parameters of ${tick || '?'}${chainSuffix}`,
             details: [
                 { label: 'Token', value: tick },
-                ...(maxMint ? [{ label: 'Max mint per tx', value: maxMint }] : []),
-                ...(mintSupply ? [{ label: 'Mint now', value: mintSupply }] : []),
+                ...(maxMint ? [{ label: 'Max mint per tx', value: amountWithAsset(maxMint, tick) }] : []),
+                ...(mintSupply ? [{ label: 'Mint now', value: amountWithAsset(mintSupply, tick) }] : []),
                 ...(transferSupply ? [{ label: 'Transfer minted supply to', value: transferSupply }] : []),
-                ...(mintAddressMax ? [{ label: 'Max mint per address', value: mintAddressMax }] : []),
+                ...(mintAddressMax ? [{ label: 'Max mint per address', value: amountWithAsset(mintAddressMax, tick) }] : []),
                 ...(mintStart ? [{ label: 'Mint start block', value: mintStart }] : []),
                 ...(mintStop ? [{ label: 'Mint stop block', value: mintStop }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
@@ -1639,7 +1639,7 @@ function decodeIssue(p, chainName, chainSuffix) {
                 { label: 'Token', value: tick },
                 ...(callbackBlock ? [{ label: 'Callback at block', value: callbackBlock }] : []),
                 ...(callbackTick ? [{ label: 'Callback token', value: callbackTick }] : []),
-                ...(callbackAmount ? [{ label: 'Callback amount', value: callbackAmount }] : []),
+                ...(callbackAmount ? [{ label: 'Callback amount', value: amountWithAsset(callbackAmount, callbackTick) }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: baseWarnings,
@@ -1705,19 +1705,19 @@ function decodeIssue(p, chainName, chainSuffix) {
 
     const details = [
         { label: 'Token', value: tick },
-        ...(maxSupply ? [{ label: 'Max supply', value: maxSupply }] : []),
-        ...(maxMint ? [{ label: 'Max mint per tx', value: maxMint }] : []),
-        ...(mintAddressMax ? [{ label: 'Max mint per address', value: mintAddressMax }] : []),
+        ...(maxSupply ? [{ label: 'Max supply', value: amountWithAsset(maxSupply, tick) }] : []),
+        ...(maxMint ? [{ label: 'Max mint per tx', value: amountWithAsset(maxMint, tick) }] : []),
+        ...(mintAddressMax ? [{ label: 'Max mint per address', value: amountWithAsset(mintAddressMax, tick) }] : []),
         ...(mintStart ? [{ label: 'Mint start block', value: mintStart }] : []),
         ...(mintStop ? [{ label: 'Mint stop block', value: mintStop }] : []),
         ...(decimals ? [{ label: 'Decimals', value: decimals }] : []),
         ...(description ? [{ label: 'Description', value: description }] : []),
-        ...(mintSupply ? [{ label: 'Initial mint', value: mintSupply }] : []),
+        ...(mintSupply ? [{ label: 'Initial mint', value: amountWithAsset(mintSupply, tick) }] : []),
         ...(transfer ? [{ label: 'Transfer ownership to', value: transfer }] : []),
         ...(transferSupply ? [{ label: 'Transfer initial supply to', value: transferSupply }] : []),
         ...(callbackBlock ? [{ label: 'Callback at block', value: callbackBlock }] : []),
         ...(callbackTick ? [{ label: 'Callback token', value: callbackTick }] : []),
-        ...(callbackAmount ? [{ label: 'Callback amount', value: callbackAmount }] : []),
+        ...(callbackAmount ? [{ label: 'Callback amount', value: amountWithAsset(callbackAmount, callbackTick) }] : []),
         ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
         ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
         ...(lockFlags.length > 0
@@ -1899,6 +1899,10 @@ function isPositiveDecimal(value) {
 function str(v) {
     if (v === undefined || v === null) return '';
     return String(v);
+}
+
+function amountWithAsset(amount, asset) {
+    return amount && asset ? `${amount} ${asset}` : amount;
 }
 
 function toArray(v) {
