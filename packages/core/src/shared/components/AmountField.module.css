@@ -19,7 +19,7 @@
 
 .amountFieldWrap {
     --amount-control-height: var(--xc-control-h-md);
-    --amount-action-width: calc(var(--amount-control-height) + var(--xc-space-6));
+    --amount-action-width: calc(var(--amount-control-height) + var(--xc-space-8));
     display: flex;
     align-items: flex-end;
     flex-wrap: wrap;
@@ -58,13 +58,19 @@
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
     top: calc(var(--xc-space-5) + var(--xc-space-1));
-    width: var(--amount-action-width);
+    flex: none;
+    width: auto;
+    min-width: max-content;
+    max-width: none;
     height: var(--amount-control-height);
     min-height: var(--amount-control-height);
+    white-space: nowrap;
 }
 
 .pasteAction button {
     inset-inline-end: 0;
+    gap: var(--xc-space-1);
+    padding-inline: calc(var(--xc-space-1) / 2);
 }
 
 .hasMax .pasteAction button {
@@ -73,6 +79,13 @@
 
 .maxAction {
     inset-inline-end: 0;
+    padding-inline: var(--xc-space-2);
+}
+
+.pasteAction button > span,
+.maxAction > span {
+    min-width: max-content;
+    white-space: nowrap;
 }
 
 .pasteAction [role='alert'] {
@@ -85,6 +98,10 @@
 .amountFooterRight > span {
     direction: ltr;
     unicode-bidi: isolate;
+}
+
+.amountFieldWrap input {
+    min-width: 0;
 }
 
 .amountFooter {
