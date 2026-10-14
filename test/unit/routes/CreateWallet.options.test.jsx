@@ -101,9 +101,12 @@ describe('CreateWallet security options', () => {
         expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /missing or mistyped passphrase opens a different wallet without warning/,
         );
-        expect(screen.getByText(/Required when enabled/)).toHaveTextContent(
+        // The warning says it once; the field hint does not repeat it.
+        expect(screen.getAllByText(/Capitalization and spaces matter/)).toHaveLength(1);
+        expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /Capitalization and spaces matter/,
         );
+        expect(screen.getByText('Required when enabled.')).toBeTruthy();
         fireEvent.focus(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
         const tip = (await screen.findByRole('tooltip')).textContent;
         expect(tip).toMatch(/extra secret combines with your recovery phrase/i);
