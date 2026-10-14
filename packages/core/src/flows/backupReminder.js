@@ -27,6 +27,12 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const memoryStores = new Map();
 let storageFailureLogged = false;
 
+const REMINDER_STORAGE_KEYS = Object.freeze([
+    STORAGE_KEY,
+    FUNDED_AT_KEY,
+    SESSION_DISMISS_KEY,
+]);
+
 function keepMemoryStore(key, map) {
     memoryStores.set(key, { ...map });
     if (storageFailureLogged) return;
@@ -70,6 +76,27 @@ function announceStoreChange(key) {
             || typeof globalThis.StorageEvent !== 'function') return;
         globalThis.dispatchEvent(new globalThis.StorageEvent('storage', { key }));
     } catch { /* storage event unavailable; best-effort */ }
+}
+
+/** Remove reminder state for one wallet, or every wallet when no id is supplied. */
+export function clearBackupReminderState(walletId = null) {
+    const clearOne = typeof walletId === 'string' && walletId.length > 0;
+    for (const key of REMINDER_STORAGE_KEYS) {
+        if (!clearOne) {
+            memoryStores.delete(key);
+            try { globalThis.localStorage?.removeItem(key); } catch { /* best-effort cleanup */ }
+            continue;
+        }
+        const map = readStore(key);
+        if (!Object.prototype.hasOwnProperty.call(map, walletId)) continue;
+        delete map[walletId];
+        if (Object.keys(map).length > 0) {
+            writeStore(key, map);
+        } else {
+            memoryStores.delete(key);
+            try { globalThis.localStorage?.removeItem(key); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
 
 /**

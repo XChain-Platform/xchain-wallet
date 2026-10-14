@@ -38,11 +38,10 @@
  */
 
 import { clearDemoWalletId } from '../../flows/demoMode.js';
-import { clearActiveWallet } from './activeWalletMemory.js';
-import { clearBalanceCache } from './balanceCache.js';
+import { clearActiveWallet, writeActiveWallet } from './activeWalletMemory.js';
 import { clearLastView } from './lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from './msgReadMemory.js';
-import { wipeWalletStorage } from './wipeWalletStorage.js';
+import { clearRemovedWalletStorage, wipeWalletStorage } from './wipeWalletStorage.js';
 
 /** localStorage slot holding the onboarding lane to resume after a demo wipe. */
 export const POST_DEMO_INTENT_KEY = 'xc:postDemoOnboardingStep';
@@ -106,14 +105,19 @@ export function demoOwnsVaultPassword({ mode, demoWalletId } = {}) {
  * @returns {Promise<'empty' | 'occupied' | 'unknown'>}
  */
 export async function readVaultOccupancy(messaging) {
-    if (typeof messaging?.listWallets !== 'function') return 'unknown';
+    const wallets = await readWalletList(messaging);
+    if (!wallets) return 'unknown';
+    return wallets.length === 0 ? 'empty' : 'occupied';
+}
+
+async function readWalletList(messaging) {
+    if (typeof messaging?.listWallets !== 'function') return null;
     try {
         const list = await messaging.listWallets();
-        const arr = Array.isArray(list) ? list : list?.wallets;
-        if (!Array.isArray(arr)) return 'unknown';
-        return arr.length === 0 ? 'empty' : 'occupied';
+        const wallets = Array.isArray(list) ? list : list?.wallets;
+        return Array.isArray(wallets) ? wallets : null;
     } catch {
-        return 'unknown';
+        return null;
     }
 }
 
@@ -187,7 +191,10 @@ export async function exitDemoWallet({
     // means the vault is still the user's, and wiping it would destroy
     // it. An unreadable list reads as 'unknown' and never triggers a
     // wipe either.
-    const remaining = await readVaultOccupancy(messaging);
+    const remainingWallets = await readWalletList(messaging);
+    const remaining = remainingWallets === null
+        ? 'unknown'
+        : (remainingWallets.length === 0 ? 'empty' : 'occupied');
     // An empty vault despite a removeWallet rejection is the retry state:
     // only the wipe remains.
     if (removeError && remaining !== 'empty') throw removeError;
@@ -195,20 +202,21 @@ export async function exitDemoWallet({
         throw new Error('Could not verify that the demo wallet was removed. Try again.');
     }
     if (remaining === 'occupied') {
+        const nextWallet = remainingWallets.find((wallet) => wallet?.id && wallet.id !== walletId);
+        if (!nextWallet) {
+            throw new Error('Could not select a wallet after removing the demo. Try again.');
+        }
         clearDemoWalletId();
         clearLastView(walletId);
-        clearBalanceCache(walletId);
-        clearActiveWallet();
         sweepMsgMemoryForWallet(walletId);
+        clearRemovedWalletStorage(walletId);
+        writeActiveWallet(nextWallet.id, nextWallet.name);
         return { wiped: false, reloaded: false, remaining };
     }
 
     await wipe();
     clearDemoWalletId();
-    clearLastView(walletId);
-    clearBalanceCache(walletId);
     clearActiveWallet();
-    sweepMsgMemoryForWallet(walletId);
     if (intent) setPostDemoIntent(intent);
     return { wiped: true, reloaded: reload(), remaining };
 }
