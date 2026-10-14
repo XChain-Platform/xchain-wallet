@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { existsSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 const VIEWPORTS = [360, 768, 1280];
@@ -46,7 +47,11 @@ for (const theme of THEMES) {
                 viewport: { width, height: 900 },
             });
 
-            test('matches the style guide snapshot', async ({ page }) => {
+            test('matches the style guide snapshot', async ({ page }, testInfo) => {
+                // Baselines are per platform and none is committed yet; without one
+                // Playwright writes the actual image and fails, which checks nothing.
+                const baseline = testInfo.snapshotPath(`style-guide-${theme}-${width}.png`);
+                test.skip(!existsSync(baseline), `no committed ${process.platform} baseline at ${baseline}`);
                 await page.goto('/style-guide/');
                 await settleStyleGuide(page);
                 expect(await page.evaluate((scheme) => (
