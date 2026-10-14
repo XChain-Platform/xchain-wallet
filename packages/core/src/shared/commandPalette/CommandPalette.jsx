@@ -18,7 +18,7 @@
 // Keyboard (§33.4):
 //   ↑ / ↓    move the selection through the flat result list (wrapping)
 //   Enter    run the selected command and close
-//   Tab      close the palette and continue through the page tab order
+//   Tab      stays within the modal search control
 //   Esc      close
 // The search input keeps focus while the palette is active, so the arrow keys
 // drive an `aria-activedescendant` selection rather than roving DOM focus.
@@ -50,9 +50,8 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const listRef = useRef(/** @type {HTMLUListElement | null} */ (null));
     const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    // The palette does not trap Tab, so this only returns focus to the control
-    // that opened the palette when another dismissal path closes it.
-    useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef, trap: false });
+    // Search is the only tab stop, so Tab loops there until the palette closes.
+    useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef });
 
     const results = useMemo(() => {
         const base = filterCommands(commands || [], query);
@@ -143,9 +142,6 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
             case 'Enter':
                 e.preventDefault();
                 runAt(activeIndex);
-                break;
-            case 'Tab':
-                onClose();
                 break;
             default:
                 break;
