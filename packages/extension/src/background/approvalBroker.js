@@ -179,18 +179,47 @@ export class ApprovalBroker {
     _pendingSize() { return this._pending.size; }
 
     /**
+     * Reject approvals whose request origin matches a background-owned rule.
+     * Revoking or blocking a site uses this to make already-open prompts
+     * unactionable before the management request completes.
+     *
+     * @param {(origin: unknown) => boolean} matches
+     * @returns {Promise<number>}
+     */
+    async cancelOriginsMatching(matches) {
+        if (typeof matches !== 'function') {
+            throw new TypeError('ApprovalBroker.cancelOriginsMatching: matches is required');
+        }
+        const entries = [...this._pending.values()].filter((entry) => (
+            matches(entry.payload?.origin)
+        ));
+        await this._cancelEntries(entries);
+        return entries.length;
+    }
+
+    /**
      * Reject every parked approval and clear the toolbar badge.
      * Lock and wipe call this so requests from an ended session cannot remain
      * actionable or restore attention state after teardown.
      */
     async cancelAll() {
         const entries = [...this._pending.values()];
-        this._pending.clear();
-        this._queueBadgeUpdate();
+        await this._cancelEntries(entries);
+    }
 
-        await Promise.all(entries.map(async (entry) => {
+    async _cancelEntries(entries) {
+        const cancelled = [];
+        for (const entry of entries) {
+            if (this._pending.get(entry.id) !== entry) continue;
+            this._pending.delete(entry.id);
             this._clearTimer(entry.timeout);
             entry.deferred.resolve({ approved: false });
+            cancelled.push(entry);
+        }
+        if (cancelled.length === 0) return;
+        this._queueBadgeUpdate();
+
+        await Promise.all(cancelled.map(async (entry) => {
             if (entry.windowId == null || !this._windows?.remove) return;
             try {
                 await this._windows.remove(entry.windowId);
