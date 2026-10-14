@@ -127,7 +127,11 @@
     outline-offset: -2px;
 }
 
+/* Block, because an inline span ignores overflow and text-overflow: a long
+   name ran under the network icons and off the row instead of ending in an
+   ellipsis. */
 .rowName {
+    display: block;
     flex: 1 1 auto;
     min-width: 0;
     font-weight: 600;
