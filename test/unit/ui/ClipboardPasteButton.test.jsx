@@ -90,4 +90,23 @@ describe('<ClipboardPasteButton>', () => {
         });
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
+
+    it('hands a failure to an owner that takes its messages instead of drawing it', async () => {
+        const onPaste = vi.fn();
+        const onMessage = vi.fn();
+        setClipboard({ readText: vi.fn().mockRejectedValue(new Error('denied')) });
+        const view = render(<ClipboardPasteButton onPaste={onPaste} onMessage={onMessage} />);
+
+        fireEvent.click(screen.getByRole('button'));
+        await waitFor(() => {
+            expect(onMessage).toHaveBeenCalledWith('Clipboard access was denied. Paste manually instead.');
+        });
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+        setClipboard({ readText: vi.fn().mockResolvedValue(' text ') });
+        view.rerender(<ClipboardPasteButton onPaste={onPaste} onMessage={onMessage} />);
+        fireEvent.click(screen.getByRole('button'));
+        await waitFor(() => expect(onPaste).toHaveBeenCalledWith('text'));
+        expect(onMessage).toHaveBeenLastCalledWith('');
+    });
 });

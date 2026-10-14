@@ -68,6 +68,18 @@ describe('<Switch>', () => {
         expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     });
 
+    it('makes the input itself fill the 44px hit area, not only its label', () => {
+        const css = readFileSync('packages/core/src/ui/Switch.module.css', 'utf8');
+        const input = css.match(/\.input\s*\{([^}]*)\}/s)[1];
+
+        // A touch audit measures the control element; the track-sized input
+        // read as 44x28 even though the label around it took the tap.
+        expect(input).toMatch(/inset:\s*0/);
+        expect(input).toMatch(/width:\s*100%/);
+        expect(input).toMatch(/height:\s*100%/);
+        expect(css).toMatch(/\.hitArea\s*\{[^}]*width:\s*var\(--xc-switch-hit-size\)[^}]*height:\s*var\(--xc-switch-hit-size\)/s);
+    });
+
     it('is exported and has canonical style-guide guidance and examples', () => {
         const uiIndex = readFileSync('packages/core/src/ui/index.js', 'utf8');
         const guide = readFileSync('packages/web/src/style-guide/StyleGuidePage.jsx', 'utf8');

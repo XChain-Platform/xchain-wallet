@@ -46,6 +46,7 @@
 }
 
 .range {
+    position: relative;
     appearance: none;
     background: transparent;
     border: none;
@@ -68,6 +69,21 @@
 
 .range:hover {
     color: var(--xc-text);
+}
+
+/* The painted pill stays compact; on a touch screen a transparent layer
+   gives it a 44px target (the Button .sm pattern). The card clips at its
+   bottom padding, so the layer ends there and grows upward over the chart
+   instead of being centred. */
+@media (pointer: coarse), (hover: none) {
+    .range::before {
+        content: '';
+        position: absolute;
+        inset-block-end: calc(-1 * var(--xc-space-2));
+        inset-inline-start: min(0%, calc(50% - var(--xc-control-hit-min) / 2));
+        width: max(100%, var(--xc-control-hit-min));
+        height: max(calc(100% + var(--xc-space-2)), var(--xc-control-hit-min));
+    }
 }
 
 .range:focus-visible {
