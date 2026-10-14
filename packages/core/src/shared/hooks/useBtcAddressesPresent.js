@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { defaultRegistry } from '../../registry/index.js';
 import { useMessaging } from '../useMessaging.js';
 
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 // BTC chain IDs, resolved once from the registry. This is the gate for the
 // surfaces that are still Bitcoin-exclusive: VALIDATOR staking, multisig and

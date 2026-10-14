@@ -136,16 +136,16 @@ assert.ok(
     'ContractsList says in plain words that fund-neutral calls are not listed yet',
 );
 assert.ok(
-    /Published contracts appear here after you publish one from an address on this chain/.test(listSrc),
-    'ContractsList surfaces the empty "My contracts" state per chain',
+    /Published contracts appear here after you publish one\./.test(listSrc),
+    'ContractsList surfaces the empty "My contracts" state once for the section',
 );
 assert.ok(
     /actionDisplayLabel\('DEPOSIT'\)[\s\S]{0,60}?actionDisplayLabel\('WITHDRAW'\)[\s\S]{0,60}?actions appear here/.test(listSrc),
-    'ContractsList surfaces the empty "My interactions" state per chain',
+    'ContractsList surfaces the empty "My interactions" state once for the section',
 );
 assert.ok(
-    /Indexed contracts appear here after this chain's contract data loads/.test(listSrc),
-    'ContractsList surfaces the empty "Browse all" state per chain',
+    /Indexed contracts appear here after contract data loads/.test(listSrc),
+    'ContractsList surfaces the empty "Browse all" state once for the section',
 );
 assert.ok(
     /Couldn't load contracts/.test(listSrc),

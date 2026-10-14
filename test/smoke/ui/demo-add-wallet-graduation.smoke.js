@@ -131,7 +131,7 @@ assert.match(
 );
 assert.match(
     onboardingSrc,
-    /const \[demoWalletId\] = useState\(\(\) => flowsLib\.getDemoWalletId\(\)\)/,
+    /const \[demoWalletId\] = useState\(\(\) => getDemoWalletId\(\)\)/,
     'the demo id is latched at mount so the teardown cannot yank the screen mid-flow',
 );
 assert.match(
