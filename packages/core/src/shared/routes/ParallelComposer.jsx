@@ -631,7 +631,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 }
 
 function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, actionsList, onChange, onRemove, canRemove }) {
-    const descriptor = row.chainId ? chainRegistry.get(row.chainId) : null;
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
 
     return (
@@ -706,11 +705,6 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 </Button>
             </div>
 
-            {descriptor ? (
-                <p className={styles.hint} style={{ textAlign: 'left', marginTop: 'var(--xc-space-2)' }}>
-                    <ChainBadge descriptor={descriptor} size="sm" showName={false} />
-                </p>
-            ) : null}
         </FormSection>
     );
 }
