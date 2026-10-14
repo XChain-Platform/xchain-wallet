@@ -98,6 +98,14 @@
     outline-offset: 2px;
 }
 
+/* The row's own Clear button clears the search; the engine's built-in
+   cancel mark would be a second control for the same thing. */
+.searchInput::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+}
+
 /* Chain picker: full-width button + popover listbox so each option
    can render its own chain logo (native <select>/<option> can't). */
 .chainPickerWrap {
