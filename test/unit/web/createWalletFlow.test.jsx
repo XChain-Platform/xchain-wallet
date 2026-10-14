@@ -71,6 +71,15 @@ afterEach(() => {
 });
 
 describe('web create-wallet flow', () => {
+    it('resumes create after a demo wipe instead of returning to Welcome', async () => {
+        localStorage.setItem('xc:postDemoOnboardingStep', 'create');
+
+        render(<App />);
+
+        expect(await screen.findByRole('heading', { name: 'Create a new wallet' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'XChain Wallet' })).not.toBeInTheDocument();
+    });
+
     it('enters Home with its skeleton before post-create data loads finish', async () => {
         render(<App />);
 
