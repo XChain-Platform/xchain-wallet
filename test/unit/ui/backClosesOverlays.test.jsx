@@ -14,7 +14,7 @@
 // whole app on an LG K51.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, cleanup, fireEvent, screen, act } from '@testing-library/react';
+import { act, render, cleanup, fireEvent, screen } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
@@ -22,6 +22,7 @@ import { NoticeModal } from '../../../packages/core/src/shared/components/Notice
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
+import { useFormLeaveGuard } from '../../../packages/core/src/shared/hooks/useFormLeaveGuard.js';
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
 const armed = () => Boolean(window.history.state && window.history.state.xcBack);
@@ -30,6 +31,21 @@ let capacitorApp;
 async function pressBack() {
     window.history.back();
     await settle();
+}
+
+function swipeBackFromIOS() {
+    act(() => window.dispatchEvent(new Event('xchain:native-edge-back')));
+}
+
+function DirtyForm({ onLeave }) {
+    const leaveGuard = useFormLeaveGuard({ dirty: true, onLeave });
+    return (
+        <>
+            <PageHeader title="Edit payment" onBack={leaveGuard.guardedOnBack} />
+            <input aria-label="Amount" defaultValue="12.50" />
+            {leaveGuard.confirmation}
+        </>
+    );
 }
 
 beforeEach(() => {
@@ -161,5 +177,35 @@ describe('Back closes overlays first', () => {
         expect(onBack).not.toHaveBeenCalled();
         act(() => nativeBack({ canGoBack: true }));
         expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes the More sheet completely on an iOS edge swipe before navigating', () => {
+        const onBack = vi.fn();
+        render(
+            <>
+                <PageHeader title="Receive" onBack={onBack} />
+                <BottomTabBar currentView="receive" onSelect={() => {}} />
+            </>,
+        );
+        const more = screen.getByRole('button', { name: /More/ });
+        fireEvent.click(more);
+
+        swipeBackFromIOS();
+
+        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
+        expect(more).toHaveAttribute('aria-expanded', 'false');
+        expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it('opens the dirty-form prompt on an iOS edge swipe instead of leaving', () => {
+        const onLeave = vi.fn();
+        render(<DirtyForm onLeave={onLeave} />);
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument();
+        expect(onLeave).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onLeave).not.toHaveBeenCalled();
     });
 });
