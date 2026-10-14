@@ -596,7 +596,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(''), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.click(moveButton());
-        expect(await screen.findByText(/Pick one of your own Dogecoin addresses/i, {}, WAIT))
+        expect(await screen.findByText(/Pick one of your own destination addresses/i, {}, WAIT))
             .toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

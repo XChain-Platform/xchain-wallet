@@ -127,13 +127,13 @@ describe('Back closes overlays first', () => {
                 <PageHeader title="Receive" onBack={onBack} />
             </>,
         );
-        const trigger = screen.getByRole('button', { name: 'Scan and addresses' });
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
         fireEvent.click(trigger);
-        expect(screen.getByRole('menu', { name: 'Scan and addresses' })).toBeInTheDocument();
+        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
 
         act(() => nativeBack({ canGoBack: true }));
 
-        expect(screen.queryByRole('menu', { name: 'Scan and addresses' })).toBeNull();
+        expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull();
         expect(onBack).not.toHaveBeenCalled();
     });
 

@@ -210,7 +210,7 @@ describe('AttachContentForm validation and review', () => {
         await review();
 
         expect(await screen.findByText(
-            'The selected signing address is not valid for Bitcoin.',
+            'The selected signing address is not valid for this network.',
         )).toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });

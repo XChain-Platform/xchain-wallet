@@ -224,7 +224,7 @@ describe('MultisigCreate key validation', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
 
-        expect(screen.getByText('Shared cosigner setup is for mainnet, not testnet.')).toBeTruthy();
+        expect(screen.getByText('Shared cosigner setup is for a different network than this wallet.')).toBeTruthy();
     });
 
     it.each([

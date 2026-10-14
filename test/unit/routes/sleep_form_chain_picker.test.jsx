@@ -157,7 +157,7 @@ describe('SleepForm address lock chain selection', () => {
         expect(await screen.findByText(/until block 10017/)).toBeInTheDocument();
         expect(screen.getByText('10017')).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
-        fireEvent.click(screen.getByRole('button', { name: /Lock address on/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
 
         expect(await screen.findByText('Wake block 10,017 has passed. Go back and choose a new duration.')).toBeInTheDocument();
         expect(messaging.sleepAction).not.toHaveBeenCalled();
