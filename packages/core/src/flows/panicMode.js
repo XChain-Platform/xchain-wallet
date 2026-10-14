@@ -41,6 +41,8 @@
 //   - The duress passphrase + decoy wallet flow (Step 6) layers on
 //     top of this; neither is required for the freeze to work.
 
+import { logConsole } from '../shared/utils/logConsole.js';
+
 const STORAGE_KEY = 'xchain-wallet:panic';
 
 /** The localStorage key, exported so the native shells can migrate off it. */
@@ -63,6 +65,20 @@ export const MIN_DURATION_MS = 60 * 1000;                    // 1m floor (tests)
 export const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;     // 7d cap
 
 let memoryFallback = null;
+let memoryFallbackActive = false;
+let storageFailureLogged = false;
+
+function keepMemoryFallback(state) {
+    memoryFallback = state.expiresAt === 0 ? null : { ...state };
+    memoryFallbackActive = true;
+    if (storageFailureLogged) return;
+    storageFailureLogged = true;
+    logConsole.record({
+        source: 'panic-mode',
+        level: 'warn',
+        message: 'local storage write failed; using in-memory state',
+    });
+}
 
 // Injected async persistence (extension: chrome.storage.local). When set, it
 // is authoritative: reads come from the `memoryFallback` cache (hydrated from
@@ -194,6 +210,9 @@ function readState() {
     if (persistentStore) {
         return memoryFallback ? { ...memoryFallback } : emptyPanicModeState();
     }
+    if (memoryFallbackActive) {
+        return memoryFallback ? { ...memoryFallback } : emptyPanicModeState();
+    }
     const store = getStorage();
     if (!store) return memoryFallback ? { ...memoryFallback } : emptyPanicModeState();
     try {
@@ -219,7 +238,7 @@ function writeState(state) {
     }
     const store = getStorage();
     if (!store) {
-        memoryFallback = { ...state };
+        keepMemoryFallback(state);
         return;
     }
     try {
@@ -228,8 +247,10 @@ function writeState(state) {
         } else {
             store.setItem(STORAGE_KEY, JSON.stringify(state));
         }
+        memoryFallback = null;
+        memoryFallbackActive = false;
     } catch (_err) {
-        memoryFallback = { ...state };
+        keepMemoryFallback(state);
     }
 }
 
@@ -252,6 +273,7 @@ export async function configurePanicModePersistence(store) {
     const generation = ++persistenceGeneration;
     persistentStore = store || null;
     memoryFallback = null;
+    memoryFallbackActive = false;
     if (!persistentStore) {
         awaitingHydration = false;
         return;
@@ -282,6 +304,7 @@ export function applyExternalPanicModeState(raw) {
     awaitingHydration = false;
     const state = coercePanicState(raw);
     memoryFallback = state.expiresAt === 0 ? null : state;
+    memoryFallbackActive = false;
 }
 
 /** @param {number} durationMs @returns {number} clamped */
@@ -350,6 +373,7 @@ export function deactivatePanicMode() {
 /** Clear the active freeze while keeping the configured persistence backend. */
 export function clearPanicModeState() {
     memoryFallback = null;
+    memoryFallbackActive = false;
     awaitingHydration = false;
     if (persistentStore) {
         persistenceGeneration += 1;
@@ -368,6 +392,8 @@ export function __resetPanicModePersistenceForTests() {
     persistenceGeneration += 1;
     persistentStore = null;
     memoryFallback = null;
+    memoryFallbackActive = false;
+    storageFailureLogged = false;
     awaitingHydration = false;
 }
 

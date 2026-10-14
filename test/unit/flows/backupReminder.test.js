@@ -11,7 +11,7 @@
 // the state machine that decides hidden/gentle/firm from when the backup
 // was verified, when the wallet was first funded, and a 24h snooze window.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     markBackupVerified,
     getBackupVerifiedAt,
@@ -19,12 +19,15 @@ import {
     hasBackupReminderFunds,
     computeBackupReminderState,
 } from '../../../packages/core/src/flows/backupReminder.js';
+import { logConsole } from '../../../packages/core/src/shared/utils/logConsole.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 beforeEach(() => {
     // jsdom supplies a real localStorage; wipe it so each case starts clean.
     globalThis.localStorage.clear();
+    logConsole.clear();
+    vi.restoreAllMocks();
 });
 
 describe('flows/backupReminder mark + read', () => {
@@ -134,5 +137,33 @@ describe('flows/backupReminder computeBackupReminderState guards', () => {
     it('is hidden without a walletId', () => {
         expect(computeBackupReminderState({}).kind).toBe('hidden');
         expect(computeBackupReminderState(null).kind).toBe('hidden');
+    });
+});
+
+describe('flows/backupReminder storage failures', () => {
+    it('keeps reminder state in memory and logs one warning', () => {
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new DOMException('full', 'QuotaExceededError');
+        });
+        const funded = Date.parse('2026-06-01T00:00:00.000Z');
+
+        markBackupVerified('verified', '2026-01-01T00:00:00.000Z');
+        computeBackupReminderState({ walletId: 'funded', hasFunds: true, now: funded });
+
+        expect(getBackupVerifiedAt('verified')).toBe('2026-01-01T00:00:00.000Z');
+        expect(computeBackupReminderState({
+            walletId: 'funded',
+            hasFunds: false,
+            now: funded + 8 * MS_PER_DAY,
+        }).kind).toBe('firm');
+
+        dismissBackupReminder('funded', funded + 8 * MS_PER_DAY);
+        expect(computeBackupReminderState({
+            walletId: 'funded',
+            hasFunds: false,
+            now: funded + 8 * MS_PER_DAY,
+        })).toEqual({ kind: 'hidden', recheckAt: funded + 9 * MS_PER_DAY });
+        expect(logConsole.entries().filter((entry) => entry.source === 'backup-reminder'))
+            .toHaveLength(1);
     });
 });
