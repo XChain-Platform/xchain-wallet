@@ -1,5 +1,8 @@
 /* §37.2 toast viewport. The host pins to the bottom-center of the
- * screen as a stack of cards; each toast slides in from the bottom
+ * screen above the tab bar on phones, and to the bottom-end corner when
+ * the side rail replaces the bar (toastPlacement.js sets data-placement),
+ * as a stack of cards. toastPlacement.js also lifts the stack by
+ * --xc-toast-lift until it clears a screen footer and the focused control; each toast slides in from the bottom
  * with a subtle fade. Animation collapses to an instantaneous swap
  * when the user prefers reduced motion.
  *
@@ -17,6 +20,7 @@
         var(--xc-space-4)
         + var(--xc-bottom-bar-h, 0px)
         + env(safe-area-inset-bottom, 0px)
+        + var(--xc-toast-lift, 0px)
     );
     inset-inline-start: 50%;
     transform: translateX(-50%);
@@ -32,6 +36,12 @@
         - env(safe-area-inset-right, 0px)
         - 2 * var(--xc-space-4)
     ));
+}
+
+.viewport[data-placement='end'] {
+    inset-inline-start: auto;
+    inset-inline-end: calc(var(--xc-space-4) + env(safe-area-inset-right, 0px));
+    transform: none;
 }
 
 .liveAnnouncement {
@@ -54,6 +64,7 @@
         100vh - var(--xc-viewport-h, 100vh)
         - env(safe-area-inset-top, 0px)
         + var(--xc-space-4)
+        + var(--xc-toast-lift, 0px)
     );
 }
 

@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../ui/Button.jsx';
 import styles from './ToastHost.module.css';
 import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
+import { clearToastRoom, placeToastStack } from './toastPlacement.js';
 
 const VISIBLE_LIMIT = 3;
 const DEFAULT_DURATION_MS = 8000;
@@ -49,6 +50,7 @@ export function ToastHost({ children }) {
     const [toasts, setToasts] = useState(/** @type {ToastInput[]} */ ([]));
     const [announcement, setAnnouncement] = useState({ id: 0, message: '' });
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
+    const viewportRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const haptic = useHaptic();
 
     const announce = useCallback((message) => {
@@ -127,11 +129,47 @@ export function ToastHost({ children }) {
         }
     }, [visibleToasts]);
 
+    // Place the stack before paint whenever its toasts change, so a new
+    // toast never flashes over the control that was just pressed.
+    useLayoutEffect(() => {
+        placeToastStack(viewportRef.current);
+    }, [visibleToasts, hiddenCount]);
+
+    // Re-place it while the page moves under it: focus moving to a control
+    // the stack covers, the content scrolling, the window resizing (which
+    // can swap the tab bar for the side rail), or the stack changing size.
+    useEffect(() => {
+        const viewport = viewportRef.current;
+        if (!viewport || typeof window === 'undefined') return undefined;
+        let frame = null;
+        const schedule = () => {
+            if (frame !== null) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = null;
+                placeToastStack(viewport);
+            });
+        };
+        document.addEventListener('focusin', schedule);
+        document.addEventListener('scroll', schedule, true);
+        window.addEventListener('resize', schedule);
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+        observer?.observe(viewport);
+        return () => {
+            document.removeEventListener('focusin', schedule);
+            document.removeEventListener('scroll', schedule, true);
+            window.removeEventListener('resize', schedule);
+            observer?.disconnect();
+            if (frame !== null) window.cancelAnimationFrame(frame);
+            clearToastRoom();
+        };
+    }, []);
+
     return (
         <HapticProvider value={haptic}>
             <ToastContext.Provider value={api}>
                 {children}
                 <div
+                    ref={viewportRef}
                     className={styles.viewport}
                     role="status"
                     aria-label="Notifications"
