@@ -36,7 +36,7 @@ describe('clipboard control feedback', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
 
-        expect(await screen.findByText('Copied')).toBeTruthy();
+        expect((await screen.findAllByText('Copied: unsigned transaction hex')).length).toBeGreaterThan(0);
         expect(writeText).toHaveBeenCalledWith('deadbeef');
     });
 
@@ -111,7 +111,7 @@ describe('clipboard control feedback', () => {
             />,
         );
         fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
-        expect(await screen.findByText('Copied')).toBeTruthy();
+        expect((await screen.findAllByText('Copied: unsigned transaction hex')).length).toBeGreaterThan(0);
 
         rerender(
             <WatcherResultPanel
