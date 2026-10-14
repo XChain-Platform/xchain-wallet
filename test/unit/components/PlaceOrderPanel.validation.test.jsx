@@ -205,6 +205,23 @@ describe('PlaceOrderPanel validation', () => {
         expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();
     });
 
+    it('returns from review without resubmitting and preserves the order fields', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        mount({}, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        });
+
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Edit order' }))).toBe(false);
+        expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
+        expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
+        expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();
+    });
+
     it('clears the review focus timer on unmount', async () => {
         const watchAddress = { ...ADDRESS, source: 'watch' };
         mount({}, {

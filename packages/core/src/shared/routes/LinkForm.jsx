@@ -600,7 +600,10 @@ export function LinkForm({ walletId, onBack }) {
                             type="button"
                             variant="secondary"
                             disabled={stage === 'submitting'}
-                            onClick={() => setStage('form')}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('form');
+                            }}
                         >
                             Back
                         </Button>

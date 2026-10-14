@@ -484,7 +484,15 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 ) : null}
                 actions={(
                     <>
-                        <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('compose');
+                            }}
+                            disabled={stage === 'submitting'}
+                        >
                             Back
                         </Button>
                         <Button

@@ -458,7 +458,15 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="secondary" type="button" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('form');
+                            }}
+                            disabled={stage === 'submitting'}
+                        >
                             {t('common.back')}
                         </Button>
                         <Button
