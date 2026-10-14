@@ -262,6 +262,87 @@ export class Vault {
         });
     }
 
+    /**
+     * Whether `candidate` is the key this vault is sealed under, compared in
+     * constant time. Lets a password change ask "does the old password open
+     * the vault?" without decrypting the blob a second time.
+     *
+     * @param {Uint8Array} candidate
+     * @returns {boolean}
+     */
+    keyMatches(candidate) {
+        this._assertOpen();
+        if (!(candidate instanceof Uint8Array) || candidate.length !== this._masterKey.length) return false;
+        let diff = 0;
+        for (let i = 0; i < candidate.length; i += 1) diff |= candidate[i] ^ this._masterKey[i];
+        return diff === 0;
+    }
+
+    /**
+     * Replace wallet records and, when `masterKey` is given, the key the
+     * document is sealed under, in ONE blob write.
+     *
+     * A password change has to move the document key and every wallet seal
+     * the old password made together: a crash or a failed write between two
+     * separate writes leaves the vault openable by one password and the
+     * wallets by the other. So the replacement document is encoded under the
+     * new key and saved once, and the in-memory document and key change only
+     * after that save returns. A failure leaves both exactly as they were, and
+     * the backend's own write is the atomic step (an object-store put, a
+     * temp-file rename, the native store's generation swap).
+     *
+     * The caller keeps ownership of `masterKey`; the vault takes a copy.
+     *
+     * @param {Object} opts
+     * @param {Uint8Array} [opts.masterKey]   the new 32-byte key; omitted keeps the current one
+     * @param {Array<import('../schemas/wallet.js').Wallet>} [opts.wallets]   replacements for existing records, matched by id
+     * @returns {Promise<void>}
+     */
+    async rekey({ masterKey, wallets = [] } = {}) {
+        this._assertOpen();
+        if (masterKey !== undefined && (!(masterKey instanceof Uint8Array) || masterKey.length !== 32)) {
+            throw new Error('Vault.rekey: masterKey must be a 32-byte Uint8Array');
+        }
+        for (const record of wallets) {
+            if (!record || typeof record.id !== 'string' || !record.id) {
+                throw new VaultValidationError('wallets', ['record.id is required']);
+            }
+            const result = validateWallet(record);
+            if (!result.ok) throw new VaultValidationError('wallets', result.errors);
+        }
+        return this._enqueueWrite(async () => {
+            this._assertOpen();
+            const previous = this._doc;
+            const arr = [...previous.wallets];
+            for (const record of wallets) {
+                const idx = arr.findIndex((r) => r.id === record.id);
+                if (idx < 0) throw new Error(`Vault.rekey: no wallet with id "${record.id}"`);
+                arr[idx] = record;
+            }
+            const next = { ...previous, wallets: arr };
+            const nextKey = masterKey ? new Uint8Array(masterKey) : null;
+            try {
+                const blob = await encodeDocument(nextKey ?? this._masterKey, next, this._aad);
+                await this._backend.save(blob);
+            } catch (err) {
+                if (nextKey) nextKey.fill(0);
+                throw err;
+            }
+            // A close or clear that landed while the backend settled owns the
+            // state now; the blob is written, so only the in-memory copy is skipped.
+            if (this._doc !== previous || !this._masterKey) {
+                if (nextKey) nextKey.fill(0);
+                return;
+            }
+            if (nextKey) {
+                this._masterKey.fill(0);
+                this._masterKey = nextKey;
+            }
+            this._doc = next;
+            logConsole.record({ source: 'vault', level: 'info', message: nextKey ? 'rekey' : 'reseal wallets' });
+        });
+    }
+
     /** Zero the cached master key and close. Safe to call multiple times. */
     close() {
         if (this._masterKey) this._masterKey.fill(0);
