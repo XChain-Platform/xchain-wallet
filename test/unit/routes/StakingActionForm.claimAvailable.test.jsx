@@ -117,6 +117,27 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         expect(await screen.findByText('12 XCHAIN available')).toBeInTheDocument();
         expect(screen.getByLabelText(/Signing public key/)).toHaveValue(activeKey);
     });
+
+    it('refuses an unstake before activation and names the unlock height', async () => {
+        const lockedKey = 'c'.repeat(64);
+        const messaging = mountForm({
+            getStakesForAddress: vi.fn().mockResolvedValue([{
+                signing_pubkey: lockedKey,
+                status: 'valid',
+                amount: '12',
+                activation_block: 1_106,
+                deactivation_block: null,
+            }]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 1_100 }),
+        }, 'unstake');
+
+        expect(await screen.findByText('0 XCHAIN available')).toBeInTheDocument();
+        expect(screen.getByLabelText(/Signing public key/)).toHaveValue(lockedKey);
+        fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+
+        expect(await screen.findByText('This stake cannot be unstaked until block 1,106.')).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
 });
 
 describe('StakingActionForm network picker', () => {
