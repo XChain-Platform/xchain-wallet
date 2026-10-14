@@ -338,4 +338,82 @@ describe('ContactsList audited behavior', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Confirmation failed.');
         expect(messaging.deleteContact).not.toHaveBeenCalled();
     });
+
+    it('shares only a contact name and its labelled addresses', async () => {
+        const share = vi.fn().mockResolvedValue(undefined);
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+        const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        const alice = contact('private-id', 'Alice', BTC, '2026-01-01T00:00:00.000Z', {
+            notes: 'private note',
+            entries: [
+                { chain: 'bitcoin', address: BTC, label: 'Savings' },
+                { chain: 'litecoin', address: LTC, label: '' },
+            ],
+        });
+
+        try {
+            mount(makeMessaging([alice]));
+            fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+            await waitFor(() => expect(share).toHaveBeenCalledWith({
+                title: 'Alice contact',
+                text: `Alice\nBitcoin (Savings): ${BTC}\nLitecoin: ${LTC}`,
+            }));
+            expect(share.mock.calls[0][0].text).not.toMatch(/private/i);
+            expect(writeText).not.toHaveBeenCalled();
+            expect(screen.queryByText('Contact copied.')).toBeNull();
+            expect(screen.queryByText('Sharing is unavailable.')).toBeNull();
+        } finally {
+            if (shareDescriptor) {
+                Object.defineProperty(navigator, 'share', shareDescriptor);
+            } else {
+                delete navigator.share;
+            }
+            if (clipboardDescriptor) {
+                Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+            } else {
+                delete navigator.clipboard;
+            }
+        }
+    });
+
+    it('copies a contact with a confirmation when the share API is missing', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+        const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        delete navigator.share;
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+
+        try {
+            mount(makeMessaging([
+                contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z'),
+            ]));
+            fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+            await waitFor(() => expect(writeText).toHaveBeenCalledWith(`Alice\nBitcoin: ${BTC}`));
+            expect(await screen.findByText('Contact copied.')).toBeInTheDocument();
+        } finally {
+            if (shareDescriptor) {
+                Object.defineProperty(navigator, 'share', shareDescriptor);
+            } else {
+                delete navigator.share;
+            }
+            if (clipboardDescriptor) {
+                Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+            } else {
+                delete navigator.clipboard;
+            }
+        }
+    });
 });

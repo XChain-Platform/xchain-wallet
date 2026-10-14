@@ -22,6 +22,7 @@ import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
 import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { shareOrCopy, ShareOutcome } from '../share.js';
 import { ScanRoute } from './ScanRoute.jsx';
 import {
     compareContactsByName,
@@ -506,6 +507,25 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         }
     }
 
+    async function handleShareContact() {
+        if (!active) return;
+        const text = [
+            active.name,
+            ...active.entries.map((entry) => {
+                const chain = resolvedChain(entry);
+                const network = NETWORK_OPTIONS.find((option) => option.value === chain)?.label || chain;
+                const label = entry.label?.trim() ? ` (${entry.label.trim()})` : '';
+                return `${network}${label}: ${entry.address}`;
+            }),
+        ].join('\n');
+        const outcome = await shareOrCopy({ title: `${active.name} contact`, text }, text);
+        if (outcome === ShareOutcome.COPIED) {
+            showToast({ message: 'Contact copied.' });
+        } else if (outcome === ShareOutcome.UNAVAILABLE) {
+            showToast({ message: 'Sharing is unavailable.' });
+        }
+    }
+
     // Remove a single address entry from the active contact, after a
     // confirmation that mirrors the delete-contact prompt.
     async function handleDeleteAddress(index) {
@@ -787,6 +807,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
                             <span>Edit</span>
+                        </Button>
+                        <Button
+                            type="button"
+                            className={picker.quickAction}
+                            onClick={handleShareContact}
+                        >
+                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.UploadIcon /></span>
+                            <span>Share</span>
                         </Button>
                         <Button
                             type="button"
