@@ -64,6 +64,7 @@ function importedFixture({ address: addressOverrides = {}, wallet: walletOverrid
         chain: 'bitcoin',
         network: 'regtest',
         accountId: null,
+        signerId: 'wallet-1',
         ...addressOverrides,
     };
     const wallet = {
@@ -341,7 +342,7 @@ describe('exportPrivateKey refusal and cleanup edges', () => {
         expect(signer.lock).toHaveBeenCalledOnce();
     });
 
-    it.skip('BUG: ImportedKeyMissingError is unreachable because ownership rejects the same missing entry first', async () => {
+    it('reports a missing imported key before checking wallet ownership', async () => {
         const fixture = importedFixture({ wallet: { importedKeys: [] } });
         await expect(exportPrivateKey({
             vault: fixture.vault,
