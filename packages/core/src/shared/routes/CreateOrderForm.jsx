@@ -845,18 +845,18 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 </Button>
                 {showAdvanced ? (
                     <>
-                        <p className={styles.successLabel}>Restrict who can match (optional)</p>
-                        <div className={styles.actions}>
-                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                                {allowListIdx ? `Allow-list #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set allow-list'}
-                            </Button>
-                            {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
-                        </div>
-                        <div className={styles.actions}>
-                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                                {blockListIdx ? `Block-list #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set block-list'}
-                            </Button>
-                            {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
+                        <div className={styles.choiceGroup}>
+                            <p className={styles.choiceGroupLabel}>Restrict who can match (optional)</p>
+                            <div className={styles.choiceButtons}>
+                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                                    {allowListIdx ? `Allow-list #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set allow-list'}
+                                </Button>
+                                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
+                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                                    {blockListIdx ? `Block-list #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set block-list'}
+                                </Button>
+                                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
+                            </div>
                         </div>
                         <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
                         <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />

@@ -1070,16 +1070,18 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         autoCorrect="off"
                         spellCheck={false}
                     />
-                    <p className={styles.successLabel}>Restrict who can match (optional)</p>
-                    <div className={styles.actions}>
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                        </Button>
-                        {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                        </Button>
-                        {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                    <div className={styles.choiceGroup}>
+                        <p className={styles.choiceGroupLabel}>Restrict who can match (optional)</p>
+                        <div className={styles.choiceButtons}>
+                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                                {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                            </Button>
+                            {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                                {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                            </Button>
+                            {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                        </div>
                     </div>
                     <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
                 </div>

@@ -366,6 +366,17 @@ describe('trade form style guide primitives', () => {
         expect(toggle).not.toMatch(/[▸▾]/);
     });
 
+    it.each([
+        'packages/core/src/shared/routes/CreateOrderForm.jsx',
+        'packages/core/src/shared/routes/DispenserForm.jsx',
+        'packages/core/src/shared/routes/SwapForm.jsx',
+    ])('%s groups its allow-list and block-list buttons under one field-style label', (file) => {
+        const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+
+        expect(source).toMatch(/<p className=\{styles\.choiceGroupLabel\}>Restrict who can (?:buy|match) \(optional\)<\/p>\s*<div className=\{styles\.choiceButtons\}>/);
+        expect(source).not.toMatch(/Restrict who can (?:buy|match) \(optional\)<\/p>\s*<div className=\{styles\.actions\}>/);
+    });
+
     it('uses kit choice controls throughout the shared order panels', () => {
         const componentControls = {
             DerivationPathCrossCheck: ['Checkbox'],

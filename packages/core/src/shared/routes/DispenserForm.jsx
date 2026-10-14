@@ -1839,16 +1839,18 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             ) : null}
 
-            <p className={styles.pickerLabel}>Restrict who can buy (optional)</p>
-            <div className={styles.actions}>
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                    {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                </Button>
-                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                    {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                </Button>
-                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+            <div className={styles.choiceGroup}>
+                <p className={styles.choiceGroupLabel}>Restrict who can buy (optional)</p>
+                <div className={styles.choiceButtons}>
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                        {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                    </Button>
+                    {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                        {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                    </Button>
+                    {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                </div>
             </div>
 
             {/* D-161: "Restrict who can buy" is the reading that causes the
