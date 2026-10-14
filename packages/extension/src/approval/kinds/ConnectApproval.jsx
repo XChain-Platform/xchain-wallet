@@ -22,6 +22,28 @@ import styles from './ConnectApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const { t } = i18n;
+const INVALID_REQUEST_MESSAGE = 'This connection request is missing or invalid.';
+const EXPIRED_REQUEST_MESSAGE = 'This connection request has expired.';
+
+function isValidConnectPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    if (typeof payload.origin !== 'string' || !payload.origin) return false;
+    try {
+        if (new URL(payload.origin).origin === 'null') return false;
+    } catch {
+        return false;
+    }
+    if (payload.requestedChains !== undefined
+        && (!Array.isArray(payload.requestedChains)
+            || payload.requestedChains.some((chainId) => typeof chainId !== 'string' || !chainId))) {
+        return false;
+    }
+    return payload.accountOptions === undefined
+        || (Array.isArray(payload.accountOptions)
+            && payload.accountOptions.every(
+                (account) => account && typeof account.id === 'string' && account.id,
+            ));
+}
 
 /**
  * Connect approval (§43.3 / §43.4): grants a dApp the right to call
@@ -43,6 +65,7 @@ const { t } = i18n;
  * @param {() => void} props.onReject
  */
 export function ConnectApproval({ id, payload, onReject }) {
+    const payloadValid = isValidConnectPayload(payload);
     const appName = neutralizeControlText(payload?.appName || '', { maxLength: 80 });
     const hasRequestedChains = Array.isArray(payload?.requestedChains);
     const requestedChains = useMemo(
@@ -109,6 +132,7 @@ export function ConnectApproval({ id, payload, onReject }) {
     );
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [requestExpired, setRequestExpired] = useState(false);
     useBackHandler(onReject, busy);
 
     function toggleChain(chainId) {
@@ -130,9 +154,12 @@ export function ConnectApproval({ id, payload, onReject }) {
     // With options on screen the user must share at least one account; with
     // none (the account read failed) the background grants the primary one.
     const accountsMissing = accountOptions.length > 0 && approvedAccounts.length === 0;
+    const requestError = !payloadValid
+        ? INVALID_REQUEST_MESSAGE
+        : (requestExpired ? EXPIRED_REQUEST_MESSAGE : null);
 
     async function handleApprove() {
-        if (busy || approvedChains.length === 0 || accountsMissing) return;
+        if (busy || requestError || approvedChains.length === 0 || accountsMissing) return;
         setBusy(true);
         setError(null);
         try {
@@ -147,7 +174,11 @@ export function ConnectApproval({ id, payload, onReject }) {
             // belt-and-braces in case the browser doesn't honour remove().
             window.close();
         } catch (err) {
-            setError(err?.message || 'Could not connect this site.');
+            if (err?.name === 'ApprovalNotFoundError') {
+                setRequestExpired(true);
+            } else {
+                setError(err?.message || 'Could not connect this site.');
+            }
             setBusy(false);
         }
     }
@@ -170,7 +201,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                         block
                         onClick={handleApprove}
                         loading={busy}
-                        disabled={approvedChains.length === 0 || accountsMissing}
+                        disabled={!!requestError || approvedChains.length === 0 || accountsMissing}
                     >
                         {t('extension.connect.approve')}
                     </Button>
@@ -268,6 +299,9 @@ export function ConnectApproval({ id, payload, onReject }) {
                     )}
                 </fieldset>
 
+                {requestError ? (
+                    <div className={shared.error} role="alert">{requestError}</div>
+                ) : null}
                 {error ? <div className={shared.error} role="alert">{error}</div> : null}
             </ListPage>
         </Screen>
