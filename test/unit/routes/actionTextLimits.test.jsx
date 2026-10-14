@@ -68,7 +68,7 @@ function messagingFor(overrides = {}) {
             creator: SOURCE.address,
             callbackTick: 'XCHAIN',
             callbackAmount: '1',
-            callbackBlock: null,
+            callbackBlock: '1',
         }),
         tokenHolderSummary: vi.fn().mockResolvedValue({ recipientCount: 1, totalPayout: '1' }),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
