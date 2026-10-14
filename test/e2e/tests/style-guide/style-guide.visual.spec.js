@@ -40,7 +40,9 @@ for (const theme of THEMES) {
         test.describe(`${theme} theme at ${width}px`, () => {
             test.use({
                 colorScheme: theme,
-                reducedMotion: 'reduce',
+                // Playwright 1.59.1 has no reducedMotion fixture, so the media
+                // emulation goes through the browser context options.
+                contextOptions: { reducedMotion: 'reduce' },
                 viewport: { width, height: 900 },
             });
 
