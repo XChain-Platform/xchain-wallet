@@ -89,6 +89,7 @@
 
 .tabLabel {
     display: block;
+    flex: 0 0 auto;
     max-width: 100%;
     line-height: 1.1;
     text-align: center;
