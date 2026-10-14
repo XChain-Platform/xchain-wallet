@@ -248,8 +248,8 @@ export async function quoteMaxSendable({
     const otherOutputs = quote.outputs - probeSats;
     if (otherOutputs < 0n) return null;
 
-    const maxSats = quote.available - quote.fee - otherOutputs;
-    if (maxSats <= 0n) return null;
+    const payableSats = quote.available - quote.fee - otherOutputs;
+    const maxSats = payableSats > 0n ? payableSats : 0n;
 
     return {
         maxSats: maxSats.toString(),

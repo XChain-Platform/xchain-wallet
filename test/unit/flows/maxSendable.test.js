@@ -51,7 +51,9 @@ function encoderThatRefuses({ fee = REAL_FEE, available = BALANCE, extraOutputSa
     });
 }
 
-function makeHarness({ createTx, utxos = [{ value: BALANCE }], ads = null } = {}) {
+function makeHarness({
+    createTx, utxos = [{ value: BALANCE }], ads = null, coin = 'bitcoin',
+} = {}) {
     const sdk = {
         encoder: {
             createTx: createTx || encoderThatRefuses(),
@@ -65,7 +67,7 @@ function makeHarness({ createTx, utxos = [{ value: BALANCE }], ads = null } = {}
     return {
         sdk,
         sdkRegistry: { get: () => sdk },
-        chainRegistry: { get: () => ({ coin: 'bitcoin', networkKind: 'regtest', adsDonationAddress: 'donateHere' }) },
+        chainRegistry: { get: () => ({ coin, networkKind: 'regtest', adsDonationAddress: 'donateHere' }) },
         vault: { settings: { get: async () => settings } },
     };
 }
@@ -92,6 +94,24 @@ describe('quoteMaxSendable', () => {
         // The defect's number, stated as the thing this must not be: the static
         // 1500-sat estimate would have offered 49,998,500 and stranded 576.
         expect(quote.maxSats).not.toBe(String(BALANCE - 1500));
+    });
+
+    it.each([
+        ['bitcoin', 12_000, 1_848],
+        ['litecoin', 2_000, 308],
+        ['dogecoin', 200_000_000, 30_800_000],
+    ])('uses the %s encoder fee at the selected rate', async (coin, feePerKb, fee) => {
+        const h = makeHarness({ coin, createTx: encoderThatRefuses({ fee }) });
+        const quote = await quoteMaxSendable(ARGS(h, {
+            encoderOpts: { pubkey: 'pub', change: 'src-address', feePerKb },
+        }));
+
+        expect(h.sdk.encoder.createTx).toHaveBeenCalledWith(expect.objectContaining({ feePerKb }));
+        expect(h.sdk.actions.createAction).not.toHaveBeenCalled();
+        expect(quote).toMatchObject({
+            maxSats: String(BALANCE - fee),
+            feeSats: String(fee),
+        });
     });
 
     it('leaves nothing behind: offered + fee is exactly what the address holds', async () => {
@@ -157,6 +177,19 @@ describe('quoteMaxSendable', () => {
         expect(quote.maxSats).toBe(String(40_000_000 - REAL_FEE));
     });
 
+    it('includes a pending input when the encoder selects it for the real send', async () => {
+        const h = makeHarness({
+            utxos: [
+                { value: 30_000_000, confirmations: 6 },
+                { value: 20_000_000, confirmations: 0 },
+            ],
+        });
+        const quote = await quoteMaxSendable(ARGS(h));
+
+        expect(quote.inputSats).toBe(String(BALANCE));
+        expect(quote.maxSats).toBe(String(BALANCE - REAL_FEE));
+    });
+
     it('survives a satoshi count past 2^53-1, which the encoder serializes as a string', async () => {
         const huge = 9_007_199_254_740_993n; // 2^53 + 1
         const createTx = vi.fn(async () => {
@@ -206,9 +239,14 @@ describe('quoteMaxSendable', () => {
         expect(await quoteMaxSendable(ARGS(h))).toBeNull();
     });
 
-    it('says nothing when the fee would consume everything the address holds', async () => {
-        const h = makeHarness({ createTx: encoderThatRefuses({ fee: BALANCE }) });
-        expect(await quoteMaxSendable(ARGS(h))).toBeNull();
+    it('returns a zero amount with the exact fee when the balance is smaller than the fee', async () => {
+        const fee = BALANCE + 1;
+        const h = makeHarness({ createTx: encoderThatRefuses({ fee }) });
+        expect(await quoteMaxSendable(ARGS(h))).toMatchObject({
+            maxSats: '0',
+            feeSats: String(fee),
+            inputSats: String(BALANCE),
+        });
     });
 
     it('says nothing without a destination to size the payment output against', async () => {
