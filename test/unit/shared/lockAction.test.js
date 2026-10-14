@@ -64,13 +64,29 @@ describe('lockImmediately', () => {
 
         for (const file of shellFiles) {
             const source = readFileSync(join(process.cwd(), file), 'utf8');
+            const clearState = source.slice(
+                source.indexOf('function clearTransientActionState()'),
+                source.indexOf('function handleLock()'),
+            );
             expect(source).toContain('function handleLock()');
             expect(source).toContain('lockImmediately({');
             expect(source).toContain("showLocked: () => setStatus({ state: 'locked' })");
             expect(source).toContain('lock: handleLock');
-            for (const setter of transientSetters) expect(source).toContain(setter);
+            expect(clearState).toContain("setUnlockedView('home')");
+            for (const setter of transientSetters) expect(clearState).toContain(setter);
+            expect(source).toMatch(
+                /if \(status\.state !== 'unlocked'\) \{\s*clearTransientActionState\(\);/,
+            );
             expect(source).not.toMatch(/lockWallet\(\)\s*\.then\(refresh\)/);
         }
+
+        const popupSource = readFileSync(
+            join(process.cwd(), 'packages/extension/src/popup/App.jsx'),
+            'utf8',
+        );
+        expect(popupSource).toMatch(
+            /if \(status\.state !== 'unlocked'\) \{\s*clearTransientActionState\(\);[\s\S]{0,160}?setWallets\(\[\]\)/,
+        );
     });
 
     it('reconciles the real session when an asynchronous host lock fails', async () => {
