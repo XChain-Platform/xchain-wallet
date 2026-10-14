@@ -101,9 +101,12 @@ describe('CreateWallet security options', () => {
         expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /missing or mistyped passphrase opens a different wallet without warning/,
         );
-        expect(screen.getByText(/Required when enabled/)).toHaveTextContent(
+        // The warning says it once; the field hint does not repeat it.
+        expect(screen.getAllByText(/Capitalization and spaces matter/)).toHaveLength(1);
+        expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /Capitalization and spaces matter/,
         );
+        expect(screen.getByText('Required when enabled.')).toBeTruthy();
         fireEvent.focus(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
         const tip = (await screen.findByRole('tooltip')).textContent;
         expect(tip).toMatch(/extra secret combines with your recovery phrase/i);
@@ -209,6 +212,8 @@ describe('MnemonicGrid narrow layout', () => {
         // The word-count choice is the kit RadioGroup, whose option text column shrinks and wraps.
         expect(css('packages/core/src/ui/RadioGroup.module.css')).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(createCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
+        // A full-width rendered legend erases the box's top border; floated, it sits inside the box.
+        expect(createCss).toMatch(/\.wordCountRow\s*>\s*legend\s*\{[^}]*float:\s*left;/s);
         expect(createCss).toMatch(/\.confirmRow\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/@media \(max-height:\s*520px\)/);
