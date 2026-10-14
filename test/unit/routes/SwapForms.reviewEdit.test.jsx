@@ -78,6 +78,30 @@ function setAmount(label, value) {
 }
 
 describe('swap review editing', () => {
+    it('keeps Memo visible beside a compact advanced-options disclosure', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging()}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+
+        const memo = await screen.findByLabelText('Memo (optional)');
+        const disclosure = screen.getByRole('button', { name: 'Advanced options' });
+        const controlledId = disclosure.getAttribute('aria-controls');
+
+        expect(memo).toBeVisible();
+        expect(memo).toHaveAttribute('id', 'swap-memo');
+        expect(getComputedStyle(memo).borderTopStyle).not.toBe('none');
+        expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+        expect(disclosure.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByText('Advanced options (receive address, lists)')).toBeNull();
+
+        fireEvent.click(disclosure);
+        expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+        expect(document.getElementById(controlledId)).toBeVisible();
+        expect(screen.getByLabelText('Receive at (optional)')).toBeVisible();
+    });
+
     it('blocks non-positive same-chain amounts before review', async () => {
         render(
             <MessagingProvider shell="desktop" messaging={messaging()}>
@@ -149,7 +173,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '3');
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (receive address, lists)' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options' }));
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bc1qrecipient' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 

@@ -191,6 +191,25 @@
     margin-top: var(--xc-space-4);
 }
 
+.advancedToggle {
+    align-self: flex-start;
+}
+
+.advancedToggle > span {
+    white-space: nowrap;
+}
+
+.advancedToggle svg {
+    margin-inline-start: var(--xc-space-1);
+}
+
+.advancedOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+}
+
 .betActions {
     display: flex;
     flex-wrap: wrap;
