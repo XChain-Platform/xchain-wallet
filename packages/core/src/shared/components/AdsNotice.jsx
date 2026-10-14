@@ -45,10 +45,12 @@ export function AdsNotice({
             </div>
             <ul style={{
                 margin: 0,
-                padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-2) var(--xc-space-5)',
-                background: 'var(--xc-surface-raised)',
-                border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-md)',
+                padding: 'var(--xc-card-pad)',
+                // The bullets hang in the extra start inset.
+                paddingInlineStart: 'calc(var(--xc-card-pad) + var(--xc-space-3))',
+                background: 'var(--xc-card-bg)',
+                border: 'var(--xc-card-border)',
+                borderRadius: 'var(--xc-card-radius)',
                 fontSize: 'var(--xc-text-sm)',
                 color: 'var(--xc-text-muted)',
                 display: 'flex',

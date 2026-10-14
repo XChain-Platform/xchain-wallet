@@ -48,6 +48,7 @@ export const TOKEN_GROUPS = [
             color('--xc-control-disabled-bg', '#F5F6F8', '#121824', 'Disabled control fill'),
             color('--xc-control-disabled-border', '#727D8E', '#718096', 'Disabled control border'),
             color('--xc-control-disabled-text', '#5F7086', '#94A3B8', 'Disabled control text'),
+            token('--xc-select-arrow', 'chevron image in --xc-text-muted', 'Arrow on every select, the Network picker chevron'),
         ],
     },
     {
@@ -89,8 +90,11 @@ export const TOKEN_GROUPS = [
             token('--xc-list-row-padding', 'var(--xc-space-3)', 'Inset inside a list row', 'length'),
             token('--xc-page-gutter', 'var(--xc-space-3)', 'Inline page inset, applied only by Screen body (16px rail, 24px full)', 'length'),
             token('--xc-page-top', 'var(--xc-space-3)', 'Top page inset, applied only by Screen body (16px rail and full)', 'length'),
-            token('--xc-card-pad', 'var(--xc-space-4)', 'Card interior inset (12px under 480px)', 'length'),
+            token('--xc-card-pad', 'var(--xc-space-4)', 'Card interior inset (12px under 480px, 8px under 360px)', 'length'),
             token('--xc-card-radius', 'var(--xc-radius-md)', 'Card corner radius', 'radius'),
+            token('--xc-card-border', '1px solid var(--xc-border)', 'The one card border, always solid'),
+            token('--xc-card-bg', 'var(--xc-surface-raised)', 'The one card fill'),
+            token('--xc-form-card-max-width', '560px', 'Width of the wide form card'),
         ],
     },
     {

@@ -331,11 +331,13 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
 
     it('puts every form in one centred 560px card when wide', () => {
         const card = ruleBody(wide, '.form');
-        expect(card).toMatch(/max-width:\s*560px/);
+        expect(css('tokens.css')).toMatch(/--xc-form-card-max-width:\s*560px/);
+        expect(card).toMatch(/max-width:\s*var\(--xc-form-card-max-width\)/);
         expect(card).toMatch(/margin:\s*0 auto/);
-        expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
-        expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
-        expect(card).toMatch(/padding:\s*var\(--xc-space-6\)/);
+        expect(card).toMatch(/background:\s*var\(--xc-card-bg\)/);
+        expect(card).toMatch(/border:\s*var\(--xc-card-border\)/);
+        expect(card).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
+        expect(card).toMatch(/padding:\s*var\(--xc-card-pad\)/);
     });
 
     it('keeps the card inside the pane at the 600px tablet boundary', () => {

@@ -156,10 +156,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     const headerCard = (
         <div style={{
-            background: 'var(--xc-bg-muted)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-card-bg)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
+            padding: 'var(--xc-card-pad)',
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--xc-space-2)',

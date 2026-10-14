@@ -49,6 +49,7 @@ import { compareAmounts } from '../../market/orderMath.js';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { t } from '../../i18n/index.js';
 
 // A classified failure (offline, rejected fee) keeps its own copy; an unclassified one gets plain order copy.
 function orderFailureFallback(err) {
@@ -913,8 +914,10 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
     return (
         <>
             {showHeading ? <p className={styles.successLabel}>{heading}</p> : null}
+            {/* The section title already says which side this is, so the group
+                names what it picks instead of repeating "You give". */}
             <RadioGroup
-                legend={heading}
+                legend={t('createOrder.side.assetType')}
                 name={`${heading}-type`}
                 value={type}
                 onChange={onType}

@@ -11,15 +11,12 @@
 /* ───── Hero - token identity (no balance, this is the issuer view). ───── */
 
 .hero {
+    composes: card from '../../ui/Card.module.css';
     position: relative;
     display: flex;
     flex-direction: row;
     align-items: flex-start;
     gap: var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    padding: var(--xc-space-4);
 }
 
 .heroIconWrap {
@@ -116,10 +113,7 @@
 /* ───── Market panel - stats strip + chart placeholder. ───── */
 
 .marketPanel {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    padding: var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
@@ -304,6 +298,21 @@
     border-bottom-color: var(--xc-accent-primary);
 }
 
+/* Phones: all five panels fit a 360px screen on tighter spacing instead of
+   scrolling the last tab out of view. The tabs share the row's spare width so
+   the strip still spans the content. */
+@media not all and (min-width: 480px) {
+    .tabs {
+        gap: 0;
+    }
+
+    .tab {
+        flex: 1 1 auto;
+        justify-content: center;
+        padding-inline: var(--xc-space-1);
+    }
+}
+
 .tabPanel {
     display: flex;
     flex-direction: column;
@@ -323,16 +332,15 @@
 }
 
 .row {
+    composes: card from '../../ui/Card.module.css';
+    /* The tap floor the audit can read; the control-height min-height below wins. */
+    min-block-size: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
     width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: transparent;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
@@ -394,10 +402,7 @@ button.row:hover:not(:disabled) {
    without competing with the tabs above. ───── */
 
 .genesisPanel {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    padding: var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -461,15 +466,13 @@ button.row:hover:not(:disabled) {
    and don't need the full history-row chrome. ───── */
 
 .histRow {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;

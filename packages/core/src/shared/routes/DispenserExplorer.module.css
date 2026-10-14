@@ -15,10 +15,12 @@
     margin-bottom: 0;
 }
 
+/* Top-aligned: the search field carries its hint underneath, so bottom
+   alignment would push the Chain select down beside the hint. */
 .filterRow {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: var(--xc-space-2);
 }
 
@@ -42,10 +44,6 @@
 .chainControl > *,
 .queryControl > * {
     margin-bottom: 0;
-}
-
-.searchHint {
-    margin: var(--xc-space-1) 0 0;
 }
 
 .resultGroup {

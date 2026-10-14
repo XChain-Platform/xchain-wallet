@@ -30,13 +30,10 @@
 /* Lists and tables (inbox, signing session, settlement) fill the content
    area; only genuine forms keep the FormPage column. */
 .listCard {
+    composes: card from '../../ui/Card.module.css';
     width: 100%;
     min-width: 0;
     margin: var(--xc-space-6) 0 0;
-    padding: var(--xc-space-6);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
     box-shadow: var(--xc-shadow-md);
     box-sizing: border-box;
     overflow-wrap: anywhere;
@@ -98,6 +95,15 @@
     resize: vertical;
 }
 
+/* A dropdown picker keeps the shared dropdown height and text size from
+   tokens.css instead of the textarea padding above. */
+select.picker {
+    height: var(--xc-control-h-md);
+    padding-block: 0;
+    font-size: var(--xc-control-font-md);
+    border-radius: var(--xc-control-radius);
+}
+
 .tickItems {
     list-style: none;
     padding: 0;
@@ -150,13 +156,10 @@
 }
 
 .fromLine {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     margin-bottom: var(--xc-space-3);
 }
 
@@ -284,10 +287,6 @@
     min-width: 0;
 }
 
-.feeToggleGap {
-    margin-top: var(--xc-space-3);
-}
-
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
@@ -298,15 +297,12 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
     gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-1);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {

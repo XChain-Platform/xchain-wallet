@@ -443,14 +443,30 @@ export function measureControlRows() {
         }
     }
 
+    // A row that spills: a control past its row container's edge or past the
+    // window. Rows that scroll sideways on purpose (tab strips, chip
+    // scrollers) are left alone, and so is a control parked wholly off screen
+    // until focused (a skip link).
+    const viewportWidth = document.documentElement.clientWidth;
+    const scrollsSideways = (el) => /(auto|scroll)/.test(getComputedStyle(el).overflowX);
+    const parkedOffScreen = (item) => item.rect.right <= 0 || item.rect.left >= viewportWidth;
+    const spills = (container, items) => {
+        if (scrollsSideways(container)) return false;
+        const box = container.getBoundingClientRect();
+        return items.some((item) => !parkedOffScreen(item)
+            && (item.rect.left < Math.max(box.left, 0) - 1
+                || item.rect.right > Math.min(box.right, viewportWidth) + 1));
+    };
+
     const findings = [];
     const signatures = new Set();
-    for (const rows of grouped.values()) {
+    for (const [container, rows] of grouped.entries()) {
         for (const row of rows) {
             const items = [...row].sort((a, b) => a.rect.left - b.rect.left);
             const heights = items.map((item) => item.height);
             const styled = items.filter((item) => !item.iconOnly);
             const problems = [];
+            if (spills(container, items)) problems.push('overflow');
             if (Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
             if (styled.length > 1 && new Set(styled.map((item) => item.radius)).size > 1) problems.push('border-radius');
             if (styled.length > 1 && new Set(styled.map((item) => item.fontSize)).size > 1) problems.push('font-size');
@@ -473,12 +489,48 @@ export function measureControlRows() {
     return findings;
 }
 
-/** Applies a venue's root font size before app code runs on every document. */
-export function installRootFontSize(page, rootFontSize) {
-    if (!rootFontSize) return Promise.resolve();
-    return page.addInitScript((size) => {
-        document.documentElement.style.fontSize = size;
-    }, rootFontSize);
+/** The root font size the app computes for a native font scale. */
+export const BASE_ROOT_FONT_PX = 16;
+export function expectedRootFontPx(fontScale) {
+    return fontScale ? BASE_ROOT_FONT_PX * fontScale : null;
+}
+
+/**
+ * Large text goes in through the app's own font-scale path, the one iOS and
+ * Android use, never by writing the root style from the harness: an init
+ * script runs before the document has a root element, so a root style set
+ * there never applied and the large-text venue measured at 100 percent.
+ *
+ * Cold start: every document starts with the native bootstrap global the app
+ * reads on load (what the iOS shell injects). Live: applyFontScale sends the
+ * native font-scale event once the app is listening.
+ */
+export function installFontScale(page, fontScale) {
+    if (!fontScale) return Promise.resolve();
+    return page.addInitScript((scale) => {
+        window.__xchainNativeFontScale = scale;
+    }, fontScale);
+}
+
+/** Sends the native font-scale event and waits until the root size follows it. */
+export async function applyFontScale(page, fontScale) {
+    if (!fontScale) return;
+    await page.evaluate((scale) => {
+        window.dispatchEvent(new CustomEvent('xchain:native-font-scale', { detail: { fontScale: scale } }));
+    }, fontScale);
+    await page.waitForFunction(
+        (px) => Math.abs(parseFloat(getComputedStyle(document.documentElement).fontSize) - px) <= 0.5,
+        expectedRootFontPx(fontScale),
+        { timeout: 10_000 },
+    );
+}
+
+/** The root font size failure for one measured screen, or null. */
+export function rootFontFailure({ label, rootFontPx, expectedRootFontPx: expected }) {
+    if (expected == null) return null;
+    if (typeof rootFontPx === 'number' && Math.abs(rootFontPx - expected) <= 0.5) return null;
+    const actual = typeof rootFontPx === 'number' ? `${rootFontPx}px` : 'unread';
+    return `${label}: root font size ${actual}, expected ${expected}px`;
 }
 
 /** Returns the route labels and layout-contract failures from a completed sweep. */
@@ -486,6 +538,10 @@ export function layoutSweepFailures(screens) {
     const failures = [];
     const topGaps = { form: new Set(), list: new Set() };
     const close = (actual, expected) => Math.abs(actual - expected) <= 1;
+    for (const screen of screens) {
+        const rootFailure = rootFontFailure(screen);
+        if (rootFailure) failures.push(rootFailure);
+    }
     for (const { label, layout, vw } of screens) {
         if (!layout) {
             failures.push(`${label}: missing #xc-main layout measurement`);
@@ -528,13 +584,23 @@ export function layoutSweepFailures(screens) {
 
 /** A sweep bound to one page, one venue and one output directory. */
 export function createSweep(page, {
-    venue, outDir, restart = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, rootFontSize,
+    venue, outDir, restart: restartPage = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, fontScale,
 }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
     writeFileSync(linesPath, '');
-    const pageReady = installRootFontSize(page, rootFontSize);
+    const pageReady = installFontScale(page, fontScale);
+    const expectedRootPx = expectedRootFontPx(fontScale);
     let n = 0;
+
+    /** Reload the app and, once it is listening, send the font scale again. */
+    async function restart() {
+        await restartPage();
+        if (!fontScale) return;
+        await page.getByRole('button', { name: 'Skip' }).or(page.getByRole('button', { name: 'Create new wallet' }))
+            .or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: 60_000 });
+        await applyFontScale(page, fontScale);
+    }
 
     async function measure(label) {
         await page.waitForTimeout(450);
@@ -546,6 +612,12 @@ export function createSweep(page, {
         } catch (err) {
             result = { error: String(err?.message || err) };
         }
+        // Every screen records the root size it was measured at, so a venue
+        // that lost its text size fails by name instead of measuring 100%.
+        try {
+            result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+        } catch { /* reported as a root font failure below */ }
+        if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
         // Extra per-screen audits (the axe sweep) hook in here; a failure in one
         // is reported on the screen's line, never thrown into the walk.
         if (onScreen) {
@@ -654,6 +726,7 @@ export function createSweep(page, {
             await dismissIntroCarousel(page);
             await page.getByRole('button', { name: 'Try in demo mode' }).click();
             await unlockedShell(page).waitFor({ state: 'visible', timeout: 120_000 });
+            await applyFontScale(page, fontScale);
             return;
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
@@ -664,6 +737,7 @@ export function createSweep(page, {
             await page.getByRole('button', { name: 'Continue', exact: true }).click();
         }
         await unlockedShell(page).waitFor({ state: 'visible', timeout: 240_000 });
+        await applyFontScale(page, fontScale);
     }
 
     async function unlocked() {

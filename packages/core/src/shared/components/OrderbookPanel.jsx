@@ -101,9 +101,10 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             aria-label="Order book"
             aria-busy={loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
             <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>

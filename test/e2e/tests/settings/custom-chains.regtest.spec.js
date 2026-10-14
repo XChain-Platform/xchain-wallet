@@ -94,7 +94,7 @@ const DESCRIPTOR = {
 async function openDeveloperMode(page) {
     await openSettings(page);
     await page.getByRole('button', { name: /^Developer Mode/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     await expect(devToggle).toBeVisible({ timeout: 30_000 });
     if (!(await devToggle.isChecked())) {
         // `.check()` cannot be used: the input is controlled by PERSISTED

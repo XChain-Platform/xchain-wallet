@@ -82,6 +82,21 @@ describe('DispenserExplorer network scoping', () => {
         expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
     });
 
+    it('says All networks and keeps the ticker hint with the search field', async () => {
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+
+        expect(screen.getByRole('option', { name: 'All networks' })).toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: 'All chains' })).toBeNull();
+        const field = screen.getByLabelText('Token ticker');
+        const hint = screen.getByText(/Ticker name, such as MYTOKEN/);
+        expect(field.getAttribute('aria-describedby').split(' ')).toContain(hint.id);
+        // The hint sits in the field's own block, before the Search button.
+        const search = screen.getByRole('button', { name: 'Search' });
+        expect(hint.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(field.closest('div[class]').parentElement.contains(hint)).toBe(true);
+    });
+
     it('explains and disables search until the active network is loaded', async () => {
         let resolveSettings;
         const getDispensersForToken = vi.fn();
