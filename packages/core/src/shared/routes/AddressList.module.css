@@ -398,11 +398,19 @@
     margin-bottom: 0;
 }
 
-/* Size the Save button to one quick-action column (the four-up grid below
-   is repeat(4, 1fr) with the same gap), so its width matches the Delete
-   button and their right edges line up. */
+/* Size the Save button to at least one quick-action column (the four-up
+   grid below uses the same gap), so it matches the Delete button where the
+   column is wide enough. On a phone a column is narrower than the icon and
+   label, so the button grows to fit them instead of breaking "Save" onto one
+   letter per line. */
 .labelRow > :last-child {
-    flex: 0 0 calc((100% - 3 * var(--xc-space-2)) / 4);
+    flex: 0 0 auto;
+    min-width: calc((100% - 3 * var(--xc-space-2)) / 4);
+}
+
+/* The kit label span sets its own white-space, so the no-wrap goes on it. */
+.labelRow > :last-child > span {
+    white-space: nowrap;
 }
 
 /* Four-up action row under the detail card, mirroring the contacts detail. */
