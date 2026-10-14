@@ -109,7 +109,7 @@ assert.ok(
     'MessagingInbox confirms a format-1 response handshake before signing',
 );
 assert.ok(
-    /if \(lane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.lane\.confirmProps\}/.test(src),
+    /if \((?:shareTarget && )?(?:lane|shareLane)\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.(?:lane|shareLane)\.confirmProps\}/.test(src),
     'MessagingInbox renders the shared dry-run confirmation screen for the reply',
 );
 assert.ok(/Share my key/.test(src),
