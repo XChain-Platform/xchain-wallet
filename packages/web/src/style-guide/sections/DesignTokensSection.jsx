@@ -234,6 +234,7 @@ export const TOKEN_GROUPS = [
             color('--xc-badge-multisig-taproot-bg', '#EDE9FE', '#2E2350', 'Badge multisig taproot bg'),
             color('--xc-badge-multisig-taproot-fg', '#4C1D95', '#DDD6FE', 'Badge multisig taproot fg'),
             color('--xc-badge-multisig-taproot-border', '#8B5CF6', '#A78BFA', 'Badge multisig taproot border'),
+            token('--xc-shadow-selected-ring', 'inset 0 0 0 1px var(--xc-control-selected)', 'Inset ring on a pressed collectible card', 'shadow'),
             token('--xc-control-bg', 'var(--xc-bg)', 'Control bg', 'value'),
             token('--xc-control-bg-hover', 'var(--xc-bg-muted)', 'Control bg hover', 'value'),
             token('--xc-control-border-hover', 'var(--xc-border-strong)', 'Control border hover', 'value'),

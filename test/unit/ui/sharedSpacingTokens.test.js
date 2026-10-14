@@ -417,7 +417,6 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
         ],
         'CollectiblesView.module.css': [
             'border: 1px solid var(--xc-border)',
-            'box-shadow: inset 0 0 0 1px var(--xc-control-selected)',
             'outline: 2px solid var(--xc-focus-ring)',
             'outline-offset: -2px',
             'outline: 2px solid var(--xc-on-accent)',
