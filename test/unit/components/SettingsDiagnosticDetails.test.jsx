@@ -64,9 +64,9 @@ describe('settings diagnostic disclosures', () => {
         expect(mismatch.textContent).not.toMatch(/m\/84|\bderived\b/);
         expect(missing.textContent).not.toMatch(/m\/84|\bderived\b/);
 
-        // The heading names the chain and address type in words, not by code.
+        // The heading names the chain by its icon and the address type in words, not by code.
         expect(screen.queryByText(/bitcoin-mainnet/)).toBeNull();
-        expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(screen.getByRole('img', { name: 'Bitcoin' })).toBeTruthy();
         expect(screen.getByText('SegWit')).toBeTruthy();
     });
 

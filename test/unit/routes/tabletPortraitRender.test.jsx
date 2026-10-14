@@ -110,7 +110,7 @@ afterAll(() => {
 });
 
 describe('primary routes at 768x1024', () => {
-    it('renders Home as a full-width list with rail navigation and a bounded lone card', async () => {
+    it('renders Home as a full-width list with rail navigation and the demo quick actions', async () => {
         markDemoWallet(WALLET_ID);
         const hostMessaging = messaging({
             listWallets: vi.fn().mockResolvedValue([{ id: WALLET_ID, name: 'Tablet demo' }]),
@@ -135,8 +135,9 @@ describe('primary routes at 768x1024', () => {
         const actions = await screen.findByRole('group', { name: 'Quick actions' });
         expectRailNavigation(view.container);
         expectListPage(view.container);
-        expect(actions.className).toMatch(/quickActionsSingle/);
-        expect(within(actions).getAllByRole('button')).toHaveLength(1);
+        // A demo wallet keeps Send (it explains the demo) beside Exchange, so the row holds two actions.
+        expect(actions.className).not.toMatch(/quickActionsSingle/);
+        expect(within(actions).getAllByRole('button')).toHaveLength(2);
         expect(screen.getByRole('button', { name: 'Exchange' })).toBeInTheDocument();
     });
 
