@@ -48,12 +48,16 @@ async function openPaletteItem(page, title, subtitle) {
 
 async function setWatcherMode(page) {
     await openPaletteItem(page, 'Settings', 'Open settings');
-    const walletMode = page.getByRole('main').getByRole('button', { name: /^Wallet Mode/ });
+    const walletMode = page.getByRole('main').getByRole('button', { name: /^Wallet mode/ });
     await expect(walletMode).toBeVisible();
     await walletMode.click();
     const watcher = page.getByRole('radio', { name: /^Watcher/ });
     await expect(watcher).toBeVisible();
     await watcher.click();
+    // Switching mode asks for confirmation in a modal that blocks the palette.
+    const confirmation = page.getByRole('dialog', { name: 'Switch to Watcher (watch-only) mode?' });
+    await confirmation.getByRole('button', { name: 'Confirm mode change' }).click();
+    await expect(confirmation).toBeHidden();
     await expect(watcher).toBeChecked();
 }
 
@@ -164,9 +168,9 @@ for (const viewport of VIEWPORTS) {
             await expectScreenFits(page, 'New stake', `${viewport.name} new stake chooser`);
 
             await page.getByRole('button', { name: /^Validator staking/ }).click();
-            const networkChoices = page.getByRole('main').getByRole('button', { name: 'Bitcoin', exact: true });
-            await expect(networkChoices).toHaveCount(3);
-            await networkChoices.last().click();
+            // The demo wallet has one staking chain, so Validator staking opens the
+            // stake form directly on it rather than asking for a network first.
+            await expect(page.getByRole('form', { name: 'Stake XCHAIN' })).toBeVisible();
 
             await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} new stake form`);
             await expect(page.getByRole('button', { name: 'Network: Bitcoin · regtest' }))
