@@ -32,6 +32,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TAB_BAR_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -50,10 +51,15 @@ assert.ok(/export function BottomTabBar\b/.test(barSrc),
 
 // --- 2. Primary tabs + More toggle --------------------------------------
 
-const expectedPrimary = ['Home', 'History', 'Send', 'Scan'];
-for (const label of expectedPrimary) {
+// The thumb row is TAB_BAR_DESTINATIONS drawn with the sidebar's label rows.
+assert.deepEqual(TAB_BAR_DESTINATIONS, ['home', 'history', 'send', 'scan'],
+    'BottomTabBar primary tabs are Home, History, Send and Scan');
+assert.ok(/const PRIMARY_TABS = TAB_BAR_DESTINATIONS\.map\(navItem\)/.test(barSrc),
+    'BottomTabBar builds its primary tabs from the tab bar destination list');
+const navSrc = readFileSync(join(core, 'src', 'shared', 'components', 'LeftNav.jsx'), 'utf8');
+for (const [id, label] of [['home', 'Home'], ['history', 'History'], ['send', 'Send'], ['scan', 'Scan']]) {
     assert.ok(
-        new RegExp(`label:\\s*'${label}'`).test(barSrc),
+        new RegExp(`id: '${id}', label: '${label}'`).test(navSrc),
         `BottomTabBar primary tab ${label} present`,
     );
 }
