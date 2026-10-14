@@ -353,7 +353,7 @@ const home = readFileSync(
 assert.ok(
     /onCreateToken/.test(home)
         && /onClick=\{\(\) => runNetworkAction\('Creating a token', onCreateToken\)\}/.test(home)
-        && /Creating a token needs a network connection/.test(home),
+        && /t\('home.createTokenOffline'\)/.test(home),
     'Home wires onCreateToken through the offline network-action gate',
 );
 

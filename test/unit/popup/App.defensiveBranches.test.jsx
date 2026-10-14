@@ -77,7 +77,7 @@ describe('popup App defensive branches', () => {
         render(<App />);
 
         expect(await screen.findByRole('status')).toHaveTextContent(
-            'XChain Wallet cannot connect to this page.',
+            "XChain Wallet can't connect to this page.",
         );
         expect(runtime.sendMessage).not.toHaveBeenCalled();
         expect(tabs.sendMessage).toHaveBeenCalledWith(

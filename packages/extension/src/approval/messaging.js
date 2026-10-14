@@ -12,12 +12,12 @@
 // `sendMessage` wrapper; each helper documents the host-side message
 // type it targets.
 
-import { i18n } from '@xchain-wallet/core';
 import { sendMessage } from '../shared/chromeMessaging.js';
+import { interruptedApprovalMessage } from './interruptedMessage.js';
 
 function normalizeInterruptedApproval(err) {
     if (err?.name !== 'ApprovalNotFoundError') throw err;
-    const interrupted = new Error(i18n.t('extension.approval.interrupted'));
+    const interrupted = new Error(interruptedApprovalMessage());
     interrupted.name = 'ApprovalInterruptedError';
     throw interrupted;
 }
