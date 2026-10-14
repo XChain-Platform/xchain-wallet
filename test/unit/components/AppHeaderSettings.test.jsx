@@ -362,7 +362,7 @@ describe('AppHeader action row', () => {
 
     it('closes the scan menu on Android Back instead of minimizing the app', () => {
         render(<AppHeader onScan={() => {}} onManageAddresses={() => {}} />);
-        const trigger = screen.getByRole('button', { name: 'Scan and addresses' });
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
         fireEvent.click(trigger);
         expect(screen.getByRole('menu')).toBeInTheDocument();
 

@@ -110,7 +110,7 @@ describe('NetworkStatusIndicator', () => {
 
     it('closes the dialog on Android Back instead of minimizing the app', () => {
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
-        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        const trigger = screen.getByRole('button', { name: /Network connected/ });
         fireEvent.click(trigger);
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
