@@ -179,19 +179,31 @@ describe('balance row sorting', () => {
         expect(sortBalanceRows(rows, 'change').map((row) => row.tick)).toEqual(['BBB', 'AAA', 'CCC']);
     });
 
-    it('keeps the populated sort control compact on the tab row at 360px', async () => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+    it.each([360, 400])('puts the compact sort below complete tab labels at %ipx', async (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
         mount();
 
         const sort = screen.getByRole('combobox', { name: 'Sort balances' });
         const tablist = screen.getByRole('tablist', { name: 'Wallet view' });
         expect(sort).toBeVisible();
         expect(sort.closest('label')?.parentElement).toBe(tablist.parentElement);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi', 'Activity']);
         expect([...sort.options].map((option) => option.textContent))
             .toEqual(['Value', 'Name', '24h change']);
-        const phoneRules = tabsCss.slice(tabsCss.indexOf('@media (max-width: 420px)'));
-        expect(phoneRules).toMatch(/\.tabsRow\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
-        expect(phoneRules).toMatch(/\.sortSelect\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;/s);
+        expect(tablist.compareDocumentPosition(sort)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+        const narrowRules = tabsCss.slice(
+            tabsCss.indexOf('@media not all and (min-width: 600px)'),
+            tabsCss.indexOf('@media (max-width: 420px)'),
+        );
+        const compactRules = tabsCss.slice(tabsCss.indexOf('@media (max-width: 420px)'));
+        expect(narrowRules).toMatch(/\.tabsRow\s*\{[^}]*flex-direction:\s*column;/s);
+        expect(narrowRules).toMatch(/\.tabsRow\s*>\s*\[role='tablist'\]\s*\{[^}]*width:\s*100%;/s);
+        expect(narrowRules).toMatch(/\.sortControl\s*\{[^}]*align-self:\s*flex-end;/s);
+        expect(compactRules).toMatch(/\.sortSelect\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;/s);
+        expect(tabsCss).toMatch(/\.sortControl\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*var\(--xc-control-h-md\);/s);
+        expect(tabsCss).toMatch(/\.tabsRow\s+\[role='tab'\]\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/s);
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'dogecoin-mainnet:DOGE',
