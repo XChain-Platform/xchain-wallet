@@ -314,9 +314,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         [filteredRows, hiddenKeys],
     );
     // Test coins have no market price, so the fiat chart is hidden only when
-    // every held row is on a test network; an empty wallet keeps its chart.
+    // every held row is on a test network; an empty wallet keeps its chart,
+    // and the demo wallet prices its synthetic test-network holdings.
     const chainRows = portfolioRows.filter((row) => typeof row?.chainId === 'string' && row.chainId);
-    const testCoinsOnly = chainRows.length > 0
+    const testCoinsOnly = !isDemoWallet(walletId)
+        && chainRows.length > 0
         && chainRows.every((row) => !isMainnetChainId(row.chainId));
 
     const coins = useMemo(

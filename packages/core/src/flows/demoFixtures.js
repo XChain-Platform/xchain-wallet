@@ -274,6 +274,7 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
         fixture.native.quantity,
         fixture.native.divisibility,
     );
+    const outgoingAmount = decimalFromBaseUnits('5000000', fixture.native.divisibility);
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
     // Pick a representative divisible token and a representative
@@ -323,7 +324,8 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     // Activity so the icon swaps to the token's image / tinted letter
     // instead of the chain icon.
     if (divisibleToken) {
-        const tokenAmount = '100000000'; // 1.0 of an 8-divisibility token
+        // History rows carry whole-token units, like the native receive above.
+        const tokenAmount = decimalFromBaseUnits('100000000', divisibleToken.divisibility);
         rows.push({
             action_index: 100011,
             tx_hash: `demo-${chainId}-token-recv-1`,
@@ -383,13 +385,13 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             source: address,
             destination: 'demo-friend-1xchainpubrecipient',
             tick,
-            amount: '5000000', // 0.05 of the native coin
-            quantity: '5000000',
+            amount: outgoingAmount, // 0.05 of the native coin
+            quantity: outgoingAmount,
             memo: 'thanks for lunch',
             params: {
                 source: address,
                 destination: 'demo-friend-1xchainpubrecipient',
-                    amount: '5000000',
+                amount: outgoingAmount,
                 memo: 'thanks for lunch',
             },
         },

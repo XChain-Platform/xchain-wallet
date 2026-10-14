@@ -50,7 +50,9 @@ import { isMainnetChainId } from '../../flows/mainnetPrelaunch.js';
  */
 export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
     const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
-    const testCoinsOnly = rowsWithChain.length > 0
+    // The demo wallet prices its synthetic test-network holdings on purpose.
+    const testCoinsOnly = !isDemoWallet(walletId)
+        && rowsWithChain.length > 0
         && rowsWithChain.every((row) => !isMainnetChainId(row.chainId));
     const { total, unpriced, priceUnavailable } = useMemo(() => {
         const sum = sumFiatValue(rows);

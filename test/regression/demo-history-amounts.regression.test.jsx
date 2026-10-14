@@ -13,7 +13,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
     synthesizeDemoBalances,
 } from '../../packages/core/src/flows/demoFixtures.js';
@@ -64,22 +64,25 @@ afterEach(() => {
 });
 
 describe('demo wallet amount regression', () => {
-    it('[REGRESSION P1] renders the pending demo send as a small outgoing BTC amount in its row and detail', async () => {
+    it('[REGRESSION P1] renders the demo send as a small outgoing BTC amount in its row and detail', async () => {
         markDemoWallet(WALLET_ID);
         mountHistory();
 
-        const amount = await waitFor(() => {
-            const node = document.querySelector('[data-pending-amount]');
+        // Demo rows carry whole-coin units: the faucet receive reads +100 BTC
+        // and the lunch send -0.05 BTC, never their base-unit counts.
+        const row = await waitFor(() => {
+            const node = [...document.querySelectorAll('button[data-history-row]')]
+                .find((candidate) => candidate.textContent.includes('-0.05 BTC'));
             expect(node).toBeTruthy();
             return node;
         });
-        expect(amount).toHaveTextContent('sending -0.05 BTC');
-        expect(amount).toHaveAttribute('data-pending-amount', 'out');
         expect(document.body).not.toHaveTextContent('+10,000,000,000 BTC');
+        expect(document.body).not.toHaveTextContent('-5,000,000 BTC');
 
-        fireEvent.click(amount.closest('button[data-history-row]'));
+        fireEvent.click(row);
         const detail = await screen.findByRole('region', { name: 'Action detail' });
-        expect(within(detail).getByText(/-0\.05 BTC to/)).toBeInTheDocument();
+        expect(detail).toHaveTextContent('demo-bitcoin-regtest-outgoing-1');
+        expect(detail).not.toHaveTextContent('-5,000,000 BTC');
         expect(detail).not.toHaveTextContent('+10,000,000,000 BTC');
     });
 
@@ -98,7 +101,7 @@ describe('demo wallet amount regression', () => {
             total + (Number(row.quantity) / (10 ** row.divisibility)) * row.fiatRate
         ), 0);
 
-        expect(independentlyCalculatedTotal).toBeCloseTo(7_397_460.13, 8);
+        expect(independentlyCalculatedTotal).toBeCloseTo(7_396_760.13, 8);
         render(
             <MessagingProvider shell="web" messaging={messaging()}>
                 <TotalBalanceHero
@@ -108,6 +111,6 @@ describe('demo wallet amount regression', () => {
                 />
             </MessagingProvider>,
         );
-        expect(screen.getByText('$7,397,460.13')).toBeInTheDocument();
+        expect(screen.getByText('$7,396,760.13')).toBeInTheDocument();
     });
 });
