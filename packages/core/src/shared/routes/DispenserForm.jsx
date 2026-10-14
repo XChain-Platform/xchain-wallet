@@ -130,6 +130,8 @@ function unixToLocalInput(unix) {
 // no record of it (see existingAddress below).
 const REOPEN_ADDRESS_ID = 'reopen-dispenser-address';
 
+const COIN_NAME = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
 // Check a typed dispenser address the way Send checks a recipient: it must
 // decode for this chain's coin and network, since buyers pay to it and a
 // mistyped or wrong-chain address sends every payment nowhere. Empty is not
@@ -137,12 +139,14 @@ const REOPEN_ADDRESS_ID = 'reopen-dispenser-address';
 function outsideAddressError(address, descriptor) {
     if (!address || !descriptor?.coin || !descriptor?.networkKind) return null;
     if (isValidAddressForChain(address, descriptor.coin, descriptor.networkKind)) return null;
-    // Distinguish a different-chain address from malformed input.
+    const chainName = COIN_NAME[descriptor.coin] || descriptor.coin;
+    // Name the coin it does look like, which beats a bare "invalid". The
+    // network kind stays out of the copy; Settings owns that choice.
     const detected = detectAddressCoin(address);
     if (detected && detected !== descriptor.coin) {
-        return 'This address belongs to a different chain.';
+        return `This looks like a ${COIN_NAME[detected] || detected} address, not a ${chainName} address.`;
     }
-    return 'This is not a valid address for the active chain. Check it for typos.';
+    return `This is not a valid ${chainName} address. Check it for typos.`;
 }
 
 /**
