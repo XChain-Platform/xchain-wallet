@@ -13,8 +13,8 @@
 // wallet's own address on the get chain, and the whole thing rides the
 // same single-encode confirm lane as CreateOrderForm.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, act as domAct, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
@@ -54,6 +54,12 @@ beforeEach(() => {
             'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
         ],
     });
+});
+
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
 });
 
 // Recording messaging mock: a wallet with one address on DOGE and one on
@@ -422,8 +428,9 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('watcher review matches built normalized values and Edit keeps the form values', async () => {
-        const { utils } = await mount({ initialChainId: DOGE }, {
+    it('watcher review matches built normalized values and Back keeps the form values', async () => {
+        const onBack = vi.fn();
+        const { utils } = await mount({ initialChainId: DOGE, onBack }, {
             getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
         });
         await fillPair(utils);
@@ -441,11 +448,66 @@ describe('CrossChainOrderForm', () => {
         expect(utils.getByText('Protocol fee')).toBeTruthy();
         expect(utils.getByText(/paid in DOGE; the network fee is separate/i)).toBeTruthy();
 
-        fireEvent.click(utils.getByRole('button', { name: 'Edit' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
+        expect(onBack).not.toHaveBeenCalled();
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
         expect(utils.getByLabelText(/^Get amount/).value).toBe('20');
         expect(utils.getByLabelText('Receive at').value).toBe(`  ${BTC_ADDRESS.address}  `);
         expect(utils.getByLabelText('Memo (optional)').value).toBe('  exact memo  ');
+    });
+
+    it('refuses a custom expiration that passes while editing but expires on watcher review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest,
+        });
+        await fillPair(utils);
+        const start = Date.now();
+        const expiration = new Date(start + 60_000);
+        const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
+            .toISOString().slice(0, 16);
+        await domAct(async () => {
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            setValue(utils, 'Expires', localExpiration);
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+        expect(utils.getByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+
+        vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('Expiration must be a future date and time.')).toBeTruthy();
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses a custom expiration that expires on the full-wallet confirmation', async () => {
+        const start = Date.now();
+        const expiration = new Date(start + 60_000);
+        const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
+            .toISOString().slice(0, 16);
+        const { utils, calls } = await mount({ initialChainId: DOGE });
+        await fillPair(utils);
+        await domAct(async () => {
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            setValue(utils, 'Expires', localExpiration);
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+
+        vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('Expiration must be a future date and time.')).toBeTruthy();
+        expect(calls.some((call) => call.method === 'orderAction')).toBe(false);
     });
 
     it('shows encoder failures as plain copy on the form', async () => {

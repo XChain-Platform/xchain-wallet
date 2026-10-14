@@ -344,24 +344,36 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId: giveChainId, actionString, source,
                 }),
-                onApprove: (_creds, composed) => submit({
-                    params: actionParams,
-                    password: passwordValueRef.current,
-                    extraBase: extraBaseFor(composed),
-                }),
+                onApprove: (_creds, composed) => {
+                    if (actionParams.EXPIRATION
+                        && Number(actionParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
+                        const error = new Error('Expiration must be a future date and time.');
+                        error.code = 'EXPIRATION_STALE';
+                        throw error;
+                    }
+                    return submit({
+                        params: actionParams,
+                        password: passwordValueRef.current,
+                        extraBase: extraBaseFor(composed),
+                    });
+                },
             });
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
-            console.error('Cross-chain order (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(submitFailureMessage(err, {
-                chainId: giveChainId,
-                coinTicker: giveCoinTicker,
-                mandatory: nativeFee.mandatory,
-                fallback: humanizeError(err, 'order').message,
-            }));
+            if (err?.code !== 'EXPIRATION_STALE') {
+                console.error('Cross-chain order (confirm) failed:', err); // eslint-disable-line no-console
+            }
+            setFormError(err?.code === 'EXPIRATION_STALE'
+                ? err.message
+                : submitFailureMessage(err, {
+                    chainId: giveChainId,
+                    coinTicker: giveCoinTicker,
+                    mandatory: nativeFee.mandatory,
+                    fallback: humanizeError(err, 'order').message,
+                }));
         } finally {
             submitInFlightRef.current = false;
         }
@@ -380,6 +392,11 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting' || submitInFlightRef.current) return;
+        if (!guardBeforeSign()) {
+            setSubmitError(null);
+            setStage('form');
+            return;
+        }
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         submitInFlightRef.current = true;
@@ -438,9 +455,19 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
 
     function handleBuildAnother() { setResult(null); setSubmitError(null); setStage('form'); }
 
+    function handleBack() {
+        if (stage === 'review') {
+            setSubmitError(null);
+            setStage('form');
+            return;
+        }
+        onBack();
+    }
+
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? 'Review order' : 'Cross-chain order'}
         />
     );

@@ -20,6 +20,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -256,11 +257,19 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (giveCoinTicker === getCoinTicker) {
             return 'Give and get chains must differ. For same-chain swaps use Swap tokens.';
         }
-        if (giveTick && giveTick.toUpperCase() === giveCoinTicker) {
+        if (giveTick.trim() && giveTick.trim().toUpperCase() === giveCoinTicker) {
             return `${actionDisplayLabel('SWAP')} cannot give ${giveCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
         }
-        if (getTick && getTick.toUpperCase() === getCoinTicker) {
+        if (getTick.trim() && getTick.trim().toUpperCase() === getCoinTicker) {
             return `${actionDisplayLabel('SWAP')} cannot get ${getCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
+        }
+        if (giveTick.trim()) {
+            const tickError = tickerReferenceError(giveTick, { noun: 'Give token', allowRef: true });
+            if (tickError) return tickError;
+        }
+        if (getTick.trim()) {
+            const tickError = tickerReferenceError(getTick, { noun: 'Get token', allowRef: true });
+            if (tickError) return tickError;
         }
         if (!giveOwnership && giveAmount && !isPlainPositive(giveAmount)) {
             return 'Give amount must be a positive decimal number.';
@@ -412,27 +421,37 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     payFeeInNativeCoin: nativeFee.flag || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 },
-                onApprove: (prebuiltPsbt) => submitConfirmed({
-                    walletId,
-                    chainId: giveChainId,
-                    from,
-                    params: swapParams,
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                    prebuiltPsbt,
-                }),
+                onApprove: (prebuiltPsbt) => {
+                    if (swapParams.EXPIRATION
+                        && Number(swapParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
+                        const error = new Error('Expiration must be a future date and time.');
+                        error.code = 'EXPIRATION_STALE';
+                        throw error;
+                    }
+                    return submitConfirmed({
+                        walletId,
+                        chainId: giveChainId,
+                        from,
+                        params: swapParams,
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt,
+                    });
+                },
             });
             setResult(r);
             setPassword('');
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(submitFailureMessage(err, {
-                chainId: giveChainId,
-                coinTicker: giveTicker || '',
-                mandatory: nativeFee.mandatory,
-                fallback: err?.message || 'Sign failed.',
-            }));
+            setFormError(err?.code === 'EXPIRATION_STALE'
+                ? err.message
+                : submitFailureMessage(err, {
+                    chainId: giveChainId,
+                    coinTicker: giveTicker || '',
+                    mandatory: nativeFee.mandatory,
+                    fallback: err?.message || 'Sign failed.',
+                }));
         } finally {
             submitInFlightRef.current = false;
         }
@@ -448,11 +467,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (!giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount)) {
+        if (!giveTick.trim() || (!giveOwnership && !giveAmount)
+            || !getTick.trim() || (!getOwnership && !getAmount)) {
             setFormError('Enter the give and get tickers and amounts, or select ownership, before reviewing.');
             return;
         }
-        if (!getAddress) {
+        if (!getAddress.trim()) {
             setFormError('Enter a receive address on the get chain.');
             return;
         }
@@ -468,6 +488,15 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (stage === 'submitting') return;
         if (!fromAddress || !giveChainId || !getChainId) return;
         if (validationError) return;
+        if (expMode === 'custom') {
+            const expiration = Math.floor(Date.parse(expInput.trim()) / 1000);
+            if (!Number.isFinite(expiration) || expiration <= Math.floor(Date.now() / 1000)) {
+                setFormError('Expiration must be a future date and time.');
+                setSubmitError(null);
+                setStage('form');
+                return;
+            }
+        }
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         if (submitInFlightRef.current) return;
@@ -547,9 +576,19 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         setStage('form');
     }
 
+    function handleBack() {
+        if (stage === 'review') {
+            setSubmitError(null);
+            setStage('form');
+            return;
+        }
+        onBack();
+    }
+
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                 ? 'Review swap'
                 : 'Cross-chain swap'}
@@ -799,7 +838,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 title="Select give token"
                 networkFilter={coinFromChainId(giveChainId)}
                 onSelect={(sel) => {
-                    setGiveTick(String(sel.tick || '').toUpperCase());
+                    const nextTick = String(sel.tick || '').toUpperCase();
+                    if (nextTick !== giveTick) setGiveAmount('');
+                    setGiveTick(nextTick);
                     setGivePickerOpen(false);
                 }}
                 onBack={() => setGivePickerOpen(false)}
@@ -815,7 +856,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 title="Select get token"
                 networkFilter={coinFromChainId(getChainId)}
                 onSelect={(sel) => {
-                    setGetTick(String(sel.tick || '').toUpperCase());
+                    const nextTick = String(sel.tick || '').toUpperCase();
+                    if (nextTick !== getTick) setGetAmount('');
+                    setGetTick(nextTick);
                     setGetPickerOpen(false);
                 }}
                 onBack={() => setGetPickerOpen(false)}
