@@ -17,13 +17,33 @@
 // Whether the vendored list still matches what xchain.io publishes is checked
 // separately, over the network: test/smoke/shells/platform-links-drift.smoke.js
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
 import LINKS from '../../../packages/core/src/shared/platform-links.json';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 
-afterEach(() => cleanup());
+let nativeBack;
+let capacitorApp;
+
+beforeEach(() => {
+    resetBackStackForTests();
+    capacitorApp = {
+        addListener: vi.fn((_event, listener) => {
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn(),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
+});
+
+afterEach(() => {
+    cleanup();
+    resetBackStackForTests();
+    delete globalThis.Capacitor;
+});
 
 const trigger = () => screen.queryByRole('button', { name: 'XChain platform sites' });
 
@@ -100,6 +120,18 @@ describe('PlatformSwitcher', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.queryAllByRole('menuitem').length).toBe(0);
         expect(document.activeElement).toBe(trigger());
+    });
+
+    it('closes on Android Back instead of minimizing the app', () => {
+        render(<PlatformSwitcher current="wallet" />);
+        fireEvent.click(trigger());
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(trigger()).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 });
 

@@ -24,6 +24,7 @@
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useBackHandler } from '../../../ui/backStack.js';
 import {
     ROW,
     ROW_COPY,
@@ -125,6 +126,8 @@ export function LanguageRegionSection() {
     const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
     const [currencyQuery, setCurrencyQuery] = useState('');
     const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
+
+    useBackHandler(currencyPickerOpen ? () => setCurrencyPickerOpen(false) : undefined);
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;

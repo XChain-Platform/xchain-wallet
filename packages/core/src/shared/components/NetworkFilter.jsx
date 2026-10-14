@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Icon } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './NetworkFilter.module.css';
 
 /**
@@ -55,6 +56,8 @@ export function NetworkFilter({
         setQuery('');
         if (restoreFocus) triggerRef.current?.focus();
     }, []);
+
+    useBackHandler(open ? () => closeFilter(true) : undefined);
 
     useEffect(() => {
         if (!open) return undefined;

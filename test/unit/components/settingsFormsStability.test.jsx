@@ -3,17 +3,20 @@
 
 import React from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { userEvent } from '../../helpers/userEvent.js';
 import {
     registerLocale,
     setLocale,
 } from '../../../packages/core/src/i18n/index.js';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 
 let settings;
 let update;
 let messaging;
+let nativeBack;
+let capacitorApp;
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, update }),
@@ -51,6 +54,15 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+    resetBackStackForTests();
+    capacitorApp = {
+        addListener: vi.fn((_event, listener) => {
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn(),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
     messaging = {
@@ -62,10 +74,27 @@ beforeEach(() => {
 
 afterEach(async () => {
     cleanup();
+    resetBackStackForTests();
+    delete globalThis.Capacitor;
     await setLocale('en');
 });
 
 describe('settings form validation', () => {
+    it('closes the fiat currency dropdown on Android Back instead of minimizing the app', () => {
+        render(<LanguageRegionSection />);
+        const picker = screen.getByLabelText('Fiat currency');
+        fireEvent.focus(picker);
+        picker.focus();
+        expect(screen.getByRole('listbox', { name: 'Supported fiat currencies' }))
+            .toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('listbox', { name: 'Supported fiat currencies' })).toBeNull();
+        expect(picker).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
     it('searches supported currencies by code and name, shows symbols, and saves the choice', () => {
         render(<LanguageRegionSection />);
         const picker = screen.getByLabelText('Fiat currency');
