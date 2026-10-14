@@ -2304,25 +2304,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 Paying from <AddressText address={buyerAddress.address} />
                             </p>
                         ) : null}
-                        <div className={local.buyFillsRow}>
-                            <Input
-                                label="Fills"
-                                hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
-                                inputMode="numeric"
-                                value={fills}
-                                onChange={(e) => setFills(e.target.value)}
-                                autoComplete="off"
-                            />
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={onMaxFills}
-                                disabled={maxBuyFills == null || maxBuyFills <= 0n}
-                            >
-                                Max
-                            </Button>
-                        </div>
+                        {/* Max and Paste sit inside the field, as on every other
+                            amount; a separate full-width Max button under it
+                            read as a second action on a phone. */}
+                        <AmountField
+                            label="Fills"
+                            hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
+                            amount={fills}
+                            onAmountFieldChange={(rawValue) => setFills(String(rawValue).replace(/,/g, ''))}
+                            onMax={onMaxFills}
+                            maxDisabled={maxBuyFills == null || maxBuyFills <= 0n}
+                        />
                         {totalPayAmount && totalReceive ? (
                             <dl className={styles.detailsList} data-testid="buy-totals">
                                 <dt className={styles.detailsLabel}>Price per fill</dt>

@@ -174,7 +174,6 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         const detailNarrow = mediaBlock(readCss(
             'packages/core/src/shared/routes/DispenserDetail.module.css',
         ), 'not all and (min-width: 400px)');
-        expect(ruleBody(detailNarrow, '.buyFillsRow')).toMatch(/flex-direction:\s*column/);
         // Dispense rows are ListRows: the amount wraps inside the shrinkable
         // content column and the time column wraps on a phone instead of
         // pushing the row wider than the screen.

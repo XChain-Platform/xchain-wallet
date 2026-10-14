@@ -154,7 +154,10 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         mount({ buyerHolds: '12' });
         await settle();
         expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /^Max$/ }));
+        const max = screen.getByRole('button', { name: 'Use max available amount' });
+        // Max sits inside the Fills field, as on every other amount field.
+        expect(screen.getByLabelText(/Fills/i).closest('[class*="amountFieldWrap"]')).toContainElement(max);
+        fireEvent.click(max);
         // floor(12 / 5) = 2, never 2.4 and never a float-misfloored 1.
         expect(screen.getByLabelText(/Fills/i)).toHaveValue('2');
         expect(buyButton()).toBeEnabled();
