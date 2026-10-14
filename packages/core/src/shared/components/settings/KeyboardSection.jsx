@@ -43,6 +43,7 @@ const GROUP_HEADER = {
     marginTop: 'var(--xc-space-3)',
     marginBottom: 'var(--xc-space-1)',
 };
+const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
 const KBD = {
     fontFamily: 'var(--xc-font-sans)',
     fontSize: 'var(--xc-text-xs)',
@@ -167,7 +168,7 @@ export function KeyboardSection() {
 
     return (
         <div style={STACK}>
-            <p style={{ ...ROW_LABEL, color: 'var(--xc-text-muted)' }}>
+            <p style={INTRO}>
                 Select Rebind, then press the new key combination. Screen-specific
                 shortcuts are fixed and only work on their screen.
             </p>
