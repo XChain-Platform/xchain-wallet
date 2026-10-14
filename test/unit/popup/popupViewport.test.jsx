@@ -141,7 +141,7 @@ describe('extension popup main screens at 360x600', () => {
         }
 
         expect(fixedWidthFaults).toEqual([]);
-        expect(css.popup).toMatch(/width:\s*min\(360px,\s*100vw\)/);
+        expect(css.popup).toMatch(/html\.xchain-toolbar-popup\s*\{[^}]*width:\s*360px;[^}]*height:\s*600px;/);
         expect(css.popup).toMatch(/#xchain-popup-root\s*\{[\s\S]*?min-width:\s*0/);
         expect(css.screen).toMatch(/\.body\s*\{[\s\S]*?overflow-x:\s*hidden/);
         expect(css.onboarding).toMatch(/\.actionsPopup\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?width:\s*100%/);

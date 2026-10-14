@@ -13,13 +13,15 @@ const popupCss = readFileSync(
     join(here, '..', '..', '..', 'packages', 'extension', 'src', 'popup', 'popup.css'),
     'utf8',
 );
-const widthRules = [...popupCss.matchAll(/([^{}]+)\{([^{}]*\bwidth:\s*min\(360px,\s*100vw\);[^{}]*)\}/g)];
+// The toolbar popup sizes itself from its content, so it needs fixed
+// lengths; a width relative to its own viewport collapses it to 25px.
+const widthRules = [...popupCss.matchAll(/([^{}]+)\{([^{}]*\bwidth:\s*360px;[^{}]*\bheight:\s*600px;[^{}]*)\}/g)];
 
-assert.equal(widthRules.length, 1, 'popup.css has one 360px document width cap');
-assert.equal(
-    widthRules[0][1].trim(),
-    'html.xchain-toolbar-popup',
-    'the 360px width cap only applies to the toolbar popup class',
+assert.equal(widthRules.length, 1, 'popup.css pins one 360 by 600 toolbar popup size');
+assert.ok(
+    widthRules[0][1].trim().endsWith('html.xchain-toolbar-popup'),
+    'the fixed popup size only applies to the toolbar popup class',
 );
+assert.doesNotMatch(popupCss, /html\.xchain-toolbar-popup\s*\{[^}]*100v[wh]/, 'the toolbar popup size is never relative to its own viewport');
 
 console.log('popup-width smoke: PASS');
