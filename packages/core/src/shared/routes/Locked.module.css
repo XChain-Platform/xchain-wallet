@@ -1,3 +1,17 @@
+/* The unlock form sits in the middle of the screen's height at every width,
+   the way it sits in the middle of the width. Auto block margins give way to
+   zero when the form is taller than the screen, so a short landscape phone or
+   a long lockout message still scrolls from the top instead of being cut off. */
+.centre {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+
+.centre > form {
+    margin-block: auto;
+}
+
 .hero {
     display: flex;
     flex-direction: column;
@@ -66,47 +80,6 @@
     unicode-bidi: isolate;
     font-variant-numeric: tabular-nums;
     font-weight: 600;
-}
-
-.passwordField {
-    position: relative;
-}
-
-.passwordField > div {
-    margin-bottom: 0;
-}
-
-.passwordInput {
-    padding-inline-end: calc(var(--xc-space-8) + var(--xc-space-3));
-}
-
-.passwordToggle {
-    --xc-icon-size: var(--xc-icon-md);
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    /* This half-grid inset keeps the toggle centered inside the input border. */
-    inset-inline-end: 2px;
-    top: calc(var(--xc-text-sm) + var(--xc-space-2));
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(var(--xc-control-h-md) - var(--xc-space-1));
-    min-height: var(--xc-control-h-sm);
-    padding: 0;
-    color: var(--xc-text-muted);
-    background: transparent;
-    border: 0;
-    border-radius: var(--xc-radius-sm);
-    cursor: pointer;
-}
-
-.passwordToggle:hover {
-    color: var(--xc-text);
-}
-
-.passwordToggle:focus-visible {
-    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
-    outline-offset: 0;
 }
 
 .unlockActions {
@@ -213,6 +186,12 @@
 :global(html[data-xc-keyboard='open']) .unlockForm {
     margin-top: 0;
     padding: 0;
+}
+
+/* With the keyboard open the form keeps to the top, right under the visible
+   area's edge, so the password field and its action stay above the keyboard. */
+:global(html[data-xc-keyboard='open']) .centre > form {
+    margin-block: 0;
 }
 
 /* The body becomes part of the form's flex flow while the keyboard is open,
