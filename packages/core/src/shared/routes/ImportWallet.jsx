@@ -138,7 +138,7 @@ function labelSyncRestoredMessage(labelSync) {
  *
  * @param {object} props
  * @param {() => void} props.onBack
- * @param {() => void} props.onImported             refreshes App.jsx state
+ * @param {(wallet?: { id: string, name: string }) => void | Promise<void>} props.onImported refreshes App.jsx state
  * @param {'default' | 'freewallet'} [props.variant]
  * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  * @param {'mnemonic' | 'backup'} [props.initialLane]
@@ -146,7 +146,7 @@ function labelSyncRestoredMessage(labelSync) {
  */
 export function ImportWallet({
     onBack,
-    onImported,
+    onImported: handleImported,
     variant: importVariant = 'default',
     mode = 'fresh',
     initialLane = 'mnemonic',
@@ -224,6 +224,7 @@ export function ImportWallet({
     const inputGenerationRef = useRef(0);
     const busyRef = useRef(false);
     const continuePendingRef = useRef(false);
+    const importedWalletRef = useRef(/** @type {{ id: string, name: string } | null} */ (null));
     const mountedRef = useRef(true);
     const inputGeneration = inputGenerationRef.current;
     const wifChains = useSupportedChains().filter(
@@ -425,22 +426,23 @@ export function ImportWallet({
                     endBusy();
                     return;
                 }
-                await messaging.importBackupFresh({
+                const result = await messaging.importBackupFresh({
                     password: backupDevicePassword,
                     backupPassword,
                     walletPassword: backupWalletPassword,
                     ...(usingPointer ? { pointer: backupPointer } : { fileContent: backupContent }),
                 });
-                finishWalletImport();
+                finishWalletImport(result);
                 return;
             }
+            let result;
             if (usingPointer) {
                 if (typeof messaging.importBackupPointerRequest !== 'function') {
                     setError('Backup-pointer restore is not available in this shell.');
                     endBusy();
                     return;
                 }
-                await messaging.importBackupPointerRequest({
+                result = await messaging.importBackupPointerRequest({
                     pointer: backupPointer,
                     password: backupPassword,
                     walletPassword: backupWalletPassword,
@@ -454,7 +456,7 @@ export function ImportWallet({
                     endBusy();
                     return;
                 }
-                await messaging.importBackupRequest({
+                result = await messaging.importBackupRequest({
                     fileContent: backupContent,
                     password: backupPassword,
                     // The seal travels with the record, so it has to
@@ -471,7 +473,7 @@ export function ImportWallet({
                     mode,
                 });
             }
-            finishWalletImport();
+            finishWalletImport(result);
         } catch (err) {
             // A restore has three passwords in play, so "wrong
             // password" is never an answer. Whatever came back, the screen
@@ -605,7 +607,7 @@ export function ImportWallet({
             } else {
                 result = await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
             }
-            finishWalletImport();
+            finishWalletImport(result);
             const showRestoredLabels = (labelSync) => {
                 const restoredMessage = labelSyncRestoredMessage(labelSync);
                 if (restoredMessage) showToast({ message: restoredMessage });
@@ -631,12 +633,26 @@ export function ImportWallet({
         }
     }
 
-    function finishWalletImport() {
+    function finishWalletImport(result) {
+        const walletId = result?.wallet?.id || result?.walletId || null;
+        importedWalletRef.current = mode === 'add' && walletId
+            ? { id: walletId, name: result?.wallet?.name || result?.walletName || name }
+            : null;
         invalidatePendingInput();
         clearSensitiveState();
         endBusy();
         setNoticeError(null);
         setAdsNotice(true);
+    }
+
+    function onImported() {
+        const wallet = importedWalletRef.current || undefined;
+        const result = handleImported(wallet);
+        importedWalletRef.current = null;
+        return Promise.resolve(result).catch((err) => {
+            importedWalletRef.current = wallet || null;
+            throw err;
+        });
     }
 
     async function handleWifSubmit(event) {
@@ -670,13 +686,13 @@ export function ImportWallet({
         setError(null);
         if (!beginBusy()) return;
         try {
-            await messaging.importMnemonic({
+            const result = await messaging.importMnemonic({
                 password,
                 wif: trimmedWif,
                 chainId: wifChainId,
                 name,
             });
-            finishWalletImport();
+            finishWalletImport(result);
         } catch (err) {
             setError(userFacingMessage(
                 err,

@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const PHRASE = 'abandon ability able about above absent absorb abstract absurd abuse access accident';
+const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PASSWORD = 'correct horse battery staple';
 
 const host = vi.hoisted(() => {
@@ -104,6 +104,19 @@ async function createSecondWallet() {
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
 }
 
+async function importSecondWallet() {
+    await openWalletPicker();
+    fireEvent.click(screen.getByRole('button', { name: 'Add wallet' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Import wallet' }));
+
+    fireEvent.change(await screen.findByLabelText('Wallet name'), { target: { value: 'Second Wallet' } });
+    fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+}
+
 function walletRow(name) {
     return within(screen.getByRole('main')).getByRole('button', {
         name: new RegExp(`^${name}`),
@@ -129,7 +142,7 @@ afterEach(() => {
 });
 
 describe('web add-wallet activation flow', () => {
-    it('keeps the first wallet active, switches to the new wallet, and restores it after remount', async () => {
+    it('activates a created wallet, confirms its name, and restores it after remount', async () => {
         const firstMount = render(<App />);
         await screen.findAllByRole('button', { name: 'Settings' });
 
@@ -141,22 +154,35 @@ describe('web add-wallet activation flow', () => {
             password: PASSWORD,
             origin: 'created',
         }));
-        await openWalletPicker();
-        expect(walletRow('First Wallet')).toHaveAttribute('aria-current', 'true');
-        const second = walletRow('Second Wallet');
-        expect(second).not.toHaveAttribute('aria-current');
-
-        fireEvent.click(second);
-        // The selection is stored with its name so a locked tab can label it;
-        // readActiveWallet is the reader every shell uses for either shape.
+        expect(await screen.findByText('Second Wallet is now active.')).toBeTruthy();
         await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
 
         await openWalletPicker();
+        expect(walletRow('First Wallet')).not.toHaveAttribute('aria-current');
         expect(walletRow('Second Wallet')).toHaveAttribute('aria-current', 'true');
 
         firstMount.unmount();
         render(<App />);
         await openWalletPicker();
+        expect(walletRow('Second Wallet')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('activates an imported wallet and confirms its name', async () => {
+        render(<App />);
+        await screen.findAllByRole('button', { name: 'Settings' });
+
+        await importSecondWallet();
+
+        expect(host.addImportedWallet).toHaveBeenCalledWith(expect.objectContaining({
+            name: 'Second Wallet',
+            mnemonic: PHRASE,
+            password: PASSWORD,
+        }));
+        expect(await screen.findByText('Second Wallet is now active.')).toBeTruthy();
+        await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
+
+        await openWalletPicker();
+        expect(walletRow('First Wallet')).not.toHaveAttribute('aria-current');
         expect(walletRow('Second Wallet')).toHaveAttribute('aria-current', 'true');
     });
 });

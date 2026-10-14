@@ -43,10 +43,10 @@ const MIN_PASSWORD_LENGTH = 8;
  *
  * @param {object} props
  * @param {() => void} props.onBack
- * @param {() => void} props.onCreated
+ * @param {(wallet?: { id: string, name: string }) => void} props.onCreated
  * @param {'fresh' | 'add'} [props.mode]   'fresh' = first wallet (pre-host `wallet.import`); 'add' = adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
-export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
+export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' }) {
     // S4: The recovery phrase is displayed here. A screenshot of it, or the
     // recents snapshot Android persists, is a copy of the wallet.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -93,6 +93,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const keepKeyboardDismissedRef = useRef(false);
     const phraseGeneratedRef = useRef(false);
     const creationInFlightRef = useRef(false);
+    const createdWalletRef = useRef(/** @type {{ id: string, name: string } | null} */ (null));
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
@@ -139,6 +140,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         setQuizError(null);
         setQuizErrorPosition(null);
         phraseGeneratedRef.current = false;
+    }
+
+    function onCreated() {
+        handleCreated(createdWalletRef.current || undefined);
     }
 
     function handleBack() {
@@ -246,6 +251,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     async function handlePersist() {
         if (stage !== 'verify' || !mnemonic || !saved || creationInFlightRef.current) return;
         creationInFlightRef.current = true;
+        createdWalletRef.current = null;
         setStage('persisting');
         setPersistError(null);
         try {
@@ -262,6 +268,12 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 }
                 const r = await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
+                if (createdWalletId) {
+                    createdWalletRef.current = {
+                        id: createdWalletId,
+                        name: r?.wallet?.name || r?.walletName || name,
+                    };
+                }
             } else {
                 const r = await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
