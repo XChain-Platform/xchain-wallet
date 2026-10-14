@@ -253,12 +253,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         : onBack}
             backDisabled={stage === 'submitting'}
             title={{
-                explain: 'Upgrade recovery phrase',
+                explain: 'Upgrade to a BIP39 recovery phrase',
                 create: 'Set up new wallet',
-                backup: 'Back up recovery phrase',
-                verify: 'Verify recovery phrase',
-                submitting: 'Creating new wallet',
-                done: 'BIP39 wallet created',
+                backup: 'Write down your recovery phrase',
+                verify: 'Verify your written copy',
+                submitting: 'Creating your new wallet',
+                done: 'New BIP39 wallet ready',
             }[stage]}
         />
     );

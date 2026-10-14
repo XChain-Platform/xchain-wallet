@@ -110,7 +110,7 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        await screen.findByRole('heading', { name: 'Dispenser details' });
+        await waitFor(() => expect(valueBeside('Dispensing')).toHaveTextContent('-'));
         expect(valueBeside('Dispensing')).toHaveTextContent('-');
         expect(valueBeside('Payment')).toHaveTextContent('-');
         expect(valueBeside('Status')).toHaveTextContent('-');
@@ -136,7 +136,7 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        await screen.findByRole('heading', { name: 'Position details' });
+        await waitFor(() => expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN'));
         expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN');
         expect(valueBeside('Delegated key')).toHaveTextContent('None');
         const rewards = screen.getByRole('list');

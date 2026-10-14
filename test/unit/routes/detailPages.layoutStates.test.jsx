@@ -297,7 +297,9 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
-        expect(await screen.findByRole('heading', { name: 'List details' })).toBeTruthy();
+        expect(await screen.findByText(LONG_NAME)).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'Address list' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'List details' })).toBeNull();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Name'), LONG_NAME);
         expectWrappingValue(detailValue('Block'), LARGE_AMOUNT);
@@ -332,7 +334,9 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Position details' })).toBeTruthy();
+        await waitFor(() => expect(detailValue('Role')).toHaveTextContent(LONG_NAME));
+        expect(screen.getByRole('heading', { level: 1, name: 'Validator stake' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Position details' })).toBeNull();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Role'), LONG_NAME);
         expectWrappingValue(detailValue('Staked'), LARGE_AMOUNT);
@@ -375,7 +379,9 @@ describe('412px protocol detail layouts', () => {
             messaging,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Dispenser details' })).toBeTruthy();
+        await waitFor(() => expect(detailValue('Dispensing')).toBeTruthy());
+        expect(screen.getByRole('heading', { level: 1, name: 'Dispenser detail' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Dispenser details' })).toBeNull();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Dispensing'), LARGE_AMOUNT);
         expectWrappingValue(detailValue('Payment'), LARGE_AMOUNT);

@@ -164,7 +164,6 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
 
     return wrap(
         <>
-            <SectionHeader title="List details" />
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Chain</dt>
                 <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
