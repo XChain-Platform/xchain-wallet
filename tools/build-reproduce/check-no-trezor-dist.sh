@@ -54,13 +54,16 @@
 # nothing.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+
 if [ "$#" -gt 0 ]; then
     DIST_DIRS=("$@")
 else
     DIST_DIRS=(
-        "packages/web/dist"
-        "packages/extension/dist"
-        "packages/desktop/renderer/dist"
+        "$REPO_ROOT/packages/web/dist"
+        "$REPO_ROOT/packages/extension/dist"
+        "$REPO_ROOT/packages/desktop/renderer/dist"
     )
 fi
 

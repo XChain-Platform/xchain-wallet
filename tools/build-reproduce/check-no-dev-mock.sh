@@ -88,6 +88,9 @@
 # (.github/workflows/release.yml), which is where its dist actually exists.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+
 ARTIFACT_DIR=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -166,7 +169,7 @@ fail_missing_desktop_source() {
     exit 1
 }
 
-if [ ! -d packages/desktop/main ]; then
+if [ ! -d "$REPO_ROOT/packages/desktop/main" ]; then
     if [ -z "$ARTIFACT_DIR" ]; then
         fail_missing_desktop_source
     elif [ -d "$ARTIFACT_DIR" ] \
@@ -520,6 +523,7 @@ for entry in "${SCAN_TARGETS[@]+"${SCAN_TARGETS[@]}"}"; do
     # is an unpack under $TMPDIR, and a FAIL naming that path tells an
     # operator mid-ceremony nothing about WHICH artifact is bad.
     if [ "$rest" = "$sdk_markers" ]; then label="$dir"; else label="${rest#*|}"; fi
+    if [ -z "$ARTIFACT_DIR" ]; then dir="$REPO_ROOT/$dir"; fi
     # Fourth field, optional: `positive-only`. WHY A DESKTOP INSTALLER IS
     # JUDGED DIFFERENTLY FROM A BUNDLE, and it is a limit of the artifact
     # rather than a softening of the rule. The web and extension targets are
