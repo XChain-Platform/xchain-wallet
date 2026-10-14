@@ -141,6 +141,8 @@
     line-height: 1.1;
     max-width: 100%;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .fiat {
@@ -150,6 +152,8 @@
     font-family: var(--xc-font-mono);
     max-width: 100%;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .amountFit {

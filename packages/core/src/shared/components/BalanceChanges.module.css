@@ -63,6 +63,8 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    direction: ltr;
+    unicode-bidi: isolate;
     word-break: break-all;
 }
 

@@ -69,6 +69,8 @@
     color: var(--xc-text);
     font-variant-numeric: tabular-nums;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
 }
 
@@ -96,6 +98,11 @@
     color: var(--xc-text);
     margin: 0;
     min-width: 0;
+}
+
+.sourceValue > span {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .sourceName {

@@ -8,6 +8,7 @@
 }
 
 .panel {
+    --xc-slide-in-offset: 20px;
     width: 100%;
     background: var(--xc-bg);
     color: var(--xc-text);
@@ -17,8 +18,12 @@
 }
 
 @keyframes slideIn {
-    from { transform: translateX(20px); opacity: 0.4; }
+    from { transform: translateX(var(--xc-slide-in-offset)); opacity: 0.4; }
     to   { transform: translateX(0); opacity: 1; }
+}
+
+:global(html[dir='rtl']) .panel {
+    --xc-slide-in-offset: -20px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -151,6 +156,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+:global(html[dir='rtl']) .rowChevron {
+    transform: scaleX(-1);
 }
 
 .lockBlock {
