@@ -180,3 +180,19 @@ describe('demo Marketplace feed', () => {
             && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
     });
 });
+
+describe('Marketplace network scope', () => {
+    it('queries and badges only the active network', async () => {
+        const messaging = renderMarket({
+            getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'regtest' }),
+        });
+        expect(await screen.findByText('5 XCHAIN per 0.01 BTC')).toBeInTheDocument();
+        const asked = messaging.getDispensersForToken.mock.calls.map(([args]) => args.chainId);
+        expect(asked.length).toBeGreaterThan(0);
+        expect(asked.every((chainId) => chainId.endsWith('-regtest'))).toBe(true);
+        const selector = screen.getByRole('button', { name: /Change market/ });
+        const marks = [...selector.querySelectorAll('img')].map((img) => img.getAttribute('src'));
+        expect(marks.length).toBeGreaterThan(0);
+        expect(marks.every((src) => /regtest/.test(src))).toBe(true);
+    });
+});
