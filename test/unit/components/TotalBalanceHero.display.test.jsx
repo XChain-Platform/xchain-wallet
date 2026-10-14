@@ -119,7 +119,9 @@ describe('TotalBalanceHero fiat formatting', () => {
             nativePrices: { 'bitcoin-mainnet': { change24hPct: 10 } },
         });
 
-        expect(await screen.findByText(/CHF\s*112\.23 \(\+10\.00%\)/)).toBeInTheDocument();
+        const change = await screen.findByText(/CHF\s*112\.23 \(\+10\.00%\) · 24h/);
+        expect(change).toBeInTheDocument();
+        expect(change).toHaveAccessibleName(/24-hour change\. Increase: \+10\.00%/);
     });
 
     it('keeps every digit of a total beyond Number safe-integer range', () => {

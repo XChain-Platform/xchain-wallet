@@ -19,7 +19,7 @@ import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import tableStyles from '../components/DataTable.module.css';
 import { isDemoWallet } from '../../flows/demoMode.js';
-import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
+import { RANGES as CHART_RANGES, priceHistoryForRange } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
@@ -356,7 +356,6 @@ function TokenDetailContent({
     );
 
     const showNativeStats = isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null;
-    const showSparkline = showNativeStats && Array.isArray(nativePrice.entry?.sparkline) && nativePrice.entry.sparkline.length > 1;
     const hasDescription = !isNative && Boolean(assetInfo?.description);
     const hasMarketData = (isNative && showNativeStats) || (!isNative && assetInfo?.marketPrice != null);
 
@@ -557,7 +556,6 @@ function TokenDetailContent({
                                 isNative={isNative}
                                 nativePrice={nativePrice}
                                 showNativeStats={showNativeStats}
-                                showSparkline={showSparkline}
                                 isDemo={isDemo}
                                 assetInfo={assetInfo}
                                 tick={tick}
@@ -896,7 +894,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, 
 // this message instead of a synthesized walk.
 const NO_PRICE_HISTORY = 'No price history yet';
 
-function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading }) {
+function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading }) {
     const tabsId = useId();
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
@@ -904,11 +902,12 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     // doesn't have data for this tick (e.g. testnet, regtest).
 
     // Range picker: mirrors the PortfolioChart buttons on Home. Native
-    // coins have a 7d CoinGecko sparkline (168 hourly points), so 24h /
-    // 7d are slices of the real series; 30d / 90d / All synthesize the
-    // same way single tokens do (the line still ends at current price).
-    const [rangeId, setRangeId] = useState('30d');
-    const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[2];
+    // Coins have a 7d CoinGecko sparkline (168 hourly points), so real
+    // wallets offer the 24h tail and the full 7d series. Demo wallets also
+    // offer longer synthesized ranges.
+    const availableRanges = isDemo ? CHART_RANGES : CHART_RANGES.filter((item) => item.realCapable);
+    const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    const range = availableRanges.find((item) => item.id === rangeId) || availableRanges[0];
 
     let priceCell = 'N/A';
     let priceLabel = 'Price';
@@ -937,14 +936,9 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 pctLabel24h = display?.label;
                 pctTone24h = display?.direction;
             }
-            if (showSparkline && range.realCapable && Array.isArray(e.sparkline) && e.sparkline.length >= 2) {
-                // Real CoinGecko sparkline = 168 hourly points (7d).
-                // 24h uses the tail; 7d uses the full series; longer
-                // ranges fall through to synthesis below.
-                const src = range.id === '24h'
-                    ? e.sparkline.slice(-Math.min(range.points, e.sparkline.length))
-                    : e.sparkline;
-                sparkline = resampleSeriesTo(src, range.points);
+            const recordedHistory = priceHistoryForRange(e, range);
+            if (recordedHistory) {
+                sparkline = recordedHistory;
             } else if (e.priceFiat != null && isDemo) {
                 // Demo wallets only: no real series for this range, so
                 // synthesize a walk seeded by chain + change so the demo
@@ -972,7 +966,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 <div className={styles.marketHistorySlot}>
                     {nativeLoading ? (
                         <Skeleton height={64} ariaLabel="Loading price history" />
-                    ) : sparkline || (showSparkline && !hint) ? (
+                    ) : sparkline ? (
                         <>
                             <div
                                 id={`${tabsId}-panel`}
@@ -981,14 +975,14 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                             >
                                 {sparkline ? (
                                     <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                                        <Sparkline series={sparkline} height={40} />
+                                        <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
                                     </div>
                                 ) : (
                                     <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
                                 )}
                             </div>
                             <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                                {CHART_RANGES.map((r) => (
+                                {availableRanges.map((r) => (
                                     // A native button preserves tab semantics and roving tab focus, which Button does not provide.
                                     <button
                                         key={r.id}
@@ -1081,7 +1075,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                         aria-labelledby={`${tabsId}-tab-${rangeId}`}
                     >
                         <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                            <Sparkline series={sparkline} height={40} />
+                            <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
                         </div>
                     </div>
                 ) : !hint ? (
