@@ -78,8 +78,7 @@ describe('chain filter memory edge behavior', () => {
         expect(clearAllChainFilters()).toBe(0);
     });
 
-    // Bug: clearAllChainFilters counts failed removals as removed.
-    it.skip('counts only records that storage actually removes', () => {
+    it('counts only records that storage actually removes', () => {
         localStorage.setItem('xc:chainFilter:history', '["bitcoin-mainnet"]');
         localStorage.setItem('xc:chainFilter:orders', '["litecoin-mainnet"]');
         const original = Storage.prototype.removeItem;
