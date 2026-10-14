@@ -16,8 +16,11 @@ import { useConfirmModal } from './useConfirmModal.js';
  * @param {boolean} [options.submitting]
  * @param {boolean} [options.signedUnbroadcast]
  * @param {() => void} options.onLeave
+ * @param {() => void} [options.onDiscard] runs only when the user confirms
+ *   "Discard and leave", before onLeave, so a form can drop its saved draft.
+ *   A clean exit skips it: a stored draft the user never restored stays.
  */
-export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast = false, onLeave }) {
+export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast = false, onLeave, onDiscard }) {
     const confirmDialog = useConfirmModal();
     const shouldWarn = dirty || submitting || signedUnbroadcast;
 
@@ -38,6 +41,7 @@ export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast
         }
 
         let request;
+        let discarding = false;
         if (signedUnbroadcast) {
             request = {
                 title: 'Leave signed transaction?',
@@ -53,6 +57,7 @@ export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast
                 danger: true,
             };
         } else {
+            discarding = true;
             request = {
                 title: 'Discard changes?',
                 message: 'Your unsaved changes will be lost.',
@@ -61,8 +66,10 @@ export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast
             };
         }
 
-        if (await confirmDialog.confirm(request)) onLeave();
-    }, [confirmDialog, onLeave, shouldWarn, signedUnbroadcast, submitting]);
+        if (!(await confirmDialog.confirm(request))) return;
+        if (discarding) onDiscard?.();
+        onLeave();
+    }, [confirmDialog, onLeave, onDiscard, shouldWarn, signedUnbroadcast, submitting]);
 
     const confirmation = confirmDialog.request
         ? createElement(ConfirmModal, {

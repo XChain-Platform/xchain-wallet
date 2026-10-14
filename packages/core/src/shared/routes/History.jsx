@@ -3519,6 +3519,20 @@ function detailTransfer(entry, walletAddresses) {
     return { label: '-', amountDirection: null, counterparty: safePeer };
 }
 
+/**
+ * Which way a SEND or RECEIVE row moved value, resolved the same way the
+ * detail table's Sent / Received row is: 'in', 'out', 'self', or null when
+ * the row is not a transfer or its direction is unknown. The detail page
+ * header names the transaction by this, so an incoming SEND reads Receive.
+ *
+ * @param {any} entry
+ * @param {Iterable<string> | null | undefined} walletAddresses
+ * @returns {'in' | 'out' | 'self' | null}
+ */
+export function detailTransferDirection(entry, walletAddresses) {
+    return detailTransfer(entry, walletAddresses).amountDirection;
+}
+
 function isEmptyDetailValue(value) {
     if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
     return typeof value === 'string' && /^(?:|undefined|null|nan|[+-]?infinity)$/i.test(value.trim());
