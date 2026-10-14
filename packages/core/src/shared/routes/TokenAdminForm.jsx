@@ -763,7 +763,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError(callbackTickError);
                 return;
             }
-            if (callbackAmount && !(Number(callbackAmount) > 0)) {
+            if (callbackAmount && !isPositiveDecimal(callbackAmount)) {
                 setFormError('Callback amount must be a positive number.');
                 return;
             }

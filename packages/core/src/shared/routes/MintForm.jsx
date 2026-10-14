@@ -50,6 +50,7 @@ import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -389,6 +390,12 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         });
         if (precisionError) {
             setFormError(precisionError);
+            return;
+        }
+        if (destination.trim() && !isValidAddressForChain(
+            destination.trim(), descriptor?.coin, descriptor?.networkKind,
+        )) {
+            setFormError(`Destination is not valid for ${descriptor?.displayName || 'this chain'}.`);
             return;
         }
         // Stop an over-mint here rather than three screens later.

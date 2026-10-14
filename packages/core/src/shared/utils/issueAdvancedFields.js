@@ -116,6 +116,7 @@ export const LOCK_FLAGS = [
  */
 
 const WHOLE_RE = /^\d+$/;
+const POSITIVE_DECIMAL_RE = /^\d+(?:\.\d+)?$/;
 
 function text(value) {
     return String(value ?? '').trim();
@@ -201,7 +202,7 @@ export function validateAdvancedIssueFields(advanced, ctx = {}) {
     if (tickError) return tickError;
 
     if (amount) {
-        if (!(Number(amount) > 0)) {
+        if (!POSITIVE_DECIMAL_RE.test(amount) || !/[1-9]/.test(amount)) {
             return 'Callback payout per unit must be a positive number.';
         }
         const digits = fractionalDigits(amount);

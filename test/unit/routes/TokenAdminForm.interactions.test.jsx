@@ -145,4 +145,29 @@ describe('TokenAdminForm review interaction safety', () => {
             resolveNext({ chainId: CHAIN, tick: 'PENDING', divisibility: 0 });
         });
     });
+
+    it('rejects exponent notation in a callback amount before review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('callback-settings', {
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+            tokenHolderSummary: vi.fn().mockResolvedValue({ isDistributed: false }),
+            buildActionPsbtRequest,
+        });
+        fireEvent.change(await screen.findByLabelText('Callback token'), {
+            target: { value: 'PAY' },
+        });
+        fireEvent.change(screen.getByLabelText('Payout per unit'), {
+            target: { value: '1e2' },
+        });
+        fireEvent.change(screen.getByLabelText('Callback allowed from block'), {
+            target: { value: '101' },
+        });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Callback amount must be a positive number.');
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
 });
