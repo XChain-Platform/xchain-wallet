@@ -789,7 +789,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                             membership until someone repoints it at the new fork. Repoint from each consumer&apos;s
                             own edit screen:
                         </p>
-                        <ul className={styles.detailsList} style={{ display: 'block' }}>
+                        <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                             {REPOINT_TARGETS.map((t) => {
                                 const open = t.built ? repointHandlers[t.id] : undefined;
                                 return (
@@ -1089,7 +1089,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             {currentItems.length > 0 ? (
                 <>
                     <span className={styles.fromLabel}>Current members (uncheck to remove)</span>
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                         {currentItems.map((item, index) => (
                             <li key={item} style={{ padding: '2px 0' }}>
                                 <Checkbox

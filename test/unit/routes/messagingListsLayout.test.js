@@ -52,3 +52,14 @@ describe('Messaging thread composer', () => {
         expect(body).toMatch(/margin:\s*calc\(var\(--xc-space-2\) - var\(--xc-space-3\)\) 0;/);
     });
 });
+
+describe('List member blocks', () => {
+    it.each([
+        'packages/core/src/shared/routes/ListDetail.jsx',
+        'packages/core/src/shared/routes/ListForkForm.jsx',
+    ])('%s draws no bullets outside its member box', (file) => {
+        const lists = read(file).match(/<ul className=\{styles\.detailsList\}[^>]*>/g) || [];
+        expect(lists.length).toBeGreaterThan(0);
+        for (const tag of lists) expect(tag).toMatch(/listStyle:\s*'none'/);
+    });
+});
