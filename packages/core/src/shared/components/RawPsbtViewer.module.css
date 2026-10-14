@@ -1,9 +1,6 @@
 .root {
+    composes: card from '../../ui/Card.module.css';
     margin: var(--xc-space-3) 0;
-    border: 1px dashed var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-surface-subtle, var(--xc-surface-raised));
 }
 
 .toggle {

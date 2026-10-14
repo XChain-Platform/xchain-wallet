@@ -1,14 +1,9 @@
 .wrap {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     /* The compact chart-stack gap has no spacing-token equivalent. */
     gap: 2px;
-    background: var(--xc-surface);
-    /* Blue accent border so the chart pops against neutral surface, the
-       same visual cue the quick-action buttons use beneath it. */
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
     /* The halo overlap has no spacing-token equivalent. */
     margin-top: -6px;
     min-width: 0;

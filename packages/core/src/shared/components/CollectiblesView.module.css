@@ -12,10 +12,8 @@
 }
 
 .card {
+    composes: flush from '../../ui/Card.module.css';
     position: relative;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-card-radius);
     height: 100%;
     min-height: var(--xc-tap-min);
     box-sizing: border-box;
@@ -166,7 +164,7 @@
     border: 0;
     background: transparent;
     padding: var(--xc-space-3);
-    border-top: 1px dashed var(--xc-border);
+    border-top: 1px solid var(--xc-border);
     text-align: center;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

@@ -164,7 +164,8 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
                     expect(measured.firstStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
                     expect(measured.firstStyle.borderLeftWidth).toBeGreaterThan(0);
                     expect(measured.firstStyle.boxShadow).not.toBe('none');
-                    expect(measured.firstStyle.paddingLeft).toBeCloseTo(24, 5);
+                    // The wide form card uses the one shared card padding (--xc-card-pad, 16px).
+                    expect(measured.firstStyle.paddingLeft).toBeCloseTo(16, 5);
                 }
             });
         }

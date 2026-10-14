@@ -20,7 +20,12 @@ import formStyles from '../../../packages/core/src/ui/FormPage.module.css';
 const readRepoFile = (relativePath) => readFileSync(resolve(process.cwd(), relativePath), 'utf8');
 const layoutCss = readRepoFile('packages/core/src/shared/components/LeftNav.module.css');
 const listCss = readRepoFile('packages/core/src/ui/ListPage.module.css');
-const formCss = readRepoFile('packages/core/src/ui/FormPage.module.css');
+const tokensCss = readRepoFile('packages/core/src/ui/tokens.css');
+// The form card width is a token; read it through so the measure stays a length.
+const formCss = readRepoFile('packages/core/src/ui/FormPage.module.css')
+    .replace(/var\((--xc-form-card-max-width)\)/g, (reference, name) => (
+        new RegExp(`${name}:\\s*([^;]+);`).exec(tokensCss)?.[1] ?? reference
+    ));
 
 const DESKTOP_WIDTHS = [1440, 1920];
 

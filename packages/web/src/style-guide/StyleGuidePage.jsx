@@ -104,7 +104,7 @@ export const SECTIONS = [
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
     { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection, primitives: ['Tabs'] },
     { id: 'quick-action',          label: 'Quick-action card',      Component: QuickActionSection },
-    { id: 'gray-card',             label: 'Gray surface card',      Component: GrayCardSection },
+    { id: 'gray-card',             label: 'Card',                   Component: GrayCardSection },
     { id: 'solid-accent-card',     label: 'Solid accent card',      Component: AccentBorderedCardSection },
     { id: 'stacked-asset-icon',    label: 'Stacked asset icon',     Component: StackedAssetIconSection },
     { id: 'asset-hero',            label: 'Asset hero (Send)',      Component: AssetHeroSection },
