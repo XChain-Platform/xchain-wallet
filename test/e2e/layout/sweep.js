@@ -133,9 +133,19 @@ export function measureInPage(opts = {}) {
     // Controls drawn over each other: an in-field icon that a wider Paste
     // button runs into at large text, say. Only controls a tap can reach at
     // their own centre count, so a menu or dialog laid over the page (which
-    // covers the page's controls by design) is not an overlap.
+    // covers the page's controls by design) is not an overlap; and only
+    // controls in the same scroller, so a row scrolling under the fixed
+    // navigation bar is not one either.
     function measureOverlaps() {
         const found = [];
+        const scrollerOf = (el) => {
+            for (let a = el.parentElement; a; a = a.parentElement) {
+                const acs = getComputedStyle(a);
+                if (scrollable(acs.overflowY) || scrollable(acs.overflowX)) return a;
+                if (acs.position === 'fixed') return a;
+            }
+            return null;
+        };
         const controls = [...document.querySelectorAll(
             'button, a[href], [role="button"], select, input[type="checkbox"], input[type="radio"]',
         )].filter((el) => {
@@ -152,6 +162,7 @@ export function measureInPage(opts = {}) {
                 const a = controls[i];
                 const b = controls[j];
                 if (a.contains(b) || b.contains(a)) continue;
+                if (scrollerOf(a) !== scrollerOf(b)) continue;
                 const ra = a.getBoundingClientRect();
                 const rb = b.getBoundingClientRect();
                 const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);

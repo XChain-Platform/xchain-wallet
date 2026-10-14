@@ -120,12 +120,17 @@ test('overlap measurement reports controls drawn over each other, not overlays',
             body { margin: 0; }
             button { position: absolute; top: 10px; height: 40px; width: 80px; }
             .sheet { position: fixed; inset: 100px 0 0 0; background: white; }
+            .scroller { position: fixed; top: 60px; left: 300px; width: 200px; height: 300px; overflow-y: auto; }
+            .scroller > div { position: relative; height: 900px; }
+            .bar { position: fixed; top: 330px; left: 300px; width: 200px; height: 40px; background: white; }
         </style>
         <button style="left: 10px">Contacts</button>
         <button style="left: 60px">Paste</button>
         <button style="left: 200px">Apart</button>
         <button style="left: 10px; top: 150px">Under the sheet</button>
         <div class="sheet"><button style="left: 20px; top: 40px">On the sheet</button></div>
+        <div class="scroller"><div><button style="left: 10px; top: 240px">Row passing under the bar</button></div></div>
+        <div class="bar"><button style="left: 10px; top: 0">Nav</button></div>
     `);
     const { overlaps } = await page.evaluate(measureInPage, {});
     expect(overlaps).toEqual([{ el: 'button "Contacts"', with: 'button "Paste"', w: 30, h: 40 }]);
