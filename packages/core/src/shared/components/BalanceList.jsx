@@ -366,8 +366,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     </span>
                 )}
                 subtitle={<span className={styles.subtitle} title={subtitle}>{subtitle}</span>}
+                trailingClassName={styles.amountsSlot}
                 trailing={<span className={styles.amounts}>
-                    <span className={styles.qty} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
+                    <span className={`${styles.qty} ${quantityLabel.length > LONG_QUANTITY_CHARS ? styles.qtyLong : ''}`.trim()} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
                         {/* Q-1 residual: an unread balance is not a zero, and a
                             fiat figure derived from one is not a value. When
                             nothing answered, say so instead of printing 0; when
@@ -468,6 +469,10 @@ function shallowEqualRow(previous, next) {
     return previousKeys.every((key) => Object.hasOwn(next, key)
         && Object.is(previous[key], next[key]));
 }
+
+// A balance longer than this (for example 1,000,000.00000000) steps down one
+// type size so it still fits the row instead of ending in an ellipsis.
+const LONG_QUANTITY_CHARS = 16;
 
 function FitAmount({ children, title }) {
     return (
