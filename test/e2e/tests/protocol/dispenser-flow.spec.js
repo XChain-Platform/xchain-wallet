@@ -45,6 +45,10 @@ async function expectControlRowAligned(controls, label) {
 
     const [first, ...rest] = boxes;
     for (const box of rest) {
+        // The confirm footer stacks its actions full width when the screen is
+        // under 400px wide, by design; only side-by-side controls must align.
+        const stacked = box.y >= first.y + first.height - 1 || first.y >= box.y + box.height - 1;
+        if (stacked) continue;
         const firstCenter = first.y + (first.height / 2);
         const center = box.y + (box.height / 2);
         expect(Math.abs(center - firstCenter), `${label}: control centers do not align`)
@@ -73,7 +77,8 @@ async function fillDispenserAndReject(page, label) {
     await expect(main.getByRole('form', { name: 'Create dispenser' })).toBeVisible();
 
     await main.getByRole('button', { name: /^Token/ }).click();
-    await page.getByText('PEPECASH', { exact: true }).first().click();
+    // Picker rows are named "Select <token name> on <chain>, <balance>".
+    await page.getByRole('button', { name: /^Select Pepe Cash on / }).first().click();
     await main.getByLabel('Give amount (per fill)').fill('25');
     await main.getByLabel('Escrow amount').fill('100');
     await main.getByLabel(/Trigger price/).fill('0.05');
@@ -130,7 +135,8 @@ async function exerciseDispenserExplorer(page, label) {
     await expectNoHorizontalOverflow(page, `${label} dispenser explorer filters`);
 
     await page.getByRole('button', { name: 'Search', exact: true }).click();
-    await expect(page.getByText('PEPECASH', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    // Each result is a button named "<token> @ <address> ...".
+    await expect(page.getByRole('button', { name: /^PEPECASH @ / }).first()).toBeVisible({ timeout: 30_000 });
     await expectNoHorizontalOverflow(page, `${label} dispenser explorer results`);
 }
 
