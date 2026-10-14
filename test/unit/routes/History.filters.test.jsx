@@ -218,8 +218,20 @@ describe('History filters', () => {
         const sender = 'mtkxExternalSender1111111111111111111111';
         mountHistory({
             [LTC]: [
-                historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: sender }),
-                historyRow({ actionIndex: 31, timestamp: secondsAt(-1), tick: 'BTC', source: LTC_ADDRESS }),
+                historyRow({
+                    actionIndex: 30,
+                    timestamp: secondsAt(0),
+                    tick: 'BTC',
+                    source: sender,
+                    destination: LTC_ADDRESS,
+                }),
+                historyRow({
+                    actionIndex: 31,
+                    timestamp: secondsAt(-1),
+                    tick: 'BTC',
+                    source: LTC_ADDRESS,
+                    destination: sender,
+                }),
             ],
         }, {
             [LTC]: [{ address: LTC_ADDRESS, label: 'Client invoices' }],
@@ -227,6 +239,8 @@ describe('History filters', () => {
 
         expect(await screen.findByText('Received at Client invoices')).toBeInTheDocument();
         expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
+        expect(screen.getByRole('button', { name: /^Receive Received at Client invoices/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Send mtkxEx/ })).toBeInTheDocument();
     });
 
     it('offers one control to clear the search', async () => {
