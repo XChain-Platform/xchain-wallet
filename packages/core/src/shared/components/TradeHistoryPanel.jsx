@@ -198,7 +198,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         </thead>
                         <tbody>
                             {summaries.map((summary, idx) => {
-                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
+                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)';
                                 const key = `${summary.ownerAddress || 'unknown'}-${summary.key || 'row'}-${idx}`;
                                 return (
                                     <tr key={key}>

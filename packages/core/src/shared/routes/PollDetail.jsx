@@ -25,6 +25,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -106,6 +107,7 @@ function ballotRowText(row, options, isSplit) {
  */
 export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -676,6 +678,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             : ballot.map((i) => `${i}: ${options[i] ?? ''}`).join(' · ');
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review vote"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
@@ -731,6 +734,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             {resultsBlock}
             {isOpen ? (
                 <FormPage
+                    demoGuard={demoGuard}
                     className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}

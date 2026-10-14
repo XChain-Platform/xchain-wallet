@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -79,6 +80,7 @@ const COIN_DISPLAY_TICKER = {
  */
 export function LinkForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -589,6 +591,7 @@ export function LinkForm({ walletId, onBack }) {
 
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review link"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -704,6 +707,7 @@ export function LinkForm({ walletId, onBack }) {
 
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label="Link two actions across chains"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}

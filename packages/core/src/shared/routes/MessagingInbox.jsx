@@ -13,6 +13,7 @@ import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, Lis
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -990,6 +991,7 @@ function SessionRequestRow({
     onDecline,
     onMessage,
 }) {
+    const demoGuard = useDemoGuard(walletId);
     const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
@@ -1094,11 +1096,13 @@ function SessionRequestRow({
                             Message
                         </Button>
                     ) : null}
-                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
+                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'} disabled={demoGuard.blocked}>
                         Share my key
                     </Button>
                 </div>
             )}
+            {demoGuard.note}
+            {demoGuard.dialog}
             {error ? (
                 <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{error}</p>
             ) : null}
