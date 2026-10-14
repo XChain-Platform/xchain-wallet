@@ -130,6 +130,22 @@ describe('PageHeader Back by layout', () => {
         expect(pageHeaderSource).toMatch(/<Button\s+size="sm"[^>]*icon=\{<BackIcon \/>\}/);
     });
 
+    // A trailing action takes the same small control height, so a screen with
+    // one (History refresh, Contacts add) is no taller than one without, and
+    // keeps the touch floor through a hit area centred on the box.
+    it('sizes trailing actions to the Back control height with a touch-floor hit area', () => {
+        const trailing = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\]\) \{([^}]*)\}/)?.[1] || '';
+        const hit = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\]\)::before \{([^}]*)\}/)?.[1] || '';
+        for (const prop of ['width', 'height', 'min-width', 'min-height']) {
+            expect(trailing).toMatch(new RegExp(`(?:^|\\s)${prop}:\\s*var\\(--xc-control-h-sm\\);`));
+        }
+        expect(trailing).not.toMatch(/--xc-control-h-md/);
+        expect(trailing).toMatch(/position:\s*relative/);
+        expect(hit).toMatch(/position:\s*absolute/);
+        expect(hit).toMatch(/width:\s*max\(100%,\s*var\(--xc-control-hit-min/);
+        expect(hit).toMatch(/height:\s*max\(100%,\s*var\(--xc-control-hit-min/);
+    });
+
     it('still runs onBack from the system Back gesture when the control is hidden', () => {
         const onBack = vi.fn();
         renderAt('sidebar', 'history', { onBack });
