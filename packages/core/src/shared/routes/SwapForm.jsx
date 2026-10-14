@@ -70,6 +70,15 @@ const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
 const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
     && /[1-9]/.test(String(value));
 
+function expirationValidationError(mode, input, nowSec = Math.floor(Date.now() / 1000)) {
+    if (mode !== 'custom') return null;
+    if (!input.trim()) return 'Pick an expiration date and time, or switch to the default window.';
+    const ms = Date.parse(input.trim());
+    if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
+    if (Math.floor(ms / 1000) <= nowSec) return 'Expiration must be in the future.';
+    return null;
+}
+
 function withFormattedExpiration(confirmAction) {
     const decoded = confirmAction?.composed?.decoded;
     if (!decoded || !Array.isArray(decoded.details)) return confirmAction;
@@ -255,12 +264,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     });
 
     const expError = useMemo(() => {
-        if (expMode !== 'custom') return null;
-        if (!expInput.trim()) return 'Pick an expiration date and time, or switch to the default window.';
-        const ms = Date.parse(expInput.trim());
-        if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
-        if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
-        return null;
+        return expirationValidationError(expMode, expInput);
     }, [expMode, expInput]);
 
     const validationError = useMemo(() => {
@@ -349,6 +353,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const feePerKb = (feeEstimate && feeEstimate.unit
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+    const feeError = feePick.mode === 'custom'
+        && (!Number.isFinite(feePick.customRate) || Number(feePick.customRate) <= 0 || !feeCustomEstimate)
+        ? 'Enter a valid custom network fee rate before reviewing.'
         : null;
 
     // Wire-format SWAP v0 params: the one definition the confirm compose and
@@ -465,7 +473,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setFormError('Enter the give and get tickers and amounts before reviewing.');
             return;
         }
-        if (validationError || expError) return;
+        if (validationError || expError || feeError) return;
         setFormError(null);
         if (singleEncode) {
             if (submitPendingRef.current) return;
@@ -481,7 +489,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (!networkAvailable) return;
         if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
-        if (validationError || expError) return;
+        const freshExpirationError = expirationValidationError(expMode, expInput);
+        if (validationError || freshExpirationError || feeError) {
+            if (freshExpirationError) setSubmitError(freshExpirationError);
+            return;
+        }
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
@@ -555,7 +567,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     }
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setStage('form'); setSubmitError(null); }
+                : onBack}
             title={stage === 'review' || stage === 'submitting'
                 ? 'Review swap'
                 : `Swap tokens`}
@@ -692,8 +706,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     ) : null}
                     <DetailRow
                         label="Expiration"
-                        value={expMode === 'custom' && expInput.trim()
-                            ? new Date(expInput).toLocaleString()
+                        value={swapParams.EXPIRATION
+                            ? formatLocalDateTime(Number(swapParams.EXPIRATION))
                             : 'Default window'}
                     />
                     <DetailRow
@@ -853,11 +867,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || formError ? (
+            status={validationError || feeError || formError ? (
                 <>
                     {validationError ? (
                         <StatusMessage variant="error" className={styles.error}>
                             {validationError}
+                        </StatusMessage>
+                    ) : null}
+                    {feeError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {feeError}
                         </StatusMessage>
                     ) : null}
                     {formError ? (
