@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -23,7 +24,7 @@ async function drainMicrotasks(rounds = 12) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsbtRequest, generateDispenserAddress } = {}) {
+async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsbtRequest, generateDispenserAddress, getTokenInfo } = {}) {
     const composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
     });
@@ -34,6 +35,7 @@ async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsb
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getWalletBalances: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+        getTokenInfo: getTokenInfo || vi.fn().mockResolvedValue(null),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         composeForConfirm,
         buildActionPsbtRequest: buildActionPsbtRequest || vi.fn().mockResolvedValue({
@@ -64,9 +66,28 @@ async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsb
     return { ...utils, composeForConfirm, buildActionPsbtRequest: target.buildActionPsbtRequest, onBack };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('DispenserForm numeric validation', () => {
+    it('rejects a dispensed amount finer than the token divisibility', async () => {
+        const utils = await mountForm({
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'JDOG', divisibility: 2 }),
+        });
+        const give = utils.getByLabelText(/^Give amount/);
+
+        fireEvent.change(give, { target: { value: '1.234' } });
+        fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
+        fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+
+        expect(await utils.findByText('Per-fill give amount can have at most 2 decimal places for JDOG.'))
+            .toBeInTheDocument();
+        expect(utils.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('tabs through terms and opens review from Enter only when valid', async () => {
         const user = userEvent.setup();
         const utils = await mountForm();

@@ -17,6 +17,7 @@ import {
     formatTokenQuantity,
     normalizeLocalizedDecimal,
     countNonCommaBefore,
+    decimalToBaseUnits,
     decimalFromBaseUnits,
     formatDisplayAmount,
     formatHistoryAmount,
@@ -166,6 +167,14 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
     ])('rejects malformed %s input %s instead of guessing', (locale, input) => {
         expect(normalizeLocalizedDecimal(input, locale)).toBeNull();
     });
+
+    it('keeps input normalization exact at parser boundaries', () => {
+        expect(normalizeLocalizedDecimal('  1.234,56  ', 'de-DE')).toBe('1234.56');
+        expect(normalizeLocalizedDecimal('9,007,199,254,740,993.01', 'en-US'))
+            .toBe('9007199254740993.01');
+        expect(normalizeLocalizedDecimal('.')).toBe('.');
+        expect(normalizeLocalizedDecimal('1e-8')).toBeNull();
+    });
 });
 
 describe('shared/amountFormat normalizeAmountFieldInput', () => {
@@ -250,6 +259,13 @@ describe('shared/amountFormat token precision validation', () => {
 });
 
 describe('shared/amountFormat exact rendering', () => {
+    it('converts validated decimal input to base units without a Number round trip', () => {
+        expect(decimalToBaseUnits('90071992.54740993', 8)).toBe(9007199254740993n);
+        expect(decimalToBaseUnits('1.000000001', 8)).toBeNull();
+        expect(decimalToBaseUnits('.', 8)).toBeNull();
+        expect(decimalToBaseUnits('1e-8', 8)).toBeNull();
+    });
+
     it.each([
         ['zero scale', '123', 0, '123'],
         ['fractional scale', '123', 2, '1.23'],
