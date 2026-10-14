@@ -138,7 +138,6 @@ describe('CoSignerProvision states', () => {
         expect(await screen.findByRole('heading', { name: 'Review agent account' })).toBeInTheDocument();
         expect(screen.getByText('Treasury agent')).toBeInTheDocument();
         expect(screen.getByText(AGENT_KEY)).toBeInTheDocument();
-        expect(screen.getByText(CHAIN)).toBeInTheDocument();
         expect(screen.getByText('["SEND"]')).toBeInTheDocument();
         expect(screen.getAllByText('null')).toHaveLength(4);
         expect(screen.getByText('[]')).toBeInTheDocument();

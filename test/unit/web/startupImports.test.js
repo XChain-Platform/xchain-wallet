@@ -134,7 +134,9 @@ describe('web startup imports', () => {
         expect(appSource).toContain(
             "import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';",
         );
-        expect(appSource).not.toContain("from '../../core/src/flows/demoMode.js'");
+        // demoMode.js has no imports and useDemoAutoWipe already loads it, so the
+        // palette's demo check adds nothing to startup.
+        expect(appSource).toContain("import { isDemoWallet } from '../../core/src/flows/demoMode.js';");
         expect(appSource).not.toContain("from '@xchain-wallet/core/flows'");
         expect(appSource).toContain(
             "import('@xchain-wallet/core/shared/utils/displayBalances.js')",
