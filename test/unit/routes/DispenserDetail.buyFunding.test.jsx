@@ -154,6 +154,8 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         mount({ buyerHolds: '12' });
         await settle();
         expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
+        // Help text in the buy form lines up with its fields.
+        expect(screen.getByTestId('buy-balance').className).toMatch(/hintLeft/);
         const max = screen.getByRole('button', { name: 'Use max available amount' });
         // Max sits inside the Fills field, as on every other amount field.
         expect(screen.getByLabelText(/Fills/i).closest('[class*="amountFieldWrap"]')).toContainElement(max);
