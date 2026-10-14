@@ -363,7 +363,6 @@ export const en = {
     'gatedPublish.successHint.afterToken':
         'through a normal send gets the key automatically. To add more files that unlock together, publish again and pick this pack.',
     'gatedPublish.pack.new': 'New pack (fresh key)',
-    'gatedPublish.pack.existing': 'Existing pack {hash}…',
     'gatedPublish.signAndPublish': 'Sign and publish',
     'gatedPublish.review.summary.beforeFile': 'Publish',
     'gatedPublish.review.summary.afterFile': 'encrypted; only holders of {tick} will be able to read it.',
