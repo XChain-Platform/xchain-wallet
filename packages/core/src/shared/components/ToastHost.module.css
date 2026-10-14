@@ -129,6 +129,19 @@
     color: var(--xc-danger-text);
 }
 
+/* Forced colours drop the tint layer; pin the system pair so the card keeps
+   its outline and readable text. */
+@media (forced-colors: active) {
+    .variant_info,
+    .variant_warning,
+    .variant_success,
+    .variant_error {
+        background: Canvas;
+        color: CanvasText;
+        border: 1px solid CanvasText;
+    }
+}
+
 .icon {
     flex: 0 0 auto;
     align-self: flex-start;
