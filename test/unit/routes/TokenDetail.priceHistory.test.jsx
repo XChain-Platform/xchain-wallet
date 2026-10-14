@@ -171,6 +171,34 @@ describe('TokenDetail price history', () => {
         expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
     });
 
+    it('leaves no blank verification band once a token on no roster has loaded', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', marketPrice: '0.5', projects: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={MAINNET_CHAIN}
+                    tick="NOROSTER"
+                    kind="token"
+                    quantity="100"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const hero = await screen.findByRole('region', { name: 'NOROSTER balance' });
+        await vi.waitFor(() => expect(screen.queryByRole('status', { name: 'Loading token verification' })).toBeNull());
+        // The element after the balance hero holds content, not an empty slot.
+        expect(hero.nextElementSibling.textContent.trim()).not.toBe('');
+        expect(screen.queryByText(/official token in the/i)).toBeNull();
+    });
+
     it('reserves price-history and price-alert space until native prices settle', async () => {
         let finishPrices;
         const messaging = {

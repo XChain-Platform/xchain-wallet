@@ -569,8 +569,10 @@ function TokenDetailContent({
                 {/* "Official token" banner: the token is on a project
                     registry's current roster (owner-attested on-chain;
                     Project_Registry.md). Display policy is "just show
-                    it" (every attesting project is listed). */}
-                {!isNative ? (
+                    it" (every attesting project is listed). The slot is
+                    held only while metadata loads or a banner shows, so a
+                    token on no roster leaves no blank band above the chart. */}
+                {!isNative && (metadataLoading || (Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0)) ? (
                     <div className={styles.officialBannerSlot}>
                         {metadataLoading ? (
                             <Skeleton height={38} ariaLabel="Loading token verification" />
