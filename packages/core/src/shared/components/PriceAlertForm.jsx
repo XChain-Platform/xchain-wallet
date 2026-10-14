@@ -192,7 +192,7 @@ export function PriceAlertForm({
                 <span
                     id={disabledReasonId}
                     role={invalidTarget ? 'alert' : 'status'}
-                    style={invalidTarget ? { ...HINT, color: 'var(--xc-danger)' } : HINT}
+                    style={invalidTarget ? { ...HINT, color: 'var(--xc-danger-fg)' } : HINT}
                 >
                     {disabledReason}
                 </span>
