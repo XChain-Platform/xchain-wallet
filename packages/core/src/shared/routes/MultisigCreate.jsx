@@ -195,8 +195,12 @@ export function MultisigCreate({ walletId, onBack }) {
         if (rows.length > maxCosigners) {
             return `${schemeLabel(scheme)} supports at most ${maxCosigners} cosigners.`;
         }
-        const t = Number(threshold);
-        if (!Number.isInteger(t) || t <= 0) return 'Threshold must be a positive integer.';
+        const rawThreshold = threshold.trim();
+        if (!rawThreshold) return 'Threshold is required.';
+        if (!/^-?\d+(?:\.\d+)?$/.test(rawThreshold)) return 'Threshold must be a whole number.';
+        const t = Number(rawThreshold);
+        if (!Number.isInteger(t)) return 'Threshold must be a whole number.';
+        if (t <= 0) return 'Threshold must be at least 1.';
         if (t > rows.length) return 'Threshold must be ≤ cosigner count.';
         // MuSig2 is n-of-n: a T<N Taproot-MuSig2 address can never be signed by
         // fewer than N cosigners, so the funds would be permanently locked.
@@ -392,7 +396,7 @@ export function MultisigCreate({ walletId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>Configuration</dt>
                     <dd className={styles.detailsValue}>
-                        {threshold}-of-{rows.length} {schemeLabel(scheme)}
+                        {Number(threshold)}-of-{rows.length} {schemeLabel(scheme)}
                     </dd>
                 </dl>
                 {rows.map((row, index) => (
@@ -492,7 +496,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <Input
                     label={`Threshold (1..${rows.length})`}
                     value={threshold}
-                    onChange={(e) => setThreshold(e.target.value.replace(/\D/g, ''))}
+                    onChange={(e) => setThreshold(e.target.value)}
                     inputMode="numeric"
                 />
 
@@ -519,7 +523,7 @@ function ReviewCosigner({ index, row }) {
                 <dt className={styles.detailsLabel}>Origin</dt>
                 <dd className={styles.detailsValue}>{originLabel(row.origin)}</dd>
                 <dt className={styles.detailsLabel}>Public key</dt>
-                <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.pubkey}</code></dd>
+                <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.pubkey.toLowerCase()}</code></dd>
                 {row.origin === 'external-xpub' ? (
                     <>
                         <dt className={styles.detailsLabel}>xpub</dt>
@@ -527,7 +531,7 @@ function ReviewCosigner({ index, row }) {
                     </>
                 ) : null}
                 <dt className={styles.detailsLabel}>Master fingerprint</dt>
-                <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.fingerprint}</code></dd>
+                <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.fingerprint.toLowerCase()}</code></dd>
                 <dt className={styles.detailsLabel}>Derivation path</dt>
                 <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.derivationPath}</code></dd>
             </dl>

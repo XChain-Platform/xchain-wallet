@@ -181,6 +181,21 @@ describe('MultisigCreate local cosigner', () => {
 });
 
 describe('MultisigCreate key validation', () => {
+    it.each([
+        ['', /Threshold is required/i],
+        ['0', /Threshold must be at least 1/i],
+        ['-1', /Threshold must be at least 1/i],
+        ['1.5', /Threshold must be a whole number/i],
+    ])('explains an invalid threshold of %j before review', async (value, message) => {
+        await mount(mkMessaging());
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value } });
+        });
+
+        expect(screen.getByText(message)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
     it('rejects a compressed-looking value that is not a secp256k1 point', async () => {
         await mount(mkMessaging());
         await pickLocalAddress();
@@ -284,6 +299,53 @@ describe('MultisigCreate review', () => {
             scheme: 'p2wsh-multisig',
             threshold: 2,
         }));
+    });
+
+    it('returns from review with every entered value kept', async () => {
+        await fillValidDraft(mkMessaging());
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('11223344');
+        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+    });
+
+    it('review display matches the built config by showing canonical keys and numeric threshold', async () => {
+        await fillValidDraft(mkMessaging());
+        fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value: '02' } });
+        fireEvent.change(screen.getAllByLabelText(/Public key \(hex/i)[1], {
+            target: { value: EXTERNAL.pubkey.toUpperCase() },
+        });
+        fireEvent.change(screen.getAllByLabelText(/Master fingerprint/i)[1], {
+            target: { value: 'AABBCCDD' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(/2-of-2 SegWit multi-signature/i)).toBeTruthy();
+        expect(screen.queryByText(/02-of-2/)).toBeNull();
+        expect(screen.getByText(EXTERNAL.pubkey)).toBeTruthy();
+        expect(screen.getByText('aabbccdd')).toBeTruthy();
+    });
+
+    it('shows plain copy when config creation rejects the reviewed values', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const messaging = mkMessaging({
+            createMultisigConfig: vi.fn(async () => {
+                throw new Error('createMultisigConfig: encoder exploded');
+            }),
+        });
+        await fillValidDraft(messaging);
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Confirm multisig' }));
+
+        const alert = await screen.findByRole('alert');
+        consoleError.mockRestore();
+        expect(alert).toHaveTextContent(
+            'Failed to create multisig configuration.',
+        );
+        expect(screen.queryByText(/createMultisigConfig|encoder exploded/i)).toBeNull();
     });
 });
 

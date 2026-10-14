@@ -71,6 +71,7 @@ export function psbtRefusalReason({
  * @param {boolean} [props.spendsOwnInputs]
  * @param {boolean} [props.developerMode]
  * @param {string} props.chainLabel
+ * @param {object} [props.chainDescriptor]
  * @param {boolean} props.signerReady
  * @param {string} props.password
  * @param {(value: string) => void} props.onPasswordChange
@@ -88,6 +89,7 @@ export function PsbtConfirmScreen({
     spendsOwnInputs = false,
     developerMode = false,
     chainLabel,
+    chainDescriptor,
     signerReady,
     password,
     onPasswordChange,
@@ -128,6 +130,7 @@ export function PsbtConfirmScreen({
                     signingAddress={signingAddress}
                     decodedAction={decodedAction}
                     decodeError={decodeError}
+                    chainDescriptor={chainDescriptor}
                 />
             )}
             credentialsReady={signerReady || password.length > 0}

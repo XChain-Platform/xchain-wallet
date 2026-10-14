@@ -13,6 +13,7 @@ import {
     normalizePsbtInput,
     PsbtSignForm,
     psbtInputError,
+    psbtReviewError,
 } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { encodeBbqrPsbtFrames } from '../../../packages/core/src/uri/bbqrPsbt.js';
 
@@ -106,6 +107,57 @@ describe('PSBT text and file input', () => {
         expect(normalizePsbtFile(new TextEncoder().encode(`\uFEFF${PSBT_HEX}\n`).buffer)).toBe(PSBT_HEX);
         expect(normalizePsbtFile(new TextEncoder().encode(`${PSBT_BASE64}\n`).buffer)).toBe(PSBT_HEX);
         expect(normalizePsbtFile(new TextEncoder().encode('not a transaction').buffer)).toBe(null);
+    });
+});
+
+describe('PSBT review validation', () => {
+    const valid = {
+        inputs: [{ address: 'input-address', value: 100 }],
+        outputs: [{ address: 'output-address', value: 90 }],
+    };
+
+    it.each([
+        [{ inputs: [], outputs: valid.outputs }, /no inputs/i],
+        [{ inputs: valid.inputs, outputs: [] }, /no outputs/i],
+        [{ ...valid, inputs: [{ address: 'input-address', value: 0 }] }, /greater than zero/i],
+        [{ ...valid, inputs: [{ address: 'input-address', value: -1 }] }, /invalid amount/i],
+        [{ ...valid, outputs: [{ address: 'output-address', value: '1.5' }] }, /invalid amount/i],
+        [{ ...valid, outputs: [{ address: 'output-address', value: 101 }] }, /more than its inputs/i],
+        [{ ...valid, outputs: [{ address: '', value: 90 }] }, /invalid address/i],
+    ])('rejects malformed parser output before review', (decomposed, message) => {
+        expect(psbtReviewError(decomposed)).toMatch(message);
+    });
+
+    it('allows a zero-value data output while still verifying the exact fee', () => {
+        expect(psbtReviewError({
+            inputs: [{ address: 'input-address', value: 100 }],
+            outputs: [
+                { address: 'output-address', value: 90 },
+                { address: null, value: 0 },
+            ],
+        })).toBeNull();
+    });
+
+    it('shows a plain parser-output error and keeps signing disabled', async () => {
+        mount(messagingFor({
+            parsePsbtRequest: vi.fn().mockResolvedValue({
+                decomposed: {
+                    inputs: [{ address: ADDRESSES[BTC][0].address, value: 100 }],
+                    outputs: [{ address: 'recipient', value: 101 }],
+                },
+                action: null,
+                actionDecodeReason: 'NO_OP_RETURN',
+            }),
+        }));
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+            target: { value: PSBT_HEX },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This transaction spends more than its inputs contain.',
+        );
+        expect(screen.getByRole('button', { name: 'Sign transaction' })).toBeDisabled();
     });
 });
 
