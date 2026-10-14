@@ -83,7 +83,9 @@ describe('regression/read-only-address-visible', () => {
         }
 
         expect(overlay).toHaveTextContent('bc1qso…acking');
-        expect(overlay).not.toHaveAttribute('aria-hidden');
-        expect(overlay.querySelector(`[aria-label="${ADDRESS}"]`)).not.toHaveAttribute('aria-hidden');
+        // The overlay is visual only: the input already exposes the full
+        // address, so assistive tech hears it once.
+        expect(overlay).toHaveAttribute('aria-hidden', 'true');
+        expect(input).toHaveValue(ADDRESS);
     });
 });

@@ -5,15 +5,28 @@
 
 // Regression suite: page header controls.
 //
-//   [P1] 2026-10-13: Page header controls share the medium icon-only kit
-//        button contract so their footprints and centred icons stay aligned.
+//   [P1] 2026-10-13: Page header controls share one medium footprint so
+//        their boxes and centred icons stay aligned on both edges.
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../packages/core/src/shared/routes/History.jsx';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import buttonStyles from '../../packages/core/src/ui/Button.module.css';
+import pageHeaderStyles from '../../packages/core/src/ui/PageHeader.module.css';
+
+const pageHeaderCss = readFileSync(
+    join(process.cwd(), 'packages', 'core', 'src', 'ui', 'PageHeader.module.css'),
+    'utf8',
+);
+
+function ruleBody(selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return pageHeaderCss.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1] || '';
+}
 
 function renderHistory() {
     const messaging = {
@@ -36,15 +49,22 @@ function renderHistory() {
 afterEach(() => cleanup());
 
 describe('regression/page-header-controls', () => {
-    it('[REGRESSION P1] aligns the History back and refresh controls with the same medium icon button classes', () => {
+    it('[REGRESSION P1] aligns the History back and refresh controls on one medium footprint', () => {
         renderHistory();
 
         const back = screen.getByRole('button', { name: 'Back to home' });
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
 
-        expect(back).toHaveClass(buttonStyles.btn, buttonStyles.md, buttonStyles.iconOnly);
+        expect(back).toHaveClass(pageHeaderStyles.back);
+        expect(refresh.closest(`.${pageHeaderStyles.trailing}`)).not.toBeNull();
         expect(refresh).toHaveClass(buttonStyles.btn, buttonStyles.md, buttonStyles.iconOnly);
-        expect(refresh.className).toBe(back.className);
+        // Both slots size from the same header side token and centre their icon.
+        for (const body of [ruleBody('.back'), ruleBody('.trailing button:not([role="menuitem"])')]) {
+            expect(body).toMatch(/width:\s*var\(--xc-page-header-side\)/);
+            expect(body).toMatch(/height:\s*var\(--xc-page-header-side\)/);
+            expect(body).toMatch(/justify-content:\s*center/);
+        }
+        expect(pageHeaderCss).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
     });
 
     it('[REGRESSION P1] renders History Refresh as one icon child without a label span', () => {
