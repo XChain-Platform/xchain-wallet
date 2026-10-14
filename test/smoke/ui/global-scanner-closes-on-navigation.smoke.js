@@ -31,6 +31,14 @@ assert.match(
     'the scanner dialog is a programmatic initial focus target',
 );
 
+// ScanRoute is lazy; opened before its chunk loaded, the scanner suspended
+// with no boundary and the shell fell to the route error screen.
+assert.match(
+    app,
+    /ref=\{globalScannerRef\}[\s\S]{0,1200}?<Suspense fallback=\{<Loading \/>\}>\s*<ScanRoute\b/,
+    'the lazy global scanner has its own Suspense boundary',
+);
+
 assert.match(
     app,
     /useEffect\(\(\) => \{\s*setGlobalScannerOpen\(false\);\s*\}, \[unlockedView\]\);/,

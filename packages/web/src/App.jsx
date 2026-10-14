@@ -3125,36 +3125,40 @@ function AppInner() {
                                 flexDirection: 'column',
                             }}
                         >
-                            <ScanRoute
-                                embedded
-                                titleId="xc-global-scanner-title"
-                                onBack={() => setGlobalScannerOpen(false)}
-                                onClassified={(outcome) => {
-                                    setGlobalScannerOpen(false);
-                                    if (outcome.kind === 'send') {
-                                        if (unlockedView === 'contacts') {
-                                            setContactScanPrefill({
-                                                address: outcome.address,
-                                                chainId: outcome.chainId,
-                                            });
-                                        } else {
-                                            setSendPrefill({
-                                                address: outcome.address,
-                                                amount: outcome.amount,
-                                                tick: outcome.tick,
-                                                chainId: outcome.chainId,
-                                                memo: outcome.memo,
-                                            });
-                                            setUnlockedView('send');
+                            {/* ScanRoute is a lazy chunk; without its own boundary the first
+                                open suspends the whole shell into the route error screen. */}
+                            <Suspense fallback={<Loading />}>
+                                <ScanRoute
+                                    embedded
+                                    titleId="xc-global-scanner-title"
+                                    onBack={() => setGlobalScannerOpen(false)}
+                                    onClassified={(outcome) => {
+                                        setGlobalScannerOpen(false);
+                                        if (outcome.kind === 'send') {
+                                            if (unlockedView === 'contacts') {
+                                                setContactScanPrefill({
+                                                    address: outcome.address,
+                                                    chainId: outcome.chainId,
+                                                });
+                                            } else {
+                                                setSendPrefill({
+                                                    address: outcome.address,
+                                                    amount: outcome.amount,
+                                                    tick: outcome.tick,
+                                                    chainId: outcome.chainId,
+                                                    memo: outcome.memo,
+                                                });
+                                                setUnlockedView('send');
+                                            }
+                                        } else if (outcome.kind === 'receive') {
+                                            setUnlockedView('receive');
+                                        } else if (outcome.kind === 'psbt') {
+                                            setScannedPsbt(outcome.psbtHex || null);
+                                            setUnlockedView('sign-psbt');
                                         }
-                                    } else if (outcome.kind === 'receive') {
-                                        setUnlockedView('receive');
-                                    } else if (outcome.kind === 'psbt') {
-                                        setScannedPsbt(outcome.psbtHex || null);
-                                        setUnlockedView('sign-psbt');
-                                    }
-                                }}
-                            />
+                                    }}
+                                />
+                            </Suspense>
                         </div>
                     ) : null}
                     <CommandPalette
