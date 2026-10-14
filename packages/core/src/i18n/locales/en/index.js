@@ -71,6 +71,7 @@ export const en = {
         '{count, plural, one {Show # small balance} other {Show # small balances}}',
     'balanceList.smallBalances.hide':
         '{count, plural, one {Hide # small balance} other {Hide # small balances}}',
+    'balanceList.rowChainSpeech': 'on {chain}',
     'addressList.hidden.show':
         '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
     'addressList.hidden.hide':

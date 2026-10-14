@@ -68,7 +68,7 @@ export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
  * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
- * @param {boolean} [props.showChain]: force each row's chain into the subtitle. Multi-chain row sets enable this automatically; callers can still force it for a single-chain context that needs an explicit label.
+ * @param {boolean} [props.showChain]: name each token row's chain in its accessible name (sighted users read it from the overlay badge). Multi-chain row sets enable this automatically; callers can still force it for a single-chain context.
  * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
  * @param {(row: BalanceRow) => number} [props.getRowTabIndex] assigns the single tab stop for a composite picker
  */
@@ -253,27 +253,19 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     // nothing. Distinct from the per-row `hidden` prop above, which
     // controls whether this row appears in the Hidden tokens section.
     const [balancesHidden] = useBalancesHidden();
-    // Network/env (mainnet/testnet/regtest) is already chosen globally
-    // in Settings, so repeating it on every row adds noise. Show just the
-    // tick symbol; chain family is conveyed by the chain icon.
+    // The subtitle is the ticker alone, on every list. The chain is shown by
+    // the asset mark: native rows use the chain icon itself and every token row
+    // carries the chain overlay badge (AssetMark draws a lettered badge when a
+    // chain has no icon), which is what tells the same ticker on two chains
+    // apart. The network is chosen once in Settings and never repeated here.
     //
-    // That last clause only holds for NATIVE rows. The chain icon is
-    // rendered under `isNative` below; a token with no published image falls
-    // through to a letter chip, which is derived from the tick and therefore
-    // identical for the same token on every chain. In a cross-chain list that
-    // makes the rows genuinely indistinguishable: session 20 hit three
-    // identical "XCHAIN / XCHAIN / 0.00000000" rows keyed bitcoin-regtest,
-    // litecoin-regtest and dogecoin-regtest, and picking one silently
-    // re-targets the calling form's network. So callers that show a
-    // cross-chain list opt into naming the chain.
-    //
-    // The active network is never repeated on a row: the wallet runs on one
-    // network at a time and Settings is where it is chosen. Nor is a chain
-    // name the row's title already says: a native coin row reads "Bitcoin"
-    // over "BTC", not "BTC · Bitcoin".
-    const subtitle = showChain && row.chainDisplayName && row.chainDisplayName !== row.displayName
-        ? `${row.tick} · ${row.chainDisplayName}`
-        : row.tick;
+    // The overlay is decorative to assistive tech, so a list that mixes chains
+    // (`showChain`) names the chain in the row's accessible name instead,
+    // unless the caller's action label already names it.
+    const subtitle = row.tick;
+    const chainSpeech = showChain && !isNative && row.chainDisplayName
+        ? t('balanceList.rowChainSpeech', { chain: row.chainDisplayName })
+        : '';
     const fiat = useMemo(
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
@@ -326,9 +318,16 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     const fiatSpeech = fiatSpeechValue
         ? `${row.unavailable === 'partial' ? 'At least ' : ''}${fiatSpeechValue}${!isNative && row.fiatRateSource === 'market' ? ', DEX price' : ''}`
         : '';
+    const chainPart = chainSpeech && !actionLabel.includes(row.chainDisplayName) ? chainSpeech : '';
     const rowAccessibleLabel = balancesHidden
-        ? `${actionLabel}, balance hidden`
-        : [actionLabel, quantitySpeech, pendingSpeech, fiatSpeech].filter(Boolean).join(', ');
+        ? [actionLabel, chainPart, 'balance hidden'].filter(Boolean).join(', ')
+        : [
+            actionLabel,
+            chainPart,
+            quantitySpeech,
+            pendingSpeech,
+            fiatSpeech,
+        ].filter(Boolean).join(', ');
     return (
         <div
             className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
