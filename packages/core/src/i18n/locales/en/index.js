@@ -522,6 +522,9 @@ export const en = {
     'issue.sendInitialMintOptional': 'Send the initial mint to (optional)',
     'issue.sendInitialMintHint': 'Leave blank to keep the minted tokens at the issuing address.',
 
+    // --- demo wallet guard ----------------------------------------
+    'demo.guard.blocked': "Demo wallets can't move funds. Create a real wallet to continue.",
+
     // --- send -----------------------------------------------------
     'send.title': 'Send',
     'send.demo.blocked': "Demo wallets can't move funds. Create a real wallet to send.",

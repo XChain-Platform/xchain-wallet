@@ -15,6 +15,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
@@ -145,7 +146,7 @@ function BroadcastKindPicker({ value, onChange }) {
 }
 
 function RawTransactionBroadcast({
-    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone,
+    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone, demoGuard,
 }) {
     const { settings } = useSettings();
     const [raw, setRaw] = useState('');
@@ -254,6 +255,7 @@ function RawTransactionBroadcast({
     if (state === 'preview' || state === 'submitting') {
         return (
             <FormPage
+                demoGuard={demoGuard}
                 label="Review signed transaction"
                 onSubmit={broadcast}
                 status={error || mismatch ? (
@@ -312,6 +314,7 @@ function RawTransactionBroadcast({
 
     return (
         <FormPage
+            demoGuard={demoGuard}
             label="Broadcast signed transaction"
             onSubmit={review}
             status={error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
@@ -369,6 +372,7 @@ function RawTransactionBroadcast({
  */
 export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { settings } = useSettings();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -779,6 +783,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         return wrap(
             <RawTransactionBroadcast
                 walletId={walletId}
+                demoGuard={demoGuard}
                 chainId={chainId}
                 setChainId={setChainId}
                 messaging={messaging}
@@ -861,6 +866,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review broadcast"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -982,6 +988,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Broadcast"
             onSubmit={handleReview}
             status={formError ? (

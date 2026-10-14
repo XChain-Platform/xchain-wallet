@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -77,6 +78,7 @@ function isPositiveDecimal(value) {
  */
 export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isDeposit = mode === 'deposit';
@@ -466,6 +468,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -651,6 +654,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} ${preposition} contract`}
             onSubmit={handleReview}
             status={withdrawRefused || formError ? (

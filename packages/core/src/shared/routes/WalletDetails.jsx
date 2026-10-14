@@ -202,7 +202,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
                 </dl>
                 {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="primary"
@@ -216,7 +216,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     </div>
                 ) : null}
                 {onRename ? (
-                    <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="primary"
@@ -230,7 +230,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     </div>
                 ) : null}
                 {isDemo ? (
-                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="danger"
