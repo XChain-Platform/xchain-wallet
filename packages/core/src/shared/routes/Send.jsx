@@ -2219,6 +2219,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             };
             const sendBase = {
                 walletId,
+                ...(accountId ? { accountId } : {}),
                 chainId,
                 from,
                 to: toAddress.trim(),
