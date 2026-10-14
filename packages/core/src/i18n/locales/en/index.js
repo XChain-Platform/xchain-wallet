@@ -522,6 +522,8 @@ export const en = {
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
+    'send.demo.blocked': "Demo wallets can't move funds. Create a real wallet to send.",
+    'send.demo.createRealWallet': 'Create a real wallet',
     'send.empty.title': 'Nothing to send yet',
     'send.empty.body': 'Receive coins or tokens on this chain before creating a payment.',
     'send.review': 'Review and send',

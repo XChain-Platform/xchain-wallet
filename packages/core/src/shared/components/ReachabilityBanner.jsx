@@ -14,6 +14,7 @@
 // user-facing consequence. Its Details disclosure identifies affected coins
 // and when they were last checked, without service names or network kinds.
 
+import { useId, useState } from 'react';
 import { useReachability } from '../hooks/useReachability.js';
 import { branding as brandingLib, registry as registryLib } from '../../index.js';
 import styles from './ReachabilityBanner.module.css';
@@ -34,6 +35,8 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
         confirmMs,
         startupGraceMs,
     });
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const panelId = useId();
 
     if (overall !== 'degraded' && overall !== 'offline') return null;
 
@@ -42,44 +45,57 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
         ? `Last checked ${formatAgo(Date.now() - lastChecked)} ago.`
         : '';
 
+    const hasDetails = coins.length > 0 || Boolean(staleness);
+
+    // The Details panel is a row in the notice's own flow, so it pushes route
+    // content down instead of floating over the header or scrolling inside
+    // the notices strip.
     return (
-        <div
-            className={`${styles.banner} ${overall === 'offline' ? styles.offline : styles.degraded}`}
-        >
-            {/* Only the state is announced, so a poll that refreshes the
-                last-checked age does not repeat the notice. */}
-            <span className={styles.message} role="status" aria-live="polite" aria-atomic="true">
-                Some balances may be out of date
-            </span>
-            <button
-                type="button"
-                className={styles.retry}
-                onClick={refresh}
-                disabled={loading}
-            >
-                {loading ? 'Checking…' : 'Try again'}
-            </button>
-            {coins.length > 0 || staleness ? (
-                <details className={styles.details}>
-                    <summary className={styles.detailsToggle}>Details</summary>
-                    <div className={styles.detailPanel}>
-                        {coins.length > 0 ? (
-                            <ul className={styles.coinList} aria-label="Affected coins">
-                                {coins.map((coin) => (
-                                    <li key={coin.key} className={styles.coin}>
-                                        {coin.iconUrl ? (
-                                            <img src={coin.iconUrl} alt="" aria-hidden="true" />
-                                        ) : (
-                                            <span className={styles.coinFallback} aria-hidden="true" />
-                                        )}
-                                        <span>{coin.name}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : null}
-                        {staleness ? <p className={styles.staleness}>{staleness}</p> : null}
-                    </div>
-                </details>
+        <div className={`${styles.notice} ${overall === 'offline' ? styles.offline : styles.degraded}`}>
+            <div className={styles.banner}>
+                {/* Only the state is announced, so a poll that refreshes the
+                    last-checked age does not repeat the notice. */}
+                <span className={styles.message} role="status" aria-live="polite" aria-atomic="true">
+                    Some balances may be out of date
+                </span>
+                <button
+                    type="button"
+                    className={styles.retry}
+                    onClick={refresh}
+                    disabled={loading}
+                >
+                    {loading ? 'Checking…' : 'Try again'}
+                </button>
+                {hasDetails ? (
+                    <button
+                        type="button"
+                        className={styles.detailsToggle}
+                        aria-expanded={detailsOpen ? 'true' : 'false'}
+                        aria-controls={panelId}
+                        onClick={() => setDetailsOpen((open) => !open)}
+                    >
+                        Details
+                    </button>
+                ) : null}
+            </div>
+            {hasDetails && detailsOpen ? (
+                <div id={panelId} className={styles.detailPanel}>
+                    {coins.length > 0 ? (
+                        <ul className={styles.coinList} aria-label="Affected coins">
+                            {coins.map((coin) => (
+                                <li key={coin.key} className={styles.coin}>
+                                    {coin.iconUrl ? (
+                                        <img src={coin.iconUrl} alt="" aria-hidden="true" />
+                                    ) : (
+                                        <span className={styles.coinFallback} aria-hidden="true" />
+                                    )}
+                                    <span>{coin.name}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
+                    {staleness ? <p className={styles.staleness}>{staleness}</p> : null}
+                </div>
             ) : null}
         </div>
     );

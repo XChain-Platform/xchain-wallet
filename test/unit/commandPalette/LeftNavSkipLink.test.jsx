@@ -14,6 +14,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { userEvent } from '../../helpers/userEvent.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 vi.mock('../../../packages/core/src/shared/styles/useLayoutTier.js', () => ({
     useLayoutTier: () => [() => {}, globalThis.__tier ?? 'full'],
@@ -52,5 +54,18 @@ describe('FullLayoutWithNav skip link', () => {
             expect(screen.getByRole('button', { name: 'Sidebar home' })).toBeInTheDocument();
             expect(screen.queryByRole('button', { name: 'Popup home' })).toBeNull();
         }
+    });
+
+    it('stays clipped while parked so the safe-area inset cannot expose it', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/components/LeftNav.module.css'),
+            'utf8',
+        );
+        const parked = css.match(/\.skipLink\s*\{[^}]*\}/s)?.[0] || '';
+        expect(parked).toMatch(/clip-path:\s*inset\(50%\)/);
+        expect(parked).toMatch(/width:\s*1px/);
+        expect(parked).not.toMatch(/top:\s*-/);
+        const focused = css.match(/\.skipLink:focus,\s*\.skipLink:focus-visible\s*\{[^}]*\}/s)?.[0] || '';
+        expect(focused).toMatch(/clip-path:\s*none/);
     });
 });

@@ -23,13 +23,21 @@
 /* Skip-to-content link (WCAG 2.4.1): persistent navigation and header chrome
    sit around every route at all widths. Park the link above the window until
    it takes focus, then expose the direct path to the active screen. */
+/* Parked as a one-pixel clipped box rather than a negative offset: the
+   layout sits below the top safe-area inset, so a parked offset would land
+   behind the status bar clock. Focus brings it into view. */
 .skipLink {
     position: absolute;
     inset-inline-start: var(--xc-space-3);
-    top: -40px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
     background: var(--xc-text);
     color: var(--xc-bg);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding: 0;
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
     font-weight: 600;
@@ -40,6 +48,11 @@
 .skipLink:focus,
 .skipLink:focus-visible {
     top: var(--xc-space-3);
+    width: auto;
+    height: auto;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    overflow: visible;
+    clip-path: none;
     outline: 2px solid var(--xc-accent-primary, var(--xc-text));
     outline-offset: 2px;
 }

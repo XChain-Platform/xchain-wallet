@@ -61,7 +61,9 @@ export function AddressText({ address, truncate = true, highlight = false, size 
     const head = address.slice(0, 6);
     const tail = address.slice(-6);
     const middleFull = address.slice(6, -6);
-    const displayStyle = {
+    // Only a truncated value is held to one line. A full value (truncate=false)
+    // wraps, so a read-only Receive field never clips the address.
+    const displayStyle = !truncate ? { overflowWrap: 'anywhere' } : {
         display: 'inline-block',
         maxWidth: '100%',
         overflowX: focused ? 'auto' : 'hidden',

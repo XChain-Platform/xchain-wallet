@@ -88,6 +88,20 @@ describe('<AddressText> rendering', () => {
         expect(container.firstChild).toBe(value);
     });
 
+    it('lets a full address wrap instead of clipping it to one line', () => {
+        render(<AddressText address={ADDRESS} truncate={false} />);
+        const address = screen.getByLabelText(ADDRESS);
+        expect(address).toHaveTextContent(ADDRESS);
+        expect(address.style.whiteSpace).not.toBe('nowrap');
+        expect(address.style.overflowX).toBe('');
+        expect(address.style.overflowWrap).toBe('anywhere');
+    });
+
+    it('keeps a truncated address on one line', () => {
+        render(<AddressText address={ADDRESS} />);
+        expect(screen.getByLabelText(ADDRESS).style.whiteSpace).toBe('nowrap');
+    });
+
     it('shows a neutral placeholder for absent addresses', () => {
         const { container } = render(<AddressText address="" size="sm" />);
         expect(container.firstChild).toHaveTextContent('…');

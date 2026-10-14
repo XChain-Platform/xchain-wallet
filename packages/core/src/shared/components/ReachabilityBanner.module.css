@@ -1,5 +1,12 @@
 /* §49.1 / §49.2 - Compact reachability notice below the app header. */
 
+.notice {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-block: 1px solid;
+}
+
 .banner {
     display: flex;
     align-items: center;
@@ -8,7 +15,6 @@
     min-width: 0;
     min-height: var(--xc-tap-min);
     padding-inline: var(--xc-space-2);
-    border-block: 1px solid;
     font-size: var(--xc-text-xs);
     line-height: 1.2;
     white-space: nowrap;
@@ -63,34 +69,16 @@
     opacity: 0.7;
 }
 
-.details {
-    position: relative;
+.detailsToggle {
     flex: 0 0 auto;
 }
 
-.detailsToggle {
-    list-style: none;
-}
-
-.detailsToggle::-webkit-details-marker {
-    display: none;
-}
-
-/* The panel opens below the notice line, never above the header, and grows
-   to its content instead of scrolling inside itself. */
+/* The panel is a row below the notice line: it grows the strip to its
+   content, so it never scrolls inside itself or overlaps the header. */
 .detailPanel {
-    position: absolute;
-    z-index: var(--xc-z-dropdown);
-    inset-block-start: calc(100% + var(--xc-space-1));
-    inset-inline-end: 0;
-    min-width: 9rem;
-    padding: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised, var(--xc-surface));
-    color: var(--xc-text);
-    box-shadow: var(--xc-shadow-popover);
-    white-space: nowrap;
+    padding: 0 var(--xc-space-2) var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
 }
 
 .coinList {

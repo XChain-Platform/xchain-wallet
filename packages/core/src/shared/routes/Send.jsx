@@ -72,6 +72,9 @@ import {
 import { createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
+import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { Settings } from './Settings.jsx';
@@ -392,6 +395,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // Watcher mode still composes unsigned PSBTs, so balance-based Send
     // empty states never replace its form.
     const { isWatcherMode, isSignerMode } = useWalletMode();
+    // A demo wallet holds fixture balances and cannot move funds: the form
+    // opens at once with an inline note instead of waiting on a balance read.
+    const isDemo = isDemoWallet(walletId);
+    const [demoExitConfirmOpen, setDemoExitConfirmOpen] = useState(false);
+    const [demoExitBusy, setDemoExitBusy] = useState(false);
+    const [demoExitError, setDemoExitError] = useState(/** @type {string | null} */ (null));
+    const handleExitDemo = useCallback(async () => {
+        if (demoExitBusy) return;
+        setDemoExitBusy(true);
+        setDemoExitError(null);
+        try {
+            const { reloaded } = await exitDemoWallet({ messaging, walletId });
+            if (reloaded) return;
+            setDemoExitConfirmOpen(false);
+            onBack?.();
+        } catch {
+            setDemoExitError('Could not exit demo mode. Please try again.');
+        } finally {
+            setDemoExitBusy(false);
+        }
+    }, [demoExitBusy, messaging, walletId, onBack]);
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
     const { showToast } = useToast();
@@ -1432,7 +1456,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // Until the address map and chain are known the status stays at its
         // loading default, so the form never flashes before the check runs.
         if (!chainId || !addressesByChain) return undefined;
-        if (isWatcherMode || isSignerMode) {
+        if (isWatcherMode || isSignerMode || isDemo) {
             setChainBalanceState({ chainId, status: 'unknown' });
             return undefined;
         }
@@ -1469,7 +1493,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!cancelled) setChainBalanceState({ chainId, status: 'unknown' });
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode]);
+    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode, isDemo]);
 
     // PC-26 gated-send readiness. A tick with active gated content can
     // only be sent as BATCH(SEND, MESSAGE-with-key); the host guard
@@ -2503,6 +2527,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             {children}
             {footer}
             {leaveGuard.confirmation}
+            {demoExitConfirmOpen ? (
+                <DemoExitConfirm
+                    busy={demoExitBusy}
+                    error={demoExitError}
+                    onConfirm={handleExitDemo}
+                    onCancel={() => { setDemoExitConfirmOpen(false); setDemoExitError(null); }}
+                />
+            ) : null}
         </Screen>
     );
 
@@ -3215,7 +3247,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (formError) setFormError(null);
                 if (submitError) setSubmitError(null);
             }}
-            status={submitError ? (
+            status={isDemo ? (
+                <StatusMessage
+                    variant="info"
+                    recovery={{
+                        label: t('send.demo.createRealWallet'),
+                        onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
+                    }}
+                >
+                    {t('send.demo.blocked')}
+                </StatusMessage>
+            ) : submitError ? (
                 <StatusMessage variant="error">{submitError}</StatusMessage>
             ) : sendFormErrors.length > 0 ? (
                 <FormErrorSummary
@@ -3237,7 +3279,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     type="submit"
                     variant="primary"
                     loading={confirmAction.composing}
-                    disabled={networkOffline || !!testSendGate || maxUnavailable}
+                    disabled={isDemo || networkOffline || !!testSendGate || maxUnavailable}
                     title={networkOffline ? t('send.offline.title') : undefined}
                 >
                     {t('send.title')}

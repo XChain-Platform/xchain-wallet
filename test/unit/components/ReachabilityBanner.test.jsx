@@ -99,6 +99,22 @@ describe('ReachabilityBanner', () => {
         expect(screen.getByText('Last checked 2m ago.')).toBeInTheDocument();
     });
 
+    it('opens Details as a row below the notice line instead of a floating panel', () => {
+        mount({ perChain: [chain()], lastChecked: Date.now() - 120_000 });
+        const toggle = screen.getByRole('button', { name: 'Details' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        const panel = document.getElementById(toggle.getAttribute('aria-controls'));
+        const line = screen.getByRole('status').parentElement;
+        expect(panel).toHaveTextContent('Last checked 2m ago.');
+        expect(line.contains(panel)).toBe(false);
+        expect(panel.parentElement).toBe(line.parentElement);
+        const panelRule = css.match(/\.detailPanel\s*\{[^}]*\}/s)?.[0] || '';
+        expect(panelRule).not.toMatch(/position:\s*absolute|overflow|max-height/);
+    });
+
     it('announces only the reachability state when poll details rerender', () => {
         const view = mount({ lastChecked: 100 });
         const announcement = screen.getByRole('status');
