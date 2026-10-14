@@ -83,7 +83,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             }}
         >
             <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                <table className={tableStyles.table}>
+                <table className={`${tableStyles.table} ${tableStyles.keepColumns}`}>
                     <caption className={tableStyles.caption}>Recent trades</caption>
                     <thead>
                         <tr>
