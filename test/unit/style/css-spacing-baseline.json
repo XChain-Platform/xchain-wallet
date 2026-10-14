@@ -1,0 +1,943 @@
+[
+  {
+    "file": "packages/core/src/shared/commandPalette/CommandPalette.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      72
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/commandPalette/CommandPalette.module.css",
+    "property": "padding",
+    "value": "6px",
+    "lines": [
+      72
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/AlertsOverlay.module.css",
+    "property": "padding-bottom",
+    "value": "0px",
+    "lines": [
+      105
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/AlertsOverlay.module.css",
+    "property": "padding",
+    "value": "0px",
+    "lines": [
+      8,
+      9,
+      10,
+      11,
+      46
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/AlertsOverlay.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      67
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/BalanceList.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      131
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/BottomTabBar.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      43
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/BottomTabBar.module.css",
+    "property": "padding-block",
+    "value": "2px",
+    "lines": [
+      275
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/BottomTabBar.module.css",
+    "property": "padding",
+    "value": "0px",
+    "lines": [
+      131,
+      133
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/ConfirmActionModal.module.css",
+    "property": "padding-bottom",
+    "value": "0px",
+    "lines": [
+      12
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/ConfirmActionModal.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      36
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/DemoBanner.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      19,
+      60
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/DerivationPathCrossCheck.module.css",
+    "property": "margin-top",
+    "value": "3px",
+    "lines": [
+      101
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/DerivationPathCrossCheck.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      46
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/GatedFileViewer.module.css",
+    "property": "padding",
+    "value": "0px",
+    "lines": [
+      10,
+      11,
+      12,
+      13
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/HomeFilterBar.module.css",
+    "property": "padding-inline",
+    "value": "10px",
+    "lines": [
+      39
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/HomeTabs.module.css",
+    "property": "margin-bottom",
+    "value": "-1px",
+    "lines": [
+      49
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/HomeTabs.module.css",
+    "property": "margin",
+    "value": "-1px",
+    "lines": [
+      76
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LayoutModeToggle.module.css",
+    "property": "gap",
+    "value": "6px",
+    "lines": [
+      39
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "margin-inline-end",
+    "value": "0px",
+    "lines": [
+      82,
+      82
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "margin-inline-start",
+    "value": "0px",
+    "lines": [
+      81,
+      81
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "margin-top",
+    "value": "0px",
+    "lines": [
+      80,
+      80
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "margin",
+    "value": "-1px",
+    "lines": [
+      407
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "padding-bottom",
+    "value": "0px",
+    "lines": [
+      179
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "padding-bottom",
+    "value": "44px",
+    "lines": [
+      161
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "padding",
+    "value": "0px",
+    "lines": [
+      83,
+      84,
+      86
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LockedTokenContext.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      29
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/NetworkStatusIndicator.module.css",
+    "property": "padding-inline-start",
+    "value": "18px",
+    "lines": [
+      96
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/NoticeModal.module.css",
+    "property": "padding",
+    "value": "0px",
+    "lines": [
+      10,
+      11,
+      12,
+      13
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/OriginIdentity.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      32
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/PlatformSwitcher.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      50
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/PlatformSwitcher.module.css",
+    "property": "padding",
+    "value": "10px",
+    "lines": [
+      65,
+      106
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/PortfolioChart.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      4
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/PortfolioChart.module.css",
+    "property": "margin-top",
+    "value": "-6px",
+    "lines": [
+      14
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/PortfolioChart.module.css",
+    "property": "padding",
+    "value": "10px",
+    "lines": [
+      53
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/PreflightPanel.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      25,
+      58
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/PsbtIntentPanel.module.css",
+    "property": "row-gap",
+    "value": "2px",
+    "lines": [
+      89
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/QueuedBroadcastBanner.module.css",
+    "property": "gap",
+    "value": "6px",
+    "lines": [
+      67
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/QueuedBroadcastBanner.module.css",
+    "property": "padding",
+    "value": "10px",
+    "lines": [
+      73
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/ReachabilityBanner.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      43
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/ReachabilityBanner.module.css",
+    "property": "padding",
+    "value": "10px",
+    "lines": [
+      65
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/ToastHost.module.css",
+    "property": "margin",
+    "value": "-1px",
+    "lines": [
+      42
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/ToastHost.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      64
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/TokenField.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      92
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/TotalBalanceHero.module.css",
+    "property": "column-gap",
+    "value": "6px",
+    "lines": [
+      98
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/TotalBalanceHero.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      8,
+      19
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/TotalBalanceHero.module.css",
+    "property": "gap",
+    "value": "6px",
+    "lines": [
+      45
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/WatcherResultPanel.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      34
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/keyboard/ShortcutHelp.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      107
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/keyboard/ShortcutHelp.module.css",
+    "property": "padding",
+    "value": "7px",
+    "lines": [
+      107
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/AddressList.module.css",
+    "property": "margin-bottom",
+    "value": "-1px",
+    "lines": [
+      339
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/AddressList.module.css",
+    "property": "margin-bottom",
+    "value": "2px",
+    "lines": [
+      365
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/AddressList.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      206,
+      278
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/AddressList.wif.module.css",
+    "property": "margin-top",
+    "value": "2px",
+    "lines": [
+      64
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ContactsList.module.css",
+    "property": "padding",
+    "value": "0px",
+    "lines": [
+      383,
+      384,
+      385,
+      386
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/CreateWallet.module.css",
+    "property": "margin-top",
+    "value": "2px",
+    "lines": [
+      61
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/DispenserDetail.module.css",
+    "property": "margin-bottom",
+    "value": "-1px",
+    "lines": [
+      120
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/DispenserDetail.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      193,
+      214
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/DispenserDetail.module.css",
+    "property": "padding",
+    "value": "7px",
+    "lines": [
+      193
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/DispenserDetail.module.css",
+    "property": "padding",
+    "value": "9px",
+    "lines": [
+      214
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/DispensersList.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      113
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/DispensersList.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      141
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/History.module.css",
+    "property": "margin-bottom",
+    "value": "-1px",
+    "lines": [
+      859
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/History.module.css",
+    "property": "margin",
+    "value": "-1px",
+    "lines": [
+      21
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/History.module.css",
+    "property": "padding-bottom",
+    "value": "0px",
+    "lines": [
+      1343
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/History.module.css",
+    "property": "padding-bottom",
+    "value": "1px",
+    "lines": [
+      858
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/History.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      676,
+      692
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ImportWallet.module.css",
+    "property": "margin",
+    "value": "-2px",
+    "lines": [
+      81
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/IssueTokenForm.module.css",
+    "property": "margin",
+    "value": "-1px",
+    "lines": [
+      121
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ManageToken.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      139
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ManageToken.module.css",
+    "property": "margin-bottom",
+    "value": "-1px",
+    "lines": [
+      263
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ManageToken.module.css",
+    "property": "padding-bottom",
+    "value": "1px",
+    "lines": [
+      262
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ManageToken.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      437
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/MarketActivity.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      37
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/MessagingInbox.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      211
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/MessagingInbox.module.css",
+    "property": "margin",
+    "value": "2px",
+    "lines": [
+      149
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/MyLists.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      125
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ObligationsView.module.css",
+    "property": "margin-top",
+    "value": "2px",
+    "lines": [
+      61
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ObligationsView.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      83
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/Onboarding.module.css",
+    "property": "margin-top",
+    "value": "2px",
+    "lines": [
+      251
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/PairSignerForm.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      113,
+      224
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/Receive.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      74
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/Send.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      212,
+      402
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/Send.module.css",
+    "property": "margin",
+    "value": "2px",
+    "lines": [
+      317
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/Send.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      169,
+      289
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/StakeDetail.module.css",
+    "property": "margin-bottom",
+    "value": "-1px",
+    "lines": [
+      81
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/StakeDetail.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      145
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/StakeDetail.module.css",
+    "property": "padding",
+    "value": "9px",
+    "lines": [
+      145
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/StakeNew.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      33
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/StakingList.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      129
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/StakingList.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      166
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenDetail.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      346,
+      398,
+      572
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenDetail.module.css",
+    "property": "gap",
+    "value": "6px",
+    "lines": [
+      697
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenDetail.module.css",
+    "property": "margin-inline-start",
+    "value": "6px",
+    "lines": [
+      202
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenDetail.module.css",
+    "property": "margin-top",
+    "value": "-6px",
+    "lines": [
+      342
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenDetail.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      576
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenPicker.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      14
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenPicker.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      13
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/TokenWizard.module.css",
+    "property": "margin-top",
+    "value": "3px",
+    "lines": [
+      101
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/ViewPrivateKey.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      66
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/WalletPicker.module.css",
+    "property": "margin-block",
+    "value": "0px",
+    "lines": [
+      100
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/AddressCombobox.module.css",
+    "property": "gap",
+    "value": "2px",
+    "lines": [
+      71
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/AddressCombobox.module.css",
+    "property": "margin-inline-start",
+    "value": "6px",
+    "lines": [
+      95
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/AddressCombobox.module.css",
+    "property": "padding",
+    "value": "10px",
+    "lines": [
+      72,
+      106
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/AddressCombobox.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      96
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/AddressCombobox.module.css",
+    "property": "padding",
+    "value": "6px",
+    "lines": [
+      96
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/ChainBadge.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      5
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/FeeSelector.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      30,
+      163,
+      181
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/FeeSelector.module.css",
+    "property": "padding",
+    "value": "9px",
+    "lines": [
+      30,
+      163
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/Screen.module.css",
+    "property": "padding-bottom",
+    "value": "0px",
+    "lines": [
+      91,
+      99,
+      123
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/StatusMessage.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      36
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/Tabs.module.css",
+    "property": "padding",
+    "value": "1px",
+    "lines": [
+      66
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/Tabs.module.css",
+    "property": "padding",
+    "value": "7px",
+    "lines": [
+      66
+    ]
+  }
+]
