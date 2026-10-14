@@ -12,28 +12,23 @@
 # protects the keys and not the users. When D5 lands, builds come back here
 # behind a verify-then-sign ceremony.
 #
-# Scope of the triggers: tags gate every release, and PRs only when they touch
-# this package. Android is the slowest lane in the repo (SDK download, Gradle,
-# bundletool), and making every core-only PR pay for it buys nothing that the
-# tag-time run does not already catch.
+# Scope of the triggers: tags gate every release, while pushes to develop and
+# pull requests into develop or master compile Android for every integration
+# path. Shared workspace code and target-branch changes can break the native
+# compile even when a pull request does not touch packages/mobile.
 #
-# workflow_dispatch is the third trigger and it is not a convenience. With only
-# the two above, this lane's first successful run would have to be the release
-# tag itself - and a tag is the one irreversible step here, because Play accepts
-# a versionCode exactly once and a replaced upload costs a new tag (§7). This
-# workflow had by then failed all three of its runs and its fix was unproven, so
-# the plan was to discover whether the fix worked at the single moment where
-# being wrong is most expensive. Dispatch makes the lane provable on any branch,
-# beforehand, for free.
+# workflow_dispatch keeps runner-only failures reproducible on any branch
+# before integration. A release tag is irreversible because Play accepts a
+# versionCode exactly once and a replaced upload costs a new tag (§7), so the
+# workflow must remain provable before that tag exists.
 name: Mobile
 
 on:
   push:
+    branches: [develop]
     tags: ['v*']
   pull_request:
-    paths:
-      - 'packages/mobile/**'
-      - '.github/workflows/mobile.yml'
+    branches: [develop, master]
   workflow_dispatch:
 
 concurrency:
