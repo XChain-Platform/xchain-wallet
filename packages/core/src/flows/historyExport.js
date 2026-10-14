@@ -14,7 +14,8 @@
 // export taken multiple times in one day stays sorted by chain scope.
 //
 // CSV is RFC-4180: fields with commas / quotes / newlines get wrapped
-// in double quotes and inner double quotes are doubled.
+// in double quotes and inner double quotes are doubled. Formula-like
+// values receive a leading apostrophe so spreadsheets import them as text.
 //
 // Cluster I FOLLOWUP 5 (v0.288.0): both converters now accept an
 // optional `columns` parameter that filters which fields land in the
@@ -211,7 +212,8 @@ export function buildExportFilename({ scope = 'all', format, date }) {
 
 function csvField(v) {
     if (v === null || v === undefined) return '';
-    const s = String(v);
+    const text = String(v);
+    const s = /^[=+\-@]/.test(text) ? `'${text}` : text;
     if (/[",\n\r]/.test(s)) {
         return `"${s.replace(/"/g, '""')}"`;
     }
