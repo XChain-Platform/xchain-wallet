@@ -30,7 +30,7 @@ export function NetworkBanner({ activeNetwork }) {
             style={BANNER_STYLE}
         >
             <strong>{label}</strong>
-            <span aria-hidden="true">·</span>
+            <span aria-hidden="true">{' · '}</span>
             <span>Not mainnet</span>
         </div>
     );
