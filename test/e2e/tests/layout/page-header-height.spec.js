@@ -12,7 +12,9 @@
 // Back is hidden on screens the visible nav links to (Send, Settings) and
 // shown on nested screens (Settings > Privacy). Holding the hidden case at
 // the larger trailing-control size made every header 8px taller than the
-// Back control it is meant to match.
+// Back control it is meant to match. Trailing actions (History refresh,
+// Contacts add) take the Back control size too, so a screen with one is the
+// same height as a screen without.
 // Settings also opens at its first row however far it was scrolled before.
 
 import {
@@ -37,21 +39,24 @@ async function enterDemoWallet(page) {
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 
-// Heights of the PageHeader row and the Screen header band that holds it,
-// read from the visible screen title.
+// Heights of the PageHeader row, the Screen header band that holds it, and
+// the row's Back and trailing action controls, read from the visible title.
 async function headerBox(page, title) {
     const heading = page.getByRole('heading', { level: 1, name: title, exact: true });
     await expect(heading).toBeVisible();
     return heading.evaluate((h1) => {
         const row = h1.parentElement.parentElement;
         const band = h1.closest('header');
-        const back = [...row.querySelectorAll('button')]
-            .find((b) => /^Back/.test(b.getAttribute('aria-label') || ''));
+        const buttons = [...row.querySelectorAll('button')]
+            .filter((b) => b.getAttribute('role') !== 'menuitem');
+        const back = buttons.find((b) => /^Back/.test(b.getAttribute('aria-label') || ''));
         return {
             row: row.getBoundingClientRect().height,
             band: band.getBoundingClientRect().height,
             back: Boolean(back),
             backHeight: back ? back.getBoundingClientRect().height : null,
+            actionHeights: buttons.filter((b) => b !== back)
+                .map((b) => b.getBoundingClientRect().height),
         };
     });
 }
@@ -76,6 +81,20 @@ for (const [width, height] of SIZES) {
         expect(send.row).toBe(privacy.backHeight);
         expect(send.row).toBe(privacy.row);
         expect(send.band).toBe(privacy.band);
+
+        // Screens with a trailing action: History (Back hidden, it is a nav
+        // destination) and Contacts (Back shown where the tab bar does not
+        // link it). The action matches Back, so neither band grows.
+        await gotoSection(page, 'History');
+        const history = await headerBox(page, 'History');
+        await gotoSection(page, 'Contacts');
+        const contacts = await headerBox(page, 'Contacts');
+        for (const [name, box] of [['History', history], ['Contacts', contacts]]) {
+            expect(box.actionHeights.length, `${name} has a header action`).toBeGreaterThan(0);
+            for (const h of box.actionHeights) expect(h, `${name} action height`).toBe(privacy.backHeight);
+            expect(box.row, `${name} row height`).toBe(privacy.row);
+            expect(box.band, `${name} band height`).toBe(privacy.band);
+        }
     });
 }
 
