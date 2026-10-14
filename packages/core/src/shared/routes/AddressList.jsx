@@ -1525,7 +1525,7 @@ export function AddressList({
                                         ) : null}
                                         <span className={local.addrLine1}>
                                             {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
-                                            <AddressText address={row.address} truncate={false} />
+                                            <AddressText address={row.address} />
                                             {row.multisig ? (
                                                 <MultisigBadge
                                                     threshold={row.multisig.threshold}
