@@ -102,27 +102,30 @@
     to   { opacity: 1; transform: translateY(0); }
 }
 
+/* The tone tints are translucent, so each one is laid over the opaque raised
+   surface: the toast keeps the inline message colours without letting the
+   page show through it. */
 .variant_info {
     border-color: var(--xc-info);
-    background: var(--xc-info-bg);
+    background: linear-gradient(var(--xc-info-bg), var(--xc-info-bg)), var(--xc-surface-raised);
     color: var(--xc-info-text);
 }
 
 .variant_warning {
     border-color: var(--xc-warning);
-    background: var(--xc-warning-bg);
+    background: linear-gradient(var(--xc-warning-bg), var(--xc-warning-bg)), var(--xc-surface-raised);
     color: var(--xc-warning-text);
 }
 
 .variant_success {
     border-color: var(--xc-success);
-    background: var(--xc-success-bg);
+    background: linear-gradient(var(--xc-success-bg), var(--xc-success-bg)), var(--xc-surface-raised);
     color: var(--xc-success);
 }
 
 .variant_error {
     border-color: var(--xc-danger);
-    background: var(--xc-danger-bg);
+    background: linear-gradient(var(--xc-danger-bg), var(--xc-danger-bg)), var(--xc-surface-raised);
     color: var(--xc-danger-text);
 }
 
