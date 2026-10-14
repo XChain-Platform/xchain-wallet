@@ -44,7 +44,7 @@
 
 .bar [data-network-status-trigger] {
     width: auto;
-    min-width: 38px;
+    min-width: var(--xc-control-h-md);
     gap: var(--xc-space-1);
     padding: 0 var(--xc-space-2);
 }
@@ -140,16 +140,19 @@
     font-size: var(--xc-text-xs);
 }
 
-/* Compact shells move the three-control group as one unit when text zoom
-   leaves too little room for identity and controls side by side. */
+/* The header is one row at every width: the logo holds the start edge, the
+   controls hold the end edge, and the wallet name gives way first. */
 :global([data-xc-tier='compact']) .bar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+}
+
+:global([data-xc-tier='compact']) .left {
+    flex: 1 1 auto;
 }
 
 :global([data-xc-tier='compact']) .right {
-    flex: 1 1 100%;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect

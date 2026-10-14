@@ -199,3 +199,69 @@ test.describe('layout: app header controls', () => {
         }
     });
 });
+
+// Operator ruling: the app header is one row at every width from 320px up,
+// with the logo at the start edge and the controls at the end edge. The
+// wallet name may truncate, the row may not wrap.
+const PHONE_WIDTHS = [320, 360, 402, 412];
+
+test.describe('layout: app header stays one row on phones', () => {
+    test('keeps logo and controls on the same line at 320, 360, 402 and 412px', async ({ page }) => {
+        await createWallet(page, { name: 'A wallet name long enough to need truncating on a phone' });
+
+        for (const width of PHONE_WIDTHS) {
+            await test.step(`${width}px`, async () => {
+                await page.setViewportSize({ width, height: 800 });
+                await gotoSection(page, 'Home');
+                await expect(unlockedShell(page)).toBeVisible();
+                await settle(page);
+
+                const header = page.getByRole('region', { name: 'App header' });
+                const geometry = await header.evaluate((bar) => {
+                    const box = bar.getBoundingClientRect();
+                    const [left, right] = [...bar.children].map((child) => child.getBoundingClientRect());
+                    const logo = bar.querySelector('img').getBoundingClientRect();
+                    const controls = [...bar.children[1].querySelectorAll('button')]
+                        .map((button) => button.getBoundingClientRect())
+                        .filter((rect) => rect.width > 0 && rect.height > 0);
+                    return {
+                        height: box.height,
+                        barLeft: box.left,
+                        barRight: box.right,
+                        scrollWidth: bar.scrollWidth,
+                        clientWidth: bar.clientWidth,
+                        leftTop: left.top,
+                        leftBottom: left.bottom,
+                        rightTop: right.top,
+                        rightBottom: right.bottom,
+                        rightEnd: right.right,
+                        logoLeft: logo.left,
+                        controlTops: controls.map((rect) => rect.top),
+                        controlBottoms: controls.map((rect) => rect.bottom),
+                    };
+                });
+
+                // One row: the two columns overlap vertically instead of stacking.
+                expect(geometry.rightTop, `${width}px: controls start below the identity`)
+                    .toBeLessThan(geometry.leftBottom);
+                expect(geometry.leftTop, `${width}px: identity starts below the controls`)
+                    .toBeLessThan(geometry.rightBottom);
+                for (let i = 0; i < geometry.controlTops.length; i += 1) {
+                    expect(geometry.controlTops[i], `${width}px: control ${i} wrapped`)
+                        .toBeLessThan(geometry.leftBottom);
+                    expect(geometry.controlBottoms[i], `${width}px: control ${i} wrapped`)
+                        .toBeGreaterThan(geometry.leftTop);
+                }
+                // A single control row is well under two control heights tall.
+                expect(geometry.height, `${width}px: header height`).toBeLessThan(72);
+                // Logo at the start edge, controls at the end edge, nothing overflows.
+                expect(geometry.logoLeft - geometry.barLeft, `${width}px: logo start inset`)
+                    .toBeLessThanOrEqual(24);
+                expect(geometry.barRight - geometry.rightEnd, `${width}px: controls end inset`)
+                    .toBeLessThanOrEqual(24);
+                expect(geometry.scrollWidth, `${width}px: header overflows`)
+                    .toBeLessThanOrEqual(geometry.clientWidth);
+            });
+        }
+    });
+});

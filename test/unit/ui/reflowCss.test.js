@@ -18,11 +18,16 @@ describe('zoom reflow CSS', () => {
         expect(tierForWidth(320)).toBe('compact');
     });
 
-    it('wraps the compact app header instead of widening the shell', () => {
+    it('keeps the compact app header on one row without widening the shell', () => {
         const css = readCss('packages/core/src/shared/components/AppHeader.module.css');
 
-        expect(css).toMatch(/:global\(\[data-xc-tier='compact'\]\) \.bar\s*\{[^}]*flex-wrap:\s*wrap/s);
-        expect(css).toMatch(/:global\(\[data-xc-tier='compact'\]\) \.right\s*\{[^}]*flex:\s*1 1 100%[^}]*flex-wrap:\s*wrap/s);
+        // Operator ruling: one header row at every width, logo at the start edge
+        // and controls at the end edge; the wallet name truncates first.
+        expect(css).toMatch(/:global\(\[data-xc-tier='compact'\]\) \.bar\s*\{[^}]*flex-wrap:\s*nowrap/s);
+        expect(css).toMatch(/:global\(\[data-xc-tier='compact'\]\) \.right\s*\{[^}]*flex:\s*0 0 auto[^}]*flex-wrap:\s*nowrap/s);
+        expect(css).not.toMatch(/flex:\s*1 1 100%/);
+        expect(css).not.toMatch(/flex-wrap:\s*wrap/);
+        expect(css).toMatch(/\.left\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s);
     });
 
     it('lets route headings and short onboarding viewports grow or scroll', () => {

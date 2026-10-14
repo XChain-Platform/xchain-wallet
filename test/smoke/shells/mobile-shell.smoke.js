@@ -209,6 +209,19 @@ assert.ok(
     )),
     'no MainActivity left behind at the pre-rename package path',
 );
+// BridgeActivity (via AppCompatActivity) declares onStart public, and Java
+// refuses an override that narrows it to protected, so the APK fails to compile.
+const mainActivityJava = readFileSync(join(
+    android, 'app', 'src', 'main', 'java', 'io', 'xchain', 'wallet', 'android',
+    'MainActivity.java',
+), 'utf8');
+for (const hook of ['onStart', 'onResume', 'onPause', 'onStop', 'onDestroy', 'onRestart']) {
+    assert.doesNotMatch(
+        mainActivityJava,
+        new RegExp(`\\b(?:protected|private)\\s+void\\s+${hook}\\s*\\(`),
+        `MainActivity keeps ${hook} public, as BridgeActivity declares it`,
+    );
+}
 assert.match(
     appGradle,
     /versionCode versionProps\['versionCode'\]/,
