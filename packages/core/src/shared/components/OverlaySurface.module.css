@@ -112,6 +112,7 @@
    phones it never meets the centred title or the close control. */
 .sheet .header {
     padding-top: calc(var(--xc-space-1) + var(--xc-space-2));
+    padding-inline: var(--xc-space-4);
 }
 
 .sheet .title {

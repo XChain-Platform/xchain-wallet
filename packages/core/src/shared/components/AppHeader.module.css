@@ -140,6 +140,12 @@
     font-size: var(--xc-text-xs);
 }
 
+@media (pointer: coarse), (hover: none) {
+    .shortcut {
+        display: none;
+    }
+}
+
 /* The header is one row at every width: the logo holds the start edge, the
    controls hold the end edge, and the wallet name gives way first. */
 :global([data-xc-tier='compact']) .bar {

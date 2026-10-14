@@ -71,7 +71,7 @@ export function MenuRoute({
 
     const primary = [
         { id: 'markets',          label: 'Decentralized exchange', Icon: Icon.MarketIcon,   handler: onMarkets },
-        { id: 'market-activity',  label: 'Marketplace', Icon: Icon.DollarIcon,   handler: onMarketActivity },
+        { id: 'market-activity',  label: 'Marketplace', Icon: Icon.LineChartIcon, handler: onMarketActivity },
         { id: 'dispensers',       label: 'Dispensers',  Icon: Icon.HandshakeIcon, handler: onDispensers },
         { id: 'tokens',           label: 'My tokens',   Icon: Icon.TokenIcon,    handler: onTokens },
         { id: 'alerts',           label: 'Alerts',      Icon: Icon.InfoIcon,     handler: onAlerts },
