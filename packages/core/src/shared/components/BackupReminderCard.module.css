@@ -1,13 +1,10 @@
 .card {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--xc-space-3);
-    padding: var(--xc-card-pad);
-    border-radius: var(--xc-card-radius);
     margin-bottom: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-surface-raised);
 }
 
 .gentle {

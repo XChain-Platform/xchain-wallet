@@ -25,7 +25,7 @@ const GUTTER_GUIDE_STYLE = {
     position: 'fixed',
     insetBlock: 0,
     insetInline: 'var(--xc-page-gutter)',
-    borderInline: '1px dashed var(--xc-accent-primary)',
+    borderInline: '1px solid var(--xc-accent-primary)',
     pointerEvents: 'none',
     zIndex: 'var(--xc-z-sticky)',
 };

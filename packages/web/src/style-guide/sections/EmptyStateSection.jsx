@@ -24,7 +24,7 @@ export function EmptyStateSection() {
                 what={<>Props: <code>title</code>, <code>body</code>, <code>icon</code> (decorative), <code>actionLabel</code> + <code>onAction</code> (the primary button shows only with both), <code>actionIcon</code>, optional <code>secondaryActionLabel</code> + <code>onSecondaryAction</code> and <code>secondaryActionIcon</code> for an outline button, <code>titleAs</code> (h2 default, h3 under a SectionHeader), <code>role</code> (default <code>status</code>, so a filter that empties the list is announced).</>}
                 when={<>Loaded, nothing here: no payments due, no polls, no contacts, a search that matched nothing.</>}
                 whenNot={<>Still loading (Skeleton) · the fetch failed (StatusMessage variant="error") · a form field with no value.</>}
-                sizing={<>Full width, <code>--xc-space-6</code> top and bottom, dashed <code>--xc-border</code>. Body capped at 40 characters a line so it stays one or two short lines.</>}
+                sizing={<>Full width, <code>--xc-space-6</code> top and bottom, no border or fill. Body capped at 40 characters a line so it stays one or two short lines.</>}
                 doRule={<>✓ Title says what is missing ("No payments due") · body says what would put something here · put the primary action first and the secondary outline action second</>}
                 dontRule={<>✗ A bare "No X yet" paragraph · two paragraphs of explanation (link to help instead) · an action that leaves the screen for something unrelated</>}
                 supersedes={<><code>EmptyStateNudge</code> (same props, minus <code>icon</code> and <code>titleAs</code>) and per-route <code>.empty</code> blocks.</>}

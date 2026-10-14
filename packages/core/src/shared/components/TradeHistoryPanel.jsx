@@ -132,9 +132,10 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             aria-label="Trade history"
             aria-busy={addressesLoading || loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
                 marginTop: '0.75rem',
             }}
         >

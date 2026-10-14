@@ -70,6 +70,7 @@ import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
+import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import { ROW_HINT, STACK, SettingsActionRow, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 
@@ -83,9 +84,11 @@ function isWrongPasswordError(err) {
     return name === 'AeadAuthError' || name === 'InvalidPasswordError';
 }
 
+const INCORRECT_PASSWORD = 'Incorrect password.';
+
 /** Plain copy for a password-gated backup step that failed. */
 function passwordStepFailure(err, fallback) {
-    return isWrongPasswordError(err) ? 'Incorrect password.' : userFacingMessage(err, fallback);
+    return isWrongPasswordError(err) ? INCORRECT_PASSWORD : userFacingMessage(err, fallback);
 }
 
 /**
@@ -647,29 +650,38 @@ function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
  */
 function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     const [pw, setPw] = useState('');
+    const submit = (event) => {
+        event.preventDefault();
+        if (busy || pw.length === 0) return;
+        onSubmit(pw);
+    };
     return (
-        <FormSection title={label} description={hint} className={styles.formSection}>
-            <Input
-                type="password"
-                placeholder="Wallet password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                autoFocus
-                autoComplete="current-password"
-                aria-label="Wallet password"
-            />
-            {error ? <Status text={error} tone="error" /> : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit(pw)}
-                    disabled={busy || pw.length === 0}
-                >
-                    {busy ? 'Revealing…' : 'Reveal'}
-                </Button>
-            </div>
-        </FormSection>
+        <form onSubmit={submit} noValidate>
+            <FormSection title={label} description={hint} className={styles.formSection}>
+                <Input
+                    type="password"
+                    revealable
+                    label="Wallet password"
+                    value={pw}
+                    onChange={(e) => setPw(e.target.value)}
+                    autoFocus
+                    autoComplete="current-password"
+                    aria-label="Wallet password"
+                    error={error === INCORRECT_PASSWORD ? error : undefined}
+                />
+                {error && error !== INCORRECT_PASSWORD ? <Status text={error} tone="error" /> : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                    <Button
+                        type="submit"
+                        size="sm"
+                        disabled={busy || pw.length === 0}
+                    >
+                        {busy ? 'Revealing…' : 'Reveal'}
+                    </Button>
+                </div>
+            </FormSection>
+        </form>
     );
 }
 
@@ -816,82 +828,91 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
         && gapLimitNumber >= 1
         && gapLimitNumber <= 100;
     const canSubmit = mn.trim().length > 0 && gapLimitValid && !busy;
+    const submit = (event) => {
+        event.preventDefault();
+        if (!canSubmit) return;
+        onSubmit({
+            mnemonic: mn.trim(),
+            format,
+            bip39Passphrase: format === 'bip39' ? passphrase : '',
+            gapLimit: gapLimitNumber,
+        });
+    };
 
     return (
-        <FormSection
-            title="Test backup"
-            description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active network from it and lists any that don't match. Nothing is saved.`}
-            className={styles.formSection}
-        >
-            <Textarea
-                value={mn}
-                onChange={(e) => setMn(e.target.value)}
-                placeholder="Recovery phrase, words separated by spaces"
-                rows={3}
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                aria-label="Recovery phrase to test"
-                className={styles.mnemonicInput}
-            />
-            <div className={styles.fieldRow}>
-                <Select
-                    label="Format:"
-                        value={format}
-                        onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
-                        aria-label="Phrase format"
-                >
-                        {/* Native options are the required children of the style guide Select. */}
-                        <option value="bip39">Standard (BIP39)</option>
-                        <option value="counterwallet-legacy">Counterwallet legacy</option>
-                </Select>
-                <Input
-                        label="Addresses to check:"
-                        type="number"
-                        inputMode="numeric"
-                        enterKeyHint="go"
-                        autoComplete="off"
-                        min={1}
-                        max={100}
-                        step={1}
-                        value={gapLimit}
-                        onChange={(e) => setGapLimit(e.target.value)}
-                        onWheel={blurNumberInputOnWheel}
-                        aria-label="Addresses to check"
-                        className={styles.gapLimitInput}
-                    />
-            </div>
-            {format === 'bip39' ? (
-                <Input
-                    type="password"
-                    placeholder="BIP39 passphrase (optional)"
-                    value={passphrase}
-                    onChange={(e) => setPassphrase(e.target.value)}
+        <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
+            <FormSection
+                title="Test backup"
+                description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active network from it and lists any that don't match. Nothing is saved.`}
+                className={styles.formSection}
+            >
+                <Textarea
+                    value={mn}
+                    onChange={(e) => setMn(e.target.value)}
+                    placeholder="Recovery phrase, words separated by spaces"
+                    rows={3}
                     autoComplete="off"
-                    aria-label="BIP39 passphrase"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Recovery phrase to test"
+                    className={styles.mnemonicInput}
                 />
-            ) : null}
-            {!gapLimitValid ? (
-                <Status text="Addresses to check must be a whole number from 1 to 100." tone="error" />
-            ) : null}
-            {error ? <Status text={error} tone="error" /> : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit({
-                        mnemonic: mn.trim(),
-                        format,
-                        bip39Passphrase: format === 'bip39' ? passphrase : '',
-                        gapLimit: gapLimitNumber,
-                    })}
-                    disabled={!canSubmit}
-                >
-                    {busy ? 'Testing…' : 'Run test'}
-                </Button>
-            </div>
-        </FormSection>
+                <div className={styles.fieldRow}>
+                    <Select
+                        label="Format:"
+                            value={format}
+                            onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
+                            aria-label="Phrase format"
+                    >
+                            {/* Native options are the required children of the style guide Select. */}
+                            <option value="bip39">Standard (BIP39)</option>
+                            <option value="counterwallet-legacy">Counterwallet legacy</option>
+                    </Select>
+                    <Input
+                            label="Addresses to check:"
+                            type="number"
+                            inputMode="numeric"
+                            enterKeyHint="go"
+                            autoComplete="off"
+                            min={1}
+                            max={100}
+                            step={1}
+                            value={gapLimit}
+                            onChange={(e) => setGapLimit(e.target.value)}
+                            onWheel={blurNumberInputOnWheel}
+                            aria-label="Addresses to check"
+                            className={styles.gapLimitInput}
+                        />
+                </div>
+                {format === 'bip39' ? (
+                    <Input
+                        type="password"
+                        revealable
+                        label="BIP39 passphrase"
+                        optional
+                        value={passphrase}
+                        onChange={(e) => setPassphrase(e.target.value)}
+                        autoComplete="off"
+                        aria-label="BIP39 passphrase"
+                    />
+                ) : null}
+                {!gapLimitValid ? (
+                    <Status text="Addresses to check must be a whole number from 1 to 100." tone="error" />
+                ) : null}
+                {error ? <Status text={error} tone="error" /> : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                    <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!canSubmit}
+                    >
+                        {busy ? 'Testing…' : 'Run test'}
+                    </Button>
+                </div>
+            </FormSection>
+        </form>
     );
 }
 
@@ -1001,62 +1022,68 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
     const passwordStrongEnough = pw1.length >= flowsLib.MIN_BACKUP_PASSWORD_LENGTH;
     const mismatch = pw2.length > 0 && pw1 !== pw2;
     const canSubmit = passwordStrongEnough && pw2.length > 0 && pw1 === pw2 && !busy;
+    const submit = (event) => {
+        event.preventDefault();
+        if (!canSubmit) return;
+        onSubmit(pw1);
+    };
     return (
-        <FormSection
-            title="Export encrypted backup"
-            description={hint}
-            className={styles.formSection}
-        >
-            <Input
-                label={label}
-                type="password"
-                placeholder="Backup password"
-                value={pw1}
-                onChange={(e) => setPw1(e.target.value)}
-                autoFocus
-                autoComplete="new-password"
-                aria-label="Backup password"
-                disabled={busy}
-            />
-            <Input
-                type="password"
-                placeholder="Confirm password"
-                value={pw2}
-                onChange={(e) => setPw2(e.target.value)}
-                autoComplete="new-password"
-                aria-label="Confirm backup password"
-                disabled={busy}
-            />
-            {pw1.length > 0 && !passwordStrongEnough ? (
-                <Status
-                    text={`Backup password must be at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters.`}
-                    tone="error"
+        <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
+            <FormSection
+                title="Export encrypted backup"
+                description={hint}
+                className={styles.formSection}
+            >
+                <Input
+                    label={label}
+                    type="password"
+                    revealable
+                    placeholder="Backup password"
+                    value={pw1}
+                    onChange={(e) => setPw1(e.target.value)}
+                    autoFocus
+                    autoComplete="new-password"
+                    aria-label="Backup password"
+                    disabled={busy}
+                    error={pw1.length > 0 && !passwordStrongEnough
+                        ? `Backup password must be at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters.`
+                        : undefined}
+                    errorKey={pw1}
                 />
-            ) : null}
-            {mismatch ? (
-                <Status text="Backup passwords do not match." tone="error" />
-            ) : null}
-            {error ? <Status text={error} tone="error" /> : null}
-            {operationTime?.showElapsed ? (
-                <Status text={`Encrypting for ${operationTime.elapsedSeconds} seconds…`} />
-            ) : null}
-            {operationTime?.timedOut ? (
-                <Status
-                    text="Encryption is taking longer than expected. Cancel and try again. If it repeats, close other memory-heavy apps before retrying."
-                    tone="error"
+                <Input
+                    type="password"
+                    revealable
+                    label="Confirm backup password"
+                    value={pw2}
+                    onChange={(e) => setPw2(e.target.value)}
+                    autoComplete="new-password"
+                    aria-label="Confirm backup password"
+                    disabled={busy}
+                    error={mismatch ? 'Backup passwords do not match.' : undefined}
+                    errorKey={pw2}
                 />
-            ) : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit(pw1)}
-                    disabled={!canSubmit}
-                >
-                    {busy ? 'Exporting…' : 'Export'}
-                </Button>
-            </div>
-        </FormSection>
+                {error ? <Status text={error} tone="error" /> : null}
+                {operationTime?.showElapsed ? (
+                    <Status text={`Encrypting for ${operationTime.elapsedSeconds} seconds…`} />
+                ) : null}
+                {operationTime?.timedOut ? (
+                    <Status
+                        text="Encryption is taking longer than expected. Cancel and try again. If it repeats, close other memory-heavy apps before retrying."
+                        tone="error"
+                    />
+                ) : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+                    <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!canSubmit}
+                    >
+                        {busy ? 'Exporting…' : 'Export'}
+                    </Button>
+                </div>
+            </FormSection>
+        </form>
     );
 }
 
@@ -1231,6 +1258,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             )}
             <Input
                 type="password"
+                revealable
                 placeholder="Wallet password"
                 value={password}
                 onChange={(e) => onPasswordChange(e.target.value)}
@@ -1368,6 +1396,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             )}
             <Input
                 type="password"
+                revealable
                 placeholder="Wallet password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

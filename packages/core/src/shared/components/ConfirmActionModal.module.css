@@ -57,10 +57,7 @@
 }
 
 .fee {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
+    composes: card from '../../ui/Card.module.css';
     font-size: var(--xc-text-sm);
     font-weight: 700;
     color: var(--xc-text);
