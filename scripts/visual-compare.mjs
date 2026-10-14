@@ -25,6 +25,8 @@
 //         [--screens home,settings] only these screens (keys below)
 //         [--max-settings 40]   cap on Settings sub-pages visited
 //         [--tolerance 24]      per-channel difference a pixel may carry and still match
+//         [--keep-threshold .5] retain rows at or above this percent difference
+//         [--keep-all]           retain every captured PNG
 //
 // Each tree must already have its dependencies installed. The dev servers run
 // with the mock SDK (VITE_XCHAIN_REAL_SDK=0), the same as the layout sweep, and
@@ -38,6 +40,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync } from 'no
 import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import pngjs from 'pngjs';
+import {
+    optimizePngs, pruneReportRows, VISUAL_REPORT_GENERATOR,
+} from './visual-report-files.mjs';
 
 const { PNG } = pngjs;
 
@@ -59,13 +64,21 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.baseline || !args.candidate || !args.out) {
-    console.error('usage: visual-compare.mjs --baseline <tree> --candidate <tree> --out <dir> [--port-base N] [--sizes a,b] [--screens a,b]');
+    console.error('usage: visual-compare.mjs --baseline <tree> --candidate <tree> --out <dir> [--port-base N] [--sizes a,b] [--screens a,b] [--keep-threshold N] [--keep-all]');
     process.exit(2);
 }
 const OUT = resolve(args.out);
 const PORT = Number(args['port-base'] || args.port) || 5391;
 const TOLERANCE = Number(args.tolerance) || 24;
 const MAX_SETTINGS = Number(args['max-settings']) || 40;
+const KEEP_ALL = args['keep-all'] === true;
+const KEEP_THRESHOLD = args['keep-threshold'] === undefined
+    ? 0.5
+    : Number(args['keep-threshold'] === true ? Number.NaN : args['keep-threshold']);
+if (!Number.isFinite(KEEP_THRESHOLD) || KEEP_THRESHOLD < 0) {
+    console.error('--keep-threshold must be a non-negative number');
+    process.exit(2);
+}
 
 // ---------------------------------------------------------------- sizes
 
@@ -472,6 +485,7 @@ function writeReport(rows, skips, meta) {
         sizes: sizes.map((s) => s.name),
         rows: rows.map((r) => ({
             screen: r.screen, size: r.size, phase: r.phase, percent: r.percent, status: r.status,
+            pruned: Boolean(r.pruned),
             baseline: rel(r.baseline), candidate: rel(r.candidate), diff: rel(r.diff),
             baselineMetrics: r.baselineMetrics, candidateMetrics: r.candidateMetrics, note: r.note,
         })),
@@ -479,15 +493,18 @@ function writeReport(rows, skips, meta) {
     };
     writeFileSync(join(OUT, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
 
-    const img = (p, alt) => (p ? `<a href="${escHtml(rel(p))}"><img loading="lazy" src="${escHtml(rel(p))}" alt="${escHtml(alt)}"></a>` : '<div class="none">none</div>');
+    const img = (p, alt, pruned) => {
+        if (pruned) return '<div class="none">pruned</div>';
+        return p ? `<a href="${escHtml(rel(p))}"><img loading="lazy" src="${escHtml(rel(p))}" alt="${escHtml(alt)}"></a>` : '<div class="none">none</div>';
+    };
     const body = rows.map((r) => `
-<section class="row ${r.percent >= 5 ? 'hi' : r.percent >= 0.5 ? 'mid' : 'lo'}">
-  <h2><span class="pct">${r.percent === null ? r.status : `${r.percent.toFixed(2)}%`}</span> ${escHtml(r.screen)} <small>${escHtml(r.size)} / ${escHtml(r.phase)}</small></h2>
+<section class="row ${r.percent >= 5 ? 'hi' : r.percent >= KEEP_THRESHOLD ? 'mid' : 'lo'}${r.pruned ? ' pruned' : ''}">
+  <h2><span class="pct">${r.percent === null ? r.status : `${r.percent.toFixed(2)}%`}</span> ${escHtml(r.screen)} <small>${escHtml(r.size)} / ${escHtml(r.phase)}</small>${r.pruned ? ' <span class="tag">pruned</span>' : ''}</h2>
   <p class="m">baseline: ${escHtml(fmtMetrics(r.baselineMetrics))}<br>candidate: ${escHtml(fmtMetrics(r.candidateMetrics))}${r.note ? `<br>${escHtml(r.note)}` : ''}</p>
   <div class="grid">
-    <figure>${img(r.baseline, 'baseline')}<figcaption>baseline</figcaption></figure>
-    <figure>${img(r.candidate, 'candidate')}<figcaption>candidate</figcaption></figure>
-    <figure>${img(r.diff, 'diff')}<figcaption>diff</figcaption></figure>
+    <figure>${img(r.baseline, 'baseline', r.pruned)}<figcaption>baseline</figcaption></figure>
+    <figure>${img(r.candidate, 'candidate', r.pruned)}<figcaption>candidate</figcaption></figure>
+    <figure>${img(r.diff, 'diff', r.pruned)}<figcaption>diff</figcaption></figure>
   </div>
 </section>`).join('\n');
     const skipList = skips.length
@@ -506,6 +523,7 @@ h1 { font-size: 18px; margin: 0 0 4px; }
 .row h2 { font-size: 15px; margin: 0 0 4px; }
 .row small { color: var(--muted); font-weight: normal; }
 .pct { display: inline-block; min-width: 72px; }
+.tag { color: var(--muted); font-size: 11px; font-weight: normal; text-transform: uppercase; }
 .hi .pct { color: var(--hi); } .mid .pct { color: var(--mid); } .lo .pct { color: var(--lo); }
 .m { color: var(--muted); font-size: 12px; margin: 0 0 8px; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -515,7 +533,7 @@ img { max-width: 100%; max-height: 640px; border: 1px solid var(--line); display
 </style></head><body>
 <h1>Visual compare</h1>
 <p class="meta">baseline ${escHtml(meta.baseline)} (${escHtml(meta.baselineHead)})<br>candidate ${escHtml(meta.candidate)} (${escHtml(meta.candidateHead)})<br>
-${rows.length} shots, ${rows.filter((r) => r.percent >= 0.5).length} differ by 0.5% or more; tolerance ${TOLERANCE} per channel. Desktop sizes are the web layout at that width: the desktop renderer marks no surface on &lt;html&gt;.</p>
+${rows.length} shots, ${rows.filter((r) => r.percent >= KEEP_THRESHOLD).length} differ by ${KEEP_THRESHOLD}% or more, ${rows.filter((r) => r.pruned).length} pruned; tolerance ${TOLERANCE} per channel. Desktop sizes are the web layout at that width: the desktop renderer marks no surface on &lt;html&gt;.</p>
 ${body}
 ${skipList}
 </body></html>`;
@@ -541,9 +559,11 @@ async function main() {
     mkdirSync(join(OUT, 'diff'), { recursive: true });
     const trees = { baseline: resolve(args.baseline), candidate: resolve(args.candidate) };
     const meta = {
+        generator: VISUAL_REPORT_GENERATOR,
         baseline: trees.baseline, candidate: trees.candidate,
         baselineHead: headOf(trees.baseline), candidateHead: headOf(trees.candidate),
         startedAt: new Date().toISOString(),
+        keepAll: KEEP_ALL, keepThreshold: KEEP_THRESHOLD,
     };
     const [baseUrl, candUrl] = await Promise.all([
         startServer('baseline', trees.baseline, PORT),
@@ -595,8 +615,15 @@ async function main() {
     rows.sort((x, y) => (y.percent ?? 101) - (x.percent ?? 101));
     meta.finishedAt = new Date().toISOString();
     writeReport(rows, skips, meta);
+    const pruning = pruneReportRows(rows, {
+        keepAll: KEEP_ALL, threshold: KEEP_THRESHOLD,
+    });
+    const optimization = await optimizePngs(pruning.retained);
+    meta.prunedRows = pruning.pruned;
+    meta.pngOptimization = optimization;
+    writeReport(rows, skips, meta);
     console.log(`report: ${join(OUT, 'index.html')}`);
-    console.log(`${rows.length} shots, ${rows.filter((r) => r.percent >= 0.5).length} at 0.5% or more, ${rows.filter((r) => r.percent === null).length} unpaired, ${skips.length} skipped`);
+    console.log(`${rows.length} shots, ${rows.filter((r) => r.percent >= KEEP_THRESHOLD).length} at ${KEEP_THRESHOLD}% or more, ${pruning.pruned} pruned, ${rows.filter((r) => r.percent === null).length} unpaired, ${skips.length} skipped`);
 }
 
 main().catch((err) => {
