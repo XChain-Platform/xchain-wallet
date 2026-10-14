@@ -406,7 +406,8 @@ describe('History filters', () => {
             fireEvent.click(screen.getByRole('button', { name: 'All' }));
             expect(screen.getByRole('button', { name: 'Filters (0)' })).toBeInTheDocument();
 
-            fireEvent.click(screen.getByRole('button', { name: /Litecoin.*Send.*Confirmed/i }));
+            // Rows show the chain through the asset icon overlay, so the name starts at the action.
+            fireEvent.click(screen.getByRole('button', { name: /(?:Send|Receive).*Confirmed/i }));
             expect(screen.getByRole('rowheader', { name: 'Time' })).toBeInTheDocument();
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();

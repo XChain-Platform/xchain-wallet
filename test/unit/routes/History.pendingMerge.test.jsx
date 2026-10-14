@@ -181,7 +181,7 @@ describe('History shows unconfirmed transactions', () => {
         });
         await waitFor(() => expect(screen.getByText('Confirmed')).toBeTruthy());
         expect(screen.queryByText('Pending')).toBeNull();
-        expect(view.container.textContent.match(/Send/g) || []).toHaveLength(1);
+        expect(view.container.querySelectorAll('[data-history-row]')).toHaveLength(1);
     });
 
     it('sorts the pending row above a confirmed one', async () => {
@@ -279,14 +279,16 @@ describe('History shows unconfirmed transactions', () => {
     it('refreshes confirmation counts from the advancing indexer watermark', async () => {
         const { messaging } = mountHistory({ history: [confirmedRow(CONFIRMED_HASH)] });
         messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7710 });
-        await waitFor(() => expect(screen.getByText('4 Confirmations')).toBeTruthy());
+        // Block and confirmation counts ride on the row's accessible description.
+        const description = () => document.querySelector('[data-history-row]')?.getAttribute('aria-description') || '';
+        await waitFor(() => expect(description()).toMatch(/4 Confirmations/));
 
         vi.useFakeTimers({ toFake: ['Date'] });
         messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7712 });
         vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getIndexerWatermark).toHaveBeenCalledTimes(2));
-        await waitFor(() => expect(screen.getByText('6 Confirmations')).toBeTruthy());
+        await waitFor(() => expect(description()).toMatch(/6 Confirmations/));
     });
 });
 
@@ -306,7 +308,7 @@ describe('History after confirmed PendingTx retention', () => {
 
         await waitFor(() => expect(screen.getByText('Confirmed')).toBeTruthy());
         expect(screen.queryByText('Pending')).toBeNull();
-        expect(view.container.textContent.match(/Send/g) || []).toHaveLength(1);
+        expect(view.container.querySelectorAll('[data-history-row]')).toHaveLength(1);
         await waitFor(async () => expect(await vault.pendingTxs.list()).toHaveLength(0));
     });
 });
