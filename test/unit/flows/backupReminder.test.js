@@ -67,13 +67,13 @@ describe('flows/backupReminder computeBackupReminderState (verified wallet)', ()
 describe('flows/backupReminder computeBackupReminderState (never verified)', () => {
     const funded = Date.parse('2026-06-01T00:00:00.000Z');
 
-    it('stays hidden until the wallet first has funds', () => {
+    it('shows for a new wallet before it receives funds', () => {
         const s = computeBackupReminderState({
             walletId: 'w1',
             hasFunds: false,
             now: funded,
         });
-        expect(s.kind).toBe('hidden');
+        expect(s.kind).toBe('gentle');
     });
 
     it('is gentle as soon as the first funds arrive', () => {
@@ -104,7 +104,6 @@ describe('flows/backupReminder computeBackupReminderState (never verified)', () 
     });
 
     it('returns after the full 24-hour snooze', () => {
-        computeBackupReminderState({ walletId: 'w1', hasFunds: true, now: funded });
         dismissBackupReminder('w1', funded);
         const stillGentle = computeBackupReminderState({
             walletId: 'w1',
@@ -119,6 +118,28 @@ describe('flows/backupReminder computeBackupReminderState (never verified)', () 
             now: funded + MS_PER_DAY,
         });
         expect(returned.kind).toBe('gentle');
+    });
+
+    it.each([
+        ['demo', { isDemo: true }],
+        ['watch-only', { walletMode: 'watcher' }],
+        ['not-yet-classified', { walletMode: null }],
+    ])('never shows for a %s wallet', (_label, walletType) => {
+        const s = computeBackupReminderState({
+            walletId: 'w1', hasFunds: true, now: funded, ...walletType,
+        });
+        expect(s).toEqual({ kind: 'hidden' });
+        expect(globalThis.localStorage.getItem('xc:backupReminderFundedAt')).toBeNull();
+    });
+
+    it('keeps completion after the reminder module restarts', async () => {
+        markBackupVerified('w1', '2026-06-01T00:00:00.000Z');
+        vi.resetModules();
+        const restarted = await import('../../../packages/core/src/flows/backupReminder.js');
+
+        expect(restarted.computeBackupReminderState({
+            walletId: 'w1', hasFunds: true, now: funded + 30 * MS_PER_DAY,
+        })).toEqual({ kind: 'hidden' });
     });
 });
 
