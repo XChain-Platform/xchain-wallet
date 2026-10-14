@@ -47,7 +47,7 @@ assert.ok(/data-testid="qr-scanner-unsupported"/.test(src),
     'QrScanner renders a fallback surface when BarcodeDetector is unavailable');
 assert.ok(/data-testid="qr-scanner"/.test(src),
     'QrScanner carries a stable test id on the supported render path');
-assert.ok(/onFrame\(r\.rawValue\)/.test(src),
+assert.ok(/onFrameRef\.current\(r\.rawValue\)/.test(src),
     'QrScanner emits each detected QR string via the onFrame callback');
 
 // ─── MultisigSigningSession integration ──────────────────────

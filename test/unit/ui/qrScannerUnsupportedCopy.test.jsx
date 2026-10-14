@@ -12,7 +12,7 @@
 // there is no other browser to switch to, so it never sends the user to one.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QrScanner } from '../../../packages/core/src/ui/QrScanner.jsx';
 
 const savedMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
@@ -20,6 +20,7 @@ const savedMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevic
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    window.sessionStorage.clear();
     delete window.Capacitor;
     delete window.BarcodeDetector;
     if (savedMediaDevices) {
@@ -105,5 +106,58 @@ describe('QrScanner browser camera failures', () => {
         expect(alert).not.toHaveTextContent(/pipeline|0x99/i);
         expect(container.querySelector('video').style.display).toBe('none');
         expect(stop).toHaveBeenCalledOnce();
+    });
+
+    it('remembers a denied permission without requesting it on every visit', async () => {
+        const getUserMedia = vi.fn().mockRejectedValue({ name: 'NotAllowedError' });
+        useBrowserCamera(getUserMedia);
+        const first = render(<QrScanner onFrame={() => {}} />);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(/paste the code instead/i);
+        expect(screen.queryByText(/Starting camera/i)).toBeNull();
+        first.unmount();
+
+        render(<QrScanner onFrame={() => {}} />);
+        expect(screen.getByRole('alert')).toHaveTextContent(/paste the code instead/i);
+        expect(screen.queryByText(/Starting camera/i)).toBeNull();
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns an Android user to the denial message instead of another permission gate', async () => {
+        window.Capacitor = { isNativePlatform: () => true };
+        const getUserMedia = vi.fn().mockRejectedValue({ name: 'NotAllowedError' });
+        useBrowserCamera(getUserMedia);
+        const first = render(<QrScanner onFrame={() => {}} />);
+        expect(screen.getByTestId('qr-scanner-camera-rationale')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to camera' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/paste the code instead/i);
+        first.unmount();
+
+        render(<QrScanner onFrame={() => {}} />);
+        expect(screen.queryByTestId('qr-scanner-camera-rationale')).toBeNull();
+        expect(screen.getByRole('alert')).toHaveTextContent(/allow the camera/);
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops scanning and remembers the failure when camera access is revoked', async () => {
+        const track = new EventTarget();
+        track.stop = vi.fn();
+        const stream = { getTracks: () => [track] };
+        const getUserMedia = vi.fn().mockResolvedValue(stream);
+        useBrowserCamera(getUserMedia);
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+        vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(1);
+        vi.spyOn(window, 'cancelAnimationFrame');
+        const first = render(<QrScanner onFrame={() => {}} />);
+        await screen.findByText(/Scanning/);
+
+        track.dispatchEvent(new Event('ended'));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(/allow the camera.*paste the code instead/i);
+        expect(screen.queryByText(/Scanning|Starting camera/i)).toBeNull();
+        first.unmount();
+        render(<QrScanner onFrame={() => {}} />);
+        expect(screen.getByRole('alert')).toHaveTextContent(/allow the camera/);
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
     });
 });
