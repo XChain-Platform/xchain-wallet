@@ -11,13 +11,16 @@
 // Regression suite: CSS fallbacks for older embedded browsers.
 //
 //   [P1] 2026-10-13: Older WebViews discard unsupported color-mix() and
-//        backdrop-filter declarations. Source rules carry cascade fallbacks
-//        so wallet surfaces remain readable and backdrop effects still work.
+//        backdrop-filter declarations. The web build (which the mobile
+//        shells also ship) flattens every color-mix() into a plain color
+//        behind @supports, and backdrop rules carry the WebKit prefix, so
+//        wallet surfaces stay readable and backdrop effects still work.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { colorMixFallback, NO_COLOR_MIX } from '../../packages/web/cssFallbacks.js';
 
 function findRepoRoot() {
     let directory = process.cwd();
@@ -30,12 +33,17 @@ function findRepoRoot() {
 }
 
 const repoRoot = findRepoRoot();
-const packagesRoot = join(repoRoot, 'packages');
+// Authored CSS that reaches the web bundle; build output is not source.
+const webSourceRoots = [
+    join(repoRoot, 'packages', 'core', 'src'),
+    join(repoRoot, 'packages', 'web', 'src'),
+];
+const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist']);
 
 function cssFilesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
         const path = join(directory, entry.name);
-        if (entry.isDirectory() && entry.name !== 'node_modules') return cssFilesBelow(path);
+        if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : cssFilesBelow(path);
         return entry.isFile() && entry.name.endsWith('.css') ? [path] : [];
     });
 }
@@ -44,34 +52,49 @@ function location(file, declaration) {
     return `${relative(repoRoot, file)}:${declaration.source.start.line}`;
 }
 
-describe('regression/CSS compatibility fallbacks', () => {
-    it('[REGRESSION P1] puts a plain declaration before every color-mix() declaration', () => {
-        const violations = [];
+function supportsFallbackFor(rule) {
+    const next = rule.next();
+    if (!next || next.type !== 'atrule' || next.name !== 'supports' || next.params !== NO_COLOR_MIX) return null;
+    const copy = next.nodes.find((node) => node.type === 'rule' && node.selector === rule.selector);
+    return copy ? copy.nodes.filter((node) => node.type === 'decl') : null;
+}
 
-        for (const file of cssFilesBelow(packagesRoot)) {
-            const root = postcss.parse(readFileSync(file, 'utf8'), { from: file });
+describe('regression/CSS compatibility fallbacks', () => {
+    it('[REGRESSION P1] gives every color-mix() declaration a plain fallback in the web build', () => {
+        const violations = [];
+        let mixed = 0;
+
+        for (const file of webSourceRoots.flatMap(cssFilesBelow)) {
+            const source = readFileSync(file, 'utf8');
+            if (!source.includes('color-mix(')) continue;
+            const root = postcss([colorMixFallback()]).process(source, { from: file }).root;
             root.walkRules((rule) => {
+                if (rule.parent?.type === 'atrule' && rule.parent.params === NO_COLOR_MIX) return;
+                const fallback = supportsFallbackFor(rule) ?? [];
                 const plainProperties = new Set();
                 for (const declaration of rule.nodes.filter((node) => node.type === 'decl')) {
                     const property = declaration.prop.toLowerCase();
-                    if (/color-mix\s*\(/i.test(declaration.value)) {
-                        if (!plainProperties.has(property)) {
-                            violations.push(`${location(file, declaration)} ${declaration.prop}`);
-                        }
-                    } else {
+                    if (!/color-mix\s*\(/i.test(declaration.value)) {
                         plainProperties.add(property);
+                        continue;
                     }
+                    mixed += 1;
+                    const flattened = fallback.find((node) => node.prop.toLowerCase() === property);
+                    const covered = plainProperties.has(property)
+                        || (flattened && !/color-mix\s*\(/i.test(flattened.value));
+                    if (!covered) violations.push(`${location(file, declaration)} ${declaration.prop}`);
                 }
             });
         }
 
-        expect(violations, 'color-mix() declarations without an earlier plain fallback').toEqual([]);
+        expect(mixed).toBeGreaterThan(0);
+        expect(violations, 'color-mix() declarations the build cannot flatten').toEqual([]);
     });
 
     it('[REGRESSION P1] pairs backdrop-filter with -webkit-backdrop-filter in the same rule', () => {
         const violations = [];
 
-        for (const file of cssFilesBelow(packagesRoot)) {
+        for (const file of webSourceRoots.flatMap(cssFilesBelow)) {
             const root = postcss.parse(readFileSync(file, 'utf8'), { from: file });
             root.walkRules((rule) => {
                 const declarations = rule.nodes.filter((node) => node.type === 'decl');
