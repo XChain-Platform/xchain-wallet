@@ -135,9 +135,9 @@
 }
 
 .sheetHeader {
-    position: relative;
-    min-height: var(--xc-tap-min);
     display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
     align-items: center;
     flex: 0 0 auto;
 }
@@ -145,16 +145,24 @@
 .handle {
     width: 36px;
     height: 4px;
-    margin: 0 auto;
+    flex: 0 0 auto;
     border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
 }
 
+.sheetTitleRow {
+    display: grid;
+    grid-template-columns: var(--xc-control-h-md, 40px) 1fr var(--xc-control-h-md, 40px);
+    align-items: center;
+    width: 100%;
+    min-height: var(--xc-control-h-md, 40px);
+}
+
 .sheetClose {
-    position: absolute;
-    inset-inline-end: var(--xc-space-2);
-    top: 2px;
+    grid-column: 3;
+    grid-row: 1;
     display: inline-flex;
+    justify-self: end;
 }
 
 .sheetBody {
@@ -165,10 +173,13 @@
 }
 
 .sheetTitle {
+    grid-column: 2;
+    grid-row: 1;
     margin: 0;
-    padding: 0 var(--xc-space-4) var(--xc-space-2);
+    padding: 0 var(--xc-space-2);
     font-size: var(--xc-text-lg);
     line-height: 1.25;
+    text-align: center;
 }
 
 .sheetList {

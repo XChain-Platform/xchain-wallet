@@ -85,6 +85,14 @@ describe('navigation route highlighting', () => {
             history: 'History',
             send: 'Send',
             scan: 'Scan',
+            receive: 'More',
+            markets: 'More',
+            'dispensers-list': 'More',
+            'contracts-list': 'More',
+            messaging: 'More',
+            contacts: 'More',
+            lists: 'More',
+            obligations: 'More',
             settings: 'More',
         };
         const { rerender } = render(<BottomTabBar currentView="home" onSelect={() => {}} />);
@@ -97,7 +105,17 @@ describe('navigation route highlighting', () => {
                     .filter((tab) => tab.getAttribute('aria-current') === 'page');
 
                 expect(activeTabs, route).toHaveLength(1);
-                expect(activeTabs[0], route).toHaveAccessibleName(tabByGroup[group] || 'Home');
+                const expected = group === 'home' && [
+                    'wallet-picker',
+                    'account-picker',
+                    'wallet-details',
+                    'wallet-rename',
+                    'account-rename',
+                    'add-wallet',
+                    'add-account',
+                    'migrate-bip39',
+                ].includes(route) ? 'More' : tabByGroup[group];
+                expect(activeTabs[0], route).toHaveAccessibleName(expected);
             }
         }
     });
@@ -123,7 +141,7 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
-    it('marks Home and the matching row for sheet-only destinations', () => {
+    it('marks More and the matching row for sheet-only destinations', () => {
         render(
             <BottomTabBar
                 currentView="contract-stake"
@@ -132,8 +150,8 @@ describe('navigation route highlighting', () => {
             />,
         );
         const more = screen.getByRole('button', { name: 'More' });
-        expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-        expect(more).not.toHaveAttribute('aria-current');
+        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+        expect(more).toHaveAttribute('aria-current', 'page');
         fireEvent.click(more);
         expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
     });
@@ -142,6 +160,19 @@ describe('navigation route highlighting', () => {
         render(<BottomTabBar currentView="menu" onSelect={() => {}} />);
         expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
         expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
+    });
+
+    it.each(['wallet-picker', 'contacts', 'markets', 'market'])('does not highlight Home on %s', (view) => {
+        render(<BottomTabBar currentView={view} onSelect={() => {}} />);
+        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+        expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('leaves every tab unselected for an unknown screen', () => {
+        render(<BottomTabBar currentView="outside-wallet" onSelect={() => {}} />);
+        const bottomNavigation = within(screen.getByRole('navigation', { name: 'Bottom navigation' }));
+        expect(bottomNavigation.getAllByRole('button')
+            .filter((tab) => tab.hasAttribute('aria-current'))).toHaveLength(0);
     });
 });
 
