@@ -543,6 +543,8 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
     const priceDataOff = settings?.privacy?.priceDataEnabled === false;
     const fiatCurrency = (typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency) || 'usd';
     const editingAlert = alerts.find((alert) => alert.id === editingId) || null;
+    const hasOriginalCurrencyAlert = alerts.some((alert) =>
+        String(alert.fiatCurrency || 'usd').toLowerCase() !== fiatCurrency.toLowerCase());
 
     if (!walletId || !supported) {
         return (
@@ -565,6 +567,12 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 </span>
             ) : !enabled ? (
                 <span style={ROW_HINT}>Turn on Price alerts above to start receiving these.</span>
+            ) : null}
+
+            {hasOriginalCurrencyAlert ? (
+                <span style={ROW_HINT}>
+                    Saved price alerts keep the currency they were created in. Delete and recreate an alert to use the current display currency.
+                </span>
             ) : null}
 
             {loading ? (

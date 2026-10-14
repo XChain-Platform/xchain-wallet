@@ -185,6 +185,26 @@ describe('notification categories and permission', () => {
 });
 
 describe('price alert manager', () => {
+    it('keeps and labels an alert in its original currency after a display-currency switch', async () => {
+        settings = { ...settings, fiatCurrency: 'EUR' };
+        priceAlerts.alerts = [alertRecord({ fiatCurrency: 'usd' })];
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        const edit = screen.getByRole('button', { name: 'Edit Bitcoin price alert' });
+        expect(edit.closest('div')).toHaveTextContent('Bitcoin rises above $70,000');
+        expect(screen.getByText(/Saved price alerts keep the currency/)).toHaveTextContent(
+            'Delete and recreate an alert to use the current display currency.',
+        );
+        fireEvent.click(edit);
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
+            chainId: 'bitcoin-mainnet',
+            direction: 'above',
+            targetFiat: 70000,
+            fiatCurrency: 'usd',
+        }));
+    });
+
     it('distinguishes loading from an empty result', () => {
         priceAlerts.loading = true;
         render(<NotificationsSection walletId="wallet-1" />);
