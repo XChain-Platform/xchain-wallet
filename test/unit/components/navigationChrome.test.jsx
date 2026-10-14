@@ -8,16 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent as keyboardUser } from '../../helpers/userEvent.js';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
     isNavItemActive,
     LeftNav,
     LEFT_NAV_VIEW_GROUPS,
 } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 
 afterEach(() => cleanup());
@@ -69,6 +72,7 @@ const NAV_ITEMS = [
     'receive',
     'scan',
     'markets',
+    'market-activity',
     'dispensers-list',
     'contracts-list',
     'messaging',
@@ -87,6 +91,7 @@ describe('navigation route highlighting', () => {
             scan: 'Scan',
             receive: 'More',
             markets: 'More',
+            'market-activity': 'More',
             'dispensers-list': 'More',
             'contracts-list': 'More',
             messaging: 'More',
@@ -125,6 +130,7 @@ describe('navigation route highlighting', () => {
         ['receive-picker', 'receive'],
         ['action-detail', 'history'],
         ['cross-chain-order', 'markets'],
+        ['market-activity', 'market-activity'],
         ['contract-stake', 'contracts-list'],
         ['list-transfer', 'lists'],
         ['coinpay', 'obligations'],
@@ -139,6 +145,19 @@ describe('navigation route highlighting', () => {
         render(<LeftNav currentView="action-detail" onSelect={() => {}} />);
         expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute('aria-current', 'page');
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+    });
+
+    it('places Marketplace after DEX and removes both when trading is unavailable', () => {
+        const { rerender } = render(<LeftNav currentView="market-activity" onSelect={() => {}} />);
+        const labels = screen.getAllByRole('button').map((button) => button.textContent.trim());
+
+        expect(labels.indexOf('Marketplace')).toBe(labels.indexOf('DEX') + 1);
+        expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('title', 'Marketplace');
+
+        rerender(<LeftNav currentView="home" onSelect={() => {}} hasDexSurface={false} />);
+        expect(screen.queryByRole('button', { name: 'DEX' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Marketplace' })).toBeNull();
     });
 
     it('marks More and the matching row for sheet-only destinations', () => {
@@ -311,7 +330,7 @@ describe('navigation Tab order', () => {
 
         const order = [
             'Open command palette', 'Home', 'History', 'Send', 'Receive',
-            'Scan', 'DEX', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
+            'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
             'Lists', 'Payments due', 'Main wallet', 'Settings', 'Lock',
             'After navigation',
         ];
@@ -319,6 +338,44 @@ describe('navigation Tab order', () => {
             userEvent.tab();
             expect(screen.getByRole('button', { name: label })).toHaveFocus();
         }
+    });
+});
+
+describe('Settings account picker navigation', () => {
+    it('uses the Settings-specific back label without changing other picker entry points', () => {
+        const messaging = { listAccounts: vi.fn().mockResolvedValue([]) };
+        const { rerender } = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AccountPicker
+                    walletId="wallet-1"
+                    activeAccountId={null}
+                    onSwitch={() => {}}
+                    onAddAccount={() => {}}
+                    onBack={() => {}}
+                    backLabel="Back to settings"
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Back to settings' })).toBeInTheDocument();
+
+        rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AccountPicker
+                    walletId="wallet-1"
+                    activeAccountId={null}
+                    onSwitch={() => {}}
+                    onAddAccount={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeInTheDocument();
+
+        const webApp = readFileSync('packages/web/src/App.jsx', 'utf8');
+        expect(webApp).toContain(
+            "backLabel={accountPickerBackTo === 'settings' ? 'Back to settings' : undefined}",
+        );
     });
 });
 
