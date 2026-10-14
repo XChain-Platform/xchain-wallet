@@ -8,23 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// D-34(b): the dispenser explorer's two observed faults, both of which the
-// user meets in the same moment.
+// Pin the dispenser explorer's network scope and user-facing failure copy,
+// which the user meets in the same search.
 //
-//   1. "All chains" fanned out over `chainRegistry.supportedChains()` - EVERY
-//      chain the registry knows - while the wallet was sitting on Regtest. So
-//      a regtest wallet fired searches at mainnet and testnet explorers it is
-//      not configured to reach, on every search.
-//   2. Those requests came back 404, which for this endpoint means "no
-//      dispensers for that token", and the screen rendered the raw string:
-//      "Couldn't search: Explorer returned HTTP 404 for
-//      /BTC/api/dispensers/XCHAIN/token". A user who searched a ticker nobody
-//      dispenses was told the app was broken.
+// Restrict "All chains" to registry entries matching the active network.
+// Otherwise a regtest wallet queries mainnet and testnet explorers that have
+// no configured endpoint for the current wallet.
 //
-// (1) is the cause and (2) is what made it visible, so both are pinned here.
-// The 404 rule is deliberately narrow: every other status still surfaces,
-// because a 500 or a dead host IS a failure and swallowing it would trade a
-// noisy bug for a silent one.
+// Treat a 404 as "no dispensers for that token", which is an empty result.
+// Keep other provider failures visible through fixed copy without exposing
+// status codes or paths.
+//
+// Pin both rules here: the 404 rule is deliberately narrow, while a 500 or a
+// dead host remains a visible failure through the shared message filter.
+
+// Keep the cases separate because an empty result and an unavailable service
+// require different recovery choices even though both return no rows.
+
+// Assert on rendered copy as well as alert state so provider diagnostics cannot
+// pass through while the component still appears structurally correct.
+
+// Exercise all-chain fan-out because one failing network must not hide another.
 
 import { describe, it, expect, vi } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -64,7 +68,7 @@ async function searchFor(token) {
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 }
 
-describe('DispenserExplorer network scoping (D-34b)', () => {
+describe('DispenserExplorer network scoping', () => {
     it('explains that a search term is required once the network is ready', async () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
         const action = await screen.findByRole('button', { name: /search/i });
@@ -161,6 +165,8 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
     });
 
     it('a 404 reads as "no dispensers", not as a broken app', async () => {
+        // Treat absence as a valid result so a retry prompt does not imply that
+        // the wallet or its connection failed.
         const getDispensersForToken = vi.fn().mockRejectedValue(
             new Error('Explorer returned HTTP 404 for /BTC/api/dispensers/XCHAIN/token'),
         );
@@ -175,47 +181,46 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
     });
 
     it('a search where EVERY chain fails says so, instead of "no results"', async () => {
-        // Found while fixing the 404 case. `ResultsPane` returned "No open
-        // dispensers matched" on the row count alone, so a totally failed
-        // search - explorer down, wrong endpoint configured - reported an
-        // empty result and dropped every error on the floor. The original
-        // D-34(b) complaint was only ever VISIBLE because one chain returned
-        // rows while the out-of-network ones 404'd.
+        // Distinguish a total request failure from an empty successful search.
+        // ResultsPane receives both as zero rows, so the error flags carry the
+        // difference and must remain visible through the rendering branch.
         const getDispensersForToken = vi.fn().mockRejectedValue(
             new Error('Explorer returned HTTP 503 for /BTC/api/dispensers/XCHAIN/token'),
         );
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
         await searchFor('XCHAIN');
 
-        // One alert per failing chain: the fan-out is per chain and so is the
-        // report, which is what tells the user WHICH explorer is down.
+        // Keep one alert per failing chain because the fan-out can return
+        // partial results and each failed network remains independently retryable.
         const alerts = await waitFor(() => screen.getAllByRole('alert'));
-        expect(alerts.every((el) => /HTTP 503/.test(el.textContent))).toBe(true);
+        expect(alerts.every((el) => /Could not search for dispensers\. Try again\./.test(el.textContent)))
+            .toBe(true);
+        expect(alerts.every((el) => !/HTTP|\/api\//.test(el.textContent))).toBe(true);
         expect(screen.queryByText(/No matching dispensers/i),
             'every chain failed and the screen still called it an empty result')
             .toBeNull();
     });
 
     it('but a 500 still surfaces, because that one IS a failure', async () => {
+        // Keep the service failure visible while filtering the status code and
+        // request path, which are provider details rather than recovery advice.
         const getDispensersForToken = vi.fn().mockRejectedValue(
             new Error('Explorer returned HTTP 500 for /BTC/api/dispensers/XCHAIN/token'),
         );
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
         await searchFor('XCHAIN');
 
-        // Matched on the alert ROLE, not the copy: the label and the message
-        // are two text nodes, and what actually matters is that the failure is
-        // announced rather than which words wrap it.
-        // One alert per failing chain: the fan-out is per chain and so is the
-        // report, which is what tells the user WHICH explorer is down.
+        // Match on the alert role because the label and message are separate
+        // text nodes. One alert per chain keeps partial failures visible.
         const alerts = await waitFor(() => screen.getAllByRole('alert'));
         expect(alerts.map((el) => el.textContent).join(' '),
-            'a real explorer failure was swallowed along with the 404s, trading a noisy bug for a '
-            + 'silent one')
-            .toMatch(/HTTP 500/);
+            'a real explorer failure was swallowed along with the 404s')
+            .toMatch(/Could not search for dispensers\. Try again\./);
+        expect(alerts.map((el) => el.textContent).join(' ')).not.toMatch(/HTTP 500|\/api\//);
     });
 
     it('shows a search skeleton, retries errors, and resets an empty search', async () => {
+        // Verify the fixed fallback still retains the existing recovery action.
         let resolveFirst;
         const getDispensersForToken = vi.fn()
             .mockImplementationOnce(() => new Promise((resolve, reject) => { resolveFirst = { resolve, reject }; }))
