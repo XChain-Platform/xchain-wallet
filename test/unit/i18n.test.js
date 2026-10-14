@@ -35,8 +35,15 @@ const uriSources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 const packageSources = { ...sharedSources, ...uriSources };
+const packageKeySources = import.meta.glob(
+    [
+        '../../packages/**/*.{js,jsx}',
+        '!../../packages/core/src/i18n/locales/**',
+    ],
+    { query: '?raw', import: 'default', eager: true },
+);
 
-function translationUsage(source) {
+function translationUsage(source, acceptsInjectedTranslator = false) {
     const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
     let importsT = false;
     const keys = new Set();
@@ -58,7 +65,10 @@ function translationUsage(source) {
         },
     });
 
-    return { importsT, keys: importsT ? keys : new Set() };
+    return {
+        importsT,
+        keys: importsT || acceptsInjectedTranslator ? keys : new Set(),
+    };
 }
 
 function missingTranslationKeys(keys, dictionary) {
@@ -440,7 +450,7 @@ describe('translations', () => {
             .toEqual(['status.failed']);
     });
 
-    it('defines every translation key used by shared code in English', () => {
+    it('keeps English keys synchronized with package source', () => {
         const translatedFiles = [];
         const usedKeys = new Set();
 
@@ -458,5 +468,13 @@ describe('translations', () => {
         ]));
         expect(usedKeys.size).toBeGreaterThan(0);
         expect(missingTranslationKeys(usedKeys, en)).toEqual([]);
+
+        const referencedKeys = new Set(usedKeys);
+        for (const source of Object.values(packageKeySources)) {
+            const usage = translationUsage(source, true);
+            for (const key of usage.keys) referencedKeys.add(key);
+        }
+
+        expect(Object.keys(en).filter((key) => !referencedKeys.has(key))).toEqual([]);
     });
 });
