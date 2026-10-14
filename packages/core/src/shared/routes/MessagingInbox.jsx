@@ -1089,11 +1089,11 @@ function SessionRequestRow({
                 </p>
             ) : (
                 <div className={local.requestActions}>
-                    <Button variant="ghost" onClick={onDecline} disabled={stage === 'sending'}>
+                    <Button variant="secondary" onClick={onDecline} disabled={stage === 'sending'}>
                         Decline
                     </Button>
                     {onMessage ? (
-                        <Button variant="ghost" onClick={onMessage} disabled={stage === 'sending'}>
+                        <Button variant="secondary" onClick={onMessage} disabled={stage === 'sending'}>
                             Message
                         </Button>
                     ) : null}

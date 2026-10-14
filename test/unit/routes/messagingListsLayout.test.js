@@ -63,3 +63,11 @@ describe('List member blocks', () => {
         for (const tag of lists) expect(tag).toMatch(/listStyle:\s*'none'/);
     });
 });
+
+describe('Encrypted-session request actions', () => {
+    it('outlines Decline and Message beside the filled Share my key', () => {
+        const src = read('packages/core/src/shared/routes/MessagingInbox.jsx');
+        expect(src).toMatch(/<Button variant="secondary" onClick=\{onDecline\}/);
+        expect(src).toMatch(/<Button variant="secondary" onClick=\{onMessage\}/);
+    });
+});
