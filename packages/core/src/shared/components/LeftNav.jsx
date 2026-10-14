@@ -51,22 +51,22 @@ export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 // Labels and icons for the sidebar rows. Which rows exist, and in what order,
 // comes from the destination lists in routeRegistry.js, which PageHeader also
 // reads to decide where Back is redundant.
-const LEFT_NAV_ITEMS = {
-    home: { label: 'Home', Icon: Icon.HomeIcon },
-    history: { label: 'History', Icon: Icon.HistoryIcon },
-    send: { label: 'Send', Icon: Icon.SendIcon, spendable: true },
-    receive: { label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
-    scan: { label: 'Scan', Icon: Icon.ScanIcon },
-    markets: { label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
-    'market-activity': { label: 'Marketplace', Icon: Icon.LineChartIcon, requiresDex: true },
-    'dispensers-list': { label: 'Dispensers', Icon: Icon.DollarIcon },
-    'contracts-list': { label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
-    messaging: { label: 'Messaging', Icon: Icon.MessageIcon },
-    contacts: { label: 'Contacts', Icon: Icon.UsersIcon },
-    lists: { label: 'Lists', Icon: Icon.TokenListIcon },
+const LEFT_NAV_ITEMS = [
+    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
+    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
+    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
+    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
+    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon, requiresDex: true },
+    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
+    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
+    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
+    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; badge = payable pending count.
-    obligations: { label: 'Payments due', Icon: Icon.ClockIcon },
-};
+    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
+];
 
 export function activeLeftNavItem(currentView) {
     return ROUTE_NAV_SECTIONS[currentView] || 'home';
@@ -119,13 +119,13 @@ export function LeftNav({
     // Contracts is gated on a VM address, matching Home and the command
     // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
     const shown = (id) => {
-        const item = LEFT_NAV_ITEMS[id];
+        const item = LEFT_NAV_ITEMS.find((row) => row.id === id);
         if (item.spendable && isSignerMode) return false;
         if (item.requiresDex && !hasDexSurface) return false;
         if (item.requiresVm && !hasVmAddress) return false;
         return true;
     };
-    const toRows = (ids) => ids.filter(shown).map((id) => ({ id, ...LEFT_NAV_ITEMS[id] }));
+    const toRows = (ids) => ids.filter(shown).map((id) => LEFT_NAV_ITEMS.find((row) => row.id === id));
     const primary = toRows(SIDEBAR_PRIMARY_DESTINATIONS);
     const secondary = toRows(SIDEBAR_SECONDARY_DESTINATIONS);
 

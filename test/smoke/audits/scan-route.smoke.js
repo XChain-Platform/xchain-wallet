@@ -29,7 +29,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ROUTE_NAV_GROUPS, TAB_BAR_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -127,12 +127,15 @@ function arrayBody(name) {
     const end = tabBarSrc.indexOf('];', start);
     return tabBarSrc.slice(start, end + 2);
 }
-const primaryBody = arrayBody('PRIMARY_TABS');
+// The thumb-row tabs are TAB_BAR_DESTINATIONS in order; PRIMARY_TAB_ITEMS
+// holds their labels and icons.
+const primaryBody = arrayBody('PRIMARY_TAB_ITEMS');
 const sheetBody = arrayBody('SHEET_PRIMARY');
 assert.ok(/id: 'scan',[\s\S]*?Icon\.ScanIcon/.test(primaryBody),
     'PRIMARY_TABS now contains Scan with ScanIcon');
-assert.ok(!/id: 'receive'/.test(primaryBody),
+assert.ok(!/id: 'receive'/.test(primaryBody) && !TAB_BAR_DESTINATIONS.includes('receive'),
     'PRIMARY_TABS no longer carries Receive (moved to More sheet)');
+assert.ok(TAB_BAR_DESTINATIONS.includes('scan'), 'the tab bar destinations include Scan');
 assert.ok(/id: 'receive',[\s\S]*?Icon\.ReceiveIcon/.test(sheetBody),
     'SHEET_PRIMARY (More drawer) now lists Receive so the surface stays reachable');
 assert.ok(/Cluster Y FOLLOWUP 1/.test(tabBarSrc),

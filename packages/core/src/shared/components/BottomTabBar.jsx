@@ -62,15 +62,15 @@ import PLATFORM_LINKS from '../platform-links.json';
 // Labels and icons for the thumb-row tabs. Which tabs exist, and in what
 // order, comes from TAB_BAR_DESTINATIONS, which PageHeader also reads to
 // decide where Back is redundant.
-const PRIMARY_TAB_ITEMS = {
-    home: { label: 'Home', Icon: Icon.HomeIcon },
-    history: { label: 'History', Icon: Icon.HistoryIcon },
+const PRIMARY_TAB_ITEMS = [
+    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
+    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
     // `spendable` marks the two rows signer mode promises are gone.
-    send: { label: 'Send', Icon: Icon.SendIcon, spendable: true },
-    scan: { label: 'Scan', Icon: Icon.ScanIcon },
-};
+    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
+    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
+];
 
-const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map((id) => ({ id, ...PRIMARY_TAB_ITEMS[id] }));
+const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map((id) => PRIMARY_TAB_ITEMS.find((tab) => tab.id === id));
 
 const SHEET_PRIMARY = [
     { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },

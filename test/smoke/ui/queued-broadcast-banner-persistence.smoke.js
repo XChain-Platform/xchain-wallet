@@ -53,7 +53,8 @@ assert.ok(
     /\{notices \? \(\s*<div className=\{styles\.notices\}>\s*<NoticesRouteContext\.Provider value=\{routeKey \?\? null\}>\s*\{notices\}\s*<\/NoticesRouteContext\.Provider>\s*<\/div>\s*\) : null\}/.test(navJsx),
     'FullLayoutWithNav renders the notices above the route body when supplied',
 );
-assert.ok(/<div className=\{styles\.mainBody\}>\{children\}<\/div>/.test(navJsx),
+// The route body also carries the nav-surface context PageHeader reads.
+assert.ok(/<div className=\{styles\.mainBody\}>\s*(<NavSurfaceContext\.Provider value=\{navSurface\}>)?\{children\}(<\/NavSurfaceContext\.Provider>)?\s*<\/div>/.test(navJsx),
     'route body wrapped in .mainBody so the header + body share the main flex column');
 
 // --- 2. CSS supports the new flex column --------------------------------
