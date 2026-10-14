@@ -44,6 +44,7 @@ import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/sh
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel, psbtActionSummary } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
+import { WATCH_ONLY_SIGNING_MESSAGE } from '@xchain-wallet/core/shared/addressSelection.js';
 import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
 import {
     listWallets,
@@ -135,6 +136,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
     useBackHandler(onReject, busy);
     const [signInChoice, setSignInChoice] = useState(0);
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
+    const [watchOnlyBlocked, setWatchOnlyBlocked] = useState(false);
+    const [signInAllowedAddresses, setSignInAllowedAddresses] = useState(
+        /** @type {Set<string> | null} */ (null),
+    );
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -164,16 +169,23 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
     // Sign-in signs as one address the user picks here, from the list the
     // background built out of this site's grant; nothing else can be chosen.
-    const signInAddresses = kind === 'signIn' && Array.isArray(payload?.payload?.addresses)
-        ? payload.payload.addresses.filter(
-            (c) => typeof c?.address === 'string' && c.address && typeof c?.chainId === 'string',
-        )
+    const signInAddresses = kind === 'signIn'
+        && signInAllowedAddresses
+        && Array.isArray(payload?.payload?.addresses)
+        ? payload.payload.addresses.filter((candidate) => (
+            typeof candidate?.address === 'string'
+            && candidate.address
+            && typeof candidate?.chainId === 'string'
+            && signInAllowedAddresses.has(`${candidate.chainId}:${candidate.address}`)
+        ))
         : [];
     const signInPick = signInAddresses[signInChoice] ?? null;
 
     useEffect(() => {
         let cancelled = false;
         setWalletId(null);
+        setWatchOnlyBlocked(false);
+        setSignInAllowedAddresses(null);
         setWalletsSettled(false);
         async function loadSigningWallet() {
             try {
@@ -187,7 +199,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     return;
                 }
 
-                if (walletSigningTargets.length === 0) {
+                if (walletSigningTargets.length === 0 && kind !== 'signIn') {
                     setWalletId(wallets[0].id);
                     return;
                 }
@@ -195,24 +207,62 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 const candidates = await Promise.all(wallets.map(async (wallet) => {
                     try {
                         const byChain = await getAddressesByChain(wallet.id);
-                        return { wallet, addresses: byChain?.[chainId] || [] };
+                        const addresses = kind === 'signIn'
+                            ? Object.entries(byChain || {}).flatMap(([addressChainId, rows]) => (
+                                (Array.isArray(rows) ? rows : [])
+                                    .map((address) => ({ ...address, chainId: addressChainId }))
+                            ))
+                            : byChain?.[chainId] || [];
+                        return { wallet, addresses };
                     } catch {
                         return { wallet, addresses: [] };
                     }
                 }));
                 if (cancelled) return;
-                const match = candidates.find(({ addresses }) => (
-                    walletSigningTargets.every((target) => addresses.some((address) => (
-                        target.address
+                const offeredSignInAddresses = new Set(
+                    (Array.isArray(payload?.payload?.addresses) ? payload.payload.addresses : [])
+                        .filter((candidate) => candidate?.chainId && candidate?.address)
+                        .map((candidate) => `${candidate.chainId}:${candidate.address}`)
+                        .filter(Boolean),
+                );
+                const targetMatches = ({ addresses }, requireSigningKey) => (
+                    (kind === 'signIn'
+                        ? addresses.some((address) => offeredSignInAddresses
+                            .has(`${address?.chainId}:${address?.address}`)
+                            && (!requireSigningKey || address?.source !== 'watch-only'))
+                        : walletSigningTargets.every((target) => addresses.some((address) => (
+                        (target.address
                             ? address?.address === target.address
-                            : address?.derivationPath === target.derivationPath
-                    )))
-                ));
+                            : address?.derivationPath === target.derivationPath)
+                        && (!requireSigningKey || address?.source !== 'watch-only')
+                    ))))
+                );
+                if (kind === 'signIn'
+                    && !candidates.some((candidate) => targetMatches(candidate, false))) {
+                    setWalletId(wallets[0].id);
+                    setSignInAllowedAddresses(offeredSignInAddresses);
+                    return;
+                }
+                const match = candidates.find((candidate) => targetMatches(candidate, true));
                 if (!match) {
-                    setError('The requested signing account is not available in this wallet.');
+                    if (candidates.some((candidate) => targetMatches(candidate, false))) {
+                        setWatchOnlyBlocked(true);
+                        setError(WATCH_ONLY_SIGNING_MESSAGE);
+                    } else {
+                        setError('The requested signing account is not available in this wallet.');
+                    }
                     return;
                 }
                 setWalletId(match.wallet.id);
+                if (kind === 'signIn') {
+                    setSignInAllowedAddresses(new Set(
+                        match.addresses
+                            .filter((address) => address?.source !== 'watch-only'
+                                && offeredSignInAddresses
+                                    .has(`${address?.chainId}:${address?.address}`))
+                            .map((address) => `${address.chainId}:${address.address}`),
+                    ));
+                }
             } catch (err) {
                 if (cancelled) return;
                 // Show the error but still let the user reject cleanly.
@@ -225,7 +275,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         }
         void loadSigningWallet();
         return () => { cancelled = true; };
-    }, [chainId, walletSigningTargets]);
+    }, [chainId, kind, payload, walletSigningTargets]);
 
     // §21.3 / §48.4 raw-view gate. The approval window doesn't sit
     // inside the shared MessagingProvider, so it can't use the
@@ -674,7 +724,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
         : 'Watcher mode never signs or asks for a password. Reject this request or switch to Normal mode to sign on this device.';
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
         || !!psbtRefusal || preflightBlocked || signInBlocked;
-    const modeApprovalBlocked = walletMode === null || watcherMode;
+    const signingUnavailable = watcherMode || watchOnlyBlocked;
+    const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
     async function handleApprove() {
         if (busy || password.length === 0 || !walletId || approvalBlocked) return;
@@ -722,7 +773,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     >
                         {t('extension.approval.reject')}
                     </Button>
-                    {!watcherMode ? (
+                    {!signingUnavailable ? (
                         <Button
                             type="button"
                             variant="primary"
@@ -881,7 +932,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
             />
 
-                {watcherMode ? (
+                {watchOnlyBlocked ? (
+                    <p className={styles.refusal} role="status">
+                        {WATCH_ONLY_SIGNING_MESSAGE}
+                    </p>
+                ) : watcherMode ? (
                     <p className={styles.refusal} role="status">
                         {watcherCopy}
                     </p>
@@ -889,7 +944,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     <p role="status">{t('extension.sign.checkingWalletMode')}</p>
                 ) : null}
             </ListPage>
-            {!watcherMode && walletMode !== null ? (
+            {!signingUnavailable && walletMode !== null ? (
                 <FormPage
                     id="sign-approval-form"
                     label={title}

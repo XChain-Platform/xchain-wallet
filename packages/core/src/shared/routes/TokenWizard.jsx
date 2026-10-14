@@ -36,7 +36,12 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listLabel } from '../utils/listLabel.js';
@@ -197,19 +202,20 @@ export function TokenWizard({ walletId, onBack }) {
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (Object.keys(byChain || {}).length === 0) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before issuing a token.',
-                    );
+                if (Object.keys(signingByChain).length === 0) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any chain yet. Use Receive to generate one before issuing a token.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
                 // first key opened the wizard on the wallet's OLDEST chain
                 // forever. Open on the last-used chain instead, ahead of the
                 // first-key fallback, exactly as Send does.
-                setChainId((prev) => pickDefaultChainId(byChain, {
+                setChainId((prev) => pickDefaultChainId(signingByChain, {
                     explicitChainId: prev,
                     settings,
                 }));

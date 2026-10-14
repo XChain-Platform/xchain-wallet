@@ -40,7 +40,12 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { useSignerReady } from './useSignerReady.js';
 import { useWalletMode } from './useWalletMode.js';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
@@ -124,16 +129,19 @@ export function useActionForm({
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (!Object.keys(byChain)[0]) {
-                    setLoadError(noAddressMessage);
+                if (!Object.keys(signingByChain)[0]) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : noAddressMessage);
                     return;
                 }
                 // Honor an externally-locked chain (token context) instead
                 // of clobbering it with the picked chain.
                 if (!lockedToken) {
-                    setChainId(pickDefaultChainId(byChain, {
+                    setChainId(pickDefaultChainId(signingByChain, {
                         explicitChainId: initialChainId,
                         settings,
                     }));
