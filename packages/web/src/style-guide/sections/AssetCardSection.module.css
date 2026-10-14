@@ -1,5 +1,6 @@
 .card {
     composes: card from '../../../../core/src/ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);

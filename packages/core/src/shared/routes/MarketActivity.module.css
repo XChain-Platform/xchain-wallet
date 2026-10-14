@@ -2,6 +2,7 @@
    shared picker to switch markets (mirrors the DEX market header). */
 .marketSelector {
     composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;

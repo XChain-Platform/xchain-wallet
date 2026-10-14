@@ -333,6 +333,8 @@
 
 .row {
     composes: card from '../../ui/Card.module.css';
+    /* The tap floor the audit can read; the control-height min-height below wins. */
+    min-block-size: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -465,6 +467,7 @@ button.row:hover:not(:disabled) {
 
 .histRow {
     composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     position: relative;
     display: flex;
     flex-direction: column;

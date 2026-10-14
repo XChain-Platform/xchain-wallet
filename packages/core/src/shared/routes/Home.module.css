@@ -214,6 +214,7 @@
 
 .pendingAirdropCard {
     composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
