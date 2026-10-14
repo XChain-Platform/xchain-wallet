@@ -12,6 +12,7 @@ import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { t } from '../../i18n/index.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
@@ -170,8 +171,8 @@ export const BalanceList = memo(function BalanceList({
                         aria-expanded={hiddenExpanded}
                     >
                         {hiddenExpanded
-                            ? `Hide ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`
-                            : `Show ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`}
+                            ? t('balanceList.hiddenTokens.hide', { count: hidden.length })
+                            : t('balanceList.hiddenTokens.show', { count: hidden.length })}
                     </button>
                     {hiddenExpanded ? hidden.map((r) => {
                         const key = `${r.chainId}:${r.tick}`;
@@ -208,8 +209,8 @@ export const BalanceList = memo(function BalanceList({
                         data-testid="small-balances-toggle"
                     >
                         {smallExpanded
-                            ? `Hide ${small.length} small balance${small.length === 1 ? '' : 's'}`
-                            : `Show ${small.length} small balance${small.length === 1 ? '' : 's'}`}
+                            ? t('balanceList.smallBalances.hide', { count: small.length })
+                            : t('balanceList.smallBalances.show', { count: small.length })}
                     </button>
                     {smallExpanded ? small.map((r) => {
                         const key = `${r.chainId}:${r.tick}`;

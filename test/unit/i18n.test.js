@@ -248,14 +248,16 @@ describe('translations', () => {
 
     it('formats localized plurals with their source dictionary rules', async () => {
         registerLocale('ru', {
-            'test.addressCount': [
-                '{count, plural, one {# address} few {# addresses-few}',
-                'many {# addresses-many} other {# addresses-other}}',
+            'addressList.hidden.show': [
+                '{count, plural, one {Show # hidden address-one} few {Show # hidden addresses-few}',
+                'many {Show # hidden addresses-many} other {Show # hidden addresses-other}}',
             ].join(' '),
         });
         await setLocale('ru');
 
-        expect(t('test.addressCount', { count: 2 })).toBe('2 addresses-few');
+        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 hidden address-one');
+        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 hidden addresses-few');
+        expect(t('addressList.hidden.show', { count: 5 })).toBe('Show 5 hidden addresses-many');
         expect(t('history.recipients.saved', { count: 21, name: 'Ada' }))
             .toBe('Saved 21 addresses as a single contact "Ada".');
     });
@@ -350,6 +352,19 @@ describe('translations', () => {
         expect(t('send.recipient.maximum', { count })).toBe(maximum);
         expect(t('history.itemsShown', { shown: count, total: count })).toBe(shown);
         expect(t('history.row.confirmations', { count })).toBe(confirmations);
+    });
+
+    it('pluralizes audited English address, token, and confirmation copy', () => {
+        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 hidden address');
+        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 hidden addresses');
+        expect(t('balanceList.hiddenTokens.show', { count: 1 })).toBe('Show 1 hidden token');
+        expect(t('balanceList.hiddenTokens.show', { count: 2 })).toBe('Show 2 hidden tokens');
+        expect(t('transactionStatus.confirmations', { count: 1 })).toBe('1 confirmation');
+        expect(t('transactionStatus.confirmations', { count: 2 })).toBe('2 confirmations');
+        expect(t('manageToken.officialProjectNoun', { count: 1 })).toBe('project.');
+        expect(t('manageToken.officialProjectNoun', { count: 2 })).toBe('projects.');
+        expect(t('manageToken.subassetCount', { count: 1 })).toBe('Subasset (1)');
+        expect(t('manageToken.subassetCount', { count: 2 })).toBe('Subassets (2)');
     });
 
     it.each([

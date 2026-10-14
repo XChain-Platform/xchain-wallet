@@ -58,6 +58,27 @@ export const en = {
         'Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then bring the signed transaction to a Full-mode wallet to broadcast.',
     'common.contactName': 'Contact name',
 
+    'balanceList.hiddenTokens.show':
+        '{count, plural, one {Show # hidden token} other {Show # hidden tokens}}',
+    'balanceList.hiddenTokens.hide':
+        '{count, plural, one {Hide # hidden token} other {Hide # hidden tokens}}',
+    'balanceList.smallBalances.show':
+        '{count, plural, one {Show # small balance} other {Show # small balances}}',
+    'balanceList.smallBalances.hide':
+        '{count, plural, one {Hide # small balance} other {Hide # small balances}}',
+    'addressList.hidden.show':
+        '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
+    'addressList.hidden.hide':
+        '{count, plural, one {Hide # hidden address} other {Hide # hidden addresses}}',
+    'addressList.pagination':
+        '{shown, number} of {total, plural, one {# address} other {# addresses}} shown',
+    'transactionStatus.confirmations':
+        '{count, plural, one {# confirmation} other {# confirmations}}',
+    'manageToken.officialProjectNoun':
+        '{count, plural, one {project.} other {projects.}}',
+    'manageToken.subassetCount':
+        '{count, plural, one {Subasset (#)} other {Subassets (#)}}',
+
     // --- shared components ---------------------------------------
     'adsNotice.title': 'Automatic Donation System',
     'adsNotice.subtitle':

@@ -23,6 +23,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { t } from '../../i18n/index.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { blurNumberInputOnWheel } from '../utils/formInput.js';
@@ -1595,7 +1596,10 @@ export function AddressList({
             {visibleAddressCount < listedRows.length ? (
                 <div className={styles.pagination} aria-live="polite">
                     <span className={styles.paginationCount}>
-                        {Math.min(visibleAddressCount, listedRows.length).toLocaleString('en-US')} of {listedRows.length.toLocaleString('en-US')} addresses shown
+                        {t('addressList.pagination', {
+                            shown: Math.min(visibleAddressCount, listedRows.length),
+                            total: listedRows.length,
+                        })}
                     </span>
                     <Button type="button" variant="secondary" icon={null} onClick={showMoreAddresses}>
                         Show more addresses
@@ -1613,8 +1617,8 @@ export function AddressList({
                     aria-expanded={showHidden}
                 >
                     {showHidden
-                        ? `Hide ${hiddenRows.length} hidden address${hiddenRows.length === 1 ? '' : 'es'}`
-                        : `Show ${hiddenRows.length} hidden address${hiddenRows.length === 1 ? '' : 'es'}`}
+                        ? t('addressList.hidden.hide', { count: hiddenRows.length })
+                        : t('addressList.hidden.show', { count: hiddenRows.length })}
                 </Button>
             ) : null}
         </ListPage>,

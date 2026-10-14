@@ -25,6 +25,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const timelineSrc = read('packages/core/src/shared/components/TxStatusTimeline.jsx');
 const historySrc = read('packages/core/src/shared/routes/History.jsx');
+const enSrc = read('packages/core/src/i18n/locales/en/index.js');
 
 // 1. The component declares chainTip + indexerWatermark in its prop list
 //    and JSDoc.
@@ -61,9 +62,11 @@ assert.ok(/const signed = signedAt > 0 \|\| txHash\.length > 0/.test(timelineSrc
 assert.ok(/confirmations\s*=\s*confirmed\s*&&\s*tip\s*>=\s*blockIndex\s*\?\s*tip\s*-\s*blockIndex\s*\+\s*1\s*:\s*0/.test(timelineSrc),
     'confirmation count is tip - blockIndex + 1 when tip is present');
 
-// 3. Singular vs plural copy is correct.
-assert.ok(/confirmation\$\{confirmations === 1 \? '' : 's'\}/.test(timelineSrc),
-    'TxStatusTimeline pluralizes "confirmation"/"confirmations"');
+// 3. Singular and plural copy use the locale's ICU plural rules.
+assert.ok(/t\('transactionStatus\.confirmations', \{ count: confirmations \}\)/.test(timelineSrc),
+    'TxStatusTimeline renders confirmations through i18n');
+assert.ok(/'transactionStatus\.confirmations':[\s\S]{0,100}\{count, plural, one \{# confirmation\} other \{# confirmations\}\}/.test(enSrc),
+    'English confirmation copy defines ICU singular and plural branches');
 
 // 4. The Confirmed-row sub line falls back to the timestamp when no
 //    chainTip is supplied (existing behaviour preserved).
