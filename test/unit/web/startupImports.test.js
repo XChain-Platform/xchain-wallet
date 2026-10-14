@@ -170,6 +170,19 @@ describe('web startup imports', () => {
         expect(source).not.toMatch(/from '(\.\.\/)+(flows\/)?index\.js'/);
     });
 
+    it('loads the command palette, shortcut help and variant badge when first opened', () => {
+        expect(appSource).toContain("const loadCommandPaletteHost = () => import('./CommandPaletteHost.jsx');");
+        expect(appSource).toContain(
+            "const ShortcutHelp = lazyRoute(() => import('@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx'), 'ShortcutHelp');",
+        );
+        expect(appSource).toContain(
+            "const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVariantBadge');",
+        );
+        expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/commandPalette\/(CommandPalette\.jsx|commandRegistry\.js)'/);
+        expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/keyboard\/ShortcutHelp\.jsx'/);
+        expect(appSource).not.toMatch(/from '\.\/DevVariantBadge\.jsx'/);
+    });
+
     it('loads the demo fixtures only when a demo wallet is entered', () => {
         const onboardingSource = readFileSync(
             resolve(process.cwd(), 'packages/core/src/shared/routes/Onboarding.jsx'),
