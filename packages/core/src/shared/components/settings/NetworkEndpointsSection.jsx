@@ -365,18 +365,22 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                     If it is unreachable, this chain&apos;s balances, history and transactions may be unavailable.
                 </div>
             ) : null}
-            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                {isCustom || dirty ? (
-                    <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
-                        Reset to default
-                    </Button>
-                ) : null}
-                {dirty || editing ? (
-                    <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
-                        {saving ? 'Saving…' : 'Save'}
-                    </Button>
-                ) : null}
-            </div>
+            {/* The action row renders only with an action in it, so an untouched
+                default card keeps even padding instead of a blank gap at its foot. */}
+            {isCustom || dirty || editing ? (
+                <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                    {isCustom || dirty ? (
+                        <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
+                            Reset to default
+                        </Button>
+                    ) : null}
+                    {dirty || editing ? (
+                        <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
+                            {saving ? 'Saving…' : 'Save'}
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
         </FormSection>
     );
 }

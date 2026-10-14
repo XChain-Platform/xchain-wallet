@@ -165,6 +165,15 @@ describe('Address detail actions', () => {
         expect(screen.getByRole('status', { name: 'Notifications' })).toHaveTextContent('Address label saved.');
     });
 
+    it('titles the detail card once, with no single-tab strip repeating it', async () => {
+        mount(messagingWith());
+        fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
+
+        expect(await screen.findByRole('heading', { name: 'About' })).toBeInTheDocument();
+        expect(screen.queryByRole('tablist')).toBeNull();
+        expect(screen.queryByRole('tab', { name: 'About' })).toBeNull();
+    });
+
     it('does not offer to activate the address that is already active', async () => {
         const messaging = messagingWith({
             getActiveAddresses: vi.fn().mockResolvedValue({

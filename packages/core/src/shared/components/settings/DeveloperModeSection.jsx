@@ -126,14 +126,12 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                     hint="Unlocks test networks, endpoint overrides, custom chains, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet."
                     checked={developerMode}
                     onChange={onDeveloperModeToggle}
-                    embedded
                 />
                 <ToggleRow
                     label="Learn Mode"
                     hint="Adds plain-language explanations to confirmation screens."
                     checked={Boolean(settings.learnMode)}
                     onChange={(v) => onToggle('learnMode', v)}
-                    embedded
                 />
                 {developerMode ? (
                     <ToggleRow
@@ -141,7 +139,6 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                         hint="In the web app, display a floating switcher for previewing each wallet layout when Developer Mode is enabled."
                         checked={Boolean(settings.showVariantBadge)}
                         onChange={(v) => onToggle('showVariantBadge', v)}
-                        embedded
                     />
                 ) : null}
             </FormSection>
@@ -167,7 +164,6 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                             checked={Boolean(settings.autoApproveLocalhost)}
                             disabled={!settings.developerMode}
                             onChange={(v) => onToggle('autoApproveLocalhost', v)}
-                            embedded
                         />
                         <AutoSignLocalhostRow
                             developerMode
@@ -195,7 +191,6 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
         <SettingsFieldRow
             label="Cache password for localhost auto-sign"
             hint="In Developer Mode, keep an approved localhost dApp password in memory for the selected time so later sign requests do not prompt again, then clear it when the browser closes."
-            embedded
         >
             <Select
                 value={current}
