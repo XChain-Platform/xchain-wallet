@@ -44,7 +44,7 @@ async function gotoPalette(page, title) {
 
 async function useWatcherReviews(page) {
     await gotoPalette(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet Mode/ }).click();
+    await page.getByRole('button', { name: /^Wallet mode/ }).click();
 
     const watcher = page.getByRole('radio', { name: /^Watcher/ });
     await expect(watcher).toBeVisible();
@@ -66,7 +66,8 @@ async function expectAlignedControlRows(page, label) {
             'textarea',
             '[role="switch"]',
         ].join(',');
-        const controls = [...main.querySelectorAll(selector)].map((element) => {
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        const controls = [...Array.from(main.querySelectorAll(selector)).filter((el) => !el.closest('[aria-hidden="true"]'))].map((element) => {
             const rect = element.getBoundingClientRect();
             const style = getComputedStyle(element);
             return {
