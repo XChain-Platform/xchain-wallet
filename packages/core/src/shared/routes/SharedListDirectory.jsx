@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
     Button,
     ChainBadge,
@@ -144,6 +144,11 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     }, [filterType, mode, directory]);
 
     const pagedLists = matchingLists.slice(0, visibleLimit);
+    // Chains that did not answer, as badges for the single notice. An unknown
+    // chain id has no badge, so it is counted by the notice but not named.
+    const unavailableDescriptors = (directory?.unavailable || [])
+        .map((id) => chainRegistry.get(id))
+        .filter(Boolean);
 
     const header = (
         <PageHeader
@@ -194,16 +199,24 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     const filteredType = listType(filterType);
     return wrap(
         <>
-            {directory.unavailable.map((unavailableChain) => {
-                const descriptor = chainRegistry.get(unavailableChain);
-                return (
-                    <p className={styles.error} key={unavailableChain}>
-                        Shared lists unavailable{descriptor ? <> from <ChainBadge descriptor={descriptor} size="sm" /></> : null}.
-                    </p>
-                );
-            })}
+            {/* One notice for every chain that did not answer, not one per chain. */}
+            {directory.unavailable.length > 0 ? (
+                <StatusMessage variant="error">
+                    Shared lists unavailable
+                    {unavailableDescriptors.length > 0 ? ' from ' : null}
+                    {unavailableDescriptors.map((descriptor, index) => (
+                        <Fragment key={descriptor.id || index}>
+                            {index === 0 ? null : ' '}
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </Fragment>
+                    ))}
+                    . Try again in a moment.
+                </StatusMessage>
+            ) : null}
 
-            {matchingLists.length === 0 ? (
+            {/* With that notice up and no search typed, an empty state would be a
+                second message for the same state. */}
+            {matchingLists.length === 0 && directory.unavailable.length > 0 && !query.trim() ? null : matchingLists.length === 0 ? (
                 <EmptyState
                     title={query.trim()
                         ? "No matching shared lists"
