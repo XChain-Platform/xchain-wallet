@@ -24,7 +24,7 @@ import {
     formatFiatAmountForSpeech,
 } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
-import { isMainnetChainId } from '../../flows/mainnetPrelaunch.js';
+import { isMainnetChainId } from '../utils/mainnetChain.js';
 
 const COMPACT_ACTIONS_QUERY = '(max-width: 479px)';
 

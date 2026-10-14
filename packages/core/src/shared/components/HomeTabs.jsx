@@ -49,7 +49,7 @@ import {
     priceTokenRows,
 } from '../hooks/useFiatRate.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
-import { isMainnetChainId } from '../../flows/mainnetPrelaunch.js';
+import { isMainnetChainId } from '../utils/mainnetChain.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 import { compareDecimalStrings, formatHistoryAmount } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
