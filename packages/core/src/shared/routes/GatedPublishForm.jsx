@@ -568,11 +568,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 </Button>
             )}
         >
-            <p className={styles.hint}>
-                {t('gatedPublish.formHint.beforeToken')} <strong>{tick}</strong>{' '}
-                {t('gatedPublish.formHint.afterToken')}
-            </p>
-
             {ownerMissing ? (
                 <StatusMessage variant="error" className={styles.error}>
                     {t('gatedPublish.ownerMissing.beforeAddress')}
@@ -586,6 +581,12 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 label={t('gatedPublish.fileLimit', {
                     bytes: plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream').toLocaleString(),
                 })}
+                hint={(
+                    <>
+                        {t('gatedPublish.formHint.beforeToken')} <strong>{tick}</strong>{' '}
+                        {t('gatedPublish.formHint.afterToken')}
+                    </>
+                )}
                 aria-label={t('gatedPublish.fileToPublish')}
                 onChange={handlePickFile}
                 disabled={ownerMissing}

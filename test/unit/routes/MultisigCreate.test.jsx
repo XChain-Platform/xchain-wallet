@@ -117,9 +117,12 @@ async function fillValidDraft(messaging) {
 afterEach(() => cleanup());
 
 describe('MultisigCreate local cosigner', () => {
-    it('describes Bitcoin support without exposing internal specification text', async () => {
+    it('keeps setup guidance in a compact disclosure', async () => {
         await mount(mkMessaging());
-        expect(screen.getByText(/currently available only on Bitcoin networks/i)).toBeTruthy();
+        const summary = screen.getByText('How multisig setup works');
+        const disclosure = summary.closest('details');
+        expect(disclosure).not.toHaveAttribute('open');
+        expect(disclosure).toHaveTextContent(/available only on Bitcoin networks/i);
         expect(screen.queryByText(/§10\.3/)).toBeNull();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });

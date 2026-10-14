@@ -70,6 +70,8 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
         const action = await screen.findByRole('button', { name: /search/i });
 
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
+        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeTruthy();
         expect(action).toBeDisabled();
         expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
     });
@@ -240,6 +242,7 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
         expect(getDispensersForToken).toHaveBeenCalledTimes(chainIdsOn('mainnet').length * 2);
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(input).toHaveValue('');
-        expect(screen.getByText(/Search by token ticker to find open dispensers/)).toBeInTheDocument();
+        expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
+        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeInTheDocument();
     });
 });

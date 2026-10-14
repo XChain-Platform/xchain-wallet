@@ -565,7 +565,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             <FormPage
                 label="Unlock messaging inbox"
                 onSubmit={handleUnlock}
-                intro="Enter your wallet password to decrypt this account's messages."
                 status={unlockError ? (
                     <StatusMessage id="messaging-unlock-error" variant="error" className={styles.error}>
                         {unlockError}
@@ -586,6 +585,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     ref={passwordRef}
                     type="password"
                     label="Password"
+                    hint="Decrypts this account's messages."
                     value={password}
                     onChange={(e) => {
                         setPassword(e.target.value);
