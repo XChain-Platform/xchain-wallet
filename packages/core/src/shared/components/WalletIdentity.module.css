@@ -8,11 +8,8 @@
 }
 
 .context {
+    composes: card from '../../ui/Card.module.css';
     align-self: flex-start;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg-muted);
 }
 
 .label {

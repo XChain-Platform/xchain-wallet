@@ -1052,10 +1052,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         role="status"
                         aria-live="polite"
                         style={{
-                            background: 'var(--xc-surface-raised)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-md)',
-                            padding: 'var(--xc-space-3)',
+                            background: 'var(--xc-card-bg)',
+                            border: 'var(--xc-card-border)',
+                            borderRadius: 'var(--xc-card-radius)',
+                            padding: 'var(--xc-card-pad)',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 4,
@@ -1167,10 +1167,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const previewBlock = decomposed ? (
         <div style={{
-            background: 'var(--xc-surface)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-2)',
+            background: 'var(--xc-card-bg)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
+            padding: 'var(--xc-card-pad)',
             display: 'flex',
             flexDirection: 'column',
             gap: 4,

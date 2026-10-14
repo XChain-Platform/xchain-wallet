@@ -1,9 +1,7 @@
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -229,7 +227,7 @@
     border: 0;
     background: transparent;
     padding: var(--xc-list-row-padding);
-    border-top: 1px dashed var(--xc-border);
+    border-top: 1px solid var(--xc-border);
     text-align: center;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

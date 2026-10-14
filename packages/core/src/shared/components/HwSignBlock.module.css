@@ -6,13 +6,10 @@
 }
 
 .statusRow {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
     font-size: var(--xc-text-sm);
 }
 

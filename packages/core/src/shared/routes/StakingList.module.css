@@ -39,11 +39,9 @@
 }
 
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -233,15 +231,12 @@
 
 /* PC-47: claimable-rewards banner above the position list. */
 .claimable {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
     margin-bottom: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .claimable > :first-child {
