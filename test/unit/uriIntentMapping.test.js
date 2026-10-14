@@ -19,6 +19,7 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
+    claimedDeepLinkRoute,
     deepLinkRoute,
     INVALID_DEEP_LINK_MESSAGE,
     useDeepLinks,
@@ -32,9 +33,9 @@ const registry = registryLib.defaultRegistry();
 afterEach(cleanup);
 
 describe('shared URI to view mapping', () => {
-    it('web applyUriIntent delegates to deepLinkRoute', () => {
-        expect(webApp).toMatch(/import \{ deepLinkRoute \} from '\.\.\/\.\.\/desktop\/renderer\/deepLinkRoute\.js'/);
-        expect(applyBody).toContain('deepLinkRoute(raw');
+    it('web applyUriIntent delegates to the claimed-link boundary', () => {
+        expect(webApp).toMatch(/import \{ claimedDeepLinkRoute \} from '\.\.\/\.\.\/desktop\/renderer\/deepLinkRoute\.js'/);
+        expect(applyBody).toContain('claimedDeepLinkRoute(raw');
     });
 
     it('web applyUriIntent holds no second mapping of its own', () => {
@@ -89,6 +90,17 @@ describe('shared URI to view mapping', () => {
         expect(deepLinkRoute('https://example.com', registry)).toBe(null);
     });
 
+    it('turns every nonempty unroutable protocol payload into a plain message', () => {
+        for (const raw of ['not-a-uri', 'https://example.com', 'solana:recipient']) {
+            expect(claimedDeepLinkRoute(raw, registry), raw).toEqual({
+                view: 'deep-link-error',
+                message: INVALID_DEEP_LINK_MESSAGE,
+            });
+        }
+        expect(claimedDeepLinkRoute('', registry)).toBe(null);
+        expect(claimedDeepLinkRoute(undefined, registry)).toBe(null);
+    });
+
     it('returns a plain error message for malformed claimed links', () => {
         for (const raw of [
             'bitcoin:?amount=1',
@@ -97,6 +109,8 @@ describe('shared URI to view mapping', () => {
             'xchain:',
             'xchain:BTC/send?to=bc1qrecipient&amount=not-a-number',
             'xchain:BTC/send?to=bc1qrecipient&amount=0.000000001',
+            'xchain:BTC/sign?to=bc1qrecipient&amount=1',
+            'xchain:BTC/connect?to=bc1qrecipient',
             'web+xchain:',
         ]) {
             expect(deepLinkRoute(raw, registry), raw).toEqual({
@@ -108,7 +122,9 @@ describe('shared URI to view mapping', () => {
 
     it('holds a payment link while locked and applies it after unlock', async () => {
         const bridge = {
-            takePending: vi.fn(async () => ({ raw: 'dogecoin:DRecipient?amount=3' })),
+            takePending: vi.fn(async () => ({
+                raw: 'dogecoin:DRecipient?amount=3&submit=1&confirm=1',
+            })),
             onUri: vi.fn(() => vi.fn()),
             sendMessage: vi.fn(),
         };
@@ -144,6 +160,38 @@ describe('shared URI to view mapping', () => {
                 memo: undefined,
             },
         });
+        expect(bridge.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('holds a malformed claimed link while locked, then applies only its plain error', async () => {
+        const bridge = {
+            takePending: vi.fn(async () => ({
+                raw: 'xchain:BTC/sign?to=bc1qrecipient&amount=1&submit=1',
+            })),
+            onUri: vi.fn(() => vi.fn()),
+            sendMessage: vi.fn(),
+        };
+        const apply = vi.fn();
+        const { rerender } = renderHook(
+            ({ unlocked, walletId }) => useDeepLinks({
+                bridge,
+                detached: false,
+                chainRegistry: registry,
+                unlocked,
+                walletId,
+                apply,
+            }),
+            { initialProps: { unlocked: false, walletId: null } },
+        );
+
+        await waitFor(() => expect(bridge.takePending).toHaveBeenCalledOnce());
+        expect(apply).not.toHaveBeenCalled();
+
+        rerender({ unlocked: true, walletId: 'wallet-1' });
+        await waitFor(() => expect(apply).toHaveBeenCalledExactlyOnceWith({
+            view: 'deep-link-error',
+            message: INVALID_DEEP_LINK_MESSAGE,
+        }));
         expect(bridge.sendMessage).not.toHaveBeenCalled();
     });
 });
