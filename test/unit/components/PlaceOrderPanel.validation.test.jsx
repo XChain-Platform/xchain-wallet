@@ -26,6 +26,18 @@ function deferred() {
     return { promise, resolve };
 }
 
+function balances({ xchain = '1000', xchainDivisibility = 2, btc = '500000000' } = {}) {
+    return {
+        [CHAIN]: [{
+            address: ADDRESS.address,
+            balances: {
+                native: { tick: 'BTC', quantity: btc, divisibility: 8 },
+                tokens: [{ tick: 'XCHAIN', quantity: xchain, divisibility: xchainDivisibility }],
+            },
+        }],
+    };
+}
+
 function mount(props = {}, overrides = {}, viewportWidth = null) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
@@ -76,6 +88,60 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Place buy order' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Price and size must be positive numbers.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects wire amounts with more precision than either market asset supports', async () => {
+        const messaging = mount({}, {
+            getWalletBalances: vi.fn().mockResolvedValue(balances()),
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1.001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Size can have at most 2 decimal places for XCHAIN.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '0.000000001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Price and size total can have at most 8 decimal places for BTC.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects a give amount above the funding address balance before review', async () => {
+        const messaging = mount({}, {
+            getWalletBalances: vi.fn().mockResolvedValue(balances({ xchain: '1000' })),
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '10.01' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Give amount exceeds your available XCHAIN balance of 10.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('uses token metadata to validate a receive-side asset absent from wallet balances', async () => {
+        const messaging = mount({ tick2: 'OTHER' }, {
+            getWalletBalances: vi.fn().mockResolvedValue(balances()),
+            getTokenInfo: vi.fn(async ({ tick }) => ({ divisibility: tick === 'OTHER' ? 1 : 2 })),
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.change(screen.getByLabelText('Price (OTHER)'), { target: { value: '0.01' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'OTHER' })));
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Price and size total can have at most 1 decimal place for OTHER.',
+        );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -197,6 +263,8 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
         pressEnter(await screen.findByRole('button', { name: 'Review' }));
         expect(await screen.findByRole('button', { name: 'Edit order' })).toBeInTheDocument();
+        expect(screen.getAllByText(ADDRESS.address)).toHaveLength(2);
+        expect(screen.getByText('Settlement address')).toBeInTheDocument();
 
         fireEvent.keyDown(window, { key: 'Escape' });
 

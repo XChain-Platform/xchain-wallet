@@ -42,9 +42,11 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
-import { multiplyAmounts } from '../../market/orderMath.js';
+import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
+import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './MarketTrading.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -183,8 +185,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId]);
 
-    const balanceFor = useCallback((tick) => {
+    const assetFor = useCallback((tick) => {
         if (!balances) return null;
+        if (!Array.isArray(balances[chainId])) return null;
         // Scope the shown balance to the funding address (the one that will
         // sign), not the wallet-wide aggregate: a single SOURCE can only spend
         // what sits on that address, so showing the aggregate would overstate
@@ -198,9 +201,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         );
         const tickUpper = String(tick || '').toUpperCase();
         const hit = rows.find((r) => r.chainId === chainId && r.tick.toUpperCase() === tickUpper);
-        if (!hit) return '0';
-        return formatQuantity(hit.quantity, hit.divisibility);
+        if (!hit) return { balance: '0', divisibility: null };
+        return {
+            balance: formatQuantity(hit.quantity, hit.divisibility),
+            divisibility: Number.isInteger(Number(hit.divisibility)) ? Number(hit.divisibility) : null,
+        };
     }, [balances, chainId, addressesByChain, fromAddressId]);
+    const balanceFor = useCallback((tick) => assetFor(tick)?.balance ?? null, [assetFor]);
 
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId) return null;
@@ -211,6 +218,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
+    const tick1Info = useTokenInfo({
+        chainId, tick: tick1, skip: tick1.toUpperCase() === coinTicker,
+    });
+    const tick2Info = useTokenInfo({
+        chainId, tick: tick2, skip: tick2.toUpperCase() === coinTicker,
+    });
 
     // PC-16: the GIVE side is the chain's native coin - the (only) shape
     // that settles via CoinPay and can arm auto-pay. Buy gives tick2,
@@ -393,6 +406,40 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // the protocol amount encoder cannot serialize.
         if (!total) {
             setFormError('Price and size must be positive numbers.');
+            return;
+        }
+        const priceFraction = price.trim().split('.')[1] || '';
+        if (priceFraction.length > 18) {
+            setFormError('Price can have at most 18 decimal places.');
+            return;
+        }
+        const sizeAsset = assetFor(tick1);
+        const sizePrecisionError = tokenAmountPrecisionError(size, {
+            divisibility: sizeAsset?.divisibility
+                ?? (tick1.toUpperCase() === coinTicker ? 8 : tick1Info?.divisibility),
+            tick: tick1,
+            noun: 'Size',
+        });
+        if (sizePrecisionError) {
+            setFormError(sizePrecisionError);
+            return;
+        }
+        const totalAsset = assetFor(tick2);
+        const totalPrecisionError = tokenAmountPrecisionError(total, {
+            divisibility: totalAsset?.divisibility
+                ?? (tick2.toUpperCase() === coinTicker ? 8 : tick2Info?.divisibility),
+            tick: tick2,
+            noun: 'Price and size total',
+        });
+        if (totalPrecisionError) {
+            setFormError(totalPrecisionError);
+            return;
+        }
+        const giveTick = side === 'buy' ? tick2 : tick1;
+        const giveAmount = side === 'buy' ? total : size.trim();
+        const giveAsset = side === 'buy' ? totalAsset : sizeAsset;
+        if (giveAsset && compareAmounts(giveAmount, giveAsset.balance) === 1) {
+            setFormError(`Give amount exceeds your available ${giveTick} balance of ${giveAsset.balance}.`);
             return;
         }
         // undefined means the custom date box holds something unparseable;
@@ -639,6 +686,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     <dt style={dtStyle}>Expiration</dt>
                     <dd style={ddStyle}>{expirationLabel}</dd>
                     <dt style={dtStyle}>From</dt>
+                    <dd style={{ ...ddStyle, wordBreak: 'break-all' }}>
+                        {fromAddress?.address ?? '-'}
+                    </dd>
+                    <dt style={dtStyle}>Settlement address</dt>
                     <dd style={{ ...ddStyle, wordBreak: 'break-all' }}>
                         {fromAddress?.address ?? '-'}
                     </dd>

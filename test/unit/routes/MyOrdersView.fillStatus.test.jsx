@@ -22,7 +22,7 @@
 // `give_remaining` is the give amount net of settled matches.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, cleanup, act as domAct, within } from '@testing-library/react';
+import { render, cleanup, act as domAct, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyOrdersView, deriveStatus, fillStateOf } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
@@ -80,7 +80,7 @@ function detail(actionIndex, status, giveRemaining) {
     };
 }
 
-function harness({ orders = [], cancels = [], details = {}, ordersError = null, cancelsError = null } = {}) {
+function harness({ orders = [], cancels = [], details = {}, ordersError = null, cancelsError = null, methods = {} } = {}) {
     const calls = [];
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
@@ -97,6 +97,7 @@ function harness({ orders = [], cancels = [], details = {}, ordersError = null, 
         },
         listAutopayOrders: () => Promise.resolve([]),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
+        ...methods,
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -172,6 +173,59 @@ describe('MyOrdersView: cancel rows', () => {
         const item = { key: `${CHAIN}:1`, row: orderRow(1), fill: null };
         expect(deriveStatus(item, new Set([`${CHAIN}:1`]), 0)).toBe('cancelled');
         expect(deriveStatus(item, new Set(), 0)).toBe('open');
+    });
+
+    it('rejects a malformed order ID before opening review', async () => {
+        const { messaging, calls } = harness({
+            orders: [orderRow('bad-id')],
+            details: { 'bad-id': detail('bad-id', 'open', '500') },
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open orders'), 'bad-id');
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+
+        expect(await utils.findByRole('alert')).toHaveTextContent('Order ID must be a positive whole number.');
+        expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('explains that an edit needs at least one changed field', async () => {
+        const { messaging, calls } = harness({
+            orders: [orderRow(700)],
+            details: { 700: detail(700, 'open', '500') },
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open orders'), 700);
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+        const submit = utils.getByRole('button', { name: 'Edit order' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+
+        expect(await utils.findByRole('alert')).toHaveTextContent(
+            'Change at least one field (expiration, allow-list, or block-list).',
+        );
+        expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('shows plain copy when the encoder refuses a cancel', async () => {
+        const raw = 'editOrder: indexer POST /internal/order/700 returned 500';
+        const { messaging } = harness({
+            orders: [orderRow(700)],
+            details: { 700: detail(700, 'open', '500') },
+            methods: { composeForConfirm: vi.fn().mockRejectedValue(new Error(raw)) },
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open orders'), 700);
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+
+        await waitFor(() => expect(utils.getByRole('alert')).toHaveTextContent(
+            'Could not cancel the order. Try again.',
+        ));
+        expect(utils.container).not.toHaveTextContent('/internal/order/700');
     });
 });
 

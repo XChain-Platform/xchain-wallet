@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const state = vi.hoisted(() => ({
     watcher: false,
@@ -107,6 +107,16 @@ beforeEach(() => {
     state.messaging = {
         getSettings: vi.fn(async () => ({ preflightPrivacy: 'report' })),
         getAutopayExposure: vi.fn(async () => ({ total: 0 })),
+        getTokenInfo: vi.fn(async () => ({ divisibility: 1 })),
+        getWalletBalances: vi.fn(async () => ({
+            'bitcoin-regtest': [{
+                address: 'mSourceAddress',
+                balances: {
+                    native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                    tokens: [{ tick: 'XCP', quantity: '1000', divisibility: 1 }],
+                },
+            }],
+        })),
         composeForConfirm: vi.fn(async () => ({ actionString: 'ORDER|0', psbtHex: 'cafe' })),
         preflight: vi.fn(async () => ({ findings: [] })),
         checkInputLiveness: vi.fn(async () => ({ verdict: 'live', spent: [] })),
@@ -131,7 +141,7 @@ describe('CreateOrderForm coverage', () => {
         fillBasicOrder();
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bad|address' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByText('Receive address is invalid.')).toBeInTheDocument();
+        expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
@@ -144,6 +154,35 @@ describe('CreateOrderForm coverage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
             .toBeInTheDocument();
+    });
+
+    it('rejects malformed ticker IDs, excess precision, and give amounts above balance before review', async () => {
+        await renderForm();
+
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: '^bad' } });
+        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.5' } });
+        fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Give ticker can be a name, or ^ followed by the token's number (^123).",
+        );
+
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
+        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.55' } });
+        await waitFor(() => expect(state.messaging.getTokenInfo).toHaveBeenCalled());
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Give amount can have at most 1 decimal place for XCP.',
+        );
+
+        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '100.1' } });
+        await waitFor(() => expect(state.messaging.getWalletBalances).toHaveBeenCalled());
+        await act(async () => {});
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Give amount exceeds your available XCP balance of 100.',
+        );
+        expect(state.confirm).not.toHaveBeenCalled();
     });
 
     it('threads a valid order through confirm composition and software submission', async () => {
@@ -197,10 +236,23 @@ describe('CreateOrderForm coverage', () => {
         state.submit.mockResolvedValue({ psbtHex: 'deadbeef' });
         await renderForm();
         fillBasicOrder();
+        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '1devmockabc' } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
         expect(await screen.findByText('Review order')).toBeInTheDocument();
         expect(screen.getByText(/Watcher mode:/)).toBeInTheDocument();
+        expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
+        expect(screen.getByTestId('action-intent')).toHaveTextContent('0.1 BTC');
+        expect(screen.getByTestId('action-intent')).toHaveTextContent('1devmockabc');
+        expect(screen.getByText('Settlement address')).toBeInTheDocument();
+        expect(screen.getByText('Default window')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        expect(screen.getByLabelText('Ticker')).toHaveValue('XCP');
+        expect(screen.getByLabelText('Amount')).toHaveValue('2.5');
+        expect(screen.getByLabelText('Amount (BTC)')).toHaveValue('0.1');
+        expect(screen.getByLabelText('Receive at (optional)')).toHaveValue('1devmockabc');
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
         await waitFor(() => expect(state.submit).toHaveBeenCalledWith(expect.objectContaining({
@@ -209,5 +261,21 @@ describe('CreateOrderForm coverage', () => {
         })));
         expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
             .toBeInTheDocument();
+    });
+
+    it('shows plain copy for watcher encoder failures and keeps the review values', async () => {
+        state.watcher = true;
+        state.submit.mockRejectedValue(new Error('orderAction: encoder POST /internal/order failed'));
+        await renderForm();
+        fillBasicOrder();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not create the order. Check the details and try again.',
+        );
+        expect(document.body).not.toHaveTextContent('/internal/order');
+        expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
     });
 });
