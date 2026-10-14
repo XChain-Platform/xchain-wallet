@@ -171,6 +171,11 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(ruleBody(listNarrow, '.row')).toMatch(/grid-template-columns:\s*40px minmax\(0, 1fr\)/);
         expect(ruleBody(listNarrow, '.status')).toMatch(/overflow-wrap:\s*anywhere/);
 
+        // The kit Button's label span is what lays out a result card, so the
+        // column rule reaches it; otherwise ticker, terms and number sit side by side.
+        const explorer = readCss('packages/core/src/shared/routes/DispenserExplorer.module.css');
+        expect(ruleBody(explorer, '.resultRow > span')).toMatch(/flex-direction:\s*column/);
+
         const detailNarrow = mediaBlock(readCss(
             'packages/core/src/shared/routes/DispenserDetail.module.css',
         ), 'not all and (min-width: 400px)');
