@@ -27,9 +27,11 @@ describe('K51 small-screen UI', () => {
         render(<NetworkBanner activeNetwork="testnet" />);
 
         const banner = screen.getByRole('status');
-        expect(banner).toHaveTextContent('Testnet·Not mainnet');
+        // Spaces in the text keep copied and read-out copy readable; the flex
+        // gap supplies the visible spacing.
+        expect(banner.textContent).toBe('Testnet · Not mainnet');
         expect(banner.style.gap).toBe('var(--xc-space-1, 4px)');
-        expect(banner.children[1]).toHaveTextContent(/^·$/);
+        expect(banner.children[1].textContent).toBe(' · ');
     });
 
     it('uses standard kit heights for ADS amounts and wraps placeholder prose at words', () => {
