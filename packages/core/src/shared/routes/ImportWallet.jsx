@@ -789,7 +789,12 @@ export function ImportWallet({
         importErrorTarget = { id: 'import-bip39-passphrase', label: 'BIP39 passphrase' };
     }
     const importErrors = error ? [{ ...importErrorTarget, message: error }] : [];
-    const formStatus = error ? (
+    // The summary links field errors after a submit attempt. An error raised
+    // before any submit (a rejected scan, an unreadable file or drop) has no
+    // attempt to anchor to, so it shows as a plain error message instead.
+    const formStatus = error && validationAttempt === 0 ? (
+        <StatusMessage variant="error">{error}</StatusMessage>
+    ) : error ? (
         <FormErrorSummary
             errors={importErrors}
             focusKey={validationAttempt}
