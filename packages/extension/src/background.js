@@ -32,6 +32,7 @@ import {
     notifications as notificationsLib,
 } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import {
     ChromeMetaBackend,
     ChromeSessionBackend,
@@ -83,6 +84,8 @@ import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js
 import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
 import { createChromeNotifier } from './background/chromeNotifications.js';
 import { createRestartStringSetStorage } from './background/restartStateStorage.js';
+
+logConsole.attach();
 
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet

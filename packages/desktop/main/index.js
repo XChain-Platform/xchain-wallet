@@ -46,6 +46,7 @@ import { fileURLToPath } from 'node:url';
 
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
 
 import { IPC_CHANNEL } from './messageHost.js';
@@ -108,6 +109,8 @@ import {
     tearDownHost,
     wipeRuntimeStores,
 } from './runtime.js';
+
+logConsole.attach();
 
 const here = dirname(fileURLToPath(import.meta.url));
 installProcessErrorHandlers();
