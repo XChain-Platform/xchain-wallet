@@ -54,6 +54,7 @@ function undecodedSentence(decodeError) {
  * @param {string} [props.signingAddress]         the address whose key will sign
  * @param {object|null} [props.decodedAction]     decodeActionFromPsbt intent, when the bytes decoded
  * @param {string|null} [props.decodeError]       why the action decode failed / was punted
+ * @param {string|null} [props.unavailableMessage] caller-facing reason the transaction is unavailable
  * @param {boolean} [props.loading]
  */
 export function PsbtIntentPanel({
@@ -62,6 +63,7 @@ export function PsbtIntentPanel({
     signingAddress,
     decodedAction = null,
     decodeError = null,
+    unavailableMessage = null,
     loading = false,
 }) {
     if (loading) {
@@ -72,8 +74,12 @@ export function PsbtIntentPanel({
         // exactly when the user most needs to be cautious.
         return (
             <p className={styles.undecoded} role="alert" data-testid="psbt-undecodable">
-                This transaction could not be decoded, so the wallet cannot show you
-                what it does. Only continue if you trust where it came from.
+                {unavailableMessage || (
+                    <>
+                        This transaction could not be decoded, so the wallet cannot show you
+                        what it does. Only continue if you trust where it came from.
+                    </>
+                )}
             </p>
         );
     }
