@@ -25,6 +25,7 @@ import { InfoTip, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
+import { t } from '../../../i18n/index.js';
 import { ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -100,8 +101,11 @@ export function AdsSection() {
 
     return (
         <div style={STACK}>
+            {/* The page title already names the subject, so the switch reads as
+                an action; screen readers hear the subject too. */}
             <ToggleRow
-                label="Automatic Donation System"
+                label={t('settings.toggle.turnOn')}
+                accessibleLabel={t('settings.ads.switchAccessibleLabel')}
                 hint="It sets aside a small amount when you send a transaction and sends it as one donation once it adds up; turning it off stops further set-asides without clearing the pending total."
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}

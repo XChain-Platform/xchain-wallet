@@ -60,6 +60,36 @@ export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
     return Math.ceil(width * safeRatio);
 }
 
+// Below this the code gets too small to scan reliably, so a window that
+// cannot fit a code this big beside the address and Copy row scrolls instead.
+export const QR_FIT_MIN_SIZE = 128;
+
+/**
+ * The largest QR side, in CSS px, that keeps the code, the address field and
+ * the Copy row inside the route scroller's visible height without scrolling.
+ * `contentTop` is the QR's top in the scroller's content (independent of the
+ * scroll position) and `belowQr` the distance from the QR's bottom to the
+ * Copy row's bottom, which does not depend on the QR's size. Returns null when
+ * there is nothing to fit (no measurable scroller) or when the fitted code
+ * would fall below QR_FIT_MIN_SIZE; the width cap then applies alone.
+ */
+export function qrFitSize({ viewportHeight, paddingBottom = 0, contentTop, belowQr }) {
+    const values = [viewportHeight, paddingBottom, contentTop, belowQr].map(Number);
+    if (values.some((value) => !Number.isFinite(value))) return null;
+    const [height, padding, top, below] = values;
+    if (height <= 0) return null;
+    const fit = Math.floor(height - padding - top - below);
+    return fit >= QR_FIT_MIN_SIZE ? fit : null;
+}
+
+/** The nearest ancestor that scrolls vertically, or null for the document. */
+function verticalScroller(element) {
+    for (let node = element?.parentElement; node && node !== document.body; node = node.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+    }
+    return null;
+}
+
 // descriptor.coin is the long coin name ('bitcoin' / 'litecoin' / 'dogecoin');
 // the user-facing native ticker is the short symbol ('BTC' / 'LTC' / 'DOGE').
 // Uppercasing descriptor.coin directly leaks 'BITCOIN' into hints and labels.
@@ -150,6 +180,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [labelError, setLabelError] = useState(/** @type {string | null} */ (null));
     const [qrPixelSize, setQrPixelSize] = useState(QR_FALLBACK_PIXEL_SIZE);
     const qrSurfaceRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const qrActionsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const [qrFit, setQrFit] = useState(/** @type {number | null} */ (null));
     const [renderedQr, setRenderedQr] = useState(
         /** @type {{ uri: string, dataUrl: string } | null} */ (null),
     );
@@ -328,11 +360,41 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const surface = qrSurfaceRef.current;
         if (!surface) return undefined;
 
+        const scroller = verticalScroller(surface);
+
+        // Size the code from the height the route scroller shows as well as
+        // from its width, so a short window (the 360x600 extension popup)
+        // keeps the code, the address and the Copy row on screen together.
+        // Every term is independent of the code's own size, so applying the
+        // result never changes the next measurement.
+        const fitToHeight = () => {
+            const copyRow = qrActionsRef.current?.firstElementChild;
+            const surfaceRect = surface.getBoundingClientRect?.();
+            const copyRect = copyRow?.getBoundingClientRect?.();
+            if (!surfaceRect || !copyRect) return null;
+            if (!scroller) {
+                return qrFitSize({
+                    viewportHeight: window.innerHeight,
+                    contentTop: surfaceRect.top + window.scrollY,
+                    belowQr: copyRect.bottom - surfaceRect.bottom,
+                });
+            }
+            const scrollerRect = scroller.getBoundingClientRect();
+            return qrFitSize({
+                viewportHeight: scroller.clientHeight,
+                paddingBottom: parseFloat(getComputedStyle(scroller).paddingBottom) || 0,
+                contentTop: surfaceRect.top - scrollerRect.top - scroller.clientTop + scroller.scrollTop,
+                belowQr: copyRect.bottom - surfaceRect.bottom,
+            });
+        };
+
         const measure = (observedWidth) => {
             const fallbackWidth = surface.getBoundingClientRect?.().width || 0;
             const width = Number(observedWidth) > 0 ? Number(observedWidth) : fallbackWidth;
             const nextSize = qrPixelSizeFor(width, window.devicePixelRatio);
             setQrPixelSize((current) => (current === nextSize ? current : nextSize));
+            const nextFit = fitToHeight();
+            setQrFit((current) => (current === nextFit ? current : nextFit));
         };
         measure();
 
@@ -341,15 +403,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         let observer;
         if (typeof ResizeObserver === 'function') {
             observer = new ResizeObserver((entries) => {
-                measure(entries[0]?.contentRect?.width);
+                const own = entries.find((entry) => entry.target === surface);
+                measure(own?.contentRect?.width);
             });
             observer.observe(surface);
+            if (scroller) observer.observe(scroller);
         }
         return () => {
             observer?.disconnect();
             window.removeEventListener('resize', onWindowResize);
         };
-    }, [address?.id]);
+    }, [address?.id, activeChainId, loadError, generateError]);
 
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
@@ -923,7 +987,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     ) : null;
 
     const qrActionsContent = address ? (
-        <div className={`${qrStyles.actions} ${styles.qrActions}`}>
+        <div ref={qrActionsRef} className={`${qrStyles.actions} ${styles.qrActions}`}>
             <Button
                 size="md"
                 variant="secondary"
@@ -1002,7 +1066,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {address ? (
                 <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
                     <div className={`${qrStyles.frame} ${styles.qrBox}`}>
-                        <div ref={qrSurfaceRef} className={styles.qrSurface}>
+                        <div
+                            ref={qrSurfaceRef}
+                            className={styles.qrSurface}
+                            style={qrFit ? { '--xc-qr-fit-size': `${qrFit}px` } : undefined}
+                        >
                             {qrDataUrl ? (
                                 <img
                                     src={qrDataUrl}

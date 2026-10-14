@@ -22,6 +22,7 @@ import {
 } from '../utils/dispenserPricing.js';
 import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { t } from '../../i18n/index.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispenserExplorer.module.css';
 
@@ -323,7 +324,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                             onChange={(e) => setChainFilter(e.target.value)}
                             className={local.chainSelect}
                         >
-                            <option value="all">All chains</option>
+                            <option value="all">{t('common.allNetworks')}</option>
                             {chains.map((cid) => (
                                 <option key={cid} value={cid}>
                                     {chainRegistry.get(cid)?.displayName || cid.split('-')[0]}
@@ -343,7 +344,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                             autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
                             autoCorrect="off"
                             spellCheck={false}
-                            aria-describedby="dispenser-search-hint"
+                            hint={searchMode === 'token'
+                                ? t('dispenserExplorer.searchHint.token')
+                                : t('dispenserExplorer.searchHint.address')}
                         />
                     </div>
                     <Button
@@ -357,11 +360,6 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {searching ? 'Searching…' : 'Search'}
                     </Button>
                 </div>
-                <p id="dispenser-search-hint" className={`${styles.entryDescription} ${local.searchHint}`}>
-                    {searchMode === 'token'
-                        ? 'Ticker name, such as MYTOKEN, or a token reference from the explorer.'
-                        : 'Dispenser address or source address.'}
-                </p>
                 {searchDisabledReason ? (
                     <p id="dispenser-search-disabled-reason" className={styles.entryDescription}>
                         {searchDisabledReason}

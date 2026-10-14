@@ -76,6 +76,14 @@ const PLURAL_ONLY_FILES = [
     '/routes/ManageToken.jsx',
 ];
 
+// Files with t() only for single wording fixes; treated like PLURAL_ONLY_FILES.
+const PARTIAL_COPY_FILES = [
+    '/settings/AdsSection.jsx',
+    '/settings/DeveloperModeSection.jsx',
+    '/routes/CreateOrderForm.jsx',
+    '/routes/DispenserExplorer.jsx',
+];
+
 describe('shipping JSX localization', () => {
     test('localized shared components stay in the literal guard', () => {
         for (const component of localizedComponents) {
@@ -110,7 +118,7 @@ describe('shipping JSX localization', () => {
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }
-            if (PLURAL_ONLY_FILES.some((suffix) => file.endsWith(suffix))) continue;
+            if ([...PLURAL_ONLY_FILES, ...PARTIAL_COPY_FILES].some((suffix) => file.endsWith(suffix))) continue;
             const ast = parse(source, {
                 sourceType: 'module',
                 plugins: ['jsx', 'estree'],

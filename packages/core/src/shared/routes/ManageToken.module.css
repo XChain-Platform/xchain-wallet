@@ -298,6 +298,21 @@
     border-bottom-color: var(--xc-accent-primary);
 }
 
+/* Phones: all five panels fit a 360px screen on tighter spacing instead of
+   scrolling the last tab out of view. The tabs share the row's spare width so
+   the strip still spans the content. */
+@media not all and (min-width: 480px) {
+    .tabs {
+        gap: 0;
+    }
+
+    .tab {
+        flex: 1 1 auto;
+        justify-content: center;
+        padding-inline: var(--xc-space-1);
+    }
+}
+
 .tabPanel {
     display: flex;
     flex-direction: column;
