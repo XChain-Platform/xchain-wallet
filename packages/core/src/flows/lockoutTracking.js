@@ -169,8 +169,9 @@ function readState() {
     if (persistentStore) {
         return memoryFallback ? { ...memoryFallback } : emptyLockoutState();
     }
+    if (memoryFallback) return { ...memoryFallback };
     const store = getStorage();
-    if (!store) return memoryFallback ? { ...memoryFallback } : emptyLockoutState();
+    if (!store) return emptyLockoutState();
     try {
         const raw = store.getItem(STORAGE_KEY);
         if (!raw) return emptyLockoutState();
@@ -218,6 +219,7 @@ function writeState(state) {
         } else {
             store.setItem(STORAGE_KEY, JSON.stringify(state));
         }
+        memoryFallback = null;
     } catch (_err) {
         memoryFallback = { ...state };
     }
