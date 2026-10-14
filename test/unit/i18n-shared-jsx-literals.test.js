@@ -76,10 +76,7 @@ const PLURAL_ONLY_FILES = [
     '/routes/ManageToken.jsx',
 ];
 
-// Files that took dictionary keys only for individual wording fixes and are
-// not yet migrated as screens. Same treatment as PLURAL_ONLY_FILES: their t()
-// keys are checked against the dictionary, their other literals wait for the
-// screen's own migration.
+// Files with t() only for single wording fixes; treated like PLURAL_ONLY_FILES.
 const PARTIAL_COPY_FILES = [
     '/settings/AdsSection.jsx',
     '/settings/DeveloperModeSection.jsx',

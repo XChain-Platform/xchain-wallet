@@ -3,9 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Manage token's panel tabs (Dispensers, Orders, Swaps, Holders, Activity)
-// used to scroll sideways on a phone, so "Activity" sat cut off past the
-// edge with nothing saying it was there. At 360px every tab must fit.
+// At 360px every Manage token panel tab fits the strip, so none sits cut
+// off past the edge of a phone screen.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
