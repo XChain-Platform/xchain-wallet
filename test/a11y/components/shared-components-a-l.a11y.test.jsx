@@ -32,6 +32,7 @@ import { DispenserBadge, __clearDispenserBadgeCache } from '../../../packages/co
 import { DraftDiscardButton } from '../../../packages/core/src/shared/components/DraftDiscardButton.jsx';
 import { EmptyStateNudge } from '../../../packages/core/src/shared/components/EmptyStateNudge.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
+import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { HomeFilterBar } from '../../../packages/core/src/shared/components/HomeFilterBar.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
@@ -236,6 +237,13 @@ const fixtures = [
             declaredType="text/plain"
             plaintextBase64="SGVsbG8sIHdhbGxldC4="
             onClose={noop}
+        />
+    )],
+    ['HeaderActionMenu', () => (
+        <HeaderActionMenu
+            onCommandPalette={noop}
+            onScan={noop}
+            onManageAddresses={noop}
         />
     )],
     ['HeaderSettingsButton', () => (
