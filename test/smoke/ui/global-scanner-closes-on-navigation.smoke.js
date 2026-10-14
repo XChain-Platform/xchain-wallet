@@ -43,4 +43,15 @@ for (const handler of navSelects) {
     assert.match(handler, /setGlobalScannerOpen\(false\)/, `navigation closes the scanner: ${handler}`);
 }
 
+assert.match(
+    app,
+    /aria-labelledby="xc-global-scanner-title"[\s\S]{0,120}?onKeyDown=\{\(event\) => \{\s*if \(event\.key !== 'Escape'\) return;[\s\S]{0,120}?setGlobalScannerOpen\(false\);/,
+    'Escape closes the global scanner',
+);
+assert.match(
+    app,
+    /<Suspense fallback=\{<Loading \/>\}>\s*<ScanRoute\s+embedded/,
+    'the lazy scan route inside the overlay has its own Suspense boundary',
+);
+
 console.log('global-scanner-closes-on-navigation smoke OK');
