@@ -180,10 +180,19 @@ describe('MultisigCosignerShare key details', () => {
             derivationPath: INFO.derivationPath,
         });
         expect(screen.getByRole('button', { name: 'Copy cosigner share payload' })).toBeTruthy();
-        expect(await screen.findByRole('img', {
+        const qr = await screen.findByRole('img', {
             name: 'QR code for multisig cosigner share payload',
-        })).toHaveAttribute('src', 'data:image/png,cosigner-share');
-        expect(toDataURL).toHaveBeenCalledWith(payloadText, expect.any(Object));
+        });
+        expect(qr).toHaveAttribute('src', 'data:image/png,cosigner-share');
+        expect(qr).toHaveAttribute('width', '256');
+        expect(qr).toHaveStyle({ width: '100%', maxWidth: '256px', height: 'auto' });
+        expect(qr).toHaveStyle({ background: '#FFFFFF' });
+        expect(toDataURL).toHaveBeenCalledWith(payloadText, {
+            errorCorrectionLevel: 'M',
+            margin: 4,
+            width: 256,
+            color: { dark: '#000000', light: '#FFFFFF' },
+        });
         expect(screen.queryByLabelText('Cosigner share payload')).toBeNull();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         expect(screen.getByRole('note')).toHaveTextContent(

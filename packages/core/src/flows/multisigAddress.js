@@ -99,6 +99,30 @@ export async function receiveMultisigAddress(opts) {
     if (!derived || typeof derived.address !== 'string' || derived.address.length === 0) {
         throw new Error('receiveMultisigAddress: SDK returned no address');
     }
+    if (typeof derived.scheme === 'string' && derived.scheme !== config.scheme) {
+        throw new Error(
+            `receiveMultisigAddress: SDK derived ${derived.scheme} for declared scheme ${config.scheme}`,
+        );
+    }
+    const expectedAddressType = {
+        'p2sh-multisig': 'p2sh',
+        'p2wsh-multisig': 'p2wsh',
+        'taproot-musig2': 'p2tr',
+    }[config.scheme];
+    const validateAddress = typeof sdk.validateAddress === 'function'
+        ? sdk.validateAddress.bind(sdk)
+        : (typeof sdk.wallet?.validateAddress === 'function'
+            ? sdk.wallet.validateAddress.bind(sdk.wallet)
+            : null);
+    if (validateAddress && expectedAddressType) {
+        const validation = validateAddress(derived.address);
+        if (!validation?.valid || validation.type !== expectedAddressType) {
+            const actualType = validation?.type || 'invalid';
+            throw new Error(
+                `receiveMultisigAddress: derived address type ${actualType} does not match declared scheme ${config.scheme}`,
+            );
+        }
+    }
 
     return {
         multisigConfigId: config.id,

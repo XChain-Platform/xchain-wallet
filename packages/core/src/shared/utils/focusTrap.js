@@ -27,6 +27,7 @@ let bodyScrollLocks = 0;
 let priorBodyOverflow = '';
 const inertLocks = new WeakMap();
 const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
+const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
 
 function installFocusVisibleFallback() {
     if (typeof document === 'undefined') return;
@@ -84,6 +85,33 @@ function unlockInert(element) {
     inertLocks.delete(element);
 }
 
+function modalRootFor(element) {
+    if (!element?.closest) return null;
+    return element.closest(MODAL_SELECTOR);
+}
+
+function inertTargetsOutside(root) {
+    const targets = [];
+    let branch = root;
+    while (branch?.parentElement) {
+        const parent = branch.parentElement;
+        const siblings = Array.from(parent.children);
+        const branchIndex = siblings.indexOf(branch);
+        for (let index = 0; index < siblings.length; index += 1) {
+            const element = siblings[index];
+            if (element === branch) continue;
+            // A later modal is the active layer and must stay outside the
+            // earlier modal's inert background.
+            const containsLaterModal = index > branchIndex
+                && (element.matches(MODAL_SELECTOR) || element.querySelector(MODAL_SELECTOR));
+            if (!containsLaterModal) targets.push(element);
+        }
+        if (parent === document.body) break;
+        branch = parent;
+    }
+    return targets;
+}
+
 const FOCUSABLE_SELECTOR = [
     'a[href]', 'button:not([disabled])', 'textarea:not([disabled])',
     'input:not([disabled]):not([type="hidden"])', 'select:not([disabled])',
@@ -133,8 +161,8 @@ function openerFor(container) {
  * descendant); on deactivate, returns focus to the opener unless something
  * else has already claimed it (a dialog that navigates away).
  *
- * `trap: false` keeps the focus move and the restore but leaves Tab alone,
- * for a widget that owns Tab itself (the command palette's category jump).
+ * `trap: false` keeps the focus move and the restore but leaves Tab alone for
+ * a widget that owns Tab itself.
  *
  * @param {import('react').RefObject<HTMLElement>} containerRef
  * @param {{ active: boolean, initialFocusRef?: import('react').RefObject<HTMLElement>, restoreFocusRef?: import('react').RefObject<HTMLElement>, trap?: boolean }} opts
@@ -155,12 +183,21 @@ export function useFocusTrap(containerRef, {
         const layer = {};
         activeTraps.push(layer);
         lockBodyScroll();
+        const modalRoot = modalRootFor(container);
+        const backgroundTargets = modalRoot ? inertTargetsOutside(modalRoot) : [];
+        backgroundTargets.forEach(lockInert);
 
         previouslyFocused.current = restoreFocusRef?.current || openerFor(container);
 
         // Initial focus: the designated element (password / HW block) or the
         // first focusable descendant.
-        const initial = (initialFocusRef && initialFocusRef.current) || focusableWithin(container)[0];
+        const requestedInitial = initialFocusRef?.current;
+        const firstFocusable = focusableWithin(container)[0];
+        // A container ref keeps the dialog itself as the fallback only when
+        // the dialog has no meaningful control to receive focus.
+        const initial = requestedInitial === container
+            ? (firstFocusable || container)
+            : (requestedInitial || firstFocusable);
         if (container.contains(document.activeElement)) {
             // Already focused inside (an autoFocus control): leave it.
         } else if (initial && typeof initial.focus === 'function') {
@@ -192,6 +229,7 @@ export function useFocusTrap(containerRef, {
             container.removeEventListener('keydown', onKeyDown);
             const layerIndex = activeTraps.indexOf(layer);
             if (layerIndex !== -1) activeTraps.splice(layerIndex, 1);
+            backgroundTargets.forEach(unlockInert);
             unlockBodyScroll();
             const prev = previouslyFocused.current;
             const now = document.activeElement;
@@ -204,7 +242,7 @@ export function useFocusTrap(containerRef, {
 }
 
 /**
- * Mark every sibling of `modalRootRef` as `inert` while `active`, so the
+ * Mark every branch outside `modalRootRef` as `inert` while `active`, so the
  * background is unreachable by pointer, focus, or AT. Restores prior inert
  * state on deactivate.
  *
@@ -214,16 +252,9 @@ export function useFocusTrap(containerRef, {
 export function useInertBackground(modalRootRef, { active } = {}) {
     useEffect(() => {
         if (!active) return undefined;
-        const root = modalRootRef.current;
+        const root = modalRootFor(modalRootRef.current) || modalRootRef.current;
         if (!root || !root.parentElement) return undefined;
-        const siblings = Array.from(root.parentElement.children);
-        const rootIndex = siblings.indexOf(root);
-        const targets = siblings.filter((element, index) => {
-            if (element === root) return false;
-            const laterModal = index > rootIndex
-                && element.matches('[role="dialog"][aria-modal="true"]');
-            return !laterModal;
-        });
+        const targets = inertTargetsOutside(root);
         targets.forEach(lockInert);
         return () => targets.forEach(unlockInert);
     }, [active, modalRootRef]);

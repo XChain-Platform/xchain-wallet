@@ -513,7 +513,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);

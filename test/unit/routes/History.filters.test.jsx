@@ -354,6 +354,30 @@ describe('History filters', () => {
         expect(screen.queryByText(/^Active range:/)).not.toBeInTheDocument();
     });
 
+    it('renders pending, local calendar days, future dates, and missing dates in stable sections', async () => {
+        const { view } = mountHistory({
+            [LTC]: [
+                historyRow({ actionIndex: 1, blockIndex: 0, timestamp: secondsAt(0), tick: 'PENDING', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 2, timestamp: secondsAt(0), tick: 'TODAY', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 3, timestamp: secondsAt(-1), tick: 'YESTERDAY', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 4, timestamp: secondsAt(1), tick: 'FUTURE', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 5, timestamp: undefined, tick: 'UNDATED', source: LTC_ADDRESS }),
+            ],
+        }, { [LTC]: [{ address: LTC_ADDRESS }] });
+        fireEvent.click(await screen.findByRole('button', { name: 'All' }));
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(5));
+
+        const headings = [...view.container.querySelectorAll('[data-xc-section-header] h2')]
+            .map((heading) => heading.textContent);
+        expect(headings).toEqual([
+            'Pending activity',
+            expect.stringMatching(/Oct 14/),
+            'Today',
+            'Yesterday',
+            'Date unavailable',
+        ]);
+    });
+
     it('reports network and special-filter misses, and Reset filters resets and can undo them', async () => {
         const { view } = mountHistory({
             [LTC]: [

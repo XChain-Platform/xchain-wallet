@@ -13,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 
 import {
     TREZOR_CONNECT_BRIDGE_WINDOW_NAME,
+    allowlistedExternalUrl,
     hasNoIpcArguments,
     isAppUrl,
     isHttpUrl,
@@ -54,6 +55,17 @@ describe('desktop renderer URL trust', () => {
         expect(isHttpUrl('file:///tmp/index.html')).toBe(false);
         expect(shouldBlockNavigation(appIndex, appRoot)).toBe(false);
         expect(shouldBlockNavigation('https://example.com', appRoot)).toBe(true);
+    });
+
+    it('normalizes only allowlisted external URLs for the system browser', () => {
+        expect(allowlistedExternalUrl('HTTPS://Example.COM/docs?q=one two'))
+            .toBe('https://example.com/docs?q=one%20two');
+        expect(allowlistedExternalUrl('http://example.com')).toBe('http://example.com/');
+        expect(allowlistedExternalUrl('https://trusted.example@evil.example/')).toBeNull();
+        expect(allowlistedExternalUrl('javascript:alert(1)')).toBeNull();
+        expect(allowlistedExternalUrl('file:///tmp/index.html')).toBeNull();
+        expect(allowlistedExternalUrl('//example.com/path')).toBeNull();
+        expect(allowlistedExternalUrl('not a URL')).toBeNull();
     });
 
     it('rejects explicit remote schemes while tolerating an unknown pre-load URL', () => {

@@ -72,6 +72,83 @@ import { validateAutopayLease } from '../schemas/autopayLease.js';
 import { validatePriceAlert } from '../schemas/priceAlert.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 
+export const STORAGE_QUOTA_MESSAGE = 'Storage is full. Free some space, then try again.';
+
+/** A critical storage write still has no room after disposable caches are removed. */
+export class StorageQuotaError extends Error {
+    /** @param {unknown} [cause] */
+    constructor(cause) {
+        super(STORAGE_QUOTA_MESSAGE);
+        this.name = 'StorageQuotaError';
+        if (cause !== undefined) this.cause = cause;
+    }
+}
+
+/** @param {unknown} err */
+function isStorageQuotaError(err) {
+    if (!err || typeof err !== 'object') return false;
+    const value = /** @type {{ name?: unknown, code?: unknown, message?: unknown }} */ (err);
+    if (value.name === 'QuotaExceededError' || value.name === 'StorageQuotaError') return true;
+    if (value.code === 22 || value.code === 1014) return true;
+    if (['ENOSPC', 'EDQUOT', 'QUOTA_BYTES'].includes(String(value.code || '').toUpperCase())) return true;
+    return /(?:quota(?:_bytes)?(?:\s+quota)? exceeded|storage (?:is )?full|disk full|no space left)/i
+        .test(String(value.message || ''));
+}
+
+const DISPOSABLE_LOCAL_KEYS = new Set([
+    'xchain-wallet:fiat-rates:v1',
+    'xchain.logConsole',
+]);
+const DISPOSABLE_LOCAL_PREFIXES = [
+    'xc:balanceCache:',
+    'xc:historyCache:v1:',
+];
+const DISPOSABLE_CHROME_KEYS = ['xchain.logConsole'];
+
+/** Remove derived display data while retaining preferences, security state, and queued transactions. */
+async function trimNonEssentialStorageCaches() {
+    try {
+        const local = /** @type {Storage | undefined} */ (globalThis.localStorage);
+        if (local) {
+            const keys = [];
+            for (let i = 0; i < local.length; i += 1) keys.push(local.key(i));
+            for (const key of keys) {
+                if (key && (DISPOSABLE_LOCAL_KEYS.has(key)
+                    || DISPOSABLE_LOCAL_PREFIXES.some((prefix) => key.startsWith(prefix)))) {
+                    local.removeItem(key);
+                }
+            }
+        }
+    } catch {
+        // A disabled localStorage must not mask the original quota failure.
+    }
+
+    try {
+        const chromeLocal = /** @type {any} */ (globalThis.chrome?.storage?.local);
+        if (chromeLocal?.remove) await chromeLocal.remove(DISPOSABLE_CHROME_KEYS);
+    } catch {
+        // Cache cleanup is best-effort; the retry below decides the write result.
+    }
+}
+
+/** Retry a critical write after reclaiming disposable storage. */
+export async function persistWithQuotaRecovery(write) {
+    try {
+        return await write();
+    } catch (err) {
+        if (!isStorageQuotaError(err)) throw err;
+    }
+
+    await trimNonEssentialStorageCaches();
+
+    try {
+        return await write();
+    } catch (err) {
+        if (isStorageQuotaError(err)) throw new StorageQuotaError(err);
+        throw err;
+    }
+}
+
 export class VaultStateError extends Error {
     constructor(msg) {
         super(msg);
@@ -256,7 +333,7 @@ export class Vault {
     async _saveNow() {
         this._assertOpen();
         const blob = await encodeDocument(this._masterKey, this._doc, this._aad);
-        await this._backend.save(blob);
+        await persistWithQuotaRecovery(() => this._backend.save(blob));
     }
 
     /**
@@ -353,7 +430,7 @@ export class Vault {
             const nextKey = masterKey ? new Uint8Array(masterKey) : null;
             try {
                 const blob = await encodeDocument(nextKey ?? this._masterKey, next, this._aad);
-                await this._backend.save(blob);
+                await persistWithQuotaRecovery(() => this._backend.save(blob));
             } catch (err) {
                 if (nextKey) nextKey.fill(0);
                 throw err;

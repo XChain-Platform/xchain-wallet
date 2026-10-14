@@ -50,13 +50,13 @@ const DOGE = 'dogecoin-mainnet';
 const LTC = 'litecoin-mainnet';
 
 const BTC_ADDRESS = {
-    id: 'a-btc', address: 'bc1qexampleexampleexampleexampleexampleex', publicKey: '02aa', derivationPath: "m/84'/0'/0'/0/0", source: 'hd',
+    id: 'a-btc', address: 'bc1qdevmock02aa', publicKey: '02aa', derivationPath: "m/84'/0'/0'/0/0", source: 'hd',
 };
 const DOGE_ADDRESS = {
-    id: 'a-doge', address: 'DExampleDogeAddressxxxxxxxxxxxxxxxx', publicKey: '02bb', derivationPath: "m/44'/3'/0'/0/0", source: 'hd',
+    id: 'a-doge', address: 'Ddevmock02bb', publicKey: '02bb', derivationPath: "m/44'/3'/0'/0/0", source: 'hd',
 };
 const LTC_ADDRESS = {
-    id: 'a-ltc', address: 'ltc1qexampleexampleexampleexampleexample', publicKey: '02cc', derivationPath: "m/84'/2'/0'/0/0", source: 'hd',
+    id: 'a-ltc', address: 'ltc1qdevmock02cc', publicKey: '02cc', derivationPath: "m/84'/2'/0'/0/0", source: 'hd',
 };
 
 const WAIT = { timeout: 4000 };
@@ -71,6 +71,8 @@ const WAIT = { timeout: 4000 };
  * @param {string} [opts.walletMode]
  * @param {Function} [opts.requoteNativeFee]
  * @param {Function} [opts.buildActionPsbtRequest]
+ * @param {Function} [opts.getTokenInfo]
+ * @param {Function} [opts.composeForConfirm]
  */
 function mount(opts = {}) {
     const byChain = opts.byChain || { [BTC]: [BTC_ADDRESS], [DOGE]: [DOGE_ADDRESS] };
@@ -95,12 +97,12 @@ function mount(opts = {}) {
             (byChain[chainId] || [])[0] || null,
         )),
         getWalletBalances: vi.fn().mockResolvedValue(walletBalances),
-        getTokenInfo: vi.fn().mockResolvedValue(opts.tokenInfo ?? null),
+        getTokenInfo: opts.getTokenInfo || vi.fn().mockResolvedValue(opts.tokenInfo ?? null),
         requoteNativeFee: opts.requoteNativeFee || vi.fn().mockResolvedValue(opts.feeQuote ?? null),
         getSettings: vi.fn().mockResolvedValue({ walletMode: opts.walletMode || 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        composeForConfirm: vi.fn().mockResolvedValue({
+        composeForConfirm: opts.composeForConfirm || vi.fn().mockResolvedValue({
             psbt: 'aa00',
             encoding: 'psbt',
             chainId: BTC,
@@ -266,6 +268,42 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
                 AMOUNT: '1',
             },
         });
+    });
+
+    it('shows values decoded from the composed action and Back keeps the form values', async () => {
+        const composeForConfirm = vi.fn(async ({ actionData }) => ({
+            psbt: 'aa00',
+            encoding: 'psbt',
+            chainId: BTC,
+            actionString: `XBRIDGE|0|DOGE|${DOGE_ADDRESS.address}|1.25|keep me`,
+            version: 1,
+            decoded: {
+                summary: 'Bridge transfer',
+                warnings: [],
+                details: [
+                    { label: 'Amount', value: actionData.params.AMOUNT },
+                    { label: 'Destination', value: actionData.params.DEST_ADDRESS },
+                    { label: 'Memo', value: actionData.params.MEMO },
+                ],
+            },
+        }));
+        mount({ composeForConfirm });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1.25' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'keep me' } });
+        fireEvent.click(moveButton());
+
+        expect(await screen.findByText('1.25', {}, WAIT)).toBeInTheDocument();
+        expect(screen.getByText(DOGE_ADDRESS.address)).toBeInTheDocument();
+        expect(screen.getByText('keep me')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        await waitFor(() => expect(amountInput()).toHaveValue('1.25'), WAIT);
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('keep me');
+        expect(composeForConfirm).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -453,6 +491,17 @@ describe('BridgeMoveForm: unhappy path - amount above balance', () => {
 });
 
 describe('BridgeMoveForm: invalid action fields', () => {
+    it('explains an empty amount before opening review', async () => {
+        const messaging = mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.click(moveButton());
+        expect(await screen.findByText('Enter an amount to move.')).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('blocks zero and incomplete decimal amounts before confirmation', async () => {
         mount();
         await waitFor(
@@ -465,6 +514,17 @@ describe('BridgeMoveForm: invalid action fields', () => {
 
         fireEvent.change(amountInput(), { target: { value: '.' } });
         expect(screen.getByText('Enter a positive amount to move.')).toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks a negative amount with plain decimal guidance', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '-1' } });
+        expect(await screen.findByText(/Enter a valid decimal amount/i)).toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
     });
 
@@ -490,5 +550,108 @@ describe('BridgeMoveForm: invalid action fields', () => {
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'left|right' } });
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks a memo above the on-chain byte limit', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'é'.repeat(126) } });
+        expect(await screen.findByText('Memo is 252 bytes; the network accepts at most 250 bytes.'))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks malformed source and destination addresses before compose', async () => {
+        const badSource = { ...BTC_ADDRESS, address: 'not-a-bitcoin-address' };
+        const messaging = mount({ byChain: { [BTC]: [badSource], [DOGE]: [DOGE_ADDRESS] } });
+        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        cleanup();
+        const badDestination = { ...DOGE_ADDRESS, address: 'not-a-dogecoin-address' };
+        const second = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [badDestination] } });
+        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+        expect(second.composeForConfirm).not.toHaveBeenCalled();
+
+        cleanup();
+        const missingId = { ...BTC_ADDRESS, id: '' };
+        const third = mount({ byChain: { [BTC]: [missingId], [DOGE]: [DOGE_ADDRESS] } });
+        expect(await screen.findByText(/No usable source address is available/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+        expect(third.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('explains an empty stored destination before review', async () => {
+        const emptyDestination = { ...DOGE_ADDRESS, address: '' };
+        const messaging = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [emptyDestination] } });
+        await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(''), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+        expect(await screen.findByText(/Pick one of your own Dogecoin addresses/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('blocks malformed token ids and out-of-range custom fee rates', async () => {
+        mount({ initialTick: '^0', balances: { '^0': '10' } });
+        expect(await screen.findByText(/Token can be a name, or \^ followed by the token's number/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+
+        cleanup();
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0.123456789' } });
+        expect(await screen.findByText(/Custom fee rate can have at most 8 decimal places/i))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('refuses review when fresh bridge settings differ from the displayed route', async () => {
+        const getTokenInfo = vi.fn()
+            .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
+            .mockResolvedValueOnce({ bridgeChains: 'LTC', minDepth: '12' })
+            .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
+        const messaging = mount({
+            initialTick: 'FUFU',
+            balances: { FUFU: '10' },
+            getTokenInfo,
+        });
+        await waitFor(() => expect(screen.getByText(/at least 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+
+        expect(await screen.findByText(/bridge settings changed/i, {}, WAIT)).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('turns watcher build failures into plain user copy', async () => {
+        const buildActionPsbtRequest = vi.fn().mockRejectedValue(
+            new Error('composer.internal: exploded at field DEST_ADDRESS'),
+        );
+        mount({ walletMode: 'watcher', buildActionPsbtRequest });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+        const alert = await screen.findByRole('alert', {}, WAIT);
+        expect(alert).toHaveTextContent("Couldn't complete this; something went wrong. Try again.");
+        expect(alert).not.toHaveTextContent(/composer\.internal/);
     });
 });

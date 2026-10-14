@@ -140,10 +140,21 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             .then(([resp, watermark]) => {
                 if (cancelled) return;
                 const rows = extractRows(resp);
-                const latest = latestEffectiveStakingRow(rows, watermark?.watermark);
+                const height = watermark?.watermark;
+                const needsHeight = rows.some((row) => (
+                    row?.activation_block != null
+                    || row?.ACTIVATION_BLOCK != null
+                    || row?.deactivation_block != null
+                    || row?.DEACTIVATION_BLOCK != null
+                ));
+                if (needsHeight && (height == null || !Number.isFinite(Number(height)) || Number(height) < 0)) {
+                    setPrefillError('Could not verify which delegation is currently active. Enter the signing public key manually.');
+                    return;
+                }
+                const latest = latestEffectiveStakingRow(rows, height);
                 const pk = latest?.signing_pubkey || latest?.SIGNING_PUBKEY;
                 if (pk && typeof pk === 'string' && /^[0-9a-fA-F]{64}$/.test(pk)) {
-                    setPubkey(pk.toLowerCase());
+                    setPubkey((current) => current.trim() ? current : pk.toLowerCase());
                 }
             })
             .catch((err) => {
@@ -255,8 +266,16 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRateValid = feePick.mode !== 'custom'
-        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
+    const customFeeRate = Number(feePick.customRate);
+    const customFeeRateError = feePick.mode !== 'custom'
+        ? null
+        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
+            ? 'Enter a custom network fee rate greater than zero.'
+            : Number.isFinite(feeTiers?.maximumRate) && customFeeRate > feeTiers.maximumRate
+                ? 'Custom network fee rate is above this network\'s supported maximum.'
+                : !feeCustomEstimate
+                    ? 'Custom network fee rate can have at most 8 decimal places.'
+                    : null;
 
     const actionParams = useMemo(() => {
         const pk = pubkey.trim().toLowerCase();
@@ -290,8 +309,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
             return;
         }
-        if (!customFeeRateValid) {
-            setFormError('Enter a custom network fee rate greater than zero.');
+        if (customFeeRateError) {
+            setFormError(customFeeRateError);
             return;
         }
         setFormError(null);
@@ -381,7 +400,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             <ListPage>{children}</ListPage>
         </Screen>
     );
-    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
+    const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{form}</Screen>;
 
     if (loadError) {
         return wrap(

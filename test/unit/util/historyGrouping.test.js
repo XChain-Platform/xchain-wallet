@@ -10,11 +10,20 @@
 
 // Unit tests for the §28.2 activity-feed grouping utility.
 
-import { describe, it, expect } from 'vitest';
-import { groupHistoryEntries } from '../../../packages/core/src/shared/utils/historyGrouping.js';
+import { afterEach, describe, it, expect } from 'vitest';
+import {
+    groupHistoryEntries,
+    groupHistoryItemsByLocalDay,
+} from '../../../packages/core/src/shared/utils/historyGrouping.js';
 
 const BTC = 'bitcoin-mainnet';
 const LTC = 'litecoin-mainnet';
+const ORIGINAL_TZ = process.env.TZ;
+
+afterEach(() => {
+    if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+    else process.env.TZ = ORIGINAL_TZ;
+});
 
 function entry(over) {
     return {
@@ -513,5 +522,73 @@ describe('shared/utils/historyGrouping', () => {
         const out = groupHistoryEntries(entries, 'flat');
         expect(out).toHaveLength(2);
         expect(out.every((it) => it.kind === 'entry')).toBe(true);
+    });
+
+    describe('local day sections', () => {
+        const flatItem = (overrides) => ({
+            kind: 'entry',
+            entry: entry({
+                chainId: BTC,
+                actionIndex: overrides.actionIndex,
+                action: 'SEND',
+                blockIndex: 100,
+                timestamp: overrides.timestamp,
+                ...overrides,
+            }),
+        });
+
+        it('keeps a 25-hour fall-back day together and splits at local midnight', () => {
+            process.env.TZ = 'America/Los_Angeles';
+            const now = Date.parse('2026-11-02T20:00:00.000Z');
+            const sections = groupHistoryItemsByLocalDay([
+                flatItem({ actionIndex: 3, timestamp: Date.parse('2026-11-02T08:01:00.000Z') }),
+                flatItem({ actionIndex: 2, timestamp: Date.parse('2026-11-02T07:59:00.000Z') }),
+                flatItem({ actionIndex: 1, timestamp: Date.parse('2026-11-01T07:30:00.000Z') }),
+            ], now);
+
+            expect(sections.map((section) => section.key)).toEqual([
+                'day:2026-11-02',
+                'day:2026-11-01',
+            ]);
+            expect(sections.map((section) => section.label)).toEqual(['Today', 'Yesterday']);
+            expect(sections[1].items.map((item) => item.entry.actionIndex)).toEqual(['2', '1']);
+        });
+
+        it('uses the viewer day rather than UTC and recalculates labels after midnight', () => {
+            process.env.TZ = 'Pacific/Honolulu';
+            const item = flatItem({
+                actionIndex: 1,
+                timestamp: Date.parse('2026-06-02T09:30:00.000Z'),
+            });
+
+            expect(groupHistoryItemsByLocalDay(
+                [item],
+                Date.parse('2026-06-02T09:59:00.000Z'),
+            )[0]).toMatchObject({ key: 'day:2026-06-01', label: 'Today' });
+            expect(groupHistoryItemsByLocalDay(
+                [item],
+                Date.parse('2026-06-02T10:01:00.000Z'),
+            )[0]).toMatchObject({ key: 'day:2026-06-01', label: 'Yesterday' });
+        });
+
+        it('puts pending first, future confirmed dates next, and undated confirmed rows last', () => {
+            process.env.TZ = 'America/New_York';
+            const now = Date.parse('2026-03-08T16:00:00.000Z');
+            const sections = groupHistoryItemsByLocalDay([
+                flatItem({ actionIndex: 1, timestamp: 0 }),
+                flatItem({ actionIndex: 2, blockIndex: 0, timestamp: 0 }),
+                flatItem({ actionIndex: 3, timestamp: Date.parse('2026-03-09T16:00:00.000Z') }),
+                flatItem({ actionIndex: 4, timestamp: Date.parse('2026-03-08T15:00:00.000Z') }),
+            ], now);
+
+            expect(sections.map((section) => section.key)).toEqual([
+                'pending',
+                'day:2026-03-09',
+                'day:2026-03-08',
+                'undated',
+            ]);
+            expect(sections[0].items[0].entry.actionIndex).toBe('2');
+            expect(sections.at(-1)).toMatchObject({ label: 'Date unavailable' });
+        });
     });
 });

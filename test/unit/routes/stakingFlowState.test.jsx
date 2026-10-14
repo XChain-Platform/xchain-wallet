@@ -460,7 +460,7 @@ describe('delegation validation and review state', () => {
         expect(alert).not.toHaveTextContent('indexer.invalid');
     });
 
-    it('blocks review when an invalid custom fee would be omitted from the DELEGATE build', async () => {
+    it('blocks custom fee rates that would be omitted or exceed the supported range', async () => {
         const methods = delegationMessaging();
         withMessaging(
             <DelegationActionForm mode="delegate" walletId="w" chainId={CHAIN} onBack={() => {}} />,
@@ -472,6 +472,20 @@ describe('delegation validation and review state', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
 
         expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+
+        for (const rate of ['0', '-1']) {
+            fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
+            fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+            expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        }
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        expect(await screen.findByText('Custom network fee rate can have at most 8 decimal places.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        expect(await screen.findByText("Custom network fee rate is above this network's supported maximum.")).toBeInTheDocument();
         expect(methods.composeForConfirm).not.toHaveBeenCalled();
     });
 

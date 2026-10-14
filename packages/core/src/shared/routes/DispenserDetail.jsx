@@ -839,7 +839,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
             haptic.tap();
-            announce('Copied');
+            announce(label === 'address' ? 'Dispenser address copied.' : 'Action index copied.');
             return;
         }
         setCopied(null);
@@ -1295,6 +1295,24 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
     }
 
+    async function verifyOwnerActionOpen(setError, action) {
+        if (!isOpen) {
+            setError(`This dispenser is ${liveStatus || 'not open'} and cannot accept another ${action}.`);
+            return false;
+        }
+        if (isDemoWallet) return true;
+        try {
+            const fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex }));
+            const freshStatus = flowsLib.dispenserLiveState(fresh).status;
+            if (freshStatus === 'open') return true;
+            if (fresh) setDispenser(fresh);
+            setError(`This dispenser is ${freshStatus || 'not open'} and cannot accept another ${action}.`);
+        } catch {
+            setError(`Could not verify that this dispenser is still open. Try the ${action} again.`);
+        }
+        return false;
+    }
+
     async function handleRefill(event) {
         event.preventDefault();
         if (refillStage === 'submitting' || !ownerAddress) return;
@@ -1309,6 +1327,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             noun: 'Refill amount',
         });
         if (precisionError) { setRefillError(precisionError); return; }
+        if (compareAmounts(amt, giveAmount) === -1) {
+            setRefillError(
+                `Refill amount must be at least one fill (${formatWithThousands(String(giveAmount))} ${giveTick}).`,
+            );
+            return;
+        }
+        if (refillBalance == null) {
+            setRefillError('Wait for the available balance before refilling.');
+            return;
+        }
         if (exceedsBalance(amt, refillBalance)) {
             setRefillError(
                 `This address holds only ${formatWithThousands(refillBalance)} ${giveTick}. `
@@ -1318,6 +1346,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
         // D-147: a spent ceiling is refused here as well as on the button.
         if (refillCount.remaining <= 0 && refillCount.exact) return;
+        if (!await verifyOwnerActionOpen(setRefillError, 'refill')) return;
         await runOwnerAction({
             params: {
                 VERSION: '2',
@@ -1384,6 +1413,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
+        if (!await verifyOwnerActionOpen(setCancelError, 'close')) return;
         await runOwnerAction({
             params: cancelParams,
             setStage: setCancelStage,
@@ -1545,7 +1575,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="primary"
                         loading={refillStage === 'submitting'}
-                        disabled={refillCount.remaining <= 0 && refillCount.exact}
+                        disabled={refillBalance == null || (refillCount.remaining <= 0 && refillCount.exact)}
                     >
                         {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Refill dispenser'}
                     </Button>
@@ -2139,7 +2169,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 role="menuitem"
                                 onClick={() => { setMoreOpen(false); handleCopy(dispAddress || source || '', 'address'); }}
                             >
-                                {copied === 'address' ? 'Copied' : 'Copy dispenser address'}
+                                {copied === 'address' ? 'Dispenser address copied' : 'Copy dispenser address'}
                             </Button>
                             <Button
                                 variant="ghost"
@@ -2149,7 +2179,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 role="menuitem"
                                 onClick={() => { setMoreOpen(false); handleCopy(String(actionIndex), 'index'); }}
                             >
-                                {copied === 'index' ? 'Copied' : 'Copy action index'}
+                                {copied === 'index' ? 'Action index copied' : 'Copy action index'}
                             </Button>
                         </div>
                     ) : null}

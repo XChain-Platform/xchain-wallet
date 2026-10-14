@@ -36,8 +36,8 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { oraclePriceFeeError, oraclePriceValueError } from '../../flows/oraclePriceAction.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './IssueTokenForm.module.css';
@@ -313,18 +313,11 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         if (tickerError) { setFormError(tickerError); return false; }
         if (!FIAT_CODES.includes(fiat)) { setFormError('Pick a supported currency.'); return false; }
         const v = value.trim();
-        if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(v) || Number(v) <= 0) {
-            setFormError('Enter a positive price with at most 8 decimal places.');
-            return false;
-        }
+        const valueError = oraclePriceValueError(v);
+        if (valueError) { setFormError(valueError); return false; }
         const f = fee.trim();
-        if (f.length > 0 && (
-            !/^[0-9]+(\.[0-9]{1,18})?$/.test(f)
-            || compareDecimalStrings(f, '1') === 1
-        )) {
-            setFormError('The usage fee is a fraction between 0 and 1 (0.01 = 1%).');
-            return false;
-        }
+        const feeError = oraclePriceFeeError(f);
+        if (feeError) { setFormError(feeError); return false; }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
         const memoError = memoLengthError(m);

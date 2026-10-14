@@ -17,9 +17,13 @@ const CHAIN = 'bitcoin-regtest';
 const ISSUER = 'bcrt1qissuer';
 const MARKER = 'Shared list token';
 
-async function renderManage({ isOwner = true, ...handlers } = {}) {
+async function renderManage({ isOwner = true, tokenInfo = {}, ...handlers } = {}) {
     const messaging = {
-        getTokenInfo: vi.fn().mockResolvedValue({ creator: ISSUER, description: MARKER }),
+        getTokenInfo: vi.fn().mockResolvedValue({
+            creator: ISSUER,
+            description: MARKER,
+            ...tokenInfo,
+        }),
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ address: isOwner ? ISSUER : 'bcrt1qsomeoneelse' }],
         }),
@@ -58,6 +62,24 @@ function sharedBlockListRow() {
 }
 
 describe('ManageToken shared block list action', () => {
+    it('keeps a locked description visible but refuses the action', async () => {
+        const onUpdateDescription = vi.fn();
+        await renderManage({
+            tokenInfo: { locks: { description: true } },
+            onUpdateDescription,
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+
+        const description = screen.getByRole('menuitem', { name: 'Description' });
+        expect(description).toBeDisabled();
+        expect(description).toHaveAttribute(
+            'title',
+            'The description is permanently locked and cannot be updated.',
+        );
+        fireEvent.click(description);
+        expect(onUpdateDescription).not.toHaveBeenCalled();
+    });
+
     it('calls the dedicated handler when passed', async () => {
         const onUseSharedBlockList = vi.fn();
         await renderManage({ onUseSharedBlockList });

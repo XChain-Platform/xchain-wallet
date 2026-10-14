@@ -46,6 +46,9 @@
 // order-fills / link-pair, because a row that renders inside two cards
 // renders twice. The batch envelope is the outer container, so it wins.
 
+import { getFormatLocale } from '../../i18n/index.js';
+import { entryTimeMs } from './pendingHistory.js';
+
 /**
  * @typedef {{
  *   key: string,
@@ -270,6 +273,100 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
     }
 
     return out;
+}
+
+/**
+ * Partition rendered History items by the viewer's local calendar day.
+ *
+ * Pending items stay above dated chain history even when their clocks are
+ * absent or skewed. Confirmed items without a usable time remain visible in
+ * a final fallback section rather than borrowing today's date.
+ *
+ * @param {GroupedItem[]} items
+ * @param {number} [nowMs]
+ * @returns {Array<{ key: string, label: string, items: GroupedItem[] }>}
+ */
+export function groupHistoryItemsByLocalDay(items, nowMs = Date.now()) {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const pending = [];
+    const undated = [];
+    const dated = new Map();
+
+    for (const item of items) {
+        const entries = itemEntries(item);
+        // Keep blockless activity in the feed's first section regardless of
+        // whether its source supplied a timestamp that is missing or ahead.
+        if (entries.some((entry) => Number(entry?.blockIndex ?? 0) <= 0)) {
+            pending.push(item);
+            continue;
+        }
+        let newestMs = null;
+        for (const entry of entries) {
+            const time = entryTimeMs(entry);
+            if (time != null && (newestMs == null || time > newestMs)) newestMs = time;
+        }
+        if (newestMs == null) {
+            undated.push(item);
+            continue;
+        }
+        const parts = localDayParts(newestMs);
+        const key = `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+        let group = dated.get(key);
+        if (!group) {
+            group = {
+                key: `day:${key}`,
+                label: formatLocalDayLabel(newestMs, nowMs),
+                items: [],
+                ordinal: parts.ordinal,
+            };
+            dated.set(key, group);
+        }
+        group.items.push(item);
+    }
+
+    const groups = [...dated.values()]
+        .sort((a, b) => b.ordinal - a.ordinal)
+        .map(({ ordinal: _ordinal, ...group }) => group);
+    if (pending.length > 0) groups.unshift({ key: 'pending', label: 'Pending activity', items: pending });
+    if (undated.length > 0) groups.push({ key: 'undated', label: 'Date unavailable', items: undated });
+    return groups;
+}
+
+function itemEntries(item) {
+    if (item?.kind === 'entry') return item.entry ? [item.entry] : [];
+    if (item?.kind === 'group') return Array.isArray(item.members) ? item.members : [];
+    return [];
+}
+
+function localDayParts(timestampMs) {
+    const date = new Date(timestampMs);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return { year, month, day, ordinal: Date.UTC(year, month - 1, day) };
+}
+
+function formatLocalDayLabel(timestampMs, nowMs) {
+    const parts = localDayParts(timestampMs);
+    const today = localDayParts(nowMs);
+    const dayDifference = (today.ordinal - parts.ordinal) / 86_400_000;
+    if (dayDifference === 0) return 'Today';
+    if (dayDifference === 1) return 'Yesterday';
+    const date = new Date(timestampMs);
+    try {
+        return date.toLocaleDateString(getFormatLocale(), {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            ...(parts.year === today.year ? {} : { year: 'numeric' }),
+        });
+    } catch {
+        return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+    }
+}
+
+function pad2(value) {
+    return String(value).padStart(2, '0');
 }
 
 function pickField(raw, names) {

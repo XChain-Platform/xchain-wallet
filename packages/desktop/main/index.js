@@ -46,6 +46,7 @@ import { fileURLToPath } from 'node:url';
 
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
 
 import { IPC_CHANNEL } from './messageHost.js';
@@ -58,7 +59,7 @@ import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import {
     attachRendererCspHeaders,
-    isHttpUrl,
+    allowlistedExternalUrl,
     hasNoIpcArguments,
     isValidDesktopIpcMessage,
     normalizeOpenWindowArgs,
@@ -108,6 +109,8 @@ import {
     tearDownHost,
     wipeRuntimeStores,
 } from './runtime.js';
+
+logConsole.attach();
 
 const here = dirname(fileURLToPath(import.meta.url));
 installProcessErrorHandlers();
@@ -285,16 +288,18 @@ function hardenWebContents(contents) {
         }
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
-        if (isHttpUrl(url)) {
-            void runMainTask(() => shell.openExternal(url), 'external link open');
+        const externalUrl = allowlistedExternalUrl(url);
+        if (externalUrl) {
+            void runMainTask(() => shell.openExternal(externalUrl), 'external link open');
         }
         return { action: 'deny' };
     });
     contents.on('will-navigate', (event, url) => {
         if (shouldBlockNavigation(url, APP_ROOT)) {
             event.preventDefault();
-            if (isHttpUrl(url)) {
-                void runMainTask(() => shell.openExternal(url), 'external navigation open');
+            const externalUrl = allowlistedExternalUrl(url);
+            if (externalUrl) {
+                void runMainTask(() => shell.openExternal(externalUrl), 'external navigation open');
             }
         }
     });
@@ -774,6 +779,23 @@ function restoreWindowAfterIdleCheck() {
 }
 
 /**
+ * Reload only the focused renderer so the main-process vault, signer pool, and
+ * cached session keep the same unlocked state across Cmd/Ctrl+R.
+ *
+ * @param {BrowserWindow | undefined} menuWindow
+ * @param {boolean} [ignoreCache]
+ * @returns {boolean}
+ */
+export function reloadRendererWindow(menuWindow, ignoreCache = false) {
+    const target = menuWindow ?? BrowserWindow.getFocusedWindow();
+    const contents = target?.webContents;
+    if (!contents || contents.isDestroyed?.()) return false;
+    if (ignoreCache) contents.reloadIgnoringCache();
+    else contents.reload();
+    return true;
+}
+
+/**
  * Wire the application menu. File > New Window runs the idle-lock gate;
  * direct-download builds also expose a visible update check, and every
  * platform can open the version-pinned native About panel.
@@ -834,8 +856,16 @@ export function installApplicationMenu({
         {
             label: '&View',
             submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
+                    click: (_item, win) => { reloadRendererWindow(win); },
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    click: (_item, win) => { reloadRendererWindow(win, true); },
+                },
                 ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
                 { type: 'separator' },
                 { role: 'resetZoom' },
@@ -849,8 +879,8 @@ export function installApplicationMenu({
             label: '&Window',
             submenu: [
                 { role: 'minimize' },
-                { role: 'zoom' },
                 ...(isMac ? [
+                    { role: 'zoom' },
                     { type: 'separator' },
                     { role: 'front' },
                 ] : [

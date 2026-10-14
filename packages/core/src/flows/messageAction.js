@@ -44,6 +44,37 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+export const MAX_MESSAGE_BYTES = 1_048_576;
+
+// MESSAGE v2 stores ciphertext as hexadecimal. ECIES packs a version byte,
+// ephemeral public key, IV, and authentication tag before the encrypted UTF-8
+// bytes; ECDH packs only the IV and tag.
+const ECIES_ENVELOPE_BYTES = 62;
+const ECDH_ENVELOPE_BYTES = 28;
+
+/**
+ * Size of the protocol message field after encryption and wire encoding.
+ *
+ * @param {string} message
+ * @param {1 | 2 | null} method
+ * @returns {number}
+ */
+export function messageWireByteLength(message, method) {
+    const plaintextBytes = new TextEncoder().encode(String(message ?? '')).byteLength;
+    if (method === null || plaintextBytes === 0) return plaintextBytes;
+    const envelopeBytes = method === 2 ? ECDH_ENVELOPE_BYTES : ECIES_ENVELOPE_BYTES;
+    return (plaintextBytes + envelopeBytes) * 2;
+}
+
+function assertMessageFieldFits(value, label) {
+    const bytes = new TextEncoder().encode(String(value ?? '')).byteLength;
+    if (bytes > MAX_MESSAGE_BYTES) {
+        throw new RangeError(
+            `messageAction: ${label} is ${bytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
+        );
+    }
+}
+
 export class PubkeyNotFoundError extends Error {
     /** @param {string} address */
     constructor(address) {
@@ -125,7 +156,7 @@ export function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descripto
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} destination     recipient address
  * @property {string} message         plaintext message body
- * @property {1 | null} [method]      1=ECIES (default), null=plaintext fallback
+ * @property {1 | 2 | null} [method]  1=ECIES (default), 2=ECDH, null=plaintext fallback
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -157,8 +188,18 @@ export async function buildMessageParams(opts) {
     if (typeof opts.destination !== 'string' || opts.destination.length === 0) {
         throw new Error('buildMessageParams: destination is required');
     }
-    if (typeof opts.message !== 'string' || opts.message.length === 0) {
+    if (typeof opts.message !== 'string' || opts.message.trim().length === 0) {
         throw new Error('buildMessageParams: message is required');
+    }
+
+    // method: null = plaintext (v3), 1 = ECIES (v2), 2 = ECDH session (v2).
+    const method = opts.method === null ? null : (opts.method === 2 ? 2 : 1);
+    const wireBytes = messageWireByteLength(opts.message, method);
+    if (wireBytes > MAX_MESSAGE_BYTES) {
+        const label = method === null ? 'Message' : 'Encrypted message';
+        throw new RangeError(
+            `messageAction: ${label} is ${wireBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
+        );
     }
 
     // The MESSAGE wire format separates the destination's network (COIN) from
@@ -182,9 +223,6 @@ export async function buildMessageParams(opts) {
     // recipient's pubkey and provides the (chain-agnostic) encryption helpers.
     const source = normalizeSource(opts.from, 'messageAction');
     const sdk = opts.sdkRegistry.get(opts.chainId);
-    // method: null = plaintext (v3), 1 = ECIES (v2), 2 = ECDH session (v2).
-    const method = opts.method === null ? null : (opts.method === 2 ? 2 : 1);
-
     // Resolve our own WIF for the source address. ECDH needs our private key to
     // derive the shared secret at compose time (ECIES needs only the
     // recipient's public key). Mirrors the inbox's resolution: an injected
@@ -259,6 +297,11 @@ export async function buildMessageParams(opts) {
         };
     }
 
+    assertMessageFieldFits(
+        method === null ? params.PLAINTEXT_MESSAGE : params.ENCRYPTED_MESSAGE,
+        method === null ? 'Message' : 'Encrypted message',
+    );
+
     return { params, method, broadcastChainId, source };
 }
 
@@ -281,6 +324,11 @@ export async function messageAction(opts) {
         method = params.VERSION === '3' ? null : 1;
         broadcastChainId = opts.broadcastChainId || opts.chainId;
         source = normalizeSource(opts.from, 'messageAction');
+        const field = method === null ? params.PLAINTEXT_MESSAGE : params.ENCRYPTED_MESSAGE;
+        if (typeof field !== 'string' || field.trim().length === 0) {
+            throw new Error('messageAction: message is required');
+        }
+        assertMessageFieldFits(field, method === null ? 'Message' : 'Encrypted message');
     } else {
         ({ params, method, broadcastChainId, source } = await buildMessageParams(opts));
     }

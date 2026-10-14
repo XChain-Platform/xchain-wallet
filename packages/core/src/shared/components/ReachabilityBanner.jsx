@@ -44,12 +44,13 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
 
     return (
         <div
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
             className={`${styles.banner} ${overall === 'offline' ? styles.offline : styles.degraded}`}
         >
-            <span className={styles.message}>Some balances may be out of date</span>
+            {/* Only the state is announced, so a poll that refreshes the
+                last-checked age does not repeat the notice. */}
+            <span className={styles.message} role="status" aria-live="polite" aria-atomic="true">
+                Some balances may be out of date
+            </span>
             <button
                 type="button"
                 className={styles.retry}

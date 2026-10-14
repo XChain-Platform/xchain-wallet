@@ -480,7 +480,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={stage !== 'review-list' && stage !== 'review-link'}
+        >
             {children}
         </Screen>
     );
@@ -599,7 +603,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
+                        <Button variant="ghost" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={submitting}>
                             Back
                         </Button>
                         <Button

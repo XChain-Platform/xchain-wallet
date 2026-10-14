@@ -49,40 +49,14 @@
         "release:sign": "bash tools/release/sign.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/v$(node -p \"require('./package.json').version\")",
         "release:verify": "bash tools/release/verify.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/v$(node -p \"require('./package.json').version\")",
         "release:verify-controls": "node tools/release/verify-ci-controls.mjs",
+        "visual:compare": "node scripts/visual-compare.mjs",
+        "visual:clean": "node scripts/visual-clean.mjs",
         "sdk:check": "node tools/dev/sdk-installed-guard.mjs",
         "sdk:link": "node tools/dev/sdk-link.mjs link",
         "sdk:unlink": "node tools/dev/sdk-link.mjs unlink",
         "sdk:status": "node tools/dev/sdk-link.mjs status"
     },
     "pnpm": {
-        "overrides": {
-            "tar": "^7.5.7",
-            "ws": "^8.20.1",
-            "brace-expansion@1": "^1.1.18",
-            "brace-expansion@2": "^2.1.4",
-            "brace-expansion@5": "^5.0.9",
-            "vite": ">=6.4.3 <7",
-            "protobufjs": "^7.5.8",
-            "@tootallnate/once": "^2.0.1",
-            "axios": "^1.20.0",
-            "form-data": "^4.0.6",
-            "js-yaml@4": "^4.3.2",
-            "fast-uri": "^3.1.8",
-            "hono": "^4.12.34",
-            "@xmldom/xmldom": "^0.8.15",
-            "proxy-addr": "^2.0.8",
-            "ip-address": "^10.5.1",
-            "http-cache-semantics": "^4.3.0",
-            "@modelcontextprotocol/sdk": "^1.31.0",
-            "undici@7": "^7.29.1"
-        },
-        "onlyBuiltDependencies": [
-            "electron",
-            "electron-winstaller",
-            "esbuild",
-            "sharp",
-            "tiny-secp256k1"
-        ],
         "minimumReleaseAgeExclude": [
             "@dankest-llc/*"
         ]

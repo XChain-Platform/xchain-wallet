@@ -311,6 +311,7 @@ export function DisplaySection() {
             pinnedTokensByWallet: {},
             watchedTokens: [],
             hiddenTokens: [],
+            hideUnknownTokens: false,
             showPinAffordance: false,
             showHideAffordance: false,
             smallBalanceThreshold: SMALL_BALANCE_THRESHOLD_DEFAULT,
@@ -340,6 +341,15 @@ export function DisplaySection() {
                 />
             </div>
             <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
+            <div style={ROW}>
+                <Switch
+                    label="Hide unknown tokens"
+                    description="Collapse unpriced tokens without a name or image unless you pinned, watched, issued, or placed them in an order. Hidden tokens stay available from the expandable Hidden tokens list."
+                    checked={settings.hideUnknownTokens === true}
+                    onChange={(event) => updateDisplay('hideUnknownTokens', { hideUnknownTokens: event.target.checked })}
+                />
+            </div>
+            <DisplaySaveError error={saveError} controlKey="hideUnknownTokens" />
             <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>

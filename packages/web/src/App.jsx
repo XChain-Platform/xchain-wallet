@@ -43,11 +43,13 @@ import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavail
 import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { vaultErrorKind } from '../../core/src/storage/backend.js';
-import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { persistActiveNetwork } from '@xchain-wallet/core/shared/utils/activeNetworkSwitch.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
@@ -623,14 +625,15 @@ function AppInner() {
     );
     // The coin/token the user picked to scope the Markets list to.
     // Carried between MarketsList and the picker (`markets-picker`) so
-    // re-entering Markets restores the selection. Defaults to BTC mainnet.
+    // re-entering Markets restores the selection.
     const [marketsAsset, setMarketsAsset] = useState(
-        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ ({
-            chainId: 'bitcoin-mainnet',
-            tick: 'BTC',
-            kind: 'native',
-        }),
+        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ (
+            () => defaultDexAssetForNetwork(settings?.activeNetwork)
+        ),
     );
+    useEffect(() => {
+        setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));
+    }, [settings?.activeNetwork]);
     // §47 / Cluster L FOLLOWUP 1: deep-link prefill for Send. Populated
     // once on mount from `?uri=` in `location.search`; consumed by the
     // 'send' route below and cleared after the user submits or backs out.
@@ -905,10 +908,7 @@ function AppInner() {
                     : [];
                 // Restore the last selected account for this wallet if it
                 // still exists; otherwise fall back to the lowest index.
-                const persisted = readActiveAccount(activeWalletId);
-                const chosen = (persisted && sorted.some((a) => a.id === persisted))
-                    ? persisted
-                    : (sorted[0]?.id || null);
+                const chosen = reconcileActiveAccount(activeWalletId, sorted);
                 setActiveAccountId(chosen);
             })
             .catch(() => { if (!cancelled) setActiveAccountId(null); });
@@ -940,8 +940,11 @@ function AppInner() {
     // Switch the active account and remember it per wallet, so a reload
     // returns to it instead of snapping back to the lowest-index account.
     const handleSwitchAccount = (id) => {
-        setActiveAccountId(id);
-        if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
+        const nextId = typeof id === 'string' && id ? id : null;
+        setActiveAccountId(nextId);
+        if (!activeWalletId) return;
+        if (nextId) writeActiveAccount(activeWalletId, nextId);
+        else clearActiveAccount(activeWalletId);
     };
 
     // Two gates, because the lanes stopped agreeing. Staking,
@@ -1513,6 +1516,7 @@ function AppInner() {
             if (unlockedView === 'list-detail' && activeWalletId && listRef) {
                 return (
                     <ListDetail
+                        walletId={activeWalletId}
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
                         onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
@@ -2086,6 +2090,7 @@ function AppInner() {
                 return (
                     <CoSignerAccountDetail
                         accountId={coSignerAccountId}
+                        walletId={activeWalletId}
                         onBack={() => setUnlockedView('cosigner-accounts')}
                     />
                 );
@@ -2841,7 +2846,7 @@ function AppInner() {
                         onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                         onSwap={DEX_SURFACE_ENABLED && activeWalletId ? () => setUnlockedView('swap') : undefined}
                         onExchange={DEX_SURFACE_ENABLED && activeWalletId ? () => {
-                            setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
+                            setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
                             setUnlockedView('markets');
                         } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
@@ -2938,6 +2943,8 @@ function AppInner() {
                 // no longer exists.
                 hasDexSurface: DEX_SURFACE_ENABLED,
                 isSignerMode,
+                isWatcherMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
             };
             // entity handlers: tokens open TokenDetail with the full
             // ref the row already carries; sites land on the Connected Sites
@@ -2967,6 +2974,8 @@ function AppInner() {
             // carries no chainId, so amount + tick alone is enough. A
             // txid/date-shaped query offers "search history".
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
+                isSignerMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');

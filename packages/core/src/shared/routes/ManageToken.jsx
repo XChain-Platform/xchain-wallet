@@ -39,6 +39,8 @@ import {
 } from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
 import { formatTokenQuantity, formatWithThousands } from '../utils/amountFormat.js';
+import { formatRelativeDateTime } from '../utils/dateTimeFormat.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -480,7 +482,14 @@ export function ManageToken({
         { id: 'dispenser', label: 'Dispenser', Icon: Icon.DollarIcon, onSelect: onCreateDispenser },
         { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: blockIssuerActions ? undefined : onPayDividend },
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
-        { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: blockIssuerActions ? undefined : onUpdateDescription },
+        {
+            id: 'description',
+            label: 'Description',
+            Icon: Icon.PencilIcon,
+            onSelect: blockIssuerActions ? undefined : onUpdateDescription,
+            disabled: !!tokenLocks.description,
+            disabledReason: 'The description is permanently locked and cannot be updated.',
+        },
         { id: 'attach-content', label: 'Artwork', Icon: Icon.DocumentIcon, onSelect: blockIssuerActions ? undefined : onAttachContent },
         // PC-25: token-gated encrypted publishing. Owner-only by protocol
         // (the indexer rejects gated FILEs from non-owners, FILE.md).
@@ -616,7 +625,7 @@ export function ManageToken({
                                 {i > 0 ? ', ' : ''}{p}
                             </span>
                         ))}
-                        {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
+                        {' '}{t('manageToken.officialProjectNoun', { count: assetInfo.projects.length })}
                     </p>
                 ) : null}
 
@@ -893,7 +902,10 @@ export function ManageToken({
                         )}
                         {subassetTicks.length > 0 ? (
                             <>
-                                <SectionHeader as="h3" title={`Subassets (${subassetTicks.length})`} />
+                                <SectionHeader
+                                    as="h3"
+                                    title={t('manageToken.subassetCount', { count: subassetTicks.length })}
+                                />
                                 {/* Safari needs an explicit list role because this class removes list styling. */}
                                 <ul className={styles.subassetList} role="list">
                                     {subassetTicks.slice(0, 20).map((t) => (
@@ -1211,7 +1223,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
                     <span>unconfirmed</span>
                 )}
                 {timestamp ? (
-                    <span className={styles.histTime}>{formatRelativeTime(timestamp)}</span>
+                    <span className={styles.histTime}>{formatRelativeDateTime(timestamp)}</span>
                 ) : null}
             </span>
         </span>
@@ -1286,23 +1298,4 @@ function formatNativeAmount(value) {
     if (abs >= 1) return v.toLocaleString('en-US', { maximumFractionDigits: 4 });
     const fixed = v.toFixed(8);
     return fixed.replace(/\.?0+$/, '');
-}
-
-function formatRelativeTime(ts) {
-    const n = Number(ts);
-    if (!n) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
 }

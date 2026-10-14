@@ -770,7 +770,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );

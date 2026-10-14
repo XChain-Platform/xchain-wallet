@@ -20,8 +20,9 @@
 // action-VALIDITY status, and a single order's getAction(...).state.status
 // does NOT promptly reflect a cancel, so "cancelled" is read from the
 // authoritative + immediate order_cancels table (getOrderCancelsForAddress)
-// and "expired" from the order's own EXPIRATION vs wall clock. Neither
-// feed carries fills, so every order those two leave open is read once
+// and "expired" from the order's own EXPIRATION vs the current indexed
+// chain clock. Neither feed carries fills, so every order those two leave
+// open is read once
 // through orders.detail, whose `state` block nets settled matches out of
 // give_remaining and reports `complete` or `filled` once the order is fully filled.
 // Cancel/edit are offered only while an order is open.
@@ -99,7 +100,8 @@ const CLOSED_LABELS = Object.freeze({
 // latest order status (open / cancelling / cancelled / expiring / expired /
 // complete / filled) and `state.give_remaining` is the give amount net of settled
 // matches, zeroed once the order is terminal. Null when the detail lacks
-// the block, so the caller falls back to the feeds alone.
+// the block, so the caller falls back to the feeds alone. The optional
+// expiry_status records the chain-clock classification from the query flow.
 export function fillStateOf(detail) {
     const state = detail && typeof detail === 'object' ? detail.state : null;
     if (!state || typeof state !== 'object') return null;
@@ -107,6 +109,7 @@ export function fillStateOf(detail) {
         status: String(state.status || ''),
         giveRemaining: state.give_remaining ?? null,
         expiration: state.expiration ?? null,
+        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
     };
 }
 
@@ -122,6 +125,8 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
         if (fill.status === 'expired') return 'expired';
         const remaining = compareDecimalStrings(fill.giveRemaining, '0');
         if (fill.status === 'open' && remaining !== null && remaining <= 0) return 'filled';
+        if (fill.expiryStatus === 'expired') return 'expired';
+        if (fill.expiryStatus != null) return 'open';
     }
     const exp = Number(fill?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';

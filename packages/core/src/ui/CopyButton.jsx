@@ -8,12 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from './Button.jsx';
 import styles from './CopyButton.module.css';
 import { CopyIcon, CheckIcon } from './icons/index.jsx';
 import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
-import { useToast } from '../shared/components/ToastHost.jsx';
 // SSC-4: every copy in the wallet goes through one path, so a
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
@@ -39,11 +38,20 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
 export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
+    const [copiedText, setCopiedText] = useState('');
+    const [announcement, setAnnouncement] = useState({
+        id: 0,
+        text: '',
+        error: false,
+        parentOwns: false,
+    });
+    const buttonRef = useRef(null);
     const haptic = useHapticFeedback();
-    const { announce } = useToast();
 
-    async function handleCopy(event) {
-        const button = event.currentTarget;
+    async function handleCopy() {
+        const actionLabel = String(ariaLabel || label).trim();
+        const subject = actionLabel.replace(/^copy(?:\s+to\s+clipboard)?\s*/i, '').trim() || 'value';
+        const successText = `Copied: ${subject}`;
         // A sensitive copy can come back false on a native shell whose
         // clipboard plugin did not register: the shared path refuses rather
         // than leaking through the web API, and the user sees "Copy failed"
@@ -52,6 +60,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
         if (ok) {
             setState('copied');
             setFailureText('');
+            setCopiedText(successText);
             haptic.tap();
             onCopied?.();
         } else {
@@ -62,31 +71,56 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
             haptic.error();
         }
         const resultText = ok
-            ? 'Copied'
+            ? successText
             : reason === CopyFailure.NO_NATIVE_CLIPBOARD
                 ? 'Copy blocked: this app has no secure clipboard.'
                 : 'Copy failed: the clipboard is unavailable.';
-        const localRegion = button.parentElement?.closest(
-            '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
-        );
-        if (!localRegion) announce(resultText);
-        setTimeout(() => setState('idle'), feedbackMs);
+        setAnnouncement((current) => ({
+            id: current.id + 1,
+            text: resultText,
+            error: !ok,
+            parentOwns: Boolean(buttonRef.current?.parentElement?.closest(
+                '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
+            )),
+        }));
+        setTimeout(() => {
+            setState('idle');
+            setAnnouncement((current) => (
+                current.error ? current : { ...current, text: '' }
+            ));
+        }, feedbackMs);
     }
 
-    const text = state === 'copied' ? 'Copied' : state === 'failed' ? failureText : label;
+    const text = state === 'copied' ? copiedText : state === 'failed' ? failureText : label;
     const icon = state === 'copied' ? <CheckIcon /> : <CopyIcon />;
     return (
-        <Button
-            size="sm"
-            className={styles.btn}
-            onClick={handleCopy}
-            icon={icon}
-            aria-label={ariaLabel || label}
-            title={text}
-            data-state={state}
-            style={{ minHeight: 'var(--xc-control-h-sm)' }}
-        >
-            {text}
-        </Button>
+        <>
+            <Button
+                ref={buttonRef}
+                size="sm"
+                className={styles.btn}
+                onClick={handleCopy}
+                icon={icon}
+                aria-label={state === 'copied' ? text : ariaLabel || label}
+                title={text}
+                data-state={state}
+                style={{ minHeight: 'var(--xc-control-h-sm)' }}
+            >
+                {text}
+            </Button>
+            <span
+                key={announcement.id}
+                className="sr-only"
+                role={announcement.parentOwns || !announcement.text
+                    ? undefined
+                    : (announcement.error ? 'alert' : 'status')}
+                aria-live={announcement.parentOwns
+                    ? undefined
+                    : (announcement.error ? 'assertive' : 'polite')}
+                aria-atomic={announcement.parentOwns ? undefined : 'true'}
+            >
+                {announcement.text}
+            </span>
+        </>
     );
 }

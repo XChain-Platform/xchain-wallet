@@ -70,6 +70,18 @@ describe('BalanceList ordering and visibility', () => {
         expect(onSelectToken).not.toHaveBeenCalled();
     });
 
+    it('pluralizes the hidden-token toggle through translated copy', () => {
+        render(
+            <BalanceList
+                rows={[row('ONE'), row('TWO')]}
+                hiddenKeys={new Set(['bitcoin-mainnet:ONE', 'bitcoin-mainnet:TWO'])}
+                onToggleHide={() => {}}
+            />,
+        );
+
+        expect(screen.getByRole('button', { name: 'Show 2 hidden tokens' })).toBeInTheDocument();
+    });
+
     it('hides and unhides rows without opening token details', () => {
         const onSelectToken = vi.fn();
         const onToggleHide = vi.fn();

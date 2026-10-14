@@ -10,6 +10,12 @@ describe('shared/utils/lastViewMemory normalizeRouteParams', () => {
             chainId: 'bitcoin-mainnet',
             tick: 'XCP',
             divisibility: 8,
+            quantity: '100000000',
+            balance: '1',
+            privateKey: 'not-route-state',
+            password: 'not-route-state',
+            psbt: 'not-route-state',
+            seed: 'not-route-state',
             ignored: 'value',
         }, { chainId: 'bitcoin-mainnet', tick: 'XCP', divisibility: 8 }],
         ['market', 'market', {

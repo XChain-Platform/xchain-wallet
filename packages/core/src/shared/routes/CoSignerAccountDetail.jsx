@@ -39,19 +39,41 @@ import {
     buildPolicyDraft,
 } from './CoSignerPolicyEditor.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const COSIGNER_CHAIN_IDS = new Set(chainRegistry.byCoin('bitcoin').map((descriptor) => descriptor.id));
+
+function accountMatchesScope(account, accountId, walletId) {
+    return Boolean(account
+        && account.id === accountId
+        && (walletId == null || account.walletId === walletId)
+        && COSIGNER_CHAIN_IDS.has(account.chainId));
+}
+
+function policyAddressError(built, descriptor) {
+    for (const [index, address] of (built.policy.allowedDestinations || []).entries()) {
+        const error = addressValidationError(address, descriptor);
+        if (error) return `Allowed recipient ${index + 1}: ${error}`;
+    }
+    for (const [index, output] of built.allowedOutputs.entries()) {
+        const error = addressValidationError(output.address, descriptor);
+        if (error) return `Allowed output ${index + 1}: ${error}`;
+    }
+    return null;
+}
 
 /**
  * @param {object} props
  * @param {string} props.accountId
+ * @param {string} [props.walletId]
  * @param {() => void} props.onBack
  */
-export function CoSignerAccountDetail({ accountId, onBack }) {
+export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
@@ -100,7 +122,10 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
             .then(() => messaging.getCoSignerAccount({ id: accountId }))
             .then((a) => {
                 if (cancelled || viewRef.current !== view) return;
-                if (!a) { setError('Agent account not found.'); return; }
+                if (!accountMatchesScope(a, accountId, walletId)) {
+                    setError('Agent account not found for this wallet and network.');
+                    return;
+                }
                 setAccount(a);
             })
             .catch((err) => {
@@ -116,7 +141,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                 busyRef.current = false;
             }
         };
-    }, [accountId, messaging, confirmDialog.onCancel]);
+    }, [accountId, walletId, messaging, confirmDialog.onCancel]);
 
     async function toggleEnabled() {
         if (!account || busyRef.current) return;
@@ -139,6 +164,9 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                 id: target.id,
                 patch: { enabled: !target.enabled },
             });
+            if (!accountMatchesScope(updated, target.id, walletId)) {
+                throw new Error('The updated agent account could not be loaded for this wallet and network.');
+            }
             if (viewRef.current === view && operationRef.current === operation) setAccount(updated);
         } catch (err) {
             if (viewRef.current === view && operationRef.current === operation) {
@@ -166,6 +194,9 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setEditError(built.error); return; }
         const target = account;
+        const descriptor = chainRegistry.get(target.chainId);
+        const addressError = policyAddressError(built, descriptor);
+        if (addressError) { setEditError(addressError); return; }
         const view = viewRef.current;
         const operation = operationRef.current + 1;
         operationRef.current = operation;
@@ -175,7 +206,9 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
         try {
             const fresh = await messaging.getCoSignerAccount({ id: target.id });
             if (viewRef.current !== view || operationRef.current !== operation) return;
-            if (!fresh) throw new Error('This agent account no longer exists.');
+            if (!accountMatchesScope(fresh, target.id, walletId)) {
+                throw new Error('This agent account no longer exists in this wallet and network.');
+            }
             if (editableSnapshot(fresh) !== editBaselineRef.current) {
                 setAccount(fresh);
                 setName(fresh.name);
@@ -193,6 +226,9 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                     allowedOutputs: built.allowedOutputs,
                 },
             });
+            if (!accountMatchesScope(updated, target.id, walletId)) {
+                throw new Error('The updated agent account could not be loaded for this wallet and network.');
+            }
             if (viewRef.current === view && operationRef.current === operation) {
                 setAccount(updated);
                 setEditing(false);

@@ -15,6 +15,7 @@
 import { createRoot } from 'react-dom/client';
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { syncChainRegistryFromHub } from '../../core/src/registry/remote.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import {
@@ -29,6 +30,8 @@ import { installShellErrorCapture } from './errorCapture.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import { hideNativeSplash, NativeShellReady } from './platform/nativeShellReady.jsx';
 import { installNativeFontScale } from './platform/nativeFontScale.js';
+
+logConsole.attach();
 
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();

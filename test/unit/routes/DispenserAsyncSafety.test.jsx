@@ -290,6 +290,8 @@ describe('dispenser async safety', () => {
         const form = submit.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
         expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1);
 
         await act(async () => build.resolve({ psbtHex: '00', fromAddress: SOURCE.address }));

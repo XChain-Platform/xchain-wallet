@@ -498,7 +498,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );

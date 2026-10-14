@@ -37,7 +37,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainPicker, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
-import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -60,6 +60,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
     AUTHORABLE_ACTIONS, isActionDataOfferedInBuild, isActionOfferedInBuild, isActionOfferedOnChain,
 } from '../../registry/actions.js';
+import { compareDecimalStrings, sumDecimalStrings } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -122,6 +123,45 @@ function parseRowParams(json) {
     }
 }
 
+function oneValidationErrorMessage(error) {
+    if (typeof error === 'string' && error.trim()) {
+        return userFacingMessage(new Error(error), 'Check this action\'s fields and try again.');
+    }
+    if (error && typeof error === 'object') {
+        if (typeof error.message === 'string' && error.message.trim()) {
+            return userFacingMessage(error, 'Check this action\'s fields and try again.');
+        }
+        if (typeof error.field === 'string' && error.field.trim()) {
+            return `${error.field}: enter a valid value.`;
+        }
+    }
+    return null;
+}
+
+function validationErrorMessage(result) {
+    if (result?.valid) return null;
+    const messages = (Array.isArray(result?.errors) ? result.errors : [])
+        .map(oneValidationErrorMessage)
+        .filter(Boolean);
+    return messages.length > 0
+        ? [...new Set(messages)].join(' ')
+        : 'Check this action\'s fields and try again.';
+}
+
+function sendTotalsFor(parsedRows) {
+    const amounts = new Map();
+    for (const { row, params } of parsedRows) {
+        if (String(row.action).toUpperCase() !== 'SEND' || !params) continue;
+        const tick = String(params.TICK ?? '').trim().toUpperCase();
+        const amount = String(params.AMOUNT ?? '').trim();
+        if (!tick || !amount) continue;
+        const values = amounts.get(tick) || [];
+        values.push(amount);
+        amounts.set(tick, values);
+    }
+    return [...amounts].map(([tick, values]) => ({ tick, amount: sumDecimalStrings(values) }));
+}
+
 /**
  * @param {object} props
  * @param {string} props.walletId
@@ -152,6 +192,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const [composed, setComposed] = useState(/** @type {{command:string,subStrings:string[]}|null} */ (null));
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
     const [buildErrorDetails, setBuildErrorDetails] = useState('');
+    const [rowValidationErrors, setRowValidationErrors] = useState(/** @type {Record<string, string>} */ ({}));
+    const [preReviewError, setPreReviewError] = useState(/** @type {string | null} */ (null));
+    const [validatingRows, setValidatingRows] = useState(false);
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
@@ -250,8 +293,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
             return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
         }
+        if (rowValidationErrors[pr.row.id]) return `Step ${i + 1}: ${rowValidationErrors[pr.row.id]}`;
         return null;
-    }), [parsedRows, hasDexSurface, chainId]);
+    }), [parsedRows, hasDexSurface, chainId, rowValidationErrors]);
 
     const constraintError = useMemo(() => {
         if (rowErrors.some(Boolean)) return null;
@@ -269,14 +313,100 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         return constraintError;
     }, [parsedRows, rowErrors, constraintError]);
 
-    const updateRow = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-    const addRow = () => setRows((rs) => (
-        rs.length >= flowsLib.BATCH_WEIGHT_BUDGET ? rs : [...rs, blankRow()]
-    ));
-    const removeRow = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i));
+    const draftKey = JSON.stringify({ chainId, fromAddressId, rows });
+    const draftKeyRef = useRef(draftKey);
+    draftKeyRef.current = draftKey;
+
+    const clearPreReviewErrors = (rowId = null) => {
+        setPreReviewError(null);
+        if (rowId) {
+            setRowValidationErrors((errors) => {
+                if (!errors[rowId]) return errors;
+                const next = { ...errors };
+                delete next[rowId];
+                return next;
+            });
+        }
+    };
+    const updateRow = (i, patch) => {
+        clearPreReviewErrors(rows[i]?.id);
+        setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+    };
+    const addRow = () => {
+        clearPreReviewErrors();
+        setRows((rs) => (rs.length >= flowsLib.BATCH_MAX_COMMANDS ? rs : [...rs, blankRow()]));
+    };
+    const removeRow = (i) => {
+        clearPreReviewErrors(rows[i]?.id);
+        setRows((rs) => rs.filter((_, idx) => idx !== i));
+    };
+
+    const sendTotals = useMemo(() => sendTotalsFor(parsedRows), [parsedRows]);
 
     async function goReview() {
         if (composeError) return;
+        const validatedDraftKey = draftKey;
+        setValidatingRows(true);
+        setPreReviewError(null);
+        const validations = await Promise.all(parsedRows.map(async (pr) => {
+            try {
+                const result = await messaging.validateAction({
+                    chainId,
+                    action: pr.row.action,
+                    params: pr.params,
+                });
+                return [pr.row.id, validationErrorMessage(result), false];
+            } catch {
+                return [pr.row.id, null, true];
+            }
+        }));
+        if (draftKeyRef.current !== validatedDraftKey) {
+            setValidatingRows(false);
+            return;
+        }
+        const validationErrors = Object.fromEntries(validations.filter(([, error]) => error));
+        setRowValidationErrors(validationErrors);
+        if (validations.some(([, , unavailable]) => unavailable)) {
+            setPreReviewError('Couldn\'t validate every action. Check your connection and try again.');
+            setValidatingRows(false);
+            return;
+        }
+        if (Object.keys(validationErrors).length > 0) {
+            setValidatingRows(false);
+            return;
+        }
+
+        if (sendTotals.length > 0) {
+            try {
+                const fresh = await messaging.getAddressBalances(chainId, fromAddress.address);
+                if (draftKeyRef.current !== validatedDraftKey) {
+                    setValidatingRows(false);
+                    return;
+                }
+                if (!fresh || typeof fresh !== 'object'
+                    || (!fresh.native && !Array.isArray(fresh.tokens))) {
+                    throw new Error('balances unavailable');
+                }
+                const balances = decoderLib.balancesFromSdk(fresh) || [];
+                for (const total of sendTotals) {
+                    const balance = balances.find(
+                        (entry) => String(entry.tick || '').trim().toUpperCase() === total.tick,
+                    );
+                    if (compareDecimalStrings(total.amount, String(balance?.amount ?? '0')) === 1) {
+                        setPreReviewError(
+                            `These steps send ${total.amount} ${total.tick} in total, more than the ${balance?.amount ?? '0'} ${total.tick} this address holds.`,
+                        );
+                        setValidatingRows(false);
+                        return;
+                    }
+                }
+            } catch {
+                setPreReviewError('Couldn\'t refresh this address\'s balances. Check your connection and try again.');
+                setValidatingRows(false);
+                return;
+            }
+        }
+
         setBuildError(null);
         setBuildErrorDetails('');
         setStage('review');
@@ -284,7 +414,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         try {
             const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
             const res = await messaging.buildBatchCommand({ chainId, subActions });
-            setComposed({ command: res.command, subStrings: res.subStrings || String(res.command).split(';') });
+            if (typeof res?.command !== 'string' || !res.command) throw new Error('batch.buildCommand: empty command');
+            setComposed({ command: res.command, subStrings: res.command.split(';') });
         } catch (err) {
             // Show a sentence, never the composer's own error text; that text moves to the collapsed details.
             const shown = submitFailureMessage(err, {
@@ -293,6 +424,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             });
             setBuildError(shown);
             setBuildErrorDetails(technicalDetails(err, shown));
+        } finally {
+            setValidatingRows(false);
         }
     }
 
@@ -401,11 +534,21 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         }
     }
 
+    const returnToCompose = () => {
+        setBuildError(null);
+        setBuildErrorDetails('');
+        setSubmitError(null);
+        setStage('compose');
+    };
     const header = (
-        <PageHeader onBack={onBack} title={stage === 'compose' ? 'Batch' : 'Review batch'} />
+        <PageHeader
+            onBack={stage === 'review' || stage === 'submitting' ? returnToCompose : onBack}
+            backDisabled={stage === 'submitting'}
+            title={stage === 'compose' ? 'Batch' : 'Review batch'}
+        />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
@@ -491,7 +634,15 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 ) : null}
                 actions={(
                     <>
-                        <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                returnToCompose();
+                            }}
+                            disabled={stage === 'submitting'}
+                        >
                             Back
                         </Button>
                         <Button
@@ -530,6 +681,17 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     </>
                 ) : null}
 
+                {sendTotals.length > 0 ? (
+                    <>
+                        <p className={styles.successLabel}>Send totals</p>
+                        <ul>
+                            {sendTotals.map((total) => (
+                                <li key={total.tick}>{total.amount} {total.tick}</li>
+                            ))}
+                        </ul>
+                    </>
+                ) : null}
+
                 {feeTiers ? (
                     <FeeSelector
                         label="Network fee"
@@ -564,8 +726,14 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <FormPage
             label="Batch composer"
             sectioned
-            status={constraintError ? <StatusMessage variant="error" className={styles.error}>{constraintError}</StatusMessage> : null}
-            actions={<Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>}
+            status={preReviewError || constraintError ? (
+                <StatusMessage variant="error" className={styles.error}>{preReviewError || constraintError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={Boolean(composeError) || validatingRows}>
+                    Review
+                </Button>
+            )}
         >
             <details>
                 <summary>Batch limits</summary>
@@ -580,6 +748,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     label="Chain"
                     value={chainId || ''}
                     onChange={(cid) => {
+                        clearPreReviewErrors();
+                        setRowValidationErrors({});
                         setChainId(cid);
                         setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || [], activeByChain[cid]));
                     }}
@@ -590,7 +760,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 <Select
                     label="From address"
                     value={fromAddressId || ''}
-                    onChange={(e) => setFromAddressId(e.target.value)}
+                    onChange={(e) => { clearPreReviewErrors(); setFromAddressId(e.target.value); }}
                 >
                     {(addressesByChain[chainId] || []).map((a) => (
                         <option key={a.id} value={a.id}>{a.address}</option>
@@ -636,14 +806,14 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     type="button"
                     variant="secondary"
                     onClick={addRow}
-                    disabled={rows.length >= flowsLib.BATCH_WEIGHT_BUDGET}
+                    disabled={rows.length >= flowsLib.BATCH_MAX_COMMANDS}
                 >
                     + Add action
                 </Button>
             </div>
-            {rows.length >= flowsLib.BATCH_WEIGHT_BUDGET ? (
+            {rows.length >= flowsLib.BATCH_MAX_COMMANDS ? (
                 <p className={styles.hint}>
-                    {flowsLib.BATCH_WEIGHT_BUDGET} actions is the most one batch carries.
+                    {flowsLib.BATCH_MAX_COMMANDS} actions is the most one batch carries.
                 </p>
             ) : null}
         </FormPage>,

@@ -100,6 +100,10 @@ describe('viewport surfaces keep content inside device safe areas', () => {
 
         const bottomBar = screen.getByRole('navigation', { name: 'Bottom navigation' });
         const bottomBarRules = computedClassRules(bottomBar, bottomBarStyles, bottomBarCss);
+        expect(bottomBarRules).toMatch(new RegExp(`inset-inline-start:[^;]*${inset('left')}`));
+        expect(bottomBarRules).toMatch(new RegExp(`inset-inline-end:[^;]*${inset('right')}`));
+        expect(bottomBarRules).toMatch(new RegExp(`padding-inline-start:\\s*${inset('left')}`));
+        expect(bottomBarRules).toMatch(new RegExp(`padding-inline-end:\\s*${inset('right')}`));
         expect(bottomBarRules).toMatch(new RegExp(`padding-bottom:\\s*${inset('bottom')}`));
 
         const toastHost = screen.getByRole('status', { name: 'Notifications' });

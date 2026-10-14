@@ -58,6 +58,27 @@ export const en = {
         'Watcher mode: this wallet builds an unsigned transaction. Sign it with your signer wallet, then bring the signed transaction to a wallet that can broadcast it.',
     'common.contactName': 'Contact name',
 
+    'balanceList.hiddenTokens.show':
+        '{count, plural, one {Show # hidden token} other {Show # hidden tokens}}',
+    'balanceList.hiddenTokens.hide':
+        '{count, plural, one {Hide # hidden token} other {Hide # hidden tokens}}',
+    'balanceList.smallBalances.show':
+        '{count, plural, one {Show # small balance} other {Show # small balances}}',
+    'balanceList.smallBalances.hide':
+        '{count, plural, one {Hide # small balance} other {Hide # small balances}}',
+    'addressList.hidden.show':
+        '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
+    'addressList.hidden.hide':
+        '{count, plural, one {Hide # hidden address} other {Hide # hidden addresses}}',
+    'addressList.pagination':
+        '{shown, number} of {total, plural, one {# address} other {# addresses}} shown',
+    'transactionStatus.confirmations':
+        '{count, plural, one {# confirmation} other {# confirmations}}',
+    'manageToken.officialProjectNoun':
+        '{count, plural, one {project.} other {projects.}}',
+    'manageToken.subassetCount':
+        '{count, plural, one {Subasset (#)} other {Subassets (#)}}',
+
     // --- shared components ---------------------------------------
     'adsNotice.title': 'Automatic Donation System',
     'adsNotice.subtitle':
@@ -340,7 +361,6 @@ export const en = {
     'gatedPublish.successHint.afterToken':
         'through a normal send gets the key automatically. To add more files that unlock together, publish again and pick this pack.',
     'gatedPublish.pack.new': 'New pack (fresh key)',
-    'gatedPublish.pack.existing': 'Existing pack {hash}…',
     'gatedPublish.signAndPublish': 'Sign and publish',
     'gatedPublish.review.summary.beforeFile': 'Publish',
     'gatedPublish.review.summary.afterFile': 'encrypted; only holders of {tick} will be able to read it.',

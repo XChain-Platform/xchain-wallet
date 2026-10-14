@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { defaultRegistry, hydrateCustomChainsFromSettings } from '../../registry/index.js';
+import { normalizeDisplayCurrency } from '../utils/displayCurrency.js';
 
 // Each useSettings() instance loads its own snapshot, so a write made by
 // one component (e.g. the Settings panel) would leave another component's
@@ -43,6 +44,7 @@ const SESSION_CHANGED_EVENT = 'xc:session-changed';
  *   settings: import('../../schemas/settings.js').Settings | null,
  *   loading: boolean,
  *   error: Error | null,
+ *   unsupportedFiatCurrency: string | null,
  *   refresh: () => Promise<void>,
  *   update: (patch: Record<string, unknown>) => Promise<import('../../schemas/settings.js').Settings>,
  * }}
@@ -52,6 +54,7 @@ export function useSettings() {
     const [settings, setSettings] = useState(/** @type {any} */ (null));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(/** @type {Error | null} */ (null));
+    const [unsupportedFiatCurrency, setUnsupportedFiatCurrency] = useState(/** @type {string | null} */ (null));
     const aliveRef = useRef(true);
     const requestRef = useRef(0);
 
@@ -77,7 +80,9 @@ export function useSettings() {
             // is readable after unlock, so hydrating here reaches every shell
             // without a per-entry boot hook (§9.7 Developer Mode).
             try { hydrateCustomChainsFromSettings(defaultRegistry(), next); } catch { /* never fail a read */ }
-            setSettings(next);
+            const effective = normalizeDisplayCurrency(next);
+            setSettings(effective.settings);
+            setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
             setError(null);
         } catch (err) {
             if (!isCurrent()) return;
@@ -92,9 +97,11 @@ export function useSettings() {
             throw new Error('messaging.updateSettings is not available in this shell');
         }
         const next = await messaging.updateSettings(patch);
+        const effective = normalizeDisplayCurrency(next);
         if (aliveRef.current) {
             requestRef.current += 1;
-            setSettings(next);
+            setSettings(effective.settings);
+            setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
             setError(null);
             setLoading(false);
         }
@@ -103,7 +110,7 @@ export function useSettings() {
                 window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: next }));
             } catch { /* CustomEvent unsupported: non-fatal */ }
         }
-        return next;
+        return effective.settings;
     }, [messaging]);
 
     useEffect(() => {
@@ -115,8 +122,10 @@ export function useSettings() {
             onChanged = (e) => {
                 const next = e?.detail;
                 if (next && aliveRef.current) {
+                    const effective = normalizeDisplayCurrency(next);
                     requestRef.current += 1;
-                    setSettings(next);
+                    setSettings(effective.settings);
+                    setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
                     setError(null);
                     setLoading(false);
                 }
@@ -135,5 +144,5 @@ export function useSettings() {
         };
     }, [refresh]);
 
-    return { settings, loading, error, refresh, update };
+    return { settings, loading, error, unsupportedFiatCurrency, refresh, update };
 }

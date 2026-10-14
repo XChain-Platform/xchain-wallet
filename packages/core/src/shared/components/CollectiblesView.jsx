@@ -41,6 +41,7 @@ import styles from './CollectiblesView.module.css';
  * @param {Set<string> | null} [props.pinnedKeys]
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]
  * @param {Set<string> | null} [props.hiddenKeys]
+ * @param {Set<string> | null} [props.automaticHiddenKeys]
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]
  * @param {boolean} [props.allowRemoteImages]
  */
@@ -54,6 +55,7 @@ export function CollectiblesView({
     pinnedKeys,
     onTogglePin,
     hiddenKeys,
+    automaticHiddenKeys,
     onToggleHide,
     allowRemoteImages = true,
 }) {
@@ -71,12 +73,12 @@ export function CollectiblesView({
         );
     }
 
-    const visible = hiddenKeys
-        ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : rows;
-    const hidden = hiddenKeys
-        ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : [];
+    const isHidden = (row) => {
+        const key = `${row.chainId}:${row.tick}`;
+        return Boolean(hiddenKeys?.has(key) || automaticHiddenKeys?.has(key));
+    };
+    const visible = rows.filter((row) => !isHidden(row));
+    const hidden = rows.filter(isHidden);
     const sortedRows = pinnedKeys && pinnedKeys.size > 0
         ? [
             ...visible.filter((r) => pinnedKeys.has(`${r.chainId}:${r.tick}`)),
@@ -124,7 +126,9 @@ export function CollectiblesView({
                             hidden
                             onSelect={onSelectToken}
                             onTogglePin={onTogglePin}
-                            onToggleHide={onToggleHide}
+                            onToggleHide={automaticHiddenKeys?.has(`${r.chainId}:${r.tick}`)
+                                ? undefined
+                                : onToggleHide}
                             allowRemoteImages={allowRemoteImages}
                         />
                     ))}

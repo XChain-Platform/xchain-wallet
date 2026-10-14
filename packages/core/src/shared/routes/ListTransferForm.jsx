@@ -26,7 +26,6 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { preferredSourceId } from '../addressSelection.js';
 import { listFormatSupport } from '../../flows/listFormatSupport.js';
 import { findListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
@@ -69,10 +68,6 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
-    const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, any> | null} */ (null),
-    );
-    const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [sdkSupported, setSdkSupported] = useState(/** @type {boolean | null} */ (null));
@@ -85,15 +80,9 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
 
     useEffect(() => {
         let cancelled = false;
-        Promise.all([
-            messaging.getAddressesByChain(walletId),
-            typeof messaging.getActiveAddresses === 'function'
-                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
-                : Promise.resolve({}),
-        ]).then(([byChain, active]) => {
+        messaging.getAddressesByChain(walletId).then((byChain) => {
             if (cancelled) return;
             setAddressesByChain(byChain || {});
-            setActiveByChain(active || {});
             if (!(byChain?.[chainId] || []).length) {
                 setLoadError('No address on this chain yet. Use Receive to generate one first.');
             }
@@ -146,28 +135,11 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         return (addressesByChain[chainId] || []).find((record) => record.address === owner) || null;
     }, [owner, addressesByChain, chainId]);
 
-    useEffect(() => {
-        if (!addressesByChain || !activeByChain || fromAddressId) return;
-        const all = addressesByChain[chainId] || [];
-        const funding = all.filter((record) => record.role !== 'dispenser');
-        const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
-        if (picked) setFromAddressId(picked);
-    }, [addressesByChain, activeByChain, chainId, fromAddressId]);
-
-    useEffect(() => {
-        if (ownerRecord) setFromAddressId(ownerRecord.id);
-    }, [ownerRecord]);
-
-    const fromAddress = useMemo(() => {
-        if (!fromAddressId || !addressesByChain) return null;
-        return (addressesByChain[chainId] || []).find((record) => record.id === fromAddressId) || null;
-    }, [fromAddressId, addressesByChain, chainId]);
-
     const lane = useOwnerActionLane({
         messaging,
         walletId,
         chainId,
-        owner: fromAddress,
+        owner: ownerRecord,
         software: 'createList',
         hardware: 'createListHw',
     });
@@ -178,7 +150,12 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (!ownerRecord) {
+            setFormError(owner
+                ? 'This list is owned by an address that is not in this wallet, so this wallet cannot transfer it.'
+                : 'The current owner could not be verified, so this wallet cannot transfer this list.');
+            return false;
+        }
         const candidates = airdropLib.parsePaste(trimmedDestination);
         const classified = airdropLib.classifyRecipients(candidates, descriptor);
         if (candidates.length !== 1 || classified.valid.length !== 1) {
@@ -287,7 +264,11 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         );
     }
 
-    const missingOwner = owner && !ownerRecord;
+    const ownershipReason = !owner
+        ? 'The current owner could not be verified, so this wallet cannot transfer this list.'
+        : !ownerRecord
+            ? `The current owner, ${shortAddress(owner)}, is not an address in this wallet. A transfer signed by another address will be refused by the network, so this wallet cannot transfer it.`
+            : null;
     return wrap(
         <FormPage
             label="Transfer list"
@@ -303,7 +284,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                     type="submit"
                     variant="danger"
                     loading={lane.composing}
-                    disabled={sdkSupported !== true || !typedConfirmOk || !fromAddress || lane.composing}
+                    disabled={sdkSupported !== true || Boolean(ownershipReason) || !typedConfirmOk || !ownerRecord || lane.composing}
                 >
                     {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
                 </Button>
@@ -318,16 +299,13 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
-                    {fromAddress ? <AddressText address={fromAddress.address} /> : 'Unavailable'}
+                    {ownerRecord ? <AddressText address={ownerRecord.address} /> : 'Unavailable'}
                 </dd>
             </dl>
 
-            {missingOwner ? (
+            {ownershipReason ? (
                 <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        The current owner, {shortAddress(owner)}, is not an address in this wallet.
-                        A transfer signed by another address will be refused by the network.
-                    </p>
+                    <p className={styles.warning}>{ownershipReason}</p>
                 </div>
             ) : null}
 
@@ -340,7 +318,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                disabled={sdkSupported !== true}
+                disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
             <Input
                 label="Memo (optional)"
@@ -348,7 +326,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"
-                disabled={sdkSupported !== true}
+                disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
             <div className={styles.warnings}>
@@ -370,7 +348,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                disabled={sdkSupported !== true}
+                disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
         </FormPage>,

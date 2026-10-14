@@ -38,4 +38,12 @@ describe('SLEEP decoder summary', () => {
         const out = decodeAction({ action: 'SLEEP', params: { VERSION: '1', RESUME_BLOCK: '0', TICK: 'JDOG' } });
         expect(out.summary).toBe('Resume JDOG');
     });
+
+    it('shows the exact memo included in the built action', () => {
+        const out = decodeAction({
+            action: 'SLEEP',
+            params: { VERSION: '1', RESUME_BLOCK: '900000', TICK: 'JDOG', MEMO: 'maintenance' },
+        });
+        expect(out.details).toContainEqual({ label: 'Memo', value: 'maintenance' });
+    });
 });

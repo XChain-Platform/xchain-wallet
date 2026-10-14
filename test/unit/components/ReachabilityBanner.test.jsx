@@ -21,6 +21,7 @@ const useReachability = vi.hoisted(() => vi.fn());
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ useReachability }));
 
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
+import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
 
 const chain = (over = {}) => ({
     chainId: 'litecoin-testnet',
@@ -98,6 +99,24 @@ describe('ReachabilityBanner', () => {
         expect(screen.getByText('Last checked 2m ago.')).toBeInTheDocument();
     });
 
+    it('announces only the reachability state when poll details rerender', () => {
+        const view = mount({ lastChecked: 100 });
+        const announcement = screen.getByRole('status');
+        expect(announcement).toHaveTextContent('Some balances may be out of date');
+        expect(announcement).not.toHaveTextContent('Last checked');
+
+        useReachability.mockReturnValue({
+            loading: false,
+            overall: 'degraded',
+            perChain: [],
+            refresh: () => {},
+            lastChecked: 200,
+        });
+        view.rerender(<ReachabilityBanner />);
+        expect(screen.getByRole('status')).toBe(announcement);
+        expect(screen.getByRole('status')).toHaveTextContent('Some balances may be out of date');
+    });
+
     it('renders nothing for a chain that is current', () => {
         mount({ overall: 'normal', perChain: [chain({ mode: 'normal', freshness: { explorer: { stale: false } } })] });
         expect(screen.queryByRole('status')).toBeNull();
@@ -108,16 +127,35 @@ describe('ReachabilityBanner', () => {
         window.innerWidth = 360;
         try {
             mount({ perChain: [chain()] });
-            const status = screen.getByRole('status');
+            const banner = screen.getByRole('status').parentElement;
             expect(window.innerWidth).toBe(360);
-            expect(status.children).toHaveLength(3);
-            expect(status.children[0]).toHaveTextContent('Some balances may be out of date');
-            expect(status.children[1]).toHaveTextContent('Try again');
-            expect(status.children[2]).toHaveTextContent('Details');
+            expect(banner.children).toHaveLength(3);
+            expect(banner.children[0]).toHaveTextContent('Some balances may be out of date');
+            expect(banner.children[1]).toHaveTextContent('Try again');
+            expect(banner.children[2]).toHaveTextContent('Details');
             expect(css).toMatch(/\.banner\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s);
             expect(css).toMatch(/\.banner\s*\{[^}]*white-space:\s*nowrap;/s);
         } finally {
             window.innerWidth = originalWidth;
         }
+    });
+});
+
+describe('transaction confirmation announcement', () => {
+    it('announces the confirmation transition once and ignores later timeline rerenders', () => {
+        const pending = { txHash: 'abc', blockIndex: 0, timestamp: 0 };
+        const confirmed = { txHash: 'abc', blockIndex: 100, timestamp: 0 };
+        const view = render(<TxStatusTimeline entry={pending} chainTip={99} />);
+        const announcement = screen.getByRole('status');
+        expect(announcement).toHaveAttribute('aria-live', 'polite');
+        expect(announcement).toHaveTextContent('');
+
+        view.rerender(<TxStatusTimeline entry={confirmed} chainTip={100} />);
+        expect(screen.getByRole('status')).toBe(announcement);
+        expect(announcement).toHaveTextContent('Transaction confirmed.');
+
+        view.rerender(<TxStatusTimeline entry={confirmed} chainTip={101} />);
+        expect(screen.getByRole('status')).toBe(announcement);
+        expect(announcement).toHaveTextContent('Transaction confirmed.');
     });
 });

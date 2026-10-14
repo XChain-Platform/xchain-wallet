@@ -204,7 +204,7 @@ describe('the message key-request reports its failures', () => {
     it('translates an encoder failure into actionable key-request copy', async () => {
         const failure = new Error('no spendable UTXOs found for the funding address');
         failure.name = 'SDKEncoderError';
-        failure.code = 'ENCODER_NO_UTXOS';
+        failure.code = 'ENCODER_NETWORK';
         const messaging = stubMessaging({
             sendHandshake: () => Promise.reject(failure),
         });
@@ -219,7 +219,7 @@ describe('the message key-request reports its failures', () => {
             await drainMicrotasks();
         });
 
-        expect(alertText(utils)).toMatch(/transaction service could not complete this request/i);
+        expect(alertText(utils)).toMatch(/could not reach the transaction service/i);
         expect(alertText(utils)).not.toMatch(/no spendable UTXOs/i);
     });
 

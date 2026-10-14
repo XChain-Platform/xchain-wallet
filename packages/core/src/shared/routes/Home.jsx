@@ -30,6 +30,7 @@ import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { buildWalletAlerts } from '../walletAlerts.js';
 import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
+import { filterConfirmSessionsForAccount } from '../utils/activeAccountScope.js';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
@@ -881,7 +882,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof messaging.listConfirmSessions === 'function') {
             try {
                 const resp = await messaging.listConfirmSessions();
-                if (!isCancelled()) setConfirmSessions(resp?.sessions || []);
+                if (!isCancelled()) {
+                    setConfirmSessions(filterConfirmSessionsForAccount(
+                        resp?.sessions,
+                        walletId,
+                        accountId,
+                    ));
+                }
             } catch { /* non-fatal */ }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -297,15 +297,9 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     useEffect(() => {
         if (stage === 'compose' && ownerRecord) setFromAddressId(ownerRecord.id);
     }, [ownerRecord, stage]);
-    // Warn when the wallet cannot sign as the owner (owner unknown: no claim).
-    const notOwnerWarning = owner && !ownerRecord && fromAddress && fromAddress.address !== owner
-        ? `List #${oldIndex} was created by ${shortAddress(owner)}, which is not an address in this wallet, so this edit is signed from ${shortAddress(fromAddress.address)}. Some chains accept an edit from any address today, but once owner-only list edits are active on this chain, only the list's creator can edit it and this edit would be invalid.`
+    const ownershipReason = owner && !ownerRecord
+        ? `List #${oldIndex} is owned by ${shortAddress(owner)}, which is not an address in this wallet. This wallet cannot edit it.`
         : null;
-    const notOwnerNotice = notOwnerWarning ? (
-        <div role="alert" className={styles.warnings}>
-            <p className={styles.warning}>{notOwnerWarning}</p>
-        </div>
-    ) : null;
 
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -541,6 +535,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     async function handleReview(event) {
         event.preventDefault();
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
+        if (ownershipReason) { setFormError(ownershipReason); return; }
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
         if (feePick.mode === 'custom' && feePerKb === null) {
             const rate = Number(feePick.customRate);
@@ -704,11 +699,12 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'review-1' && stage !== 'review-2'}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
-    if (!addressesByChain) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (!addressesByChain || owner === undefined) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (ownershipReason) return wrap(<StatusMessage variant="warning">{ownershipReason}</StatusMessage>);
 
     // A leg signed but not broadcast stops the chain: the shared panel
     // says so and deliberately offers no retry (re-signing while a signed
@@ -897,7 +893,6 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                     <summary>Review removed items</summary>
                     <ul>{toRemove.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                 </details>
-                {notOwnerNotice}
                 <SignCredentials
                     unlocked={signerReady}
                     fromAddress={fromAddress}
@@ -1025,7 +1020,6 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         <ul>{(needsAdd ? toAdd : toRemove).map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                     </details>
                 ) : null}
-                {notOwnerNotice}
                 {memoOnly ? (
                     <p className={styles.hint}>
                         Only the memo changes. The list keeps its {currentItems.length} member{currentItems.length === 1 ? '' : 's'};
@@ -1087,8 +1081,6 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             {fromAddress ? (
                 <p className={styles.hint}>Signed from <AddressText address={fromAddress.address} /></p>
             ) : null}
-            {notOwnerNotice}
-
             {currentItems.length > 0 ? (
                 <>
                     <span className={styles.fromLabel}>Current members (uncheck to remove)</span>

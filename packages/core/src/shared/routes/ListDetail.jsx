@@ -26,6 +26,7 @@ import { TickMemberName } from '../components/TickMemberName.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
+import { findListOwner } from '../../flows/listMembership.js';
 import { uniqueRows } from '../utils/pagedRows.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -61,6 +62,7 @@ const MEMBERS_PAGE_SIZE = 25;
  * rather than pretending to.
  *
  * @param {object} props
+ * @param {string} [props.walletId]
  * @param {string} props.chainId
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
@@ -69,26 +71,51 @@ const MEMBERS_PAGE_SIZE = 25;
  * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onRename]    shows "Rename list" when passed and supported
  * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]  shows "Transfer list" when passed
  */
-export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
+export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
     const [data, setData] = useState(/** @type {any | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [metaSupported, setMetaSupported] = useState(false);
+    const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
+    const [walletAddresses, setWalletAddresses] = useState(/** @type {any[] | null | undefined} */ (undefined));
     const [reload, setReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
         setData(undefined);
+        setOwner(undefined);
         setLoadError(null);
-        messaging.getListByActionIndex({ chainId, actionIndex })
-            .then((row) => { if (!cancelled) setData(row || null); })
+        const readList = (index) => messaging.getListByActionIndex({ chainId, actionIndex: index });
+        readList(actionIndex)
+            .then(async (row) => {
+                const nextOwner = row ? await findListOwner({ detail: row, readList }) : null;
+                if (!cancelled) {
+                    setData(row || null);
+                    setOwner(nextOwner);
+                }
+            })
             .catch((err) => {
                 if (!cancelled) setLoadError(readFailureMessage(err, 'load this list'));
             });
         return () => { cancelled = true; };
     }, [chainId, actionIndex, messaging, reload]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId) {
+            setWalletAddresses(null);
+            return () => { cancelled = true; };
+        }
+        setWalletAddresses(undefined);
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                if (!cancelled) setWalletAddresses(Array.isArray(byChain?.[chainId]) ? byChain[chainId] : []);
+            })
+            .catch(() => { if (!cancelled) setWalletAddresses(null); });
+        return () => { cancelled = true; };
+    }, [walletId, chainId, messaging]);
 
     useEffect(() => {
         let cancelled = false;
@@ -130,6 +157,16 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const name = typeof data?.name === 'string' && data.name.length > 0 ? data.name : null;
     const description = typeof data?.description === 'string' && data.description.length > 0
         ? data.description : null;
+    const permissionCheckEnabled = Boolean(walletId);
+    const walletOwnsList = Boolean(owner && walletAddresses?.some((record) => record?.address === owner));
+    const canManage = !permissionCheckEnabled || walletOwnsList;
+    const readOnlyReason = !permissionCheckEnabled || canManage
+        ? null
+        : owner === undefined || walletAddresses === undefined
+            ? 'Checking whether this wallet owns the list.'
+            : owner === null || walletAddresses === null
+                ? 'Ownership could not be verified, so this list is read-only.'
+                : 'This list is owned by another address, so it is read-only in this wallet.';
 
     const header = (
         <PageHeader onBack={onBack} title={isTick ? 'Token list' : 'Address list'} />
@@ -185,6 +222,12 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 <dd className={styles.detailsValue}>{isTick ? 'Token list' : 'Address list'}</dd>
                 <dt className={styles.detailsLabel}>Published by</dt>
                 <dd className={styles.detailsValue}>{data.source ? <AddressText address={data.source} /> : '?'}</dd>
+                {owner !== undefined ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Current owner</dt>
+                        <dd className={styles.detailsValue}>{owner ? <AddressText address={owner} /> : 'Unavailable'}</dd>
+                    </>
+                ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>{data.status === 'valid' ? 'Valid' : String(data.status || '?')}</dd>
                 {data.block_index != null ? (
@@ -281,40 +324,43 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
             />
 
             <SectionHeader title="Actions" />
-            <div className={styles.actions}>
-                {onShare ? (
-                    <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
-                        Share list
+            {readOnlyReason ? <StatusMessage variant="warning">{readOnlyReason}</StatusMessage> : null}
+            {canManage ? (
+                <div className={styles.actions}>
+                    {onShare ? (
+                        <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
+                            Share list
+                        </Button>
+                    ) : null}
+                    {onTransfer ? (
+                        <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
+                            Transfer list
+                        </Button>
+                    ) : null}
+                    {onRename && metaSupported ? (
+                        <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
+                            Rename list
+                        </Button>
+                    ) : null}
+                    <Button
+                        variant="primary"
+                        onClick={() => onFork({
+                            chainId,
+                            actionIndex,
+                            type: String(data.type),
+                            // An edit applies to the membership a reference resolves
+                            // to, so fork from the current members under resolution.
+                            items: currentItems || items,
+                            editResolutionActive: resolution,
+                            // Where the fork form starts its walk to the list's owner.
+                            source: data.source ? String(data.source) : null,
+                            parentIndex: isFork ? String(data.list_action_index) : null,
+                        })}
+                    >
+                        Fork &amp; edit
                     </Button>
-                ) : null}
-                {onTransfer ? (
-                    <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
-                        Transfer list
-                    </Button>
-                ) : null}
-                {onRename && metaSupported ? (
-                    <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
-                        Rename list
-                    </Button>
-                ) : null}
-                <Button
-                    variant="primary"
-                    onClick={() => onFork({
-                        chainId,
-                        actionIndex,
-                        type: String(data.type),
-                        // An edit applies to the membership a reference resolves
-                        // to, so fork from the current members under resolution.
-                        items: currentItems || items,
-                        editResolutionActive: resolution,
-                        // Where the fork form starts its walk to the list's owner.
-                        source: data.source ? String(data.source) : null,
-                        parentIndex: isFork ? String(data.list_action_index) : null,
-                    })}
-                >
-                    Fork &amp; edit
-                </Button>
-            </div>
+                </div>
+            ) : null}
         </>,
     );
 }

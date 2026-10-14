@@ -212,6 +212,18 @@ describe('mergePendingEntries', () => {
         expect(out.pending).toHaveLength(0);
     });
 
+    it('deduplicates one confirmed action returned for two wallet addresses', () => {
+        const out = mergePendingEntries({
+            confirmed: [
+                confirmed('', { address: OURS }),
+                confirmed('AABBCC', { address: 'secondOwnAddress' }),
+            ],
+            pending: [fromMempool()],
+        });
+        expect(out.pending).toHaveLength(0);
+        expect(out.entries).toEqual([confirmed('', { address: OURS })]);
+    });
+
     it('keeps a pending entry whose hash confirmed on a DIFFERENT chain', () => {
         const out = mergePendingEntries({
             confirmed: [confirmed('aabbcc', { chainId: 'dogecoin-regtest' })],

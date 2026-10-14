@@ -60,6 +60,22 @@ describe('ProjectRosterForm editing validation', () => {
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
+    it('returns from review without submitting the compose form again', async () => {
+        mount();
+        await screen.findByText('No list published yet. This will be the first.');
+        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
+            target: { value: 'VALID' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        expect(await screen.findByRole('form', { name: 'Review official token list' })).toBeTruthy();
+
+        const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+        expect(clickAllowed).toBe(false);
+        expect(screen.getByRole('form', { name: 'Official token list' })).toBeTruthy();
+        expect(screen.queryByRole('form', { name: 'Review official token list' })).toBeNull();
+    });
+
     it('rejects malformed references and an overlong memo before review', async () => {
         mount();
         await screen.findByText('No list published yet. This will be the first.');

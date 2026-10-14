@@ -235,7 +235,7 @@ describe('wallet.changePassword, then wallet.unlock', () => {
         env.storageBackend.save = async () => { throw new Error('disk full'); };
 
         await expect(changeWalletPassword(
-            { walletId: 'w1', currentPassword: OLD, newPassword: NEW }, hostDeps(env))).rejects.toThrow('disk full');
+            { walletId: 'w1', currentPassword: OLD, newPassword: NEW }, hostDeps(env))).rejects.toThrow('Storage is full');
         env.storageBackend.save = realSave;
 
         expect(await unlockOutcome(env, OLD)).toBe('opened; signers for [w1]');

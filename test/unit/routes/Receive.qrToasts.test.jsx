@@ -275,6 +275,7 @@ describe('Receive QR copy and share toasts', () => {
             await waitFor(() => expect(qrToDataURL).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
+                    errorCorrectionLevel: 'M',
                     margin: 4,
                     width: 800,
                     color: { dark: '#0F172A', light: '#FFFFFF' },

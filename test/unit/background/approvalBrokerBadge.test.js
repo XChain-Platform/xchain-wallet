@@ -46,6 +46,7 @@ function harness() {
 
 function failureHarness({ timeoutMs = 60_000 } = {}) {
     const tabRemoved = [];
+    const windowRemoved = [];
     const suspended = [];
     const remove = vi.fn(async () => {});
     vi.stubGlobal('chrome', {
@@ -58,14 +59,14 @@ function failureHarness({ timeoutMs = 60_000 } = {}) {
         windows: {
             create: vi.fn(async () => ({ id: 41 })),
             remove,
-            onRemoved: { addListener: vi.fn() },
+            onRemoved: { addListener: (fn) => windowRemoved.push(fn) },
         },
     });
     const broker = new ApprovalBroker({
         newId: () => 'failure-request',
         timeoutMs,
     });
-    return { broker, remove, suspended, tabRemoved };
+    return { broker, remove, suspended, tabRemoved, windowRemoved };
 }
 
 describe('ApprovalBroker action badge', () => {
@@ -227,15 +228,19 @@ describe('ApprovalBroker failure paths', () => {
         expect(remove).toHaveBeenCalledWith(41);
     });
 
-    it('rejects and drains an open approval before the background suspends', async () => {
-        const { broker, remove, suspended } = failureHarness();
+    it('keeps an approval pending when another extension surface closes', async () => {
+        const { broker, remove, suspended, windowRemoved } = failureHarness();
         const pending = broker.signPsbt({ origin: 'https://dapp.test' });
         await Promise.resolve();
 
-        suspended[0]();
+        expect(suspended).toEqual([]);
+        windowRemoved[0](99);
 
-        await expect(pending).resolves.toEqual({ approved: false });
-        expect(broker._pendingSize()).toBe(0);
-        await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(41));
+        expect(broker._pendingSize()).toBe(1);
+        expect(remove).not.toHaveBeenCalled();
+
+        await broker.resolve('failure-request', { approved: true });
+        await expect(pending).resolves.toEqual({ approved: true });
+        expect(remove).toHaveBeenCalledWith(41);
     });
 });

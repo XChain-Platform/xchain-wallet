@@ -122,7 +122,7 @@ const CURRENCY_OPTION = {
 };
 
 export function LanguageRegionSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, unsupportedFiatCurrency, update } = useSettings();
     const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
     const [currencyQuery, setCurrencyQuery] = useState('');
     const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
@@ -185,6 +185,11 @@ export function LanguageRegionSection() {
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>Fiat currency</span>
                     <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
+                    {unsupportedFiatCurrency ? (
+                        <span role="status" style={ROW_HINT}>
+                            {unsupportedFiatCurrency} is not supported. Values are shown in USD.
+                        </span>
+                    ) : null}
                 </div>
                 <div style={CONTROLS}>
                     <input

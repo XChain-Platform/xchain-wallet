@@ -60,8 +60,51 @@ describe('logConsole buffer', () => {
         expect(logConsole.entries()[0]).toMatchObject({ level: 'warn', source: 'console' });
         expect(logConsole.entries()[0].message).toContain('hello 4 null');
         expect(logConsole.entries()[0].message).toContain('boom');
-        expect(logConsole.entries()[0].message).toContain('[unserializable]');
+        expect(logConsole.entries()[0].message).toContain('[Circular]');
         expect(logConsole.isAttached()).toBe(false);
+    });
+
+    it('redacts secret fields and secret patterns before buffering or forwarding logs', () => {
+        const original = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const mnemonic = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+        const privateKey = 'a'.repeat(64);
+        const wif = `K${'1'.repeat(51)}`;
+        const password = 'wallet-password-canary';
+        const passphrase = 'hidden wallet canary';
+        const psbt = 'cHNidP8BAHECAAAAAdummyPsbtPayload=';
+        const psbtHex = '70736274ff0100deadbeef';
+        const secrets = [mnemonic, privateKey, wif, password, passphrase, psbt, psbtHex];
+
+        logConsole.attach();
+        console.error(`signing failed for ${mnemonic}`, {
+            password,
+            recovery_words: mnemonic,
+            account: {
+                privateKey,
+                wif,
+                bip39Passphrase: passphrase,
+            },
+            decryptedVault: { privateKey },
+            psbt,
+            safe: 'visible diagnostic',
+        }, new Error(`private_key=${privateKey}`));
+        logConsole.record({
+            source: 'vault',
+            message: `PSBT: ${psbtHex}`,
+            data: { seedPhrase: mnemonic, password, safe: 'record survives' },
+        });
+        logConsole.detach();
+
+        const buffered = JSON.stringify(logConsole.entries());
+        const forwarded = JSON.stringify(original.mock.calls);
+        for (const secret of secrets) {
+            expect(buffered).not.toContain(secret);
+            expect(forwarded).not.toContain(secret);
+        }
+        expect(buffered).toContain('[REDACTED]');
+        expect(buffered).toContain('visible diagnostic');
+        expect(buffered).toContain('record survives');
+        expect(forwarded).toContain('[REDACTED]');
     });
 
     it('restores sanitized entries in time order without duplicates or notifications', () => {

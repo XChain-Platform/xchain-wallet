@@ -17,9 +17,10 @@ let update;
 let messaging;
 let nativeBack;
 let capacitorApp;
+let unsupportedFiatCurrency;
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
-    useSettings: () => ({ settings, loading: false, error: null, update }),
+    useSettings: () => ({ settings, loading: false, error: null, unsupportedFiatCurrency, update }),
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ shell: 'web', messaging }),
@@ -65,6 +66,7 @@ beforeEach(() => {
     globalThis.Capacitor = { Plugins: { App: capacitorApp } };
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
+    unsupportedFiatCurrency = null;
     messaging = {
         sendHoldCancel: vi.fn(),
         listContacts: vi.fn(async () => []),
@@ -93,6 +95,17 @@ describe('settings form validation', () => {
         expect(screen.queryByRole('listbox', { name: 'Supported fiat currencies' })).toBeNull();
         expect(picker).toHaveFocus();
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
+    it('explains the USD fallback for an unsupported saved currency', () => {
+        settings = { ...settings, fiatCurrency: 'USD' };
+        unsupportedFiatCurrency = 'XYZ';
+        render(<LanguageRegionSection />);
+
+        expect(screen.getByRole('status')).toHaveTextContent(
+            'XYZ is not supported. Values are shown in USD.',
+        );
+        expect(screen.getByLabelText('Fiat currency').value).toContain('USD');
     });
 
     it('searches supported currencies by code and name, shows symbols, and saves the choice', () => {

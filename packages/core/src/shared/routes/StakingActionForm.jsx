@@ -29,7 +29,12 @@ import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { unclaimedRewards, effectiveStakingRows } from '../../flows/stakingDashboard.js';
+import {
+    unclaimedRewards,
+    effectiveStakingRows,
+    stakingRowState,
+    stakingActivationBlock,
+} from '../../flows/stakingDashboard.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -256,14 +261,20 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         () => effectiveStakingRows(positions?.stakes, positions?.height),
         [positions],
     );
+    const pendingStakes = useMemo(
+        () => (positions?.stakes || []).filter((stake) => (
+            stakingRowState(stake, positions?.height) === 'pending'
+        )),
+        [positions],
+    );
     const stakedKeys = useMemo(() => {
         const keys = [];
-        for (const s of activeStakes) {
+        for (const s of [...activeStakes, ...pendingStakes]) {
             const k = s.signing_pubkey || s.SIGNING_PUBKEY;
             if (k && !keys.includes(k)) keys.push(k);
         }
         return keys;
-    }, [activeStakes]);
+    }, [activeStakes, pendingStakes]);
 
     useEffect(() => {
         if (isUnstake && !signingPubkey && stakedKeys.length > 0) {
@@ -291,6 +302,18 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         const totals = unclaimedRewards({ rewards: positions.rewards, claims: positions.claims });
         return totals.unclaimed;
     }, [positions, isUnstake, signingPubkey, activeStakes]);
+
+    const selectedUnlockHeight = useMemo(() => {
+        if (!isUnstake || activeStakes.some((stake) => (
+            (stake.signing_pubkey || stake.SIGNING_PUBKEY) === signingPubkey
+        ))) return null;
+        const heights = pendingStakes
+            .filter((stake) => (stake.signing_pubkey || stake.SIGNING_PUBKEY) === signingPubkey)
+            .map(stakingActivationBlock)
+            .filter((block) => block !== null)
+            .sort((a, b) => a - b);
+        return heights[0] ?? null;
+    }, [isUnstake, activeStakes, pendingStakes, signingPubkey]);
 
     // Prefill with the full balance (the common case is still "take it
     // all"), but stop overwriting once the user edits: a positions
@@ -509,6 +532,10 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 setFormError('Signing public key must be exactly 64 hexadecimal characters.');
                 return;
             }
+            if (selectedUnlockHeight !== null) {
+                setFormError(`This stake cannot be unstaked until block ${formatWithThousands(String(selectedUnlockHeight))}.`);
+                return;
+            }
         }
         if (!totalKnown) {
             setFormError(TOTAL_LOADING_MESSAGE[isUnstake ? 'unstake' : 'claim']);
@@ -645,7 +672,15 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     : verb}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
+    );
 
     if (loadError) {
         return wrap(

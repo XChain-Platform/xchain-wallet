@@ -13,6 +13,7 @@ import { Button, EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from 
 import { AssetMark } from '../../ui/AssetMark.jsx';
 export { tickerColor } from '../../ui/AssetMark.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { t } from '../../i18n/index.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
@@ -61,6 +62,7 @@ export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
  * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
+ * @param {Set<string> | null} [props.automaticHiddenKeys] `chainId:tick` keys collapsed by a display preference. These rows stay reachable but have no per-row unhide action because the preference owns their visibility.
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
@@ -84,6 +86,7 @@ export const BalanceList = memo(function BalanceList({
     pinnedKeys,
     onTogglePin,
     hiddenKeys,
+    automaticHiddenKeys,
     onToggleHide,
     verifyMap,
     hideSmallBalances = false,
@@ -111,12 +114,12 @@ export const BalanceList = memo(function BalanceList({
     // Stable sort: pinned rows first (preserving each section's existing
     // chain/tick order), then unpinned. Caller already sorted within each
     // group via sortByChainThenAsset.
-    const notHidden = hiddenKeys
-        ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : rows;
-    const hidden = hiddenKeys
-        ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : [];
+    const isHidden = (row) => {
+        const key = `${row.chainId}:${row.tick}`;
+        return Boolean(hiddenKeys?.has(key) || automaticHiddenKeys?.has(key));
+    };
+    const notHidden = rows.filter((row) => !isHidden(row));
+    const hidden = rows.filter(isHidden);
     //A row the user explicitly pinned is never dust to them, so the
     // pin wins over the dust threshold; everything else under the threshold
     // moves into its own collapsed section. Collapsed, not dropped: a balance
@@ -171,8 +174,8 @@ export const BalanceList = memo(function BalanceList({
                         aria-expanded={hiddenExpanded}
                     >
                         {hiddenExpanded
-                            ? `Hide ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`
-                            : `Show ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`}
+                            ? t('balanceList.hiddenTokens.hide', { count: hidden.length })
+                            : t('balanceList.hiddenTokens.show', { count: hidden.length })}
                     </button>
                     {hiddenExpanded ? hidden.map((r) => {
                         const key = `${r.chainId}:${r.tick}`;
@@ -189,7 +192,7 @@ export const BalanceList = memo(function BalanceList({
                                 pinned={pinned}
                                 onTogglePin={onTogglePin}
                                 hidden
-                                onToggleHide={onToggleHide}
+                                onToggleHide={automaticHiddenKeys?.has(key) ? undefined : onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
                                 showChain={labelChains}
                                 allowRemoteImages={allowRemoteImages}
@@ -209,8 +212,8 @@ export const BalanceList = memo(function BalanceList({
                         data-testid="small-balances-toggle"
                     >
                         {smallExpanded
-                            ? `Hide ${small.length} small balance${small.length === 1 ? '' : 's'}`
-                            : `Show ${small.length} small balance${small.length === 1 ? '' : 's'}`}
+                            ? t('balanceList.smallBalances.hide', { count: small.length })
+                            : t('balanceList.smallBalances.show', { count: small.length })}
                     </button>
                     {smallExpanded ? small.map((r) => {
                         const key = `${r.chainId}:${r.tick}`;

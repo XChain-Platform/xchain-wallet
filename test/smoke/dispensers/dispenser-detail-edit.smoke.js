@@ -79,9 +79,11 @@ assert.match(src, /refillCeilingMessage\(refillCount\)/, 'refill form states THI
 assert.match(src, /refillsUsed\(lifecycle\)/, 'the count is derived from the lifecycle events already loaded');
 assert.match(
     src,
-    /disabled=\{refillCount\.remaining <= 0 && refillCount\.exact\}/,
-    'a spent refill ceiling disables the refill button',
+    /disabled=\{refillBalance == null \|\| \(refillCount\.remaining <= 0 && refillCount\.exact\)\}/,
+    'an unread balance or spent refill ceiling disables the refill button',
 );
+assert.match(src, /compareAmounts\(amt, giveAmount\) === -1/, 'refill amount covers at least one fill');
+assert.match(src, /verifyOwnerActionOpen\(setCancelError, 'close'\)/, 'close rechecks live state before compose');
 assert.ok(
     !/up to 5 refills \(6,000 lifetime dispenses\)/.test(src),
     'the refill form no longer quotes the cap as policy with no count beside it (D-147)',

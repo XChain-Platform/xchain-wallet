@@ -10,9 +10,10 @@
 
 // The system Back gesture runs the same action as the visible back control.
 // Android's narrow App plugin dispatches directly to the top handler and
-// minimizes when the stack is empty. Browsers use a sentinel history entry
-// when route snapshots do not already own history. Overlay handlers take
-// priority over route handlers, so a modal or sheet always closes first.
+// uses available history before requiring a confirmed Home exit. Browsers use
+// a sentinel history entry when route snapshots do not already own history.
+// Overlay handlers take priority over route handlers, so a modal or sheet
+// always closes first.
 
 import { useEffect, useRef } from 'react';
 
@@ -27,6 +28,9 @@ let listening = false;
 let routeHistoryManaged = false;
 let nativeListener = null;
 let nativeBackRootOwners = 0;
+let homeBackAt = null;
+
+const HOME_BACK_WINDOW_MS = 2000;
 
 const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history?.pushState);
 
@@ -39,13 +43,29 @@ function topHandler() {
     return handlers[handlers.length - 1];
 }
 
-function onNativeBack() {
+function onNativeBack(event) {
     const top = topHandler();
     if (top) {
+        homeBackAt = null;
         top.run();
         return;
     }
-    if (nativeBackRootOwners > 0) capacitorApp()?.minimizeApp?.();
+    if (event?.canGoBack && typeof window !== 'undefined' && window.history?.back) {
+        homeBackAt = null;
+        window.history.back();
+        return;
+    }
+    // Only a native Back root (Home) may background the app, and only on a
+    // second press within the window.
+    if (nativeBackRootOwners === 0) return;
+    const pressedAt = Date.now();
+    const sinceHomeBack = homeBackAt === null ? null : pressedAt - homeBackAt;
+    if (sinceHomeBack !== null && sinceHomeBack >= 0 && sinceHomeBack <= HOME_BACK_WINDOW_MS) {
+        homeBackAt = null;
+        capacitorApp()?.minimizeApp?.();
+        return;
+    }
+    homeBackAt = pressedAt;
 }
 
 /** iOS edge Back belongs only to in-app navigation and never exits the app. */
@@ -53,7 +73,7 @@ function onNativeEdgeBack() {
     topHandler()?.run();
 }
 
-/** Keep one Capacitor listener alive so Back on a root screen can minimize. */
+/** Keep one Capacitor listener alive so root Back can apply the exit guard. */
 function ensureNativeListener() {
     const app = capacitorApp();
     if (nativeListener || typeof app?.addListener !== 'function') return;
@@ -135,6 +155,7 @@ function onKeyDown(event) {
  * @returns {() => void} unregister
  */
 export function registerBackHandler(run, kind = 'overlay') {
+    homeBackAt = null;
     ensureNativeListener();
     if (!listening && typeof window !== 'undefined') {
         window.addEventListener('popstate', onPopState);
@@ -221,6 +242,7 @@ export function resetBackStackForTests() {
     listening = false;
     routeHistoryManaged = false;
     nativeBackRootOwners = 0;
+    homeBackAt = null;
     const listener = nativeListener;
     nativeListener = null;
     Promise.resolve(listener).then((handle) => handle?.remove?.());

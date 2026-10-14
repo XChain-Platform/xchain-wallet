@@ -320,6 +320,12 @@ jobs:
   # the venue suite did NOT run, so a skipped gate is never read as a pass.
   e2e-regtest:
     runs-on: ubuntu-latest
+    # One run at a time on the shared regtest venue: concurrent runs starve each other past the
+    # 6 h job limit, while a lone run takes about 65 minutes.
+    timeout-minutes: 150
+    concurrency:
+      group: wallet-regtest-venue
+      cancel-in-progress: false
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
       XC_REGTEST_SSH_KEY: ${{ secrets.XC_REGTEST_SSH_KEY }}

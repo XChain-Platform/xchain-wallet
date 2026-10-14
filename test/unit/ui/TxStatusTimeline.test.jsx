@@ -116,6 +116,16 @@ describe('<TxStatusTimeline>', () => {
         expect(screen.getByText(/5 confirmations/)).toBeInTheDocument();
     });
 
+    it('uses singular confirmation copy for the first confirmation', () => {
+        render(
+            <TxStatusTimeline
+                entry={{ txHash: 'abc', blockIndex: 100, timestamp: 0 }}
+                chainTip={100}
+            />,
+        );
+        expect(screen.getByText('1 confirmation')).toBeInTheDocument();
+    });
+
     it('labels every step state in words and marks the current step semantically', () => {
         render(<TxStatusTimeline entry={{ txHash: 'abc', blockIndex: 0, timestamp: 0 }} />);
         const timeline = screen.getByRole('list', { name: 'Transaction status' });

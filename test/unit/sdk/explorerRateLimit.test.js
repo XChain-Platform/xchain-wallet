@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The shared explorer rate-limit layer: header parsing, the 429 retry and its
-// cap, coalescing of identical GETs, pacing when the window runs low, and the
-// plain sentence a surfaced 429 carries. The last block drives the real SDK
-// ExplorerClient so the SDK's own error typing is part of what is proven.
+// The shared SDK host gate: transient read retries, 4xx finality, coalescing,
+// pacing when a rate-limit window runs low, and the plain sentence a surfaced
+// 429 carries. The last block drives the real SDK ExplorerClient so the SDK's
+// own error typing is part of what is proven.
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
     EXPLORER_BUSY_MESSAGE,
     HostRateLimiter,
@@ -31,6 +31,10 @@ import { serializeError, hydrateEnvelopeError } from '../../../packages/extensio
 import { requireSdkDeep, sdkInstalled } from '../../helpers/sdkDeepPaths.js';
 
 const T0 = 1_760_000_000_000;
+
+afterEach(() => {
+    vi.useRealTimers();
+});
 
 /** A limiter on a fake clock: sleep advances time instead of waiting. */
 function fakeLimiter(opts = {}) {
@@ -88,45 +92,52 @@ describe('Retry-After and ratelimit-reset parsing', () => {
     });
 });
 
-describe('429 retry', () => {
-    it('waits the named Retry-After, then retries and succeeds', async () => {
+describe('4xx handling', () => {
+    it('surfaces a named 429 without retrying and pauses the next request', async () => {
         const { limiter, sleeps } = fakeLimiter();
         let calls = 0;
-        const res = await limiter.request('h', null, async () => {
+        const send = async () => {
             calls += 1;
             if (calls === 1) throw http429({ 'retry-after': '4' });
             return ok('fine');
-        }, () => new Error('unused'));
+        };
+        await expect(limiter.request('h', null, send, () => new Error('unused')))
+            .rejects.toMatchObject({ response: { status: 429 } });
+        expect(calls).toBe(1);
+
+        const res = await limiter.request('h', null, send, () => new Error('unused'));
         expect(res.data).toBe('fine');
         expect(calls).toBe(2);
-        // 4 s plus a bounded jitter, never less than asked.
+        // Later work honors the pause plus bounded wake-up jitter.
         expect(sleeps[0]).toBeGreaterThanOrEqual(4_000);
         expect(sleeps[0]).toBeLessThanOrEqual(5_000);
     });
 
-    it('backs off with doubling, jittered waits when the 429 names no wait', async () => {
-        const { limiter, sleeps } = fakeLimiter({ baseBackoffMs: 1_000 });
+    it('never retries any other 4xx response', async () => {
+        const { limiter, sleeps } = fakeLimiter();
         let calls = 0;
-        await limiter.request('h', null, async () => {
-            calls += 1;
-            if (calls <= 2) throw http429();
-            return ok(1);
-        }, () => new Error('unused'));
-        expect(calls).toBe(3);
-        const [first, second] = sleeps;
-        expect(first).toBeGreaterThanOrEqual(1_000);
-        expect(second).toBeGreaterThanOrEqual(2_000);
-        expect(second).toBeGreaterThan(first);
-    });
-
-    it('stops after the retry budget and surfaces the last 429', async () => {
-        const { limiter } = fakeLimiter({ maxRetries: 2 });
-        let calls = 0;
+        const error = Object.assign(new Error('bad request'), {
+            response: { status: 400, headers: {} },
+        });
         await expect(limiter.request('h', null, async () => {
             calls += 1;
-            throw http429({ 'retry-after': '1' });
-        }, () => new Error('unused'))).rejects.toMatchObject({ response: { status: 429 } });
-        expect(calls).toBe(3);
+            throw error;
+        }, () => null)).rejects.toBe(error);
+        expect(calls).toBe(1);
+        expect(sleeps).toEqual([]);
+    });
+
+    it('backs off later calls after header-less 429 responses', async () => {
+        const { limiter, sleeps } = fakeLimiter({ baseBackoffMs: 1_000 });
+        let calls = 0;
+        const fail = async () => {
+            calls += 1;
+            throw http429();
+        };
+        await limiter.request('h', null, fail, () => null).catch(() => {});
+        await limiter.request('h', null, fail, () => null).catch(() => {});
+        expect(calls).toBe(2);
+        expect(sleeps[0]).toBeGreaterThanOrEqual(1_000);
     });
 
     it('raises the backoff for the host, so each fresh wave after a header-less 429 waits longer', async () => {
@@ -152,27 +163,6 @@ describe('429 retry', () => {
         expect(limiter.state('h').strikes).toBe(1);
     });
 
-    it('sends one trial request after a 429 and holds the rest until it answers', async () => {
-        const { limiter } = fakeLimiter({ baseBackoffMs: 1_000 });
-        let window = 'empty';
-        let sent = 0;
-        const send = async () => {
-            sent += 1;
-            if (window === 'empty') { window = 'refilled'; throw http429(); }
-            return ok('fine');
-        };
-        await limiter.request('h', null, send, () => null);
-        expect(sent).toBe(2);
-        // Now the window is empty again: the next wave of five sends one trial,
-        // and only after it succeeds do the other four go.
-        window = 'empty';
-        sent = 0;
-        const wave = await Promise.all(Array.from({ length: 5 }, () => limiter.request('h', null, send, () => null)));
-        expect(wave.every((r) => r.data === 'fine')).toBe(true);
-        expect(sent).toBe(6);
-        expect(limiter.state('h').needsTrial).toBe(false);
-    });
-
     it('gives up a request that has spent its total time budget waiting', async () => {
         const { limiter } = fakeLimiter({ maxWaitMs: 30_000, maxTotalMs: 10_000 });
         limiter.block('h', 20_000);
@@ -183,15 +173,6 @@ describe('429 retry', () => {
         expect(err.seconds).toBe(20);
     });
 
-    it('does not retry other failures', async () => {
-        const { limiter } = fakeLimiter();
-        let calls = 0;
-        const boom = Object.assign(new Error('502'), { response: { status: 502, headers: {} } });
-        await expect(limiter.request('h', null, async () => { calls += 1; throw boom; }, () => null))
-            .rejects.toBe(boom);
-        expect(calls).toBe(1);
-    });
-
     it('can gate a non-GET request without retrying its 429 response', async () => {
         const { limiter } = fakeLimiter();
         let calls = 0;
@@ -200,6 +181,134 @@ describe('429 retry', () => {
             throw http429();
         }, () => null, 0)).rejects.toMatchObject({ response: { status: 429 } });
         expect(calls).toBe(1);
+    });
+});
+
+describe('transient read retry policy', () => {
+    it('retries HTTP 500 after jittered backoff with fake timers', async () => {
+        vi.useFakeTimers();
+        const limiter = new HostRateLimiter({ baseBackoffMs: 100, random: () => 0 });
+        let calls = 0;
+        const pending = limiter.request('h', null, async () => {
+            calls += 1;
+            if (calls === 1) {
+                throw Object.assign(new Error('server failed'), {
+                    response: { status: 500, headers: {} },
+                });
+            }
+            return ok('fine');
+        }, () => null, 1);
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(calls).toBe(1);
+        await vi.runAllTimersAsync();
+        await expect(pending).resolves.toMatchObject({ data: 'fine' });
+        expect(calls).toBe(2);
+    });
+
+    it('retries network errors but caps the caller retry budget', async () => {
+        vi.useFakeTimers();
+        const limiter = new HostRateLimiter({ maxRetries: 2, baseBackoffMs: 100, random: () => 0 });
+        let calls = 0;
+        const pending = limiter.request('h', null, async () => {
+            calls += 1;
+            throw Object.assign(new Error('offline'), { code: 'ERR_NETWORK' });
+        }, () => null, 20);
+        const rejected = expect(pending).rejects.toMatchObject({ code: 'ERR_NETWORK' });
+
+        await vi.runAllTimersAsync();
+        await rejected;
+        expect(calls).toBe(3);
+    });
+
+    it('caps retry concurrency after one trial clears a concurrent failure wave', async () => {
+        vi.useFakeTimers();
+        const limiter = new HostRateLimiter({
+            maxRetries: 1, baseBackoffMs: 100, maxConcurrentRetries: 2, random: () => 0,
+        });
+        let retriesStarted = 0;
+        let activeRetries = 0;
+        let peakRetries = 0;
+        const sends = Array.from({ length: 6 }, () => {
+            let calls = 0;
+            return async () => {
+                calls += 1;
+                if (calls === 1) {
+                    throw Object.assign(new Error('unavailable'), {
+                        response: { status: 503, headers: {} },
+                    });
+                }
+                retriesStarted += 1;
+                activeRetries += 1;
+                peakRetries = Math.max(peakRetries, activeRetries);
+                await new Promise((resolve) => setTimeout(resolve, 10));
+                activeRetries -= 1;
+                return ok('fine');
+            };
+        });
+        const pending = sends.map((send) => limiter.request('h', null, send, () => null, 1));
+
+        await vi.advanceTimersByTimeAsync(75);
+        expect(retriesStarted).toBe(1);
+        await vi.runAllTimersAsync();
+        await expect(Promise.all(pending)).resolves.toHaveLength(6);
+        expect(retriesStarted).toBe(6);
+        expect(peakRetries).toBe(2);
+    });
+});
+
+describe('SDK service policy', () => {
+    it('retries encoder reads but never retries broadcasts', async () => {
+        vi.useFakeTimers();
+        const limiter = new HostRateLimiter({ maxRetries: 1, baseBackoffMs: 100, random: () => 0 });
+        const calls = { health: 0, broadcast_tx: 0 };
+        const client = {
+            defaults: { baseURL: 'https://encoder.test' },
+            post: vi.fn(async (_url, body) => {
+                calls[body.method] += 1;
+                if (body.method === 'health' && calls.health > 1) return ok({ result: { healthy: true } });
+                throw Object.assign(new Error('server failed'), {
+                    response: { status: 503, headers: {} },
+                });
+            }),
+        };
+        const sdk = { encoder: { client, retry: { maxRetries: 1 } } };
+        installExplorerRateLimit(sdk, limiter);
+
+        const health = sdk.encoder.client.post('/', { method: 'health', params: {}, id: 1 });
+        await vi.runAllTimersAsync();
+        await expect(health).resolves.toMatchObject({ status: 200 });
+        expect(calls.health).toBe(2);
+
+        await expect(sdk.encoder.client.post('/', {
+            method: 'broadcast_tx', params: { tx_hex: '00' }, id: 2,
+        })).rejects.toMatchObject({ response: { status: 503 } });
+        expect(calls.broadcast_tx).toBe(1);
+        expect(sdk.encoder.retry).toBe(false);
+    });
+
+    it('retries transient hub discovery without retrying a hub 4xx', async () => {
+        vi.useFakeTimers();
+        const limiter = new HostRateLimiter({ maxRetries: 1, baseBackoffMs: 100, random: () => 0 });
+        const unavailable = (status) => Object.assign(new Error('hub unavailable'), {
+            name: 'SDKHubError',
+            code: 'HUB_UNAVAILABLE',
+            details: { error: `Request failed with status code ${status}` },
+        });
+        const discover = vi.fn()
+            .mockRejectedValueOnce(unavailable(503))
+            .mockResolvedValueOnce({ bitcoin: {} });
+        const sdk = { hub: { url: 'https://hub.test', getDiscoveryConfig: discover } };
+        installExplorerRateLimit(sdk, limiter);
+
+        const pending = sdk.hub.getDiscoveryConfig();
+        await vi.runAllTimersAsync();
+        await expect(pending).resolves.toEqual({ bitcoin: {} });
+        expect(discover).toHaveBeenCalledTimes(2);
+
+        discover.mockRejectedValueOnce(unavailable(404));
+        await expect(sdk.hub.getDiscoveryConfig()).rejects.toMatchObject({ code: 'HUB_UNAVAILABLE' });
+        expect(discover).toHaveBeenCalledTimes(3);
     });
 });
 
@@ -443,17 +552,17 @@ describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
         return ex;
     }
 
-    it('retries a 429 inside the layer and returns the data to the SDK caller', async () => {
+    it('surfaces a 429 without replaying the SDK read', async () => {
         const { limiter } = fakeLimiter();
         let calls = 0;
         const ex = realExplorer(async () => {
             calls += 1;
-            if (calls === 1) throw Object.assign(http429({ 'retry-after': '2' }), { isAxiosError: true });
-            return ok({ data: ['list'] });
+            throw Object.assign(http429({ 'retry-after': '2' }), { isAxiosError: true });
         });
         const sdk = installExplorerRateLimit({ explorer: ex }, limiter);
-        await expect(sdk.explorer.get('/lists/bc1qx/address')).resolves.toEqual({ data: ['list'] });
-        expect(calls).toBe(2);
+        await expect(sdk.explorer.get('/lists/bc1qx/address'))
+            .rejects.toMatchObject({ code: 'RATE_LIMITED' });
+        expect(calls).toBe(1);
     });
 
     it('rejects malformed JSON instead of returning it as successful data', async () => {
@@ -475,7 +584,7 @@ describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
         await expect(ex.client.get('/BTC/api/status')).rejects.toBeTruthy();
     });
 
-    it('surfaces an exhausted 429 as the plain sentence, with the wait kept for the screens', async () => {
+    it('surfaces a 429 as the plain sentence, with the wait kept for the screens', async () => {
         const { limiter } = fakeLimiter({ maxRetries: 1 });
         let calls = 0;
         const ex = realExplorer(async () => {
@@ -484,8 +593,8 @@ describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
         });
         const sdk = installExplorerRateLimit({ explorer: ex }, limiter);
         const err = await sdk.explorer.get('/lists/bc1qx/address').catch((e) => e);
-        // The SDK's own honoured retry is off, so the layer's budget is the only one spent.
-        expect(calls).toBe(2);
+        // A 4xx is final for this call even when the general retry budget remains.
+        expect(calls).toBe(1);
         expect(err.message).toBe(EXPLORER_BUSY_MESSAGE);
         expect(err.message).not.toMatch(/HTTP|\/api\//);
         expect(err.code).toBe('RATE_LIMITED');
@@ -495,7 +604,7 @@ describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
         expect(explorerReadFailure(err, 'load lists').cause).toBe('rate_limited');
     });
 
-    it('does not retry an explorer POST read', async () => {
+    it('does not retry an explorer POST read after a 429', async () => {
         const { limiter } = fakeLimiter();
         let calls = 0;
         const ex = realExplorer(async () => ok(1), async () => {

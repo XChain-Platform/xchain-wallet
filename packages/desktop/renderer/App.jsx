@@ -55,10 +55,12 @@ import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.j
 import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.jsx';
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
-import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -507,12 +509,13 @@ function AppInner() {
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
     );
     const [marketsAsset, setMarketsAsset] = useState(
-        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ ({
-            chainId: 'bitcoin-mainnet',
-            tick: 'BTC',
-            kind: 'native',
-        }),
+        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ (
+            () => defaultDexAssetForNetwork(settings?.activeNetwork)
+        ),
     );
+    useEffect(() => {
+        setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));
+    }, [settings?.activeNetwork]);
     // §24.6 / Cluster Y FOLLOWUP 4: when the renderer is launched
     // with an `xc-init-route` search-string entry (set by main on
     // detach-window IPC), parse it once at mount, route the new
@@ -725,10 +728,7 @@ function AppInner() {
                     : [];
                 // Restore the last selected account for this wallet if it
                 // still exists; otherwise fall back to the lowest index.
-                const persisted = readActiveAccount(activeWalletId);
-                const chosen = (persisted && sorted.some((a) => a.id === persisted))
-                    ? persisted
-                    : (sorted[0]?.id || null);
+                const chosen = reconcileActiveAccount(activeWalletId, sorted);
                 setActiveAccountId(chosen);
             })
             .catch(() => { if (!cancelled) setActiveAccountId(null); });
@@ -738,8 +738,11 @@ function AppInner() {
     // Switch the active account and remember it per wallet, so a restart
     // returns to it instead of snapping back to the lowest-index account.
     const handleSwitchAccount = (id) => {
-        setActiveAccountId(id);
-        if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
+        const nextId = typeof id === 'string' && id ? id : null;
+        setActiveAccountId(nextId);
+        if (!activeWalletId) return;
+        if (nextId) writeActiveAccount(activeWalletId, nextId);
+        else clearActiveAccount(activeWalletId);
     };
 
     // D-34(c): switch the active WALLET and remember it, so a restart returns
@@ -1225,6 +1228,7 @@ function AppInner() {
             if (unlockedView === 'list-detail' && activeWalletId && listRef) {
                 return (
                     <ListDetail
+                        walletId={activeWalletId}
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
                         onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
@@ -1867,6 +1871,7 @@ function AppInner() {
                 return (
                     <CoSignerAccountDetail
                         accountId={coSignerAccountId}
+                        walletId={activeWalletId}
                         onBack={() => setUnlockedView('cosigner-accounts')}
                     />
                 );
@@ -2669,7 +2674,7 @@ function AppInner() {
                     onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                     onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                     onExchange={activeWalletId ? () => {
-                        setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
+                        setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
                         setUnlockedView('markets');
                     } : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
@@ -2752,6 +2757,8 @@ function AppInner() {
                 hasVmAddress,
                 hasGovernanceAddress,
                 isSignerMode,
+                isWatcherMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
             };
             // entity handlers: tokens open TokenDetail with the full
             // ref the row already carries (desktop parity); sites land
@@ -2781,6 +2788,8 @@ function AppInner() {
             // resolves the chain from the first available when unset). A
             // txid/date-shaped query offers "search history".
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
+                isSignerMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');

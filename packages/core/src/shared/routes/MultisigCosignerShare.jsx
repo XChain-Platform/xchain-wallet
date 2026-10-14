@@ -123,7 +123,7 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
                         </p>
                         <KeyQR
                             value={sharePayload}
-                            size={200}
+                            size={256}
                             alt={t('multisig.share.qrAlt')}
                         />
                         <CopyButton

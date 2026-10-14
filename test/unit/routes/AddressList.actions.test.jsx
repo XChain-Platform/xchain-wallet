@@ -104,10 +104,9 @@ describe('Address detail actions', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
 
-        expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
-        const notifications = screen.getByRole('status', { name: 'Notifications' });
-        expect(notifications).toHaveTextContent('Copied');
-        expect(screen.getAllByText('Copied')).toHaveLength(2);
+        expect(await screen.findByRole('button', { name: 'Copied: address' })).toBeInTheDocument();
+        // The button announces its own result in a polite status region.
+        expect(screen.getAllByText('Copied: address')).toHaveLength(2);
     });
 
     it('reports clipboard failure and does not switch the button to Copied', async () => {
@@ -121,7 +120,7 @@ describe('Address detail actions', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
 
         await waitFor(() => expect(
-            screen.getByRole('status', { name: 'Notifications' }),
+            screen.getByRole('alert'),
         ).toHaveTextContent('Copy failed: the clipboard is unavailable.'));
         expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Copied' })).toBeNull();

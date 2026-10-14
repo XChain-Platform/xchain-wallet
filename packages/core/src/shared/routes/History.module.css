@@ -29,6 +29,10 @@
     to { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .refreshing svg { animation: none; }
+}
+
 /* Unified filter card containing search, chain picker, and the collapsible
    advanced-filters panel in one bordered container so the mobile view reads
    as one block instead of three stacked widgets. */

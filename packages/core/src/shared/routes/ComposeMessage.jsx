@@ -39,11 +39,10 @@ import {
     MESSAGE_ATTACHMENT_TYPES,
     serializeMessageContent,
 } from '../utils/messageContent.js';
-import { utf8ByteLength } from '../utils/memoLimit.js';
+import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-const MAX_MESSAGE_LENGTH = 1_048_576;
 
 // User-facing native ticker for a chain, used to label the network-fee
 // estimate on the review screen.
@@ -190,6 +189,7 @@ function ComposeMessageForm({
     );
     const [pubkeyError, setPubkeyError] = useState(/** @type {string | null} */ (null));
     const [sendUnencrypted, setSendUnencrypted] = useState(fixedEncryption === 'plaintext');
+    const [plaintextConfirmationPending, setPlaintextConfirmationPending] = useState(false);
     // Encryption choice when the recipient's pubkey is known: 'ecies' (default,
     // only the recipient can read) or 'ecdh' (a shared session key both parties
     // derive, so the sender can read their own sent messages too). ECDH needs
@@ -306,7 +306,10 @@ function ComposeMessageForm({
                     if (cancelled) return;
                     setPubkeyState(pubkey ? 'found' : 'missing');
                     setPubkeyError(null);
-                    if (pubkey && !fixedEncryption) setSendUnencrypted(false);
+                    if (pubkey && !fixedEncryption) {
+                        setSendUnencrypted(false);
+                        setPlaintextConfirmationPending(false);
+                    }
                 })
                 .catch((err) => {
                     if (cancelled) return;
@@ -456,10 +459,15 @@ function ComposeMessageForm({
         () => serializeMessageContent(message, attachment),
         [message, attachment],
     );
-    const messageBytes = utf8ByteLength(message);
-    const wireMessageBytes = utf8ByteLength(wireMessage);
-    const messageLengthError = wireMessageBytes > MAX_MESSAGE_LENGTH
-        ? `${attachment ? 'Message and attachment are' : 'Message is'} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`
+    const messageMethod = sendUnencrypted
+        ? null
+        : (encryptionChoice === 'ecdh' && !hw ? 2 : 1);
+    const wireMessageBytes = messageWireByteLength(wireMessage, messageMethod);
+    const messageLengthSubject = sendUnencrypted
+        ? (attachment ? 'Message and attachment are' : 'Message is')
+        : (attachment ? 'Encrypted message and attachment are' : 'Encrypted message is');
+    const messageLengthError = wireMessageBytes > MAX_MESSAGE_BYTES
+        ? `${messageLengthSubject} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`
         : undefined;
 
     function handleAttachmentPick(event) {
@@ -507,7 +515,15 @@ function ComposeMessageForm({
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
     const encryptionValue = sendUnencrypted ? 'plaintext' : encryptionChoice;
     function onEncryptionChange(value) {
-        if (value === 'plaintext') { setSendUnencrypted(true); return; }
+        if (value === 'plaintext') {
+            if (!fixedEncryption) {
+                setPlaintextConfirmationPending(true);
+                return;
+            }
+            setSendUnencrypted(true);
+            return;
+        }
+        setPlaintextConfirmationPending(false);
         setSendUnencrypted(false);
         setEncryptionChoice(value);
     }
@@ -803,7 +819,7 @@ function ComposeMessageForm({
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -1035,6 +1051,7 @@ function ComposeMessageForm({
                     setHandshakeSent(false);
                     setHandshakeError(null);
                     setPubkeyError(null);
+                    setPlaintextConfirmationPending(false);
                     if (submitError) setSubmitError(null);
                 }}
                 onIconClick={() => setContactsPickerOpen(true)}
@@ -1054,7 +1071,7 @@ function ComposeMessageForm({
                 placeholder="Write your message…"
                 hint={messageLengthError
                     ? undefined
-                    : `${messageBytes.toLocaleString()} / ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`}
+                    : `${wireMessageBytes.toLocaleString()} / ${MAX_MESSAGE_BYTES.toLocaleString()}${sendUnencrypted ? ' bytes.' : ' encrypted bytes.'}`}
                 error={messageLengthError}
                 style={{ minHeight: '4rem' }}
             />
@@ -1098,6 +1115,32 @@ function ComposeMessageForm({
                 options={encryptionOptions}
                 disabled={Boolean(fixedEncryption)}
             />
+            {plaintextConfirmationPending ? (
+                <div role="alert" style={{ marginTop: '0.5rem' }}>
+                    <p style={{ margin: '0 0 0.5rem' }}>
+                        Send this message as plain text? Anyone can read it on the blockchain.
+                    </p>
+                    <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        onClick={() => {
+                            setSendUnencrypted(true);
+                            setPlaintextConfirmationPending(false);
+                        }}
+                    >
+                        Send as plain text
+                    </Button>{' '}
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setPlaintextConfirmationPending(false)}
+                    >
+                        Keep encrypted
+                    </Button>
+                </div>
+            ) : null}
             {pubkeyState === 'checking' && encryptionValue !== 'plaintext' ? (
                 <p className={styles.hint} style={{ marginTop: '0.25rem' }}>
                     Looking up recipient's public key…

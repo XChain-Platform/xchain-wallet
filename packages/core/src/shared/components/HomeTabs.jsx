@@ -321,20 +321,6 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
     }, [allRows, networkFilter]);
-    const portfolioRows = useMemo(
-        () => hiddenKeys
-            ? filteredRows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
-            : filteredRows,
-        [filteredRows, hiddenKeys],
-    );
-    // Test coins have no market price, so the fiat chart is hidden only when
-    // every held row is on a test network; an empty wallet keeps its chart,
-    // and the demo wallet prices its synthetic test-network holdings.
-    const chainRows = portfolioRows.filter((row) => typeof row?.chainId === 'string' && row.chainId);
-    const testCoinsOnly = !isDemoWallet(walletId)
-        && chainRows.length > 0
-        && chainRows.every((row) => !isMainnetChainId(row.chainId));
-
     const coins = useMemo(
         () => sortBalanceRows(filteredRows.filter((r) => r.kind === 'native'), sortBy, nativePriceMap),
         [filteredRows, sortBy, nativePriceMap],
@@ -350,7 +336,34 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         [active, filteredRows, sortBy, nativePriceMap],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
-    const ownedTokens = useOwnedTokens(balances, active === 'tokens');
+    const ownedTokens = useOwnedTokens(
+        balances,
+        active === 'tokens' || settings?.hideUnknownTokens === true,
+    );
+    const automaticHiddenKeys = useMemo(
+        () => settings?.hideUnknownTokens === true
+            ? unknownTokenKeys(allRows, {
+                pinnedKeys,
+                watchedTokens: settings?.watchedTokens,
+                ownedTokens,
+            })
+            : new Set(),
+        [settings?.hideUnknownTokens, settings?.watchedTokens, allRows, pinnedKeys, ownedTokens],
+    );
+    const portfolioRows = useMemo(
+        () => filteredRows.filter((row) => {
+            const key = `${row.chainId}:${row.tick}`;
+            return !hiddenKeys?.has(key) && !automaticHiddenKeys.has(key);
+        }),
+        [filteredRows, hiddenKeys, automaticHiddenKeys],
+    );
+    // Test coins have no market price, so the fiat chart is hidden only when
+    // every held row is on a test network; an empty wallet keeps its chart,
+    // and the demo wallet prices its synthetic test-network holdings.
+    const chainRows = portfolioRows.filter((row) => typeof row?.chainId === 'string' && row.chainId);
+    const testCoinsOnly = !isDemoWallet(walletId)
+        && chainRows.length > 0
+        && chainRows.every((row) => !isMainnetChainId(row.chainId));
     const issuedUnheld = useMemo(() => {
         if (active !== 'tokens') return [];
         const held = new Set(allRows.map((r) => `${r.chainId}:${r.tick}`));
@@ -565,6 +578,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             pinnedKeys={pinnedKeys}
                             onTogglePin={onTogglePin}
                             hiddenKeys={hiddenKeys}
+                            automaticHiddenKeys={automaticHiddenKeys}
                             onToggleHide={onToggleHide}
                             hideSmallBalances={hideSmallBalances}
                             smallBalanceThreshold={settings?.smallBalanceThreshold}
@@ -600,6 +614,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             pinnedKeys={pinnedKeys}
                             onTogglePin={onTogglePin}
                             hiddenKeys={hiddenKeys}
+                            automaticHiddenKeys={automaticHiddenKeys}
                             onToggleHide={onToggleHide}
                             verifyMap={verifyMap}
                             hideSmallBalances={hideSmallBalances}
@@ -619,6 +634,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                                 pinnedKeys={pinnedKeys}
                                 onTogglePin={onTogglePin}
                                 hiddenKeys={hiddenKeys}
+                                automaticHiddenKeys={automaticHiddenKeys}
                                 onToggleHide={onToggleHide}
                                 verifyMap={verifyMap}
                                 hideSmallBalances={hideSmallBalances}
@@ -639,6 +655,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                                 pinnedKeys={pinnedKeys}
                                 onTogglePin={onTogglePin}
                                 hiddenKeys={hiddenKeys}
+                                automaticHiddenKeys={automaticHiddenKeys}
                                 onToggleHide={onToggleHide}
                                 verifyMap={verifyMap}
                                 numberFormat={settings?.numberFormat}
@@ -679,6 +696,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                                 pinnedKeys={pinnedKeys}
                                 onTogglePin={onTogglePin}
                                 hiddenKeys={hiddenKeys}
+                                automaticHiddenKeys={automaticHiddenKeys}
                                 onToggleHide={onToggleHide}
                                 allowRemoteImages={allowRemoteImages}
                             />
@@ -762,6 +780,46 @@ export function buildWatchedTokenRows(watchedTokens, balanceRows, chainRegistry)
         added.add(key);
     }
     return rows;
+}
+
+/**
+ * Finds held tokens that have no useful metadata or price and no explicit
+ * wallet relationship. Pins and watches are direct user choices, issuer
+ * ownership proves a stronger relationship, and escrow proves an open order.
+ * Native coins never qualify.
+ *
+ * @param {Array<any>} rows
+ * @param {{ pinnedKeys?: Set<string> | null, watchedTokens?: unknown, ownedTokens?: Array<any> }} [relationships]
+ * @returns {Set<string>}
+ */
+export function unknownTokenKeys(rows, relationships = {}) {
+    const familiar = new Set(relationships.pinnedKeys || []);
+    if (Array.isArray(relationships.watchedTokens)) {
+        for (const key of relationships.watchedTokens) {
+            if (typeof key === 'string') familiar.add(key);
+        }
+    }
+    if (Array.isArray(relationships.ownedTokens)) {
+        for (const token of relationships.ownedTokens) {
+            if (typeof token?.chainId === 'string' && typeof token?.tick === 'string') {
+                familiar.add(`${token.chainId}:${token.tick}`);
+            }
+        }
+    }
+
+    const unknown = new Set();
+    for (const row of rows || []) {
+        if (!row || row.kind === 'native' || row.escrowed) continue;
+        const key = `${row.chainId}:${row.tick}`;
+        if (familiar.has(key)) continue;
+        const tick = String(row.tick || '').trim();
+        const name = String(row.displayName || '').trim();
+        const hasName = Boolean(name) && name.toLocaleLowerCase() !== tick.toLocaleLowerCase();
+        const hasImage = typeof row.imageUrl === 'string' && row.imageUrl.trim().length > 0;
+        const hasPrice = typeof row.fiatRate === 'number' && Number.isFinite(row.fiatRate);
+        if (!hasName && !hasImage && !hasPrice) unknown.add(key);
+    }
+    return unknown;
 }
 
 // Ticks any of the wallet's addresses owns, balance or not: a token whose

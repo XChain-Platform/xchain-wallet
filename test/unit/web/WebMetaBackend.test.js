@@ -17,6 +17,7 @@ import {
     VaultCorruptError,
     VaultUnavailableError,
 } from '../../../packages/core/src/storage/backend.js';
+import { STORAGE_QUOTA_MESSAGE } from '../../../packages/core/src/storage/Vault.js';
 
 function memoryStorage(seed = {}) {
     const values = new Map(Object.entries(seed));
@@ -100,9 +101,10 @@ describe('WebMetaBackend', () => {
         const backend = new WebMetaBackend({ storage });
 
         await expect(backend.load()).rejects.toThrow(VaultUnavailableError);
-        await expect(backend.save({ kdfParams: {} })).rejects.toThrow(
-            /metadata could not be persisted: quota exceeded/,
-        );
+        await expect(backend.save({ kdfParams: {} })).rejects.toMatchObject({
+            name: 'StorageQuotaError',
+            message: STORAGE_QUOTA_MESSAGE,
+        });
         await expect(backend.clear()).rejects.toThrow(VaultUnavailableError);
     });
 

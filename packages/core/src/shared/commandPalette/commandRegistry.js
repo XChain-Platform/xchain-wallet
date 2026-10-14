@@ -61,6 +61,26 @@ const SEND_QUERY_RE = /^(?:send|pay)\s+(\d+(?:\.\d+)?)\s+([a-z0-9]{1,32})\s*$/i;
 const TXID_QUERY_RE = /^[0-9a-f]{8,64}$/i;
 const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
+// Read-only demo wallets keep discovery and inspection commands, while
+// transaction authors and signing tools stay out of the palette.
+const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
+    'nav-send',
+    'nav-receive',
+    'nav-actions',
+    'nav-multisig-create',
+    'nav-multisig-sign',
+    'sign-message',
+    'sign-psbt',
+    'wallet-scan',
+]);
+
+// Watch-only wallets can author unsigned transactions, but they cannot use
+// commands whose only outcome requires a private key in this wallet.
+const WATCHER_UNAVAILABLE_COMMAND_IDS = new Set([
+    'sign-message',
+    'sign-psbt',
+]);
+
 /**
  * Parse a free-form palette query into synthetic action commands (§33.3).
  * Currently recognizes "send <amount> <TICK>" / "pay <amount> <TICK>" and
@@ -73,7 +93,7 @@ const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
  * and prepends the result above the fuzzy matches.
  *
  * @param {string} rawQuery
- * @param {{ composeSend?: (intent: { amount: string, tick: string }) => void, searchHistory?: (query: string) => void }} ctx
+ * @param {{ composeSend?: (intent: { amount: string, tick: string }) => void, searchHistory?: (query: string) => void, isDemoWallet?: boolean, isSignerMode?: boolean }} ctx
  * @returns {import('./fuzzyMatch.js').Command[]}
  */
 export function parseFreeformCommands(rawQuery, ctx) {
@@ -82,7 +102,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
     const out = [];
 
     const send = SEND_QUERY_RE.exec(query);
-    if (send && typeof ctx?.composeSend === 'function') {
+    if (send && !ctx?.isDemoWallet && !ctx?.isSignerMode
+        && typeof ctx?.composeSend === 'function') {
         const amount = send[1];
         const tick = send[2].toUpperCase();
         out.push({
@@ -127,6 +148,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {boolean} [hasGovernanceAddress]    gates governance polls
  * @property {boolean} [hasDexSurface] false only when the build compiled the DEX surface out; its commands then point at views that do not exist
  * @property {boolean} [isSignerMode] §20 air-gapped signer mode; drops the Send and Receive navigate commands
+ * @property {boolean} [isWatcherMode] hides commands that require a private key in this wallet
+ * @property {boolean} [isDemoWallet] hides commands that mutate the read-only demo wallet
  */
 
 /**
@@ -303,6 +326,16 @@ export function buildCommands(ctx) {
         { id: 'nav-connected-sites', category: 'Settings', title: 'Connected sites', subtitle: 'dApp permissions', keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') },
     );
 
+    if (ctx.isDemoWallet) {
+        return list.filter((command) => (
+            !command.id.startsWith('create-')
+            && !command.id.startsWith('trade-')
+            && !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id)
+        ));
+    }
+    if (ctx.isWatcherMode) {
+        return list.filter((command) => !WATCHER_UNAVAILABLE_COMMAND_IDS.has(command.id));
+    }
     return list;
 }
 

@@ -18,9 +18,9 @@
 // getAction(...).state.status does NOT promptly reflect a cancel, so
 // "cancelled" is read from the authoritative + immediate swap_cancels
 // table (getSwapCancelsForAddress). The list feed carries lifecycle inline
-// as `swap_status`, while action detail carries edited expiration. A failed
-// or older detail read falls back to the creation expiration. Cancel/edit
-// are offered only while open.
+// as `swap_status`, while action detail carries edited expiration and the
+// chain-clock expiry classification. A failed or older detail read falls
+// back to the creation expiration. Cancel/edit are offered only while open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -86,13 +86,16 @@ const CLOSED_LABELS = Object.freeze({
 
 const STATE_READ_CONCURRENCY = 6;
 
-const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
-    && /[1-9]/.test(String(value));
+const isPositiveActionIndex = (value) => /^[1-9][0-9]*$/.test(String(value ?? ''));
 
 function swapStateOf(detail) {
     const state = detail?.state || detail?.data?.state;
     if (!state || typeof state !== 'object') return null;
-    return { status: String(state.status || ''), expiration: state.expiration ?? null };
+    return {
+        status: String(state.status || ''),
+        expiration: state.expiration ?? null,
+        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
+    };
 }
 
 async function readSwapStates(messaging, candidates) {
@@ -119,6 +122,8 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
     if (swapStatus === 'complete' || swapStatus === 'filled' || swapStatus === 'settled') return 'settled';
     if (swapStatus === 'cancelled') return 'cancelled';
     if (swapStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus != null) return 'open';
     const exp = Number(item.live?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
@@ -510,6 +515,44 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             ? { VERSION: '1', SWAP_ACTION_INDEX: idx }
             : { VERSION: '2', SWAP_ACTION_INDEX: idx, ...editParams };
         try {
+            let freshCancelledKeys = item.cancelledKeys || new Set();
+            if (typeof messaging.getSwapCancelsForAddress === 'function') {
+                try {
+                    const response = await messaging.getSwapCancelsForAddress({ chainId, address: owner.address });
+                    freshCancelledKeys = collectCancelledKeys([{
+                        p: { chainId, owner },
+                        cancels: extractRows(response),
+                    }]);
+                } catch {
+                    setError('Could not refresh this swap. Try again.');
+                    return;
+                }
+            }
+            if (typeof messaging.getSwapDetail === 'function') {
+                let freshDetail;
+                try {
+                    freshDetail = await messaging.getSwapDetail({ chainId, actionIndex: idx });
+                } catch {
+                    setError('Could not refresh this swap. Try again.');
+                    return;
+                }
+                const freshState = swapStateOf(freshDetail);
+                if (freshState) {
+                    const status = deriveStatus(
+                        { ...item, live: freshState },
+                        freshCancelledKeys,
+                        Math.floor(Date.now() / 1000),
+                    );
+                    if (status !== 'open') {
+                        setError('This swap is no longer open. Refresh My swaps and try again.');
+                        return;
+                    }
+                }
+            }
+            if (freshCancelledKeys.has(item.key)) {
+                setError('This swap is no longer open. Refresh My swaps and try again.');
+                return;
+            }
             const res = await lane.run({
                 actionData: { action: 'SWAP', params },
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
