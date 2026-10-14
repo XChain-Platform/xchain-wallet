@@ -68,7 +68,10 @@ import {
     shouldAutoLock,
 } from './background/autoLockState.js';
 import { createLockBackstop, createHostBuildFlight, createKeepaliveTick } from './background/walletLock.js';
-import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
+import {
+    createBridgeEventBroadcaster,
+    notifyDisconnectedSites,
+} from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
     attachLayoutModeListener,
@@ -199,6 +202,13 @@ const connectedTabs = createConnectedTabRegistry();
 if (typeof chrome !== 'undefined' && chrome.tabs) {
     connectedTabs.attach(chrome.tabs);
 }
+const bridgeEvents = typeof chrome !== 'undefined' && chrome.tabs
+    ? createBridgeEventBroadcaster({
+        tabs: chrome.tabs,
+        runtime: chrome.runtime,
+        connectedTabs,
+    })
+    : undefined;
 
 let host = null;
 let vault = null;
@@ -379,13 +389,7 @@ async function buildHost() {
         // from chrome.tabs.query: MV3 withholds Tab.url from a manifest
         // holding no "tabs" or host permission, which left the URL match
         // skipping every tab and delivering nothing.
-        bridgeEvents: typeof chrome !== 'undefined' && chrome.tabs
-            ? createBridgeEventBroadcaster({
-                tabs: chrome.tabs,
-                runtime: chrome.runtime,
-                connectedTabs,
-            })
-            : undefined,
+        bridgeEvents,
         // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build.
         getDiagnosticContext: async () => ({
             env: {
@@ -578,6 +582,10 @@ async function buildHost() {
 function tearDownHost() {
     hostEpoch += 1;
     const cancelApprovals = approvalBroker.cancelAll();
+    let connectedSites = Promise.resolve([]);
+    if (vault) {
+        connectedSites = vault.connectedSites.list().catch(() => []);
+    }
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
@@ -619,7 +627,12 @@ function tearDownHost() {
     signerPool = new signersLib.SignerPool();
     // The queue store stays: a lock drops the host, not the queue it served.
     host = null;
-    return cancelApprovals;
+    const disconnectSites = connectedSites.then((sites) => notifyDisconnectedSites({
+        events: bridgeEvents,
+        sites,
+        reason: 'wallet-locked',
+    }));
+    return Promise.all([cancelApprovals, disconnectSites]).then(() => undefined);
 }
 
 /**

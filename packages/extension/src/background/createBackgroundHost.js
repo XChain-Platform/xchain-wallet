@@ -40,6 +40,11 @@ import {
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
+import {
+    notifyAccountsChanged,
+    notifyDisconnectedSites,
+    notifyNetworkChanged,
+} from '../bridge/bridgeEvents.js';
 import { applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
@@ -259,6 +264,7 @@ const {
     verifyAddressBalance,
     verifyAddressAction,
     getActiveNetwork,
+    filterChainIdsByActiveNetwork,
     createPriceOracle,
     isFiatRateSourceUrl,
     getMarkets,
@@ -900,6 +906,32 @@ async function announceWalletSwitch(req, vault, bridgeEvents) {
     return { ok: true };
 }
 
+async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents) {
+    if (getActiveNetwork(previous) === getActiveNetwork(next)) return;
+    if (typeof bridgeEvents?.chainChanged !== 'function') return;
+    const activeChainIds = filterChainIdsByActiveNetwork(
+        Object.keys(next?.fees ?? {}),
+        next,
+        chainRegistry,
+    );
+    const sites = await vault.connectedSites.list();
+    await notifyNetworkChanged({ events: bridgeEvents, sites, activeChainIds });
+}
+
+async function announceAccountChange(vault, bridgeEvents, changedAccountIds, sites) {
+    if (typeof bridgeEvents?.accountsChanged !== 'function') return;
+    const [accounts, connectedSites] = await Promise.all([
+        vault.accounts.list(),
+        sites ? Promise.resolve(sites) : vault.connectedSites.list(),
+    ]);
+    await notifyAccountsChanged({
+        events: bridgeEvents,
+        accounts,
+        sites: connectedSites,
+        changedAccountIds,
+    });
+}
+
 function toSafeWallet(w) {
     return {
         schemaVersion: w.schemaVersion,
@@ -1400,7 +1432,11 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('account.rename', async (req, { vault }) => {
+        const previous = await vault.accounts.get(req?.accountId);
         const updated = await renameAccount({ ...req, vault });
+        if (previous?.name !== updated.name) {
+            await announceAccountChange(vault, bridgeEvents, [updated.id]);
+        }
         return { account: updated };
     });
 
@@ -1445,6 +1481,7 @@ export function createBackgroundHost(deps) {
             chainRegistry,
             sdkRegistry,
         });
+        await announceAccountChange(vault, bridgeEvents, [r.account.id]);
         return { account: r.account, addresses: r.addresses };
     });
 
@@ -1547,6 +1584,7 @@ export function createBackgroundHost(deps) {
         if (typeof network !== 'string' || !network) {
             throw new Error('settings.setActiveNetwork: network is required');
         }
+        const previousSettings = await getSettings(vault);
         let settings = await updateSettings(vault, { activeNetwork: network });
 
         let addresses = { created: [], existing: [], failed: [], skipped: 'no-wallet' };
@@ -1574,14 +1612,25 @@ export function createBackgroundHost(deps) {
                 settings = await ensureSettings(vault, chainRegistry, networkChainIds);
             }
         }
+        await announceNetworkChange(
+            previousSettings,
+            settings,
+            vault,
+            chainRegistry,
+            bridgeEvents,
+        );
         await publishSurfaceState('network', { settings });
         return { settings, addresses };
     });
 
-    host.register('settings.update', async (req, { vault, sdkRegistry }) => {
+    host.register('settings.update', async (req, { vault, chainRegistry, sdkRegistry }) => {
         const patch = req && typeof req === 'object' && 'patch' in req
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
+        const previousSettings = patch
+            && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')
+            ? await getSettings(vault)
+            : null;
         const result = await updateSettings(vault, patch);
         // A saved endpoint takes effect on the next request, not
         // at the next wallet restart. Invalidates only the chains whose
@@ -1616,6 +1665,13 @@ export function createBackgroundHost(deps) {
             }
         }
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')) {
+            await announceNetworkChange(
+                previousSettings,
+                result,
+                vault,
+                chainRegistry,
+                bridgeEvents,
+            );
             await publishSurfaceState('network', { settings: result });
         }
         return result;
@@ -2086,6 +2142,10 @@ export function createBackgroundHost(deps) {
         if (typeof walletId !== 'string' || !walletId) {
             throw new Error('wallet.remove: walletId is required');
         }
+        const [removedAccounts, sitesBefore] = await Promise.all([
+            vault.accounts.findBy('walletId', walletId),
+            vault.connectedSites.list(),
+        ]);
         const result = await removeWallet({ vault, walletId });
         if (signerPool && typeof signerPool.evict === 'function') {
             try { signerPool.evict(walletId); } catch { /* best-effort */ }
@@ -2096,6 +2156,31 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
+        const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
+        const affectedOrigins = new Set(sitesBefore
+            .filter((site) => {
+                if (removedAccountIds.size === 0) return false;
+                const grants = Array.isArray(site?.permissions?.accounts)
+                    ? site.permissions.accounts
+                    : [];
+                return grants.length === 0 || grants.some((id) => removedAccountIds.has(id));
+            })
+            .map((site) => site.origin));
+        const sitesAfter = await vault.connectedSites.list();
+        const survivingOrigins = new Set(sitesAfter.map((site) => site.origin));
+        await notifyDisconnectedSites({
+            events: bridgeEvents,
+            sites: sitesBefore.filter((site) => (
+                affectedOrigins.has(site.origin) && !survivingOrigins.has(site.origin)
+            )),
+            reason: 'wallet-removed',
+        });
+        await announceAccountChange(
+            vault,
+            bridgeEvents,
+            [],
+            sitesAfter.filter((site) => affectedOrigins.has(site.origin)),
+        );
         return result;
     });
 
