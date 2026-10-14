@@ -93,25 +93,37 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
         if (!validation.ok) {
             throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
         }
+        const replaced = new Set(Array.isArray(replaceIds) ? replaceIds : []);
+        const duplicateName = existing.find((contact) => (
+            contact.id !== rec.id
+            && !replaced.has(contact.id)
+            && normalizedName(contact.name) === normalizedName(rec.name)
+        ));
+        if (duplicateName) {
+            throw new Error(`A contact named "${duplicateName.name}" already exists.`);
+        }
         const seen = new Set();
         for (const entry of rec.entries) {
             const key = normalizedEntryKey(entry);
             if (seen.has(key)) {
-                throw new Error(`saveContact: address appears more than once: ${entry.address}`);
+                throw new Error(`This address appears more than once for ${rec.name}: ${entry.address}`);
             }
             seen.add(key);
         }
-        const replaced = new Set(Array.isArray(replaceIds) ? replaceIds : []);
         for (const contact of existing) {
             if (contact.id === rec.id || replaced.has(contact.id)) continue;
             const duplicate = (contact.entries || []).find((entry) => seen.has(normalizedEntryKey(entry)));
             if (duplicate) {
-                throw new Error(`saveContact: address already belongs to ${contact.name}: ${duplicate.address}`);
+                throw new Error(`This address is already saved for ${contact.name}: ${duplicate.address}`);
             }
         }
         await vault.contacts.put(rec);
         return rec;
     });
+}
+
+function normalizedName(name) {
+    return String(name || '').trim().toLowerCase();
 }
 
 function normalizedEntryKey(entry) {
