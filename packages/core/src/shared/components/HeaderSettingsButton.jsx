@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { ConfirmModal } from './ConfirmModal.jsx';
 import { NetworkFilter } from './NetworkFilter.jsx';
@@ -197,7 +198,7 @@ export function HeaderSettingsButton({
                         />
                     )}
                 </span>
-                {open ? (
+                {open && typeof document !== 'undefined' ? createPortal(
                     <OverlaySurface
                         variant="popover"
                         surfaceRef={popoverPlacement.ref}
@@ -205,6 +206,7 @@ export function HeaderSettingsButton({
                         title="Wallet settings"
                         titleId="xc-wallet-settings-title"
                         aria-labelledby="xc-wallet-settings-title"
+                        onMouseDown={(event) => event.stopPropagation()}
                     >
                     {/* Picker destinations stay native buttons to preserve full-row navigation semantics. */}
                     {onOpenWalletPicker ? (
@@ -279,7 +281,8 @@ export function HeaderSettingsButton({
                             </button>
                         </div>
                     ) : null}
-                    </OverlaySurface>
+                    </OverlaySurface>,
+                    document.body,
                 ) : null}
             </div>
             {confirmDialog.request ? (
