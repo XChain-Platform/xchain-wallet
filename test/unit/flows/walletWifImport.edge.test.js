@@ -231,6 +231,16 @@ describe('importWif error and rollback edges', () => {
         expect([...derivedKey]).toEqual([0, 0, 0]);
     });
 
+    it('zeros the decrypted seed when encrypting the imported key fails', async () => {
+        const seed = new Uint8Array([5, 6, 7]);
+        const { args } = existingHarness();
+        crypto.decrypt.mockResolvedValue(seed);
+        crypto.encrypt.mockRejectedValue(new Error('encrypt failed'));
+
+        await expect(importWif(args)).rejects.toThrow('encrypt failed');
+        expect([...seed]).toEqual([0, 0, 0]);
+    });
+
     it('aggregates a failed final write with both failed rollback operations', async () => {
         const { args, vault } = existingHarness();
         vault.wallets.put

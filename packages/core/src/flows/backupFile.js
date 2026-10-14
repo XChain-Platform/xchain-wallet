@@ -683,47 +683,49 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     let wifs = [];
     /** @type {Uint8Array | null} */
     let passphrase = null;
+    /** @type {Uint8Array | null} */
+    let newKey = null;
     try {
-        if (hasSeed) {
-            try {
-                seed = await decrypt(oldKey, base64ToBytes(wallet.encryptedSeed));
-            } catch {
-                throw new BackupSeedPasswordError('seed');
+        try {
+            if (hasSeed) {
+                try {
+                    seed = await decrypt(oldKey, base64ToBytes(wallet.encryptedSeed));
+                } catch {
+                    throw new BackupSeedPasswordError('seed');
+                }
             }
-        }
-        for (const k of sealedKeys) {
-            try {
-                wifs.push(await decrypt(oldKey, base64ToBytes(k.encryptedWif)));
-            } catch {
-                throw new BackupSeedPasswordError('imported key');
+            for (const k of sealedKeys) {
+                try {
+                    wifs.push(await decrypt(oldKey, base64ToBytes(k.encryptedWif)));
+                } catch {
+                    throw new BackupSeedPasswordError('imported key');
+                }
             }
-        }
-        if (hasPassphrase) {
-            try {
-                // The AAD is what distinguishes this blob from a seed blob
-                // under the same key, so it is mandatory on both sides. Kept in
-                // BYTES the whole way across: decoding to a string would put
-                // the passphrase somewhere that cannot be zeroed (§17.7.3),
-                // and nothing here needs to read it.
-                passphrase = await decrypt(
-                    oldKey, base64ToBytes(wallet.encryptedPassphrase), PASSPHRASE_AAD,
-                );
-            } catch {
-                throw new BackupSeedPasswordError('passphrase');
+            if (hasPassphrase) {
+                try {
+                    // The AAD is what distinguishes this blob from a seed blob
+                    // under the same key, so it is mandatory on both sides. Kept in
+                    // BYTES the whole way across: decoding to a string would put
+                    // the passphrase somewhere that cannot be zeroed (§17.7.3),
+                    // and nothing here needs to read it.
+                    passphrase = await decrypt(
+                        oldKey, base64ToBytes(wallet.encryptedPassphrase), PASSPHRASE_AAD,
+                    );
+                } catch {
+                    throw new BackupSeedPasswordError('passphrase');
+                }
             }
+        } finally {
+            oldKey.fill(0);
         }
-    } finally {
-        oldKey.fill(0);
-    }
 
-    // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
-    const nextParams = kdfParams ?? makeFreshKdfParams({
-        iterations: wallet.kdfParams.iterations,
-        memory: wallet.kdfParams.memory,
-        parallelism: wallet.kdfParams.parallelism,
-    });
-    const newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
-    try {
+        // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
+        const nextParams = kdfParams ?? makeFreshKdfParams({
+            iterations: wallet.kdfParams.iterations,
+            memory: wallet.kdfParams.memory,
+            parallelism: wallet.kdfParams.parallelism,
+        });
+        newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
         try {
             if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
             for (let i = 0; i < sealedKeys.length; i += 1) {
@@ -748,7 +750,11 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         // secrets are already zeroed; this buffer is zeroed right after.
         if (onDeviceKey) await onDeviceKey(newKey, { ...nextParams });
     } finally {
-        newKey.fill(0);
+        oldKey.fill(0);
+        if (newKey) newKey.fill(0);
+        if (seed) seed.fill(0);
+        for (const wif of wifs) wif.fill(0);
+        if (passphrase) passphrase.fill(0);
     }
     return true;
 }

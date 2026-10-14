@@ -225,22 +225,25 @@ describe('wallet re-key failure and cleanup edges', () => {
         expect([...seed]).toEqual([0, 0]);
     });
 
-    it.skip('BUG: rekeyWalletRecord leaves decrypted seed bytes live when passphrase decryption fails', async () => {
+    it('zeros decrypted seed and WIF bytes when passphrase decryption fails', async () => {
         const seed = new Uint8Array([5, 6]);
+        const wif = new Uint8Array([7, 8]);
         const wallet = {
             encryptedSeed: 'seed',
             encryptedPassphrase: 'passphrase',
-            importedKeys: [],
+            importedKeys: [{ addressId: 'address-1', encryptedWif: 'wif' }],
             kdfParams: KDF,
         };
         crypto.decrypt
             .mockResolvedValueOnce(seed)
+            .mockResolvedValueOnce(wif)
             .mockRejectedValueOnce(new Error('bad passphrase tag'));
 
         await rekeyWalletRecord(wallet, {
             walletPassword: 'wallet password', devicePassword: 'device password',
         }).catch(() => {});
         expect([...seed]).toEqual([0, 0]);
+        expect([...wif]).toEqual([0, 0]);
     });
 });
 
