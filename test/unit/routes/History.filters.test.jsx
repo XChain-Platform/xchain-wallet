@@ -185,8 +185,10 @@ describe('History filters', () => {
             entries: [{ chain: 'litecoin', address: clientAddress }],
         }]);
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
-        expect(screen.getByText(clientAddress)).toBeInTheDocument();
-        expect(screen.queryByText(LTC_ADDRESS)).toBeNull();
+        // The row keeps both ends of the counterparty on screen and the
+        // whole address in its title.
+        expect(screen.getByTitle(clientAddress)).toHaveTextContent('mClien…111111');
+        expect(screen.queryByTitle(LTC_ADDRESS)).toBeNull();
 
         const search = screen.getByLabelText('Search history');
         const expectToday = async (query) => {

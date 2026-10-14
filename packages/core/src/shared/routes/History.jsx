@@ -86,6 +86,7 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useResponsivePlaceholder } from '../../ui/Input.jsx';
+import { truncateAddress } from '../../ui/AddressText.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { shareOrCopy, ShareOutcome } from '../share.js';
@@ -4059,12 +4060,14 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
             <PendingAmountLabel entry={entry} />
         </>
     );
-    const contextLabel = contractRowLabel(entry)
-        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '')
-        // A row names its counterparty, so a send shows where it went.
-        || peerAddressOfEntry(entry)
-        || entry.source
-        || '';
+    const namedContext = contractRowLabel(entry)
+        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '');
+    // A row names its counterparty, so a send shows where it went. The
+    // address keeps both identifying ends: an end-clipped one showed only its
+    // first characters on a phone.
+    const counterparty = namedContext ? '' : (peerAddressOfEntry(entry) || entry.source || '');
+    const contextLabel = namedContext || counterparty;
+    const contextText = namedContext || truncateAddress(counterparty);
     const linkedTo = entry.link
         ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
         : '';
@@ -4091,7 +4094,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                         {verify ? (
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
                         ) : null}
-                        {contextLabel ? <span title={contextLabel}>{contextLabel}</span> : null}
+                        {contextLabel ? <span title={contextLabel}>{contextText}</span> : null}
                     </>
                 )}
                 amount={amount}
