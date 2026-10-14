@@ -105,7 +105,7 @@ assert.ok(
     'MessagingInbox sends handshake software and hardware signing through the owner confirm lane',
 );
 assert.ok(
-    /buildHandshakeActionData\(\{[\s\S]*?version:\s*1,[\s\S]*?lane\.run\(\{[\s\S]*?actionData/.test(src),
+    /buildHandshakeActionData\(\{[\s\S]*?version:\s*1,[\s\S]*?(?:lane|LaneRef\.current)\.run\(\{[\s\S]*?actionData/.test(src),
     'MessagingInbox confirms a format-1 response handshake before signing',
 );
 assert.ok(
