@@ -147,7 +147,27 @@ export function attachRendererCspHeaders(webRequest, appRoot) {
  * @returns {boolean}
  */
 export function isHttpUrl(url) {
-    return typeof url === 'string' && /^https?:\/\//i.test(url);
+    return allowlistedExternalUrl(url) !== null;
+}
+
+/**
+ * Return the normalized URL when it uses a protocol allowed for the system
+ * browser. Credentials are rejected so a displayed host cannot conceal a
+ * different destination in userinfo.
+ *
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function allowlistedExternalUrl(value) {
+    if (typeof value !== 'string' || value.length === 0) return null;
+    try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+        if (parsed.username || parsed.password) return null;
+        return parsed.href;
+    } catch {
+        return null;
+    }
 }
 
 /**

@@ -580,8 +580,20 @@ describe('desktop main entry point', () => {
 
         expect(contents.setWindowOpenHandler).toHaveBeenCalledOnce();
         expect(permissions.observeHidFrames).toHaveBeenCalledWith(contents);
-        expect(openHandler({ url: 'https://example.com', frameName: '' })).toEqual({ action: 'deny' });
-        expect(electron.shell.openExternal).toHaveBeenCalledWith('https://example.com');
+        expect(openHandler({
+            url: 'HTTPS://Example.COM/docs?q=one two',
+            frameName: '',
+        })).toEqual({ action: 'deny' });
+        expect(electron.shell.openExternal)
+            .toHaveBeenCalledExactlyOnceWith('https://example.com/docs?q=one%20two');
+
+        expect(openHandler({
+            url: 'https://trusted.example@evil.example/',
+            frameName: '',
+        })).toEqual({ action: 'deny' });
+        expect(openHandler({ url: 'file:///tmp/untrusted.html', frameName: '' }))
+            .toEqual({ action: 'deny' });
+        expect(electron.shell.openExternal).toHaveBeenCalledTimes(1);
 
         const navigation = { preventDefault: vi.fn() };
         handlers.get('will-navigate')(navigation, 'file:///tmp/untrusted.html');

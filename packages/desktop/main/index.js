@@ -58,7 +58,7 @@ import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import {
     attachRendererCspHeaders,
-    isHttpUrl,
+    allowlistedExternalUrl,
     hasNoIpcArguments,
     isValidDesktopIpcMessage,
     normalizeOpenWindowArgs,
@@ -279,16 +279,18 @@ function hardenWebContents(contents) {
         }
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
-        if (isHttpUrl(url)) {
-            void runMainTask(() => shell.openExternal(url), 'external link open');
+        const externalUrl = allowlistedExternalUrl(url);
+        if (externalUrl) {
+            void runMainTask(() => shell.openExternal(externalUrl), 'external link open');
         }
         return { action: 'deny' };
     });
     contents.on('will-navigate', (event, url) => {
         if (shouldBlockNavigation(url, APP_ROOT)) {
             event.preventDefault();
-            if (isHttpUrl(url)) {
-                void runMainTask(() => shell.openExternal(url), 'external navigation open');
+            const externalUrl = allowlistedExternalUrl(url);
+            if (externalUrl) {
+                void runMainTask(() => shell.openExternal(externalUrl), 'external navigation open');
             }
         }
     });
