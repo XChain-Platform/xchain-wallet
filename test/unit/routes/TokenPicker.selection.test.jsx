@@ -49,8 +49,9 @@ describe('<TokenPicker> selection hand-off', () => {
     it('names the selection action and returns the chosen chain and full ticker', async () => {
         const { onSelect } = mountPicker();
         const token = await screen.findByRole('button', {
-            // The row label leads with the action and then speaks the balance.
-            name: (name) => name.startsWith(`Select ${LONG_TICKER}, `),
+            // The row label leads with the action, names the chain without its
+            // network kind, and then speaks the balance.
+            name: (name) => name.startsWith(`Select ${LONG_TICKER} on Bitcoin, `),
         });
 
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);

@@ -34,8 +34,12 @@ const PLATFORM_QUERY_DEBOUNCE_MS = 350;
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// Rows show the chain only as an icon overlay, and every chain lists the same
+// tickers, so the row's accessible name says which chain (without the network
+// kind) the asset is on.
 function tokenSelectionLabel(row) {
-    return `Select ${row.displayName || row.tick}`;
+    const chain = chainRegistry.get(row.chainId)?.displayName;
+    return `Select ${row.displayName || row.tick}${chain ? ` on ${chain}` : ''}`;
 }
 
 function withoutRenderedChainLabels(rows) {

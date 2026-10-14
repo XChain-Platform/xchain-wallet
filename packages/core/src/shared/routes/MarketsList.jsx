@@ -10,14 +10,13 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, Chip, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
-import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
-import { tickerColor } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './IssueTokenForm.module.css';
-import receiveStyles from './Receive.module.css';
+import { AssetMark } from '../../ui/AssetMark.jsx';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
@@ -281,14 +280,6 @@ export function MarketsList({
             ? (selectedAsset.displayName || selectorTickUpper)
             : (selectorDescriptor?.displayName || selectorNativeTicker || selectorTickUpper))
         : 'Select coin or token';
-    const assetImageUrl = selectedAsset && selectorDescriptor
-        ? (isTokenSelection ? null : brandingLib.chainIconLargeUrl(selectorDescriptor.id))
-        : null;
-    const assetLetter = selectedAsset
-        ? (isTokenSelection
-            ? selectorTickUpper.slice(0, 1)
-            : (selectorNativeTicker || selectorDescriptor?.displayName || '?').slice(0, 1))
-        : '?';
     return (
         <Screen variant={variant} header={header}>
             <ListPage
@@ -296,49 +287,26 @@ export function MarketsList({
                     <div style={{ width: '100%' }}>
                         <Button
                             type="button"
-                            className={`${receiveStyles.assetCard} ${marketsStyles.assetButton}`}
+                            className={`${marketsStyles.assetCard} ${marketsStyles.assetButton}`}
                             icon={null}
                             onClick={onChangeAsset}
                             aria-label={selectedAsset
                                 ? `Change asset (currently ${assetName})`
                                 : 'Select coin or token'}
                         >
-                            <span className={receiveStyles.assetIconWrap}>
-                                {assetImageUrl ? (
-                                    <img
-                                        src={assetImageUrl}
-                                        alt=""
-                                        aria-hidden="true"
-                                        className={receiveStyles.assetIcon}
-                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                    />
-                                ) : (
-                                    <span
-                                        className={receiveStyles.assetIconFallback}
-                                        style={{ background: tickerColor(selectorTickUpper || 'BTC') }}
-                                        aria-hidden="true"
-                                    >
-                                        {assetLetter}
-                                    </span>
-                                )}
-                                {isTokenSelection && selectorDescriptor ? (() => {
-                                    const chainPipUrl = brandingLib.chainIconSmallUrl(selectorDescriptor.id);
-                                    return chainPipUrl ? (
-                                        <img
-                                            src={chainPipUrl}
-                                            alt=""
-                                            aria-hidden="true"
-                                            className={receiveStyles.assetChainOverlay}
-                                        />
-                                    ) : null;
-                                })() : null}
-                            </span>
+                            {selectedAsset && selectorDescriptor ? (
+                                <AssetMark
+                                    chainId={selectorDescriptor.id}
+                                    tick={selectorTickUpper}
+                                    isNative={!isTokenSelection}
+                                />
+                            ) : null}
                             {isTokenSelection ? (
-                                <span className={receiveStyles.assetText}>
-                                    <span className={receiveStyles.assetName}>{assetName}</span>
+                                <span className={marketsStyles.assetText}>
+                                    <span className={marketsStyles.assetName}>{assetName}</span>
                                 </span>
                             ) : null}
-                            <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
+                            <span className={marketsStyles.assetChevron} aria-hidden="true">›</span>
                         </Button>
 
                         {selectedAsset ? (
@@ -446,7 +414,7 @@ export function MarketsList({
                                 onAction={filtersHideAllMarkets ? resetFilters : undefined}
                             />
                         ) : (
-                        <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
+                        <div className={marketsStyles.marketsCard}>
                             <ul ref={marketResultsRef} aria-label="Markets" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                                 {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
                                     <MarketRow
