@@ -145,20 +145,6 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 
 **Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. The back chevron glyph also sits about 10px inside its own 28px SVG (the `BackIcon` vertex is at 9/24 of the viewBox), so a box-aligned button still reads indented. `<PageHeader />` owns the optical correction through `--xc-page-header-chevron-nudge`. Its trailing slot mirrors the chrome alignment on the right, and its buttons render as circular 38px controls so their right edges line up with the AppHeader buttons.
 
-## Control sizes
-
-Inputs, selects, pickers, network filters, and buttons use one visual size scale. `md` is the default when `size` is omitted.
-
-| size | mouse visual and hit area | touch hit area | use |
-|---|---:|---:|---|
-| `sm` | 32px | at least 44px | Dense toolbars, table rows, and secondary inline actions |
-| `md` | 40px | at least 44px | Default forms, filters, dialogs, and actions |
-| `lg` | 48px | 48px | One or two primary hero fields or actions on a focused screen |
-
-The control tokens are `--xc-control-h-sm`, `--xc-control-h-md`, `--xc-control-h-lg`, `--xc-control-font`, `--xc-control-radius`, and `--xc-control-pad-x`. On a coarse pointer, an invisible pseudo-element or activating wrapper expands `sm` and `md` to at least 44 by 44px without changing the painted box or layout. Do not make the visible mouse control taller to create that touch target, and do not place another target inside the expanded hit area.
-
-Use `sm` only where density matters and the expanded touch area cannot overlap a neighbor. Use `lg` for a screen's primary entry or commitment point, such as Send's To and Amount fields. Keep the rest of the form at the default `md` size.
-
 ## Buttons
 
 Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes follow the shared `sm` / `md` / `lg` control scale below. `block` makes it full width, `loading` shows a spinner and disables it, `disabled` disables it, and `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
