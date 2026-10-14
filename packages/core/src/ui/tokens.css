@@ -226,6 +226,10 @@
     --xc-text: #0F172A;
     /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
+    /* Every select's arrow: the Network picker's chevron (ChevronDownIcon)
+       stroked in this palette's muted text color. Each palette block below
+       redefines it with its own muted color. */
+    --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%235F7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --xc-text-inverted: #FFFFFF;
 
     /* Labels sitting on semantic fills. Accent and danger use white; success
@@ -447,6 +451,7 @@
         --xc-border: #5F6D83;
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
+        --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         --xc-text-inverted: #0B0F17;
         --xc-on-success: #0B0F17;
         --xc-danger-bg: rgba(252, 165, 165, 0.14);
@@ -486,6 +491,7 @@
     --xc-border: #5F6D83;
     --xc-text: #E5EAF2;
     --xc-text-muted: #94A3B8;
+    --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --xc-text-inverted: #0B0F17;
     --xc-on-success: #0B0F17;
     --xc-danger-bg: rgba(252, 165, 165, 0.14);
@@ -636,6 +642,7 @@
         --xc-border: #1F2937;
         --xc-text: #000000;
         --xc-text-muted: #1F2937;
+        --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%231F2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         --xc-danger: #B91C1C;
         --xc-info: #134B6E;
         --xc-info-text: #134B6E;
@@ -658,6 +665,7 @@
             --xc-border: #E5EAF2;
             --xc-text: #FFFFFF;
             --xc-text-muted: #E5EAF2;
+            --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23E5EAF2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
             --xc-danger: #FCA5A5;
             --xc-info: #93C5FD;
             --xc-info-text: #93C5FD;
@@ -683,6 +691,7 @@
         --xc-border: #E5EAF2;
         --xc-text: #FFFFFF;
         --xc-text-muted: #E5EAF2;
+        --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23E5EAF2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         --xc-danger: #FCA5A5;
         --xc-info: #93C5FD;
         --xc-info-text: #93C5FD;
@@ -905,12 +914,11 @@ fieldset {
     }
 }
 
-/* About thirty dropdowns are bare <select>s with no class (settings rows,
- * filters, pickers), and the UA default draws them as grey system widgets
- * that match nothing else on the screen. Give every class-less select the
- * Input field look. :where() keeps the specificity at zero, so a select's
- * own inline style or a later rule still wins. */
-:where(select:not([class])) {
+/* Every dropdown, the shared Select and each native <select>, takes the
+ * Network picker's field look: its height, padding, border, radius and
+ * surface. :where() keeps the specificity at zero, so a sized Select's own
+ * height and padding still win. */
+:where(select) {
     height: var(--xc-control-h-md, 36px);
     padding-block: 0;
     padding-inline: var(--xc-control-pad-x-md, 12px);
@@ -919,9 +927,37 @@ fieldset {
     line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background-color: var(--xc-surface);
-    border: 1px solid var(--xc-control-border);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-control-radius, 8px);
     max-width: 100%;
+    cursor: pointer;
+}
+
+/* No select draws the browser's own arrow: each shows the Network picker's
+ * chevron at the inline end, with room kept so a long option never runs
+ * under it. The important declarations hold this when a component sets the
+ * background shorthand or its own padding. List boxes (multiple or size)
+ * keep their native look. */
+select:not([multiple]):not([size]) {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background-image: var(--xc-select-arrow) !important;
+    background-repeat: no-repeat !important;
+    background-size: 18px 18px !important;
+    background-position: right var(--xc-control-padding-x, var(--xc-control-pad-x-md, 12px)) center !important;
+    padding-inline-end: calc(var(--xc-control-padding-x, var(--xc-control-pad-x-md, 12px)) + 18px + var(--xc-space-2)) !important;
+}
+
+[dir='rtl'] select:not([multiple]):not([size]) {
+    background-position: left var(--xc-control-padding-x, var(--xc-control-pad-x-md, 12px)) center !important;
+}
+
+select:not([multiple]):not([size]):not(:disabled):not([aria-invalid='true']):hover {
+    border-color: var(--xc-accent-primary);
+}
+
+select:disabled {
+    cursor: not-allowed;
 }
 
 /* Keep one theme-aware keyboard indicator on native controls, links, and
@@ -988,7 +1024,7 @@ html.xc-focus-visible-fallback :where(
     filter: saturate(var(--xc-disabled-saturation));
 }
 
-:where(select:not([class])):focus {
+:where(select):focus {
     outline: none;
     border-color: var(--xc-accent-primary);
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
@@ -999,9 +1035,17 @@ html.xc-focus-visible-fallback :where(
         filter: none;
     }
 
-    :where(select:not([class])):focus {
+    :where(select):focus {
         outline: 2px solid Highlight;
         outline-offset: 2px;
+    }
+
+    /* The chevron image carries a fixed palette color, so system colors
+     * bring back the platform arrow, which follows the user's palette. */
+    select:not([multiple]):not([size]) {
+        -webkit-appearance: auto !important;
+        appearance: auto !important;
+        background-image: none !important;
     }
 }
 

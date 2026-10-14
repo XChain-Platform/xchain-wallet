@@ -365,6 +365,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     </span>
                 )}
                 subtitle={<span className={styles.subtitle} title={subtitle}>{subtitle}</span>}
+                contentClassName={styles.rowBody}
                 trailingClassName={styles.amountsSlot}
                 trailing={<span className={styles.amounts}>
                     <span className={`${styles.qty} ${quantityLabel.length > LONG_QUANTITY_CHARS ? styles.qtyLong : ''}`.trim()} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
@@ -470,7 +471,8 @@ function shallowEqualRow(previous, next) {
 }
 
 // A balance longer than this (for example 1,000,000.00000000) steps down one
-// type size so it still fits the row instead of ending in an ellipsis.
+// type size so it still fits beside the name; one that still does not fit
+// moves to its own line under the name. Neither ends in an ellipsis.
 const LONG_QUANTITY_CHARS = 16;
 
 function FitAmount({ children, title }) {
