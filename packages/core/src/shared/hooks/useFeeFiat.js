@@ -14,10 +14,14 @@ import { useFiatRate, useTickFiatRate } from './useFiatRate.js';
 export function useFeeFiat({ chainCoin, nativeTicker, settings } = {}) {
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const allowCoingeckoFallback = settings?.privacy?.priceDataEnabled !== false;
+    const enabled = Boolean(settings)
+        && settings.activeNetwork !== 'testnet'
+        && settings.activeNetwork !== 'regtest';
     const nativeRate = useFiatRate({
         chainCoin,
         fiatCurrency,
         allowCoingeckoFallback,
+        enabled,
     });
     const protocolRate = useTickFiatRate({
         chainCoin,
@@ -25,6 +29,7 @@ export function useFeeFiat({ chainCoin, nativeTicker, settings } = {}) {
         nativeTicker,
         fiatCurrency,
         allowCoingeckoFallback,
+        enabled,
     });
 
     const formatAtRate = useCallback((amount, rate) => {

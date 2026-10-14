@@ -122,7 +122,7 @@ function TokenDetailContent({
     onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
-    const { settings } = useSettings();
+    const { settings, error: settingsError } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const walletModeReady = settings !== null;
     const isWatcherMode = settings?.walletMode === 'watcher';
@@ -135,6 +135,10 @@ function TokenDetailContent({
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
     const isDemo = isDemoWallet(walletId);
+    const fiatSupported = settings
+        ? settings.activeNetwork !== 'testnet' && settings.activeNetwork !== 'regtest'
+        : Boolean(settingsError);
+    const displayFiatRate = fiatSupported ? fiatRate : null;
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
@@ -169,7 +173,7 @@ function TokenDetailContent({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const nativePrice = useNativePrice(isNative ? chainId : null, {
+    const nativePrice = useNativePrice(isNative && fiatSupported ? chainId : null, {
         includeSparkline: true,
         fiatCurrency,
     });
@@ -298,9 +302,9 @@ function TokenDetailContent({
     }, [holdersOpen, isNative, tick, chainId, messaging]);
 
     const fiat = useMemo(() => {
-        if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
-        return fiatValue(quantity, divisibility, fiatRate);
-    }, [quantity, divisibility, fiatRate]);
+        if (typeof displayFiatRate !== 'number' || !isFinite(displayFiatRate)) return null;
+        return fiatValue(quantity, divisibility, displayFiatRate);
+    }, [quantity, divisibility, displayFiatRate]);
 
     // Header icon picks the smallest representation available: a TIS
     // `icon`-typed image first, then any other TIS image, then the
@@ -490,14 +494,16 @@ function TokenDetailContent({
                                     title="Swap primary unit"
                                     icon={<Icon.SwapIcon />}
                                 />
-                                <Button
-                                    className={styles.balanceHeroEye}
-                                    onClick={toggleChartVisible}
-                                    aria-pressed={chartVisible ? 'true' : 'false'}
-                                    aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
-                                    title={chartVisible ? 'Hide chart' : 'Show chart'}
-                                    icon={<Icon.LineChartIcon />}
-                                />
+                                {fiatSupported ? (
+                                    <Button
+                                        className={styles.balanceHeroEye}
+                                        onClick={toggleChartVisible}
+                                        aria-pressed={chartVisible ? 'true' : 'false'}
+                                        aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
+                                        title={chartVisible ? 'Hide chart' : 'Show chart'}
+                                        icon={<Icon.LineChartIcon />}
+                                    />
+                                ) : null}
                                 <Button
                                     className={styles.balanceHeroEye}
                                     onClick={toggleBalanceHidden}
@@ -547,7 +553,7 @@ function TokenDetailContent({
                     the quick actions and is collapsible via the chart-icon
                     button in the balance hero (same hook the Home portfolio
                     chart uses, so the toggle persists across both surfaces). */}
-                {chartVisible ? (
+                {fiatSupported && chartVisible ? (
                     <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
                         <RouteErrorBoundary
                             variant="compact"
@@ -563,7 +569,7 @@ function TokenDetailContent({
                                 tick={tick}
                                 chainId={chainId}
                                 hasMarketData={hasMarketData}
-                                fiatRate={fiatRate}
+                                fiatRate={displayFiatRate}
                                 fiatRateSource={fiatRateSource}
                                 fiatCurrency={fiatCurrency}
                                 loading={metadataLoading}
@@ -593,7 +599,7 @@ function TokenDetailContent({
                     </div>
                 ) : null}
 
-                {isNative ? (
+                {isNative && fiatSupported ? (
                     <NativePriceAlertEntry
                         walletId={walletId}
                         chainId={chainId}
@@ -602,6 +608,10 @@ function TokenDetailContent({
                         loading={nativePrice.loading || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error)}
                         disabled={nativePrice.disabled}
                     />
+                ) : null}
+
+                {!fiatSupported ? (
+                    <p className={styles.muted}>Test coins have no value.</p>
                 ) : null}
 
                 {/* Every shell shares this action order. Missing capabilities

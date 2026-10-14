@@ -942,6 +942,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         chainCoin: chainId ? chainRegistry.get(chainId)?.coin : null,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
     });
 
     const isNativeSend = useMemo(() => {
@@ -1076,6 +1077,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
     });
 
     // Switching from the coin to a token while typing in fiat would leave the
@@ -2909,7 +2911,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     result={previewResult}
                     loading={previewBalances.loading}
                     error={previewBalances.error}
-                    chainCoin={descriptor?.coin}
+                    chainCoin={descriptor?.networkKind === 'mainnet' ? descriptor.coin : null}
                     nativeTicker={nativeTickerFor(descriptor)}
                     fiatCurrency={fiatCurrency}
                     allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}

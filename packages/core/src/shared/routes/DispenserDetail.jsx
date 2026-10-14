@@ -310,6 +310,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         chainCoin: descriptor?.coin,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: descriptor?.networkKind === 'mainnet',
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
         const value = coinToFiatExact(coinAmount, feeFiatRate);

@@ -24,6 +24,7 @@ import {
     formatFiatAmountForSpeech,
 } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { isMainnetChainId } from '../../flows/mainnetPrelaunch.js';
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -48,6 +49,9 @@ import { percentChangeDisplay } from '../utils/percentFormat.js';
  * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
 export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
+    const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
+    const testCoinsOnly = rowsWithChain.length > 0
+        && rowsWithChain.every((row) => !isMainnetChainId(row.chainId));
     const { total, unpriced, priceUnavailable } = useMemo(() => {
         const sum = sumFiatValue(rows);
         const meaningful = (rows || []).filter(hasNonZeroQuantity);
@@ -74,7 +78,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const nativeChainIds = useMemo(() => {
         const set = new Set();
         for (const r of rows || []) {
-            if (r?.kind === 'native' && typeof r.chainId === 'string' && r.chainId) {
+            if (r?.kind === 'native' && isMainnetChainId(r.chainId)) {
                 set.add(r.chainId);
             }
         }
@@ -153,7 +157,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
-    const showMeta = !hidden && (hasChange || hasUnpriced || hasUpdate);
+    const showMeta = !testCoinsOnly && !hidden && (hasChange || hasUnpriced || hasUpdate);
+    const balanceDisplay = testCoinsOnly
+        ? 'Test coins have no value'
+        : priceUnavailable
+            ? 'Price unavailable'
+            : formatFiatAmount(total, fiatCurrency, fiatLocale, true);
+    const balanceSpeech = testCoinsOnly
+        ? 'Test coins have no value'
+        : priceUnavailable
+            ? 'Price unavailable'
+            : formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -170,22 +184,16 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                 </span>
                 <div
                     className={styles.amount}
-                    aria-label={hidden
-                        ? 'Balance hidden'
-                        : priceUnavailable
-                            ? 'Price unavailable'
-                            : formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}
+                    aria-label={hidden ? 'Balance hidden' : balanceSpeech}
                 >
                     {hidden ? (
                         <span className={styles.hidden}>•••••</span>
                     ) : (
                         <>
                             <span className={styles.amountValue}>
-                                {priceUnavailable
-                                    ? 'Price unavailable'
-                                    : formatFiatAmount(total, fiatCurrency, fiatLocale, true)}
+                                {balanceDisplay}
                             </span>
-                            {!priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
+                            {!testCoinsOnly && !priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
                         </>
                     )}
                 </div>
@@ -247,17 +255,19 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             {null}
                         </Button>
                     ) : null}
-                    <Button
-                        type="button"
-                        className={`${styles.eye} ${chartVisible ? styles.eyeActive : ''}`}
-                        onClick={toggleChartVisible}
-                        aria-pressed={chartVisible ? 'true' : 'false'}
-                        aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
-                        title={chartVisible ? 'Hide chart' : 'Show chart'}
-                        icon={<Icon.LineChartIcon />}
-                    >
-                        {null}
-                    </Button>
+                    {!testCoinsOnly ? (
+                        <Button
+                            type="button"
+                            className={`${styles.eye} ${chartVisible ? styles.eyeActive : ''}`}
+                            onClick={toggleChartVisible}
+                            aria-pressed={chartVisible ? 'true' : 'false'}
+                            aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
+                            title={chartVisible ? 'Hide chart' : 'Show chart'}
+                            icon={<Icon.LineChartIcon />}
+                        >
+                            {null}
+                        </Button>
+                    ) : null}
                     <Button
                         type="button"
                         className={styles.eye}

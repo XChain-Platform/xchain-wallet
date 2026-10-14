@@ -47,6 +47,7 @@ import {
     priceTokenRows,
 } from '../hooks/useFiatRate.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import { isMainnetChainId } from '../../flows/mainnetPrelaunch.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import styles from './HomeTabs.module.css';
@@ -76,6 +77,17 @@ function persistBalanceSort(walletId, value) {
     } catch {
         // Storage can be unavailable in privacy-restricted shells.
     }
+}
+
+function withoutTestNetworkFiat(rows) {
+    return rows.map((row) => (isMainnetChainId(row.chainId) ? row : {
+        ...row,
+        fiatRate: null,
+        fiatRateSource: null,
+        fiatRateFetchedAt: null,
+        fiatRateStale: false,
+        change24hPct: null,
+    }));
 }
 
 function compareBalanceNames(a, b) {
@@ -203,7 +215,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         && settings.privacy?.metadataFetchEnabled !== false;
     const nativeCoins = useMemo(() => {
         if (isDemo) return [];
-        return displayRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
+        return displayRows
+            .filter((r) => r.kind === 'native' && isMainnetChainId(r.chainId))
+            .map((r) => r.coin || coinFromChainId(r.chainId));
     }, [displayRows, isDemo]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
@@ -220,6 +234,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         if (isDemoWallet(walletId)) return [];
         return displayRows
             .filter((r) => r.kind !== 'native'
+                && isMainnetChainId(r.chainId)
                 && typeof r.fiatRate !== 'number'
                 && !spamKeys.has(`${r.chainId}:${r.tick}`))
             .map((r) => {
@@ -239,11 +254,16 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(
-        () => priceTokenRows(priceNativeRows(displayRows, nativeRates), tokenRates),
+        () => withoutTestNetworkFiat(
+            priceTokenRows(priceNativeRows(displayRows, nativeRates), tokenRates),
+        ),
         [displayRows, nativeRates, tokenRates],
     );
     const nativeChainIds = useMemo(
-        () => allRows.filter((row) => row.kind === 'native').map((row) => row.chainId).sort(),
+        () => allRows
+            .filter((row) => row.kind === 'native' && isMainnetChainId(row.chainId))
+            .map((row) => row.chainId)
+            .sort(),
         [allRows],
     );
     const nativeChainKey = nativeChainIds.join(',');
@@ -278,6 +298,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             : filteredRows,
         [filteredRows, hiddenKeys],
     );
+    const hasMainnetRows = portfolioRows.some((row) => isMainnetChainId(row.chainId));
 
     const coins = useMemo(
         () => sortBalanceRows(filteredRows.filter((r) => r.kind === 'native'), sortBy, nativePriceMap),
@@ -394,10 +415,12 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 variant="compact"
                 resetKey={`${walletId || ''}:${networkFilter}:chart`}
             >
-                <PortfolioChart
-                    rows={portfolioRows}
-                    walletId={walletId}
-                />
+                {hasMainnetRows ? (
+                    <PortfolioChart
+                        rows={portfolioRows}
+                        walletId={walletId}
+                    />
+                ) : null}
             </RouteErrorBoundary>
 
             {actions}
