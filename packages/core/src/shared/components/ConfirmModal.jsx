@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useRef } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
@@ -126,9 +126,9 @@ export function ConfirmModal({
         >
             {message ? <p id={messageId}>{message}</p> : null}
             {error ? (
-                <p role="alert">
+                <StatusMessage variant="error">
                     {userFacingMessage(error, 'Could not complete this request. Try again.')}
-                </p>
+                </StatusMessage>
             ) : null}
         </OverlaySurface>
     );
