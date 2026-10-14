@@ -1078,13 +1078,25 @@ export function AddressList({
             setLabelSaving(true);
             try {
                 const next = labelDraft.trim();
-                await messaging.setAddressLabel(targetId, next);
+                const result = await messaging.setAddressLabel(targetId, next);
+                const savedLabel = typeof result?.label === 'string'
+                    ? result.label
+                    : (next || 'Address');
                 setSelected((current) => (
                     current?.record?.id === targetId
-                        ? { ...current, label: next, record: { ...current.record, label: next } }
+                        ? { ...current, label: savedLabel, record: { ...current.record, label: savedLabel } }
                         : current
                 ));
-                setReloadKey((k) => k + 1);
+                setAddressesByChain((current) => Object.fromEntries(
+                    Object.entries(current || {}).map(([chainId, records]) => [
+                        chainId,
+                        Array.isArray(records)
+                            ? records.map((record) => record?.id === targetId
+                                ? { ...record, label: savedLabel }
+                                : record)
+                            : records,
+                    ]),
+                ));
                 announce('Address label saved.');
             } catch (err) {
                 setLoadError(userFacingMessage(err, 'Could not save that label. Try again.'));
