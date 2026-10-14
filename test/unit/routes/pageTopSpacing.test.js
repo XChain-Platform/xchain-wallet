@@ -39,7 +39,7 @@ describe('route page-top ownership', () => {
     it('keeps each Send FormPage root flush with Screen', () => {
         const source = read('packages/core/src/shared/routes/Send.jsx');
         const form = rule(read('packages/core/src/ui/FormPage.module.css'), '.form');
-        expect(source.match(/<FormPage\b/g)).toHaveLength(3);
+        expect(source.match(/<FormPage\b/g)).toHaveLength(2);
         expect(form).toMatch(/margin:\s*0/);
         expect(form).toMatch(/padding:\s*0/);
     });

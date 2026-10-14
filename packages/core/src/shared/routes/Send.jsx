@@ -2634,17 +2634,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
     if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
+        // The empty state is the page's whole content, so it sits directly in
+        // the page at full content width rather than in a form card.
         return wrap(
-            <FormPage as="div" label={t('send.title')}>
-                <EmptyState
-                    title={t('send.empty.title')}
-                    body={t('send.empty.body')}
-                    icon={<Icon.ReceiveIcon />}
-                    actionLabel={onReceive ? t('home.receive') : undefined}
-                    onAction={onReceive}
-                    actionIcon={<Icon.ReceiveIcon />}
-                />
-            </FormPage>,
+            <EmptyState
+                plain
+                title={t('send.empty.title')}
+                body={t('send.empty.body')}
+                icon={<Icon.ReceiveIcon />}
+                actionLabel={onReceive ? t('home.receive') : undefined}
+                onAction={onReceive}
+                actionIcon={<Icon.ReceiveIcon />}
+            />,
         );
     }
 
