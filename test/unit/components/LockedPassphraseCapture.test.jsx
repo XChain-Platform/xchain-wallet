@@ -33,7 +33,7 @@ const TRAVEL = { id: 'w2', name: 'Travel' };
 
 /** The storage promise the copy makes, verbatim from the spec's §3.4. */
 const STORAGE_SENTENCE
-    = /Enter it once to finish setting up this device\. It will be stored on this device, protected by your wallet password, so you are not asked again\./;
+    = /Enter it once to finish setting up this device\. It will be stored on this device, protected by your wallet password, so you aren't asked again\./;
 
 function mount({ unlockWallet, capturePassphrase } = {}) {
     const onUnlocked = vi.fn();

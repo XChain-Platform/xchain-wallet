@@ -110,7 +110,7 @@ describe('popup background connection recovery', () => {
 
         renderHarness();
         await flushPromises();
-        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet...');
+        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet…');
 
         await vi.advanceTimersByTimeAsync(1);
         await flushPromises();
@@ -131,7 +131,7 @@ describe('popup background connection recovery', () => {
         renderHarness();
         await vi.advanceTimersByTimeAsync(RUNTIME_MESSAGE_TIMEOUT_MS);
         await flushPromises();
-        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet...');
+        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet…');
 
         await vi.advanceTimersByTimeAsync(1);
         await flushPromises();

@@ -76,7 +76,7 @@ describe('Locked password failure feedback', () => {
         expect(banner).toHaveTextContent(
             'Too many incorrect passwords on this device. '
             + 'Wait 5 seconds before trying again. '
-            + 'Changing networks will not skip the wait.',
+            + 'Changing networks won\'t skip the wait.',
         );
         expect(screen.getAllByText(/too many incorrect passwords on this device/i))
             .toHaveLength(1);

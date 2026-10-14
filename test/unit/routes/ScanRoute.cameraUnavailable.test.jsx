@@ -31,7 +31,7 @@ describe('ScanRoute without a browser camera API', () => {
 
         expect(screen.getByTestId('scan-route')).toBeInTheDocument();
         expect(screen.getByTestId('qr-scanner-unsupported')).toHaveTextContent(
-            /camera access is not available.*paste the code/i,
+            /camera access isn't available.*paste the code/i,
         );
         expect(screen.getByRole('textbox', { name: 'Or paste it here' })).toBeInTheDocument();
     });
@@ -51,7 +51,7 @@ describe('ScanRoute without a browser camera API', () => {
 
         expect(screen.getByTestId('scan-route')).toBeInTheDocument();
         expect(screen.getByTestId('qr-scanner-unsupported')).toHaveTextContent(
-            /camera access is not available.*paste the code/i,
+            /camera access isn't available.*paste the code/i,
         );
     });
 });
