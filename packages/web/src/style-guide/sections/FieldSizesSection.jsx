@@ -27,13 +27,13 @@ export function FieldSizesSection() {
             id="field-sizes"
             title="Field sizes"
             tag="CANONICAL sizing contract"
-            kicker="Fields, selects, pickers, filters, and buttons share sm (32px), md (40px), and lg (48px). The default is md; touch hit areas remain at least 44px."
+            kicker="Fields, selects, pickers, filters, and buttons share sm (28px), md (36px), and lg (44px), stepping up to 36px, 44px, and 48px on touch. The default is md; touch hit areas remain at least 44px."
         >
             <Guidance
                 what={<>One <code>size</code> prop across text fields, native selects, custom pickers, the network filter, and buttons. Every control uses the shared height, font, radius, and horizontal-padding tokens.</>}
                 when={<>Use <code>md</code> by default. Use <code>sm</code> in dense toolbars and rows where its expanded touch target cannot overlap another action. Use <code>lg</code> for one or two hero controls, including Send's To and Amount fields.</>}
                 whenNot={<>Do not invent a nearby height, mix arbitrary dimensions within a row, or enlarge a painted control to satisfy touch. The coarse-pointer hit area expands around <code>sm</code> and <code>md</code> without changing layout.</>}
-                sizing={<><code>sm</code>: 32px visual, 44px touch target. <code>md</code>: 40px visual, 44px touch target. <code>lg</code>: 48px visual and touch target. All share <code>--xc-control-font</code>, <code>--xc-control-radius</code>, and <code>--xc-control-pad-x</code>.</>}
+                sizing={<><code>sm</code>: 28px visual with a mouse, 36px on touch with a 44px hit area. <code>md</code>: 36px with a mouse, 44px on touch. <code>lg</code>: 44px with a mouse, 48px on touch. All share <code>--xc-control-font</code>, <code>--xc-control-radius</code>, and <code>--xc-control-pad-x</code>.</>}
                 variants={<><code>size="sm" | "md" | "lg"</code>. Default is <code>md</code>. Composed fields forward the size to their shared primitive.</>}
                 doRule={<>✓ Pick one size per form · mark only optional fields with the exact <code>(optional)</code> suffix · use <code>optional</code> when the base label is translated or dynamic · pair an inline action (Max, address book) with the field via the component</>}
                 dontRule={<>✗ Mix required and optional markers · write <code>(required)</code> in labels · put units inside the optional marker · use literal control heights</>}
@@ -41,8 +41,8 @@ export function FieldSizesSection() {
             />
 
             <Markup>
-{`<Input label="Amount" size="lg" />   // 48px hero field
-<Input label="Memo" optional />       // 40px default field
+{`<Input label="Amount" size="lg" />   // 44px hero field, 48px on touch
+<Input label="Memo" optional />       // 36px default field, 44px on touch
 <Select label="Network" size="lg">…</Select>
 <Textarea label="Message" size="lg" rows={3} />
 <AmountField size="lg" … />          // composed fields take the same prop`}

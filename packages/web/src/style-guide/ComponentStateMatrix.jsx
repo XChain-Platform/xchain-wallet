@@ -27,6 +27,7 @@ const componentSizes = {
     SectionHeader: FIXED_SIZE,
     StatusMessage: FIXED_SIZE,
     Button: ALL_SIZES,
+    Spinner: ALL_SIZES,
     Checkbox: FIXED_SIZE,
     ChoiceControl: FIXED_SIZE,
     Switch: FIXED_SIZE,
@@ -125,6 +126,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.StatusMessage variant={statusVariant}>{state === 'error' ? error : 'Wallet is ready'}</UI.StatusMessage>;
     case 'Button':
         return <UI.Button size={nativeSize} variant={state === 'error' ? 'danger' : 'primary'} disabled={disabled}>Continue</UI.Button>;
+    case 'Spinner':
+        return <UI.Spinner size={nativeSize} label={disabled ? undefined : 'Checking'} />;
     case 'Checkbox':
         return <UI.Checkbox label="Publish permanently" defaultChecked disabled={disabled} error={error} />;
     case 'ChoiceControl':

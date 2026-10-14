@@ -25,6 +25,7 @@ export { EmptyState } from './EmptyState.jsx';
 export { SectionHeader } from './SectionHeader.jsx';
 export { StatusMessage } from './StatusMessage.jsx';
 export { Button } from './Button.jsx';
+export { Spinner } from './Button.jsx';
 export { Checkbox } from './Checkbox.jsx';
 export { ChoiceControl } from './ChoiceControl.jsx';
 export { Switch } from './Switch.jsx';

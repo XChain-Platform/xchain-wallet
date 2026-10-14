@@ -94,7 +94,7 @@ export const SECTIONS = [
     { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
-    { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
+    { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button', 'Spinner'] },
     { id: 'checkbox',              label: 'Checkbox',               Component: CheckboxSection, primitives: ['Checkbox'] },
     { id: 'choice-control',        label: 'Choice control',         Component: ChoiceControlSection, primitives: ['ChoiceControl'] },
     { id: 'chip',                  label: 'Chip',                   Component: ChipSection, primitives: ['Chip'] },
