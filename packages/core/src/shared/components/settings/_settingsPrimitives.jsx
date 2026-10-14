@@ -17,6 +17,7 @@
 
 import { cloneElement, useId } from 'react';
 import { Switch } from '@xchain-wallet/core/ui';
+import { StatusMessage } from '../../../ui/StatusMessage.jsx';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import cardStyles from '../../../ui/Card.module.css';
 
@@ -204,23 +205,28 @@ export function ToggleRow({
     );
 }
 
+const STATUS_TEXT = {
+    margin: 0,
+    color: 'var(--xc-text-muted)',
+    fontSize: 'var(--xc-text-sm)',
+    overflowWrap: 'anywhere',
+};
+
 /**
+ * A section's status line. An error is the shared error notice; any other
+ * status is one muted line of text, never a card or a box of its own, so it
+ * reads the same inside a row card or a form card as on the bare page.
+ *
  * @param {object} props
  * @param {string} props.text
  * @param {'error'|'muted'} [props.tone]
  * @param {string} [props.id]
  */
 export function Status({ text, tone, id }) {
-    return (
-        <div id={id} role={tone === 'error' ? 'alert' : undefined} className={cardStyles.card} style={{
-            // An error keeps the card shape and names its tone in the border colour.
-            borderColor: tone === 'error' ? 'var(--xc-danger-fg)' : undefined,
-            color: tone === 'error' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)',
-            fontSize: 'var(--xc-text-sm)',
-        }}>
-            {text}
-        </div>
-    );
+    if (tone === 'error') {
+        return <StatusMessage variant="error" id={id}>{text}</StatusMessage>;
+    }
+    return <p id={id} style={STATUS_TEXT}>{text}</p>;
 }
 
 export const SETTINGS_LOAD_FALLBACK = 'Settings could not be loaded. Close and reopen the wallet, then try again.';
