@@ -1030,5 +1030,7 @@ const check = (over) => assertRecord({
 }
 
 server.close();
+// Stop the gpg-agent the throwaway GNUPGHOME spawned before removing it.
+spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: gpgEnv });
 rmSync(work, { recursive: true, force: true });
 process.stdout.write('rehearsal.smoke.js: ok\n');

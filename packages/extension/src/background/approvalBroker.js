@@ -95,8 +95,10 @@ export class ApprovalBroker {
         this._runtime = deps.runtime ?? globalThis.chrome?.runtime;
         this._action = deps.action ?? globalThis.chrome?.action;
         this._timeoutMs = deps.timeoutMs ?? APPROVAL_TIMEOUT_MS;
-        this._setTimer = deps.setTimer ?? setTimeout;
-        this._clearTimer = deps.clearTimer ?? clearTimeout;
+        // Wrapped, not stored bare: Chrome throws "Illegal invocation" when the
+        // global timer functions are called as methods of another object.
+        this._setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+        this._clearTimer = deps.clearTimer ?? ((id) => clearTimeout(id));
         this._approvalPath = deps.approvalPath ?? 'approval.html';
         this._windowSize = {
             width: deps.windowSize?.width ?? 400,

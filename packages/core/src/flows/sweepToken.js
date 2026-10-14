@@ -49,6 +49,7 @@ import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
+ * @property {boolean} [verifyBuiltTx]                   check the built PSBT against this sweep before signing; set by the dApp bridge, whose approval precedes the build
  */
 
 /**
@@ -131,6 +132,7 @@ export async function sweepToken(opts) {
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
         onBroadcastFailure: opts.onBroadcastFailure,
+        verifyBuiltTx: opts.verifyBuiltTx === true,
     });
 
     // PC-34 force-close interplay: ORDERS=1 cancels every open ORDER

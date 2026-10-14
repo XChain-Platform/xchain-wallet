@@ -586,6 +586,7 @@ export {
     isBiometricSupported,
     isBiometricRegistered,
     clearBiometricCredential,
+    retireBiometricAfterPasswordChange,
     registerBiometricCredential,
     unlockWithBiometric,
     setBiometricProvider,

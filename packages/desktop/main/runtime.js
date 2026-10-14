@@ -69,6 +69,7 @@ import { createBroadcastQueueStore, sealBroadcastQueueStore } from '@xchain-wall
 import { createBroadcastQueueStorage } from '@xchain-wallet/extension/src/background/broadcastQueueStorage.js';
 import { restoreLabelSyncBestEffort } from '@xchain-wallet/extension/src/background/walletCreate.js';
 import { startLabelSyncRestoreTask } from '@xchain-wallet/extension/src/background/labelSyncRestoreTasks.js';
+import { createVaultKeyring } from '@xchain-wallet/extension/src/background/vaultKeyring.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
 import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
@@ -395,6 +396,12 @@ export async function ensureHost(runtime) {
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
             signerPool: runtime.signerPool,
+            // A password change re-seals the vault; the keychain-cached
+            // session key must follow it or the next launch opens nothing.
+            vaultKeyring: createVaultKeyring({
+                metaBackend: runtime.metaBackend,
+                sessionBackend: runtime.sessionBackend,
+            }),
             broadcastQueueStore: runtime.broadcastQueueStore,
             getDiagnosticContext: runtime.getDiagnosticContext,
             // Re-applies routing on any settings.update touching `privacy`,

@@ -1027,6 +1027,14 @@ async function executeSignAction(req, deps, ctx) {
     // forces every bridge-driven spend to keep tracking on regardless of
     // what the caller sent.
     //
+    // verifyBuiltTx is trusted for the same reason, and it is what closes the
+    // gap between this approval and the bytes signed. The user approved the
+    // intent above; the PSBT is built afterwards by the encoder service, and
+    // until this flag the flow signed whatever came back. With it the built
+    // PSBT is held to the confirm pipeline's tamper checks (outputs, action
+    // bytes, carrier scripts) against the values approved, and a mismatch is
+    // refused unsigned with the same plain message the in-app confirm shows.
+    //
     // The published param vocabulary is not the flow's. bridge-spec's
     // SendActionParams / SweepActionParams carry fromAddress / toAddress /
     // asset / amountRaw as plain strings, while sendToken and sweepToken take
@@ -1059,6 +1067,7 @@ async function executeSignAction(req, deps, ctx) {
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
             trackPendingTx: true,
+            verifyBuiltTx: true,
         });
         return finish(submitted);
     }
@@ -1077,6 +1086,7 @@ async function executeSignAction(req, deps, ctx) {
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             trackPendingTx: true,
+            verifyBuiltTx: true,
             chainId: req.chainId,
         });
         return finish(submitted);

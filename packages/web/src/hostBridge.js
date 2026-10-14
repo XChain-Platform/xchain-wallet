@@ -76,6 +76,7 @@ import {
 } from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 import { startLabelSyncRestoreTask } from '../../extension/src/background/labelSyncRestoreTasks.js';
+import { createVaultKeyring } from '../../extension/src/background/vaultKeyring.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
 import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
@@ -104,6 +105,14 @@ import {
     installDevMockConsole,
 } from './devMockEvents.js';
 import { buildDevMockActionString } from './devMockActionString.js';
+
+// The page holds the open vault itself and caches no session key or signing
+// password, so a password change only needs the meta slot kdfParams the vault
+// key is derived under.
+function webVaultKeyring() {
+    // Resolved per read, so building a host never touches the meta store.
+    return createVaultKeyring({ metaBackend: { load: () => createMetaBackend().load() } });
+}
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -1427,6 +1436,7 @@ export async function createWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1550,6 +1560,7 @@ export async function importMnemonicLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1736,6 +1747,7 @@ export async function importBackupLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1878,6 +1890,7 @@ export async function unlockWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();

@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
+import { crypto as coreCrypto, decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
@@ -5393,9 +5393,50 @@ export function createBackgroundHost(deps) {
 }
 
 /**
- * Verify the current password before preparing a detached, re-encrypted wallet record.
- * Keeping the candidate detached means an authentication or encryption failure cannot
- * alter the live vault record.
+ * A host whose shell supplied no vault keyring cannot tell whether the vault
+ * itself is sealed under the password being changed, and changing only the
+ * wallet record in that case locks the person out of their own wallet.
+ */
+export class PasswordChangeUnavailableError extends Error {
+    constructor() {
+        super('This app cannot change the wallet password from here. Your password has not been changed.');
+        this.name = 'PasswordChangeUnavailableError';
+    }
+}
+
+/**
+ * A wallet record changed while a password change was being prepared (a
+ * rename, an imported key or a new wallet from another window, or a second
+ * change). Nothing was written; the person can simply try again.
+ */
+export class PasswordChangeConflictError extends Error {
+    constructor() {
+        super('Your wallets changed while the password was being changed. Your password has not been changed; try again.');
+        this.name = 'PasswordChangeConflictError';
+    }
+}
+
+/**
+ * Change the password every seal the current password made: the target
+ * wallet's, any other wallet sealed under the same password, and the vault
+ * document's own key when the current password is the unlock password.
+ *
+ * The vault document is sealed under a key derived from the unlock password
+ * and the meta slot's kdfParams, and each wallet record's seed under its own
+ * derivation. Re-sealing only the wallet record left the vault on the old
+ * password: the next unlock refused the new password, and the old one opened
+ * the vault with the changed wallet silently missing from the signer pool.
+ *
+ * Every replacement record is prepared on a detached copy and the whole set is
+ * written in ONE `vault.rekey` call together with the new document key, so an
+ * authentication, encryption or storage failure leaves the stored vault and
+ * the live session exactly as they were. KDF parameters, salt included, are
+ * kept on every seal: the meta slot keeps describing the vault, and the
+ * onboarding wallet keeps sharing its params with the vault key.
+ *
+ * @returns {Promise<{ changed: true, vaultRekeyed: boolean, walletIds: string[] }>}
+ *   `vaultRekeyed` says the unlock password itself changed, which is what a
+ *   biometric enrolment wraps.
  */
 export async function changeWalletPassword(req, deps, operations = {}) {
     const walletId = req?.walletId;
@@ -5419,6 +5460,7 @@ export async function changeWalletPassword(req, deps, operations = {}) {
 
     const unlock = operations.unlockWallet ?? unlockWallet;
     const rekey = operations.rekeyWalletRecord ?? rekeyWalletRecord;
+    const deriveKey = operations.deriveMasterKey ?? coreCrypto.deriveMasterKeyAsync;
     const wallet = await deps.vault.wallets.get(walletId);
     if (!wallet) throw new Error(`Wallet not found: ${walletId}`);
 
@@ -5435,22 +5477,117 @@ export async function changeWalletPassword(req, deps, operations = {}) {
         // Verification has completed; signer cleanup is best-effort.
     }
 
-    const candidate = {
+    const keyring = deps.vaultKeyring;
+    const vaultKdfParams = typeof keyring?.kdfParams === 'function' ? await keyring.kdfParams() : null;
+    if (!vaultKdfParams || typeof keyring.commit !== 'function') {
+        throw new PasswordChangeUnavailableError();
+    }
+
+    /** @type {Uint8Array | null} */
+    let oldVaultKey = null;
+    /** @type {Uint8Array | null} */
+    let newVaultKey = null;
+    try {
+        oldVaultKey = await deriveKey(currentPassword, vaultKdfParams);
+        const vaultRekeyed = deps.vault.keyMatches(oldVaultKey);
+
+        // Re-seal on detached copies; nothing below touches the live records.
+        // The target first, so its own failure is the one reported. Another
+        // wallet the old password does not open was sealed under a different
+        // password and keeps it.
+        // The records every replacement is prepared from. The vault write below
+        // refuses unless these are still the stored records, so a wallet write
+        // that lands during the derivations is never overwritten or left on
+        // the old password. The target was read before the verification
+        // unlock, so it must still be the stored one too.
+        const stored = await deps.vault.wallets.list();
+        if (!stored.includes(wallet)) throw new PasswordChangeConflictError();
+        const target = detachedWalletCopy(wallet);
+        const sealOpts = (candidate) => ({
+            walletPassword: currentPassword,
+            devicePassword: newPassword,
+            kdfParams: candidate.kdfParams,
+        });
+        if (!await rekey(target, sealOpts(target))) {
+            throw new Error('This wallet has no password-protected key material.');
+        }
+        const candidates = [target];
+        for (const other of stored) {
+            if (other.id === walletId) continue;
+            const candidate = detachedWalletCopy(other);
+            try {
+                if (await rekey(candidate, sealOpts(candidate))) candidates.push(candidate);
+            } catch (err) {
+                if (/** @type {any} */ (err)?.name !== 'BackupSeedPasswordError') throw err;
+            }
+        }
+
+        if (vaultRekeyed) newVaultKey = await deriveKey(newPassword, vaultKdfParams);
+        let applied;
+        try {
+            applied = await deps.vault.rekey({
+                ...(newVaultKey ? { masterKey: newVaultKey } : {}),
+                wallets: candidates,
+                readWallets: stored,
+            });
+        } catch (err) {
+            if (/** @type {any} */ (err)?.name === 'VaultConflictError') throw new PasswordChangeConflictError();
+            throw err;
+        }
+
+        const result = { changed: true, vaultRekeyed, walletIds: candidates.map((c) => c.id) };
+        // A lock that lands while the change runs closes this vault. The blob
+        // is written either way, so the change stands, but nothing below may
+        // run after a lock: a session key or signing password written now, or
+        // a signer pooled now, would leave the wallet usable behind the lock.
+        const stillOpen = () => deps.vault.isOpen !== false;
+        if (applied === false || !stillOpen()) return result;
+
+        // Committed. The shell's caches follow the vault key: a stale session
+        // key would reopen nothing after a worker restart or relaunch, and a
+        // stale signing password would refill the pool with nothing. A failure
+        // here does not undo the change; it costs one password unlock later.
+        // The keyring writes only while its slot still holds the old key,
+        // which a lock clears before it closes the vault.
+        if (newVaultKey) {
+            try {
+                await keyring.commit({ masterKey: newVaultKey, password: newPassword, previousKey: oldVaultKey });
+            } catch (err) {
+                console.error('[xchain] wallet.changePassword: session cache not updated:', err);
+            }
+        }
+
+        // The pooled signers hold the same seeds, but they were opened from
+        // the old seals; reopen them from the records as stored now.
+        const pool = deps.signerPool;
+        for (const candidate of candidates) {
+            if (!pool || !stillOpen()) break;
+            try {
+                await pool.unlockOne({
+                    wallet: candidate,
+                    password: newPassword,
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                });
+                // Each unlock is an Argon2id derivation; a lock can land inside it.
+                if (!stillOpen()) pool.evict?.(candidate.id);
+            } catch {
+                pool.evict?.(candidate.id);
+            }
+        }
+        return result;
+    } finally {
+        if (oldVaultKey) oldVaultKey.fill(0);
+        if (newVaultKey) newVaultKey.fill(0);
+    }
+}
+
+function detachedWalletCopy(wallet) {
+    return {
         ...wallet,
-        kdfParams: { ...wallet.kdfParams },
+        kdfParams: wallet.kdfParams ? { ...wallet.kdfParams } : wallet.kdfParams,
         importedKeys: Array.isArray(wallet.importedKeys)
             ? wallet.importedKeys.map((key) => ({ ...key }))
             : wallet.importedKeys,
     };
-    const rekeyed = await rekey(candidate, {
-        walletPassword: currentPassword,
-        devicePassword: newPassword,
-        kdfParams: candidate.kdfParams,
-    });
-    if (!rekeyed) {
-        throw new Error('This wallet has no password-protected key material.');
-    }
-    await deps.vault.wallets.put(candidate);
-    deps.signerPool?.evict?.(walletId);
-    return { changed: true };
 }

@@ -92,6 +92,7 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {(transactions: { signed: object, revealSigned: object | null }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
+ * @property {boolean} [verifyBuiltTx]               check the built PSBT against this send before signing; set by the dApp bridge, whose approval precedes the build
  * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1; passes through to submitAction.
  */
 
@@ -210,6 +211,7 @@ export async function sendToken(opts) {
         onProgress: opts.onProgress,
         beforeBroadcast: opts.beforeBroadcast,
         onBroadcastFailure: opts.onBroadcastFailure,
+        verifyBuiltTx: opts.verifyBuiltTx === true,
     });
 }
 
