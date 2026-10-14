@@ -291,7 +291,9 @@ describe('AppHeader action row', () => {
         const close = screen.getByRole('button', { name: 'Close' });
         expect(close.className).toMatch(/secondary/);
         expect(close.className).toMatch(/iconOnly/);
-        expect(close.className).toMatch(/sm/);
+        // The same md close as every other dialog, sheet and the palette.
+        expect(close.className).toMatch(/(^|\s|_)md(_|\s|$)/);
+        expect(close.className).not.toMatch(/(^|\s|_)sm(_|\s|$)/);
     });
 
 
