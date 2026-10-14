@@ -373,7 +373,7 @@ describe('Receive QR copy and share toasts', () => {
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
         await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(ADDRESS.address));
         await waitFor(() => expect(qrToDataURL).toHaveBeenLastCalledWith(
-            `bitcoin:${ADDRESS.address}`,
+            `bitcoin:${ADDRESS.address}?chain=bitcoin-regtest&label=Daily%20deposits`,
             expect.any(Object),
         ));
     });
@@ -426,8 +426,10 @@ describe('Receive QR copy and share toasts', () => {
         await clickWhenEnabled(/Share QR/);
 
         await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-        // With no amount or token the request is the bare address URI.
-        expect(writeText).toHaveBeenCalledWith('bitcoin:bcrt1qexample');
+        // The address-only request retains its network and payee label.
+        expect(writeText).toHaveBeenCalledWith(
+            'bitcoin:bcrt1qexample?chain=bitcoin-regtest&label=Daily%20deposits',
+        );
         expect(showToast).toHaveBeenCalledWith({
             message: 'Sharing is unavailable, so the payment link was copied to the clipboard.',
         });
@@ -674,7 +676,9 @@ describe('Receive address handling', () => {
         fireEvent.click(generatedField);
         await waitFor(() => expect(writeText).toHaveBeenCalled());
         expect(writeText.mock.calls.at(-1)[0]).toBe(generated.address);
-        expect(qrToDataURL.mock.calls.at(-1)[0]).toBe(`bitcoin:${generated.address}`);
+        expect(qrToDataURL.mock.calls.at(-1)[0]).toBe(
+            `bitcoin:${generated.address}?chain=bitcoin-regtest&label=BTC%20Address%20%234`,
+        );
     });
 
     it('shows amount validation and never encodes a rejected value', async () => {

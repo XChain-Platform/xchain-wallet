@@ -65,33 +65,44 @@ function settingsFor(descriptor) {
     };
 }
 
-async function requestFromReceive(descriptor) {
+async function requestFromReceive(descriptor, {
+    amount = AMOUNT,
+    tick,
+    divisibility,
+} = {}) {
     const address = recordFor(descriptor, 'receive');
     const messaging = {
         getSettings: vi.fn().mockResolvedValue(settingsFor(descriptor)),
         getAddressesByChain: vi.fn().mockResolvedValue({ [descriptor.id]: [address] }),
         getNewestAddress: vi.fn().mockResolvedValue(address),
+        getTokenInfo: vi.fn().mockResolvedValue({ tick, divisibility }),
     };
 
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <Receive
                 walletId={`receive-${descriptor.id}`}
-                prefill={{ chainId: descriptor.id }}
+                prefill={{ chainId: descriptor.id, tick, divisibility }}
             />
         </MessagingProvider>,
     );
 
-    fireEvent.change(await screen.findByRole('textbox', { name: /^Amount/ }), {
-        target: { value: AMOUNT },
-    });
+    if (amount) {
+        fireEvent.change(await screen.findByRole('textbox', { name: /^Amount/ }), {
+            target: { value: amount },
+        });
+    }
     await waitFor(() => expect(qrToDataURL.mock.calls.some(([value]) => (
         value.startsWith(`${descriptor.uriScheme}:${address.address}?`)
-        && value.includes(`amount=${AMOUNT}`)
+        && value.includes(`chain=${descriptor.id}`)
+        && (!amount || value.includes(`amount=${amount}`))
+        && (!tick || value.includes(`tick=${tick}`))
     ))).toBe(true));
     const request = qrToDataURL.mock.calls.findLast(([value]) => (
         value.startsWith(`${descriptor.uriScheme}:${address.address}?`)
-        && value.includes(`amount=${AMOUNT}`)
+        && value.includes(`chain=${descriptor.id}`)
+        && (!amount || value.includes(`amount=${amount}`))
+        && (!tick || value.includes(`tick=${tick}`))
     ))[0];
     cleanup();
     return { address, request };
@@ -209,6 +220,42 @@ describe('Receive payment request round trips', () => {
             });
 
             await pasteRequestIntoSend(descriptor, request);
+        },
+    );
+
+    it.each(CHAINS)(
+        '$id preserves its chain in an address-only request',
+        async (descriptor) => {
+            const { address, request } = await requestFromReceive(descriptor, { amount: '' });
+
+            expect(scanRequest(request)).toMatchObject({
+                kind: 'send',
+                address: address.address,
+                chainId: descriptor.id,
+                memo: LABEL,
+            });
+        },
+    );
+
+    it.each(CHAINS)(
+        '$id preserves an 18-decimal token request through Scan',
+        async (descriptor) => {
+            const amount = '0.123456789012345678';
+            const tick = 'ROUNDTRIP';
+            const { address, request } = await requestFromReceive(descriptor, {
+                amount,
+                tick,
+                divisibility: 18,
+            });
+
+            expect(scanRequest(request)).toMatchObject({
+                kind: 'send',
+                address: address.address,
+                amount,
+                tick,
+                chainId: descriptor.id,
+                memo: LABEL,
+            });
         },
     );
 });
