@@ -57,9 +57,11 @@ assert.match(
     'unlock uses current-password',
 );
 
-const recoveryPhrase = importWallet.match(/<Textarea[\s\S]{0,1200}?id="xc-mnemonic"[\s\S]{0,1200}?\/>/)?.[0] || '';
+const recoveryPhrase = importWallet.match(/<Textarea[\s\S]{0,300}?id="xc-mnemonic"[\s\S]{0,2500}?aria-describedby="xc-mnemonic-status"/)?.[0] || '';
 assert.match(recoveryPhrase, /autoComplete="off"/, 'recovery phrase disables autocomplete');
 assert.match(recoveryPhrase, /spellCheck=\{false\}/, 'recovery phrase disables spellcheck');
+assert.match(recoveryPhrase, /autoCapitalize="off"/, 'recovery phrase disables autocapitalize');
+assert.match(recoveryPhrase, /autoCorrect="off"/, 'recovery phrase disables autocorrect');
 
 const backupPhrase = backupSection.match(
     /<Textarea[\s\S]{0,500}?placeholder="Recovery phrase, words separated by spaces"[\s\S]{0,500}?\/>/,
