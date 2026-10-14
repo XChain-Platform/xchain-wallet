@@ -93,6 +93,18 @@ describe('PreflightPanel warning copy (§5.2.4)', () => {
         expect(detail.textContent).toBe(f.message);
     });
 
+    it('shows the Issue protocol-fee forfeiture finding once', () => {
+        mount(reportWith({ findings: [{
+            code: 'NATIVE_FEE_FORFEIT', severity: 'warning', source: 'client',
+            message: 'This action charges a protocol fee. If the chain rejects the action, any attached native-coin fee output is forfeited.',
+            data: { action: 'ISSUE' },
+        }] }));
+        const row = screen.getByTestId('preflight-warning-NATIVE_FEE_FORFEIT');
+        expect(row.querySelectorAll('span')).toHaveLength(1);
+        expect(within(row).getByText(WARNING_COPY.NATIVE_FEE_FORFEIT)).toBeTruthy();
+        expect(row.textContent.match(/protocol fee/g)).toHaveLength(1);
+    });
+
     // Tier 1 demotes a balance error to a warning when the network accepted the
     // action and only a projection over other unconfirmed actions still flags
     // it; copy keyed on the code alone would contradict that acceptance.

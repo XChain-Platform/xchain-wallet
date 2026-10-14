@@ -75,10 +75,10 @@ describe('preflightFindingKey', () => {
 describe('PreflightPanel: repeated error codes in one batch report', () => {
     it('renders one row per rejected sub-command', () => {
         mount(reportWith([subCommandError(1), subCommandError(4)]));
-        const rows = screen.getAllByText(/The network refused batch command/);
+        const rows = screen.getAllByText(/Batch command \d+ would be refused because/);
         expect(rows).toHaveLength(2);
-        expect(rows[0].textContent).toContain('batch command 2');
-        expect(rows[1].textContent).toContain('batch command 5');
+        expect(rows[0].textContent).toContain('Batch command 2');
+        expect(rows[1].textContent).toContain('Batch command 5');
     });
 
     it('gives each sub-command its own override checkbox', () => {
@@ -173,8 +173,9 @@ describe('definite consensus refusals', () => {
 
     it('shows the refusal reason in plain words without a Sign anyway control', () => {
         mount(reportWith([refusal]));
-        expect(screen.getByText('The network refused this action: Gated token transfer requires key handoff message.'))
+        expect(screen.getByText('This action would be refused because gated token transfer requires key handoff message.'))
             .toBeTruthy();
+        expect(screen.queryByText(/The network refused/i)).toBeNull();
         expect(screen.queryByTestId('ack-DRYRUN_INVALID')).toBeNull();
         expect(screen.queryByText(/invalid:/i)).toBeNull();
     });
