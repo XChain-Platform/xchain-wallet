@@ -105,7 +105,7 @@
     inset-inline-end: 0;
     z-index: var(--xc-z-dropdown);
     width: 320px;
-    max-width: calc(100vw - (2 * var(--xc-page-gutter)));
+    max-width: calc(100vw - (2 * var(--xc-space-3)));
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-lg);

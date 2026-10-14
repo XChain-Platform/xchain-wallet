@@ -8,9 +8,9 @@
     align-items: center;
     justify-content: center;
     padding: calc(var(--xc-page-top) + env(safe-area-inset-top, 0))
-        calc(var(--xc-page-gutter) + env(safe-area-inset-right, 0))
+        calc(var(--xc-space-4) + env(safe-area-inset-right, 0))
         calc(var(--xc-page-top) + env(safe-area-inset-bottom, 0))
-        calc(var(--xc-page-gutter) + env(safe-area-inset-left, 0));
+        calc(var(--xc-space-4) + env(safe-area-inset-left, 0));
 }
 
 .panel {

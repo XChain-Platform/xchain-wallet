@@ -51,5 +51,4 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: var(--xc-space-2);
-    margin-top: var(--xc-space-2);
 }

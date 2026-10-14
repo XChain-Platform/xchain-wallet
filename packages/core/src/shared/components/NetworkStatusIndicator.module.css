@@ -65,7 +65,7 @@
 .wrap .popover {
     display: none;
     /* The content-width cap has no layout-token equivalent. */
-    width: min(280px, calc(100vw - var(--xc-page-gutter) - var(--xc-page-gutter)));
+    width: min(280px, calc(100vw - var(--xc-space-3) - var(--xc-space-3)));
     font-size: var(--xc-text-sm);
 }
 

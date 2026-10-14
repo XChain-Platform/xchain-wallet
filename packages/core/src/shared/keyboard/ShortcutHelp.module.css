@@ -13,7 +13,7 @@
     align-items: flex-start;
     justify-content: center;
     padding-block: min(10vh, var(--xc-space-8));
-    padding-inline: var(--xc-page-gutter);
+    padding-inline: var(--xc-space-4);
 }
 
 .panel {

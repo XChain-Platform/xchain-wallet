@@ -42,7 +42,7 @@
     z-index: 20;
     /* The menu's label-driven minimum has no layout-token equivalent. */
     min-width: 208px;
-    max-width: calc(100vw - var(--xc-page-gutter) - var(--xc-page-gutter));
+    max-width: calc(100vw - var(--xc-space-3) - var(--xc-space-3));
     padding: var(--xc-space-1);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);

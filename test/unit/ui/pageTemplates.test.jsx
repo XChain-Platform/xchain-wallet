@@ -589,7 +589,7 @@ describe('list page rhythm tokens', () => {
         expect(ruleBody(sectionHeader, '.text')).toMatch(/gap:\s*var\(--xc-space-1\)/);
         expect(ruleBody(sectionHeader, '.description')).toMatch(/margin:\s*0/);
         expect(ruleBody(emptyState, '.wrap')).toMatch(/gap:\s*var\(--xc-section-header-gap\)/);
-        expect(ruleBody(emptyState, '.action')).not.toMatch(/margin/);
+        expect(ruleBody(emptyState, '.actions')).not.toMatch(/margin/);
     });
 
     it('uses the shared padding for balance rows and list footer rows', () => {

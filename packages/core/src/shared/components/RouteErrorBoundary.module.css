@@ -2,8 +2,9 @@
     /* Keep the untokenized 560px measure aligned with the wide FormPage card. */
     width: min(100%, 560px);
     margin: 0 auto;
-    /* Supply page edges because a top-level failure replaces Screen itself. */
-    padding: var(--xc-page-top) var(--xc-page-gutter);
+    /* A top-level failure replaces Screen, so this panel supplies its own
+       inset; the page gutter itself stays owned by Screen. */
+    padding: var(--xc-space-4);
 }
 
 .title {
