@@ -160,7 +160,6 @@
     --xc-control-icon-lg: 24px;
     --xc-control-line: 1.25;
     --xc-control-radius: 8px;
-    --xc-control-border: 1px;
     --xc-control-hit-min: 24px;
     --xc-control-font: var(--xc-control-font-md);
     --xc-control-pad-x: var(--xc-control-pad-x-md);
@@ -916,7 +915,7 @@ fieldset {
     line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background-color: var(--xc-surface);
-    border: var(--xc-control-border, 1px) solid var(--xc-border-strong);
+    border: 1px solid var(--xc-control-border);
     border-radius: var(--xc-control-radius, 8px);
     max-width: 100%;
 }

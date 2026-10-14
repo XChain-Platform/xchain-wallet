@@ -24,6 +24,18 @@ afterEach(() => {
 });
 
 describe('<Input>', () => {
+    it('keeps a visible default border on shared fields and classless selects', () => {
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+
+        expect(inputCss).toMatch(
+            /\.input\s*\{[^}]*border:\s*1px solid var\(--xc-control-border\)/s,
+        );
+        expect(tokensCss).toMatch(
+            /:where\(select:not\(\[class\]\)\)\s*\{[^}]*border:\s*1px solid var\(--xc-control-border\)/s,
+        );
+    });
+
     it.each(['sm', 'md', 'lg'])('shares the %s height and radius tokens across text controls', (size) => {
         render(
             <>
@@ -79,7 +91,6 @@ describe('<Input>', () => {
             '--xc-control-icon-lg': '24px',
             '--xc-control-line': '1.25',
             '--xc-control-radius': '8px',
-            '--xc-control-border': '1px',
             '--xc-control-hit-min': '24px',
         };
 

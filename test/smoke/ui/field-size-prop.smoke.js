@@ -51,7 +51,6 @@ for (const [token, value] of Object.entries({
     '--xc-control-icon-lg': '24px',
     '--xc-control-line': '1.25',
     '--xc-control-radius': '8px',
-    '--xc-control-border': '1px',
     '--xc-control-hit-min': '24px',
 })) {
     assert.match(tokensCss, new RegExp(`${token}:\\s*${value.replace('.', '\\.')}\\s*;`),
