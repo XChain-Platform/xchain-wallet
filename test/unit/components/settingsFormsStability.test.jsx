@@ -149,6 +149,17 @@ describe('settings form validation', () => {
         expect(screen.getByRole('option', { name: 'pseudo-rtl' })).toHaveValue('pseudo-rtl');
     });
 
+    it('applies and persists a selected language', async () => {
+        settings = { ...settings, developerMode: true };
+        render(<LanguageRegionSection />);
+
+        fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'pseudo-rtl' } });
+
+        await waitFor(() => expect(update).toHaveBeenCalledWith({ language: 'pseudo-rtl' }));
+        expect(document.documentElement.lang).toBe('en');
+        expect(document.documentElement.dir).toBe('rtl');
+    });
+
     it('presents equal secondary contact actions in one wrapping row', async () => {
         render(<ContactsSection />);
         await screen.findByText('0 contacts stored');
@@ -215,13 +226,15 @@ describe('settings form validation', () => {
         });
     });
 
-    it('uses a wheel-safe decimal text field and rejects exponent test-send thresholds', () => {
+    it('uses a wheel-safe integer text field and rejects exponent test-send thresholds', () => {
         render(<SafetySection />);
         const input = screen.getByLabelText('Test-send warning threshold (sats)');
         const initialValue = input.value;
 
         expect(input.type).toBe('text');
-        expect(input.inputMode).toBe('decimal');
+        expect(input.inputMode).toBe('numeric');
+        expect(input).toHaveAttribute('enterkeyhint', 'done');
+        expect(input).toHaveAttribute('autocomplete', 'off');
         fireEvent.wheel(input, { deltaY: -100 });
         expect(input.value).toBe(initialValue);
 

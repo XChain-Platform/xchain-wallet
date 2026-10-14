@@ -133,7 +133,7 @@ describe('wallet import flow', () => {
         fillPhrase(PHRASE.replace(/about$/, 'notaword'));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Unknown recovery phrase word "notaword"',
+            'Word 12 ("notaword") is not in the recovery phrase word list. Check its spelling.',
         );
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
     });

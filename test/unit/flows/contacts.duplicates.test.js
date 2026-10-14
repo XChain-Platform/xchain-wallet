@@ -40,7 +40,7 @@ describe('saveContact address uniqueness', () => {
         ]);
 
         await expect(saveContact({ vault, record: imported }))
-            .rejects.toThrow('address appears more than once');
+            .rejects.toThrow('This address appears more than once for Imported');
         expect(vault.contacts.put).not.toHaveBeenCalled();
     });
 
@@ -50,7 +50,7 @@ describe('saveContact address uniqueness', () => {
         const duplicate = record('bob', 'Bob', [{ ...ENTRY, address: 'BC1QDUPLICATE' }]);
 
         await expect(saveContact({ vault, record: duplicate }))
-            .rejects.toThrow('address already belongs to Alice');
+            .rejects.toThrow('This address is already saved for Alice');
         await expect(saveContact({ vault, record: { ...alice, notes: 'Friend' } }))
             .resolves.toMatchObject({ id: 'alice', notes: 'Friend' });
         expect(vault.contacts.put).toHaveBeenCalledOnce();
@@ -95,9 +95,26 @@ describe('saveContact address uniqueness', () => {
         }]);
 
         await expect(saveContact({ vault, record: samePair }))
-            .rejects.toThrow('address already belongs to Alice');
+            .rejects.toThrow('This address is already saved for Alice');
         await expect(saveContact({ vault, record: otherChain }))
             .resolves.toMatchObject({ id: 'carol' });
+    });
+
+    it('refuses a repeated name on add or edit and names the existing contact', async () => {
+        const alice = record('alice', 'Alice', [ENTRY]);
+        const bob = record('bob', 'Bob', [{ chain: 'litecoin', address: 'ltc1qbob', label: '' }]);
+        const vault = fakeVault([alice, bob]);
+
+        await expect(saveContact({
+            vault,
+            input: {
+                name: ' alice ',
+                entries: [{ chain: 'dogecoin', address: 'DNewContact', label: '' }],
+            },
+        })).rejects.toThrow('A contact named "Alice" already exists.');
+        await expect(saveContact({ vault, record: { ...bob, name: 'ALICE' } }))
+            .rejects.toThrow('A contact named "Alice" already exists.');
+        expect(vault.contacts.put).not.toHaveBeenCalled();
     });
 
     it('refuses to overwrite a contact that changed after editing began', async () => {

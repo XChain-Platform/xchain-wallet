@@ -443,6 +443,31 @@ describe('AppHeader action row', () => {
         await waitFor(() => expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull());
         expect(screen.getByRole('heading', { name: 'wallets' })).toHaveFocus();
     });
+
+    it('supports arrow, Enter, and Tab keys in the header action menu', () => {
+        const onManageAddresses = vi.fn();
+        render(<AppHeader onScan={() => {}} onManageAddresses={onManageAddresses} onViewAddress={() => {}} />);
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('menuitem', { name: 'Scan' })).toHaveFocus();
+
+        fireEvent.keyDown(document.activeElement, { key: 'ArrowDown' });
+        const manage = screen.getByRole('menuitem', { name: 'Manage addresses' });
+        expect(manage).toHaveFocus();
+        fireEvent.keyDown(manage, { key: 'Enter' });
+        expect(onManageAddresses).toHaveBeenCalledOnce();
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.keyDown(trigger, { key: 'ArrowUp' });
+        const last = screen.getAllByRole('menuitem').at(-1);
+        expect(last).toHaveFocus();
+        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        fireEvent(last, event);
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(event.defaultPrevented).toBe(false);
+    });
 });
 
 describe('HeaderSettingsButton section gating', () => {

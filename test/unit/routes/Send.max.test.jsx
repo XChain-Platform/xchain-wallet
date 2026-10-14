@@ -124,7 +124,7 @@ describe('Send Max', () => {
         expect(messaging.quoteMaxSendable).not.toHaveBeenCalled();
     });
 
-    it('leaves the amount alone and shows a plain note when Max is below dust', async () => {
+    it('keeps the amount blank and shows a plain note when Max is below dust', async () => {
         mount({
             nativeQuantity: '1000',
             quote: vi.fn().mockResolvedValue({
@@ -139,6 +139,28 @@ describe('Send Max', () => {
 
         await screen.findByText(/below the 0\.00000546 BTC dust minimum/);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('clears a stale amount and disables Send when the selected fee consumes the balance', async () => {
+        mount({
+            nativeQuantity: '1000',
+            quote: vi.fn().mockResolvedValue({
+                maxSats: '0',
+                feeSats: '1200',
+                inputSats: '1000',
+                otherOutputSats: '0',
+                source: 'encoder-quote',
+            }),
+        });
+        const amount = await screen.findByLabelText(/^Amount \(/);
+        fireEvent.change(amount, { target: { value: '0.00000546' } });
+        await prepareNativeMax();
+
+        await screen.findByText('The selected network fee uses the available balance, so Max cannot create a payment.');
+        expect(amount).toHaveValue('');
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
         expect(screen.queryByRole('alert')).toBeNull();
     });
 });

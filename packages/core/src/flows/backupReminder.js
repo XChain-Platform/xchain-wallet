@@ -16,14 +16,30 @@
 // walletId so the data survives reload without churning the vault schema.
 // Home only prompts wallets that have no recorded verification.
 
+import { logConsole } from '../shared/utils/logConsole.js';
+
 const STORAGE_KEY = 'xc:backupVerifiedAt';
 const FUNDED_AT_KEY = 'xc:backupReminderFundedAt';
 const SESSION_DISMISS_KEY = 'xc:backupReminderDismissedUntil';
 const FIRM_AFTER_DAYS = 7;
 const DISMISS_HOURS = 24;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const memoryStores = new Map();
+let storageFailureLogged = false;
+
+function keepMemoryStore(key, map) {
+    memoryStores.set(key, { ...map });
+    if (storageFailureLogged) return;
+    storageFailureLogged = true;
+    logConsole.record({
+        source: 'backup-reminder',
+        level: 'warn',
+        message: 'local storage write failed; using in-memory state',
+    });
+}
 
 function readStore(key) {
+    if (memoryStores.has(key)) return { ...memoryStores.get(key) };
     try {
         const raw = globalThis.localStorage?.getItem(key);
         if (!raw) return {};
@@ -36,8 +52,16 @@ function readStore(key) {
 
 function writeStore(key, map) {
     try {
-        globalThis.localStorage?.setItem(key, JSON.stringify(map));
-    } catch { /* localStorage unavailable; best-effort */ }
+        const storage = globalThis.localStorage;
+        if (!storage) {
+            keepMemoryStore(key, map);
+            return;
+        }
+        storage.setItem(key, JSON.stringify(map));
+        memoryStores.delete(key);
+    } catch {
+        keepMemoryStore(key, map);
+    }
 }
 
 function announceStoreChange(key) {
@@ -122,6 +146,8 @@ export function hasBackupReminderFunds(rows) {
  * @typedef {Object} BackupReminderInput
  * @property {string} walletId
  * @property {boolean} hasFunds                            current balance includes confirmed, pending, or escrowed funds
+ * @property {boolean} [isDemo]
+ * @property {string | null} [walletMode]
  * @property {number} [now]                                 epoch ms (injectable for tests)
  */
 
@@ -139,21 +165,28 @@ export function hasBackupReminderFunds(rows) {
  * @returns {BackupReminderState}
  */
 export function computeBackupReminderState(input) {
-    const { walletId, hasFunds = false } = input || {};
+    const {
+        walletId,
+        hasFunds = false,
+        isDemo = false,
+        walletMode = 'full',
+    } = input || {};
     const now = typeof input?.now === 'number' && Number.isFinite(input.now)
         ? input.now
         : Date.now();
-    if (typeof walletId !== 'string' || !walletId) return { kind: 'hidden' };
+    if (typeof walletId !== 'string' || !walletId
+        || isDemo || walletMode === null || walletMode === 'watcher') {
+        return { kind: 'hidden' };
+    }
 
     const verifiedAt = getBackupVerifiedAt(walletId);
     if (verifiedAt) return { kind: 'hidden' };
 
-    const fundedAt = firstFundedAt(walletId, hasFunds, now);
-    if (fundedAt === null) return { kind: 'hidden' };
     const recheckAt = dismissedUntil(walletId, now);
     if (recheckAt !== null) return { kind: 'hidden', recheckAt };
-    const fundedDays = Math.max(0, now - fundedAt) / MS_PER_DAY;
-    if (fundedDays >= FIRM_AFTER_DAYS) {
+    const fundedAt = firstFundedAt(walletId, hasFunds, now);
+    const fundedDays = fundedAt === null ? 0 : Math.max(0, now - fundedAt) / MS_PER_DAY;
+    if (fundedAt !== null && fundedDays >= FIRM_AFTER_DAYS) {
         return {
             kind: 'firm',
             headline: 'Back up your wallet',

@@ -75,7 +75,7 @@ describe('BatchComposerForm rows', () => {
         expect(second.queryByText('Step 2: pick an action.')).toBeNull();
 
         fireEvent.change(second.getByRole('textbox', { name: 'Params (JSON object)' }), { target: { value: '{' } });
-        expect(second.getByText(/Step 2: params JSON parse error/)).toBeInTheDocument();
+        expect(second.getByText(/Step 2: Params JSON is not valid/)).toBeInTheDocument();
         fireEvent.change(second.getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0"}' },
         });

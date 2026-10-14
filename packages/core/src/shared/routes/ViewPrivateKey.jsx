@@ -305,7 +305,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 )}
                 <Button
                     variant="ghost"
-                    size="sm"
                     onClick={() => setRevealed(false)}
                     disabled={!revealed}
                 >

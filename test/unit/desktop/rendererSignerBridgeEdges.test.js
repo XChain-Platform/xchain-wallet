@@ -39,8 +39,7 @@ describe('desktop renderer signer bridge edges', () => {
         expect(signerBridge.registeredIds()).toEqual([]);
     });
 
-    // Bug: a failed preload registration leaves the signer live in the renderer registry.
-    it.skip('rolls back registration when the signer preload bridge is unavailable', () => {
+    it('rolls back registration when the signer preload bridge is unavailable', () => {
         expect(() => signerBridge.registerSigner('ledger-1', { signPsbt: vi.fn() }))
             .toThrow('xchainWalletSignerBridge not exposed by preload');
 

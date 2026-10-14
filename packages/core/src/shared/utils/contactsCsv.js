@@ -64,6 +64,7 @@ export function contactsFromCsv(text, options = {}) {
     const now = options.now || new Date().toISOString();
     const makeId = options.makeId || randomUUID;
     const groups = new Map();
+    const nameOwners = new Map();
     const addressOwners = new Map();
     const failures = [];
     let duplicates = 0;
@@ -80,18 +81,16 @@ export function contactsFromCsv(text, options = {}) {
         const groupKey = value.id.trim() || `name:${value.name.trim().toLocaleLowerCase()}`;
         let group = groups.get(groupKey);
         if (!group) {
-            const record = {
-                schemaVersion: value.schemaVersion.trim() === '' ? 1 : Number(value.schemaVersion),
-                id: value.id.trim() || makeId(),
-                name: value.name.trim(),
-                notes: value.notes,
-                entries: [],
-                avatarSeed: value.avatarSeed || value.address.trim(),
-                createdAt: value.createdAt.trim() || now,
-                updatedAt: value.updatedAt.trim() || now,
-            };
-            group = { record, line: row.line, source: value };
-            groups.set(groupKey, group);
+            const nameKey = value.name.trim().toLowerCase();
+            const nameOwner = nameOwners.get(nameKey);
+            if (nameOwner && nameOwner.groupKey !== groupKey) {
+                failures.push(failure(
+                    row.line,
+                    value.name,
+                    `contact name already belongs to ${nameOwner.name} (line ${nameOwner.line}).`,
+                ));
+                continue;
+            }
         } else {
             const mismatch = CONTACT_FIELDS.find((field) => {
                 if (field === 'schemaVersion') return value[field].trim() && Number(value[field]) !== group.record[field];
@@ -107,17 +106,39 @@ export function contactsFromCsv(text, options = {}) {
         }
 
         const address = value.address.trim();
-        const addressKey = normalizedAddress(address);
+        const addressKey = `${value.chain.trim().toLowerCase()}|${normalizedAddress(address)}`;
         const owner = addressOwners.get(addressKey);
         if (owner) {
             if (owner.groupKey === groupKey) {
                 duplicates += 1;
-            } else {
-                failures.push(failure(row.line, value.name, `address duplicates line ${owner.line}.`));
             }
+            failures.push(failure(
+                row.line,
+                value.name,
+                `address already belongs to ${owner.name} (line ${owner.line}).`,
+            ));
             continue;
         }
-        addressOwners.set(addressKey, { groupKey, line: row.line });
+        if (!group) {
+            const record = {
+                schemaVersion: value.schemaVersion.trim() === '' ? 1 : Number(value.schemaVersion),
+                id: value.id.trim() || makeId(),
+                name: value.name.trim(),
+                notes: value.notes,
+                entries: [],
+                avatarSeed: value.avatarSeed || value.address.trim(),
+                createdAt: value.createdAt.trim() || now,
+                updatedAt: value.updatedAt.trim() || now,
+            };
+            group = { record, line: row.line, source: value };
+            groups.set(groupKey, group);
+            nameOwners.set(value.name.trim().toLowerCase(), {
+                groupKey,
+                line: row.line,
+                name: record.name,
+            });
+        }
+        addressOwners.set(addressKey, { groupKey, line: row.line, name: group.record.name });
         group.record.entries.push({
             chain: value.chain.trim().toLowerCase(),
             address,

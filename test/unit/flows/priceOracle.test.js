@@ -23,8 +23,14 @@ describe('priceOracle', () => {
 
         await expect(oracle.getNativePrices({ chainIds: ['custom-chain'] }))
             .resolves.toEqual({ prices: { 'custom-chain': null } });
+        await expect(oracle.getNativePrices({ chainIds: ['bitcoin-testnet', 'litecoin-regtest'] }))
+            .resolves.toEqual({ prices: { 'bitcoin-testnet': null, 'litecoin-regtest': null } });
         expect(fetch).not.toHaveBeenCalled();
-        expect(COINGECKO_SUPPORTED_CHAINS).toContain('bitcoin-regtest');
+        expect(COINGECKO_SUPPORTED_CHAINS).toEqual([
+            'bitcoin-mainnet',
+            'litecoin-mainnet',
+            'dogecoin-mainnet',
+        ]);
     });
 
     it('batches spot prices and caches them by fiat currency', async () => {
@@ -109,7 +115,7 @@ describe('priceOracle', () => {
         expect(refreshedChart.prices['bitcoin-mainnet'].sparkline).toEqual([67000]);
     });
 
-    it('returns cached data with the spot error and retries after clearCache', async () => {
+    it('labels expired cached data stale after a failed refresh and retries after clearCache', async () => {
         let time = 0;
         const fetch = vi.fn()
             .mockResolvedValueOnce(response({
@@ -130,7 +136,12 @@ describe('priceOracle', () => {
         // A 503 is retried once by fetchWithRetry before it reports the
         // service as unavailable, so each failed refresh costs two requests.
         const unavailable = 'The network service is temporarily unavailable. Please try again.';
-        expect(stale).toEqual({ prices: first.prices, error: unavailable });
+        expect(first.prices['dogecoin-mainnet'].priceFiat).toBe(0.2);
+        expect(stale).toEqual({
+            prices: { 'dogecoin-mainnet': { ...first.prices['dogecoin-mainnet'], stale: true } },
+            error: unavailable,
+        });
+        expect(stale.prices['dogecoin-mainnet'].stale).toBe(true);
         oracle.clearCache();
         await expect(oracle.getNativePrices(request)).resolves.toEqual({
             prices: {},

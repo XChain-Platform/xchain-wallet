@@ -45,6 +45,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -91,7 +92,10 @@ function blankRow() {
     return { id: newRowId(), action: '', paramsJson: '{\n  "VERSION": "0"\n}' };
 }
 
-/** The raw error text for the collapsed details, or '' when the shown sentence already carries it. */
+/**
+ * The raw error text for the collapsed details disclosure, or '' when the
+ * shown sentence already carries it. The raw text never reaches the shown copy.
+ */
 function technicalDetails(err, shown) {
     const raw = String(err?.message || '').trim();
     return raw && !String(shown || '').includes(raw) ? raw : '';
@@ -109,7 +113,12 @@ function parseRowParams(json) {
         }
         return { params: parsed };
     } catch (err) {
-        return { error: `params JSON parse error: ${err?.message || String(err)}` };
+        return {
+            error: userFacingMessage(
+                err,
+                'Params JSON is not valid. Check the syntax and try again.',
+            ),
+        };
     }
 }
 
@@ -182,7 +191,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             setChainId(chains[0]);
             setFromAddressId(pickDefaultAddressId(byChain[chains[0]] || [], active?.[chains[0]]));
         }).catch((err) => {
-            if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+            if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet.'));
         });
         return () => { cancelled = true; };
     }, [walletId, messaging, hasDexSurface]);
@@ -325,10 +334,10 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            // Was `err?.message`, i.e. the encoder's developer string on
-            // screen; every other migrated form maps through this helper.
+            // Keep the generic fallback independent of caught provider text so
+            // the shared message filters remain the only display boundary.
             setSubmitError(submitFailureMessage(err, {
-                chainId, coinTicker, fallback: err?.message || 'Batch failed.',
+                chainId, coinTicker, fallback: 'Batch failed.',
             }));
             setStage('review');
         }
@@ -380,7 +389,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             const shown = bad ? 'Incorrect password.' : submitFailureMessage(err, {
-                chainId, coinTicker, fallback: err?.message || 'Batch failed.',
+                chainId, coinTicker, fallback: 'Batch failed.',
             });
             setSubmitError(shown);
             setSubmitErrorDetails(bad ? '' : technicalDetails(err, shown));

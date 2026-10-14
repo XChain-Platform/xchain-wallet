@@ -85,13 +85,12 @@ describe('SOCKS handshake error branches', () => {
         await expect(probeSocks({ host: '127.0.0.1', port: proxyPort })).resolves.toEqual({ ok: true });
     });
 
-    // Bug: socksConnect stays pending when the proxy closes a handshake without an error.
-    it.skip('rejects immediately when the proxy disconnects during the handshake', async () => {
+    it('rejects immediately when the proxy disconnects during the handshake', async () => {
         const proxyPort = await listen((socket) => socket.end());
 
         const result = await Promise.race([
             socksConnect({
-                proxyHost: '127.0.0.1', proxyPort, host: 'example.com', port: 443, timeoutMs: 25,
+                proxyHost: '127.0.0.1', proxyPort, host: 'example.com', port: 443, timeoutMs: 1_000,
             }).then(
                 () => ({ state: 'resolved' }),
                 (error) => ({ state: 'rejected', error }),
@@ -100,5 +99,6 @@ describe('SOCKS handshake error branches', () => {
         ]);
         expect(result.state).toBe('rejected');
         expect(result.error).toBeInstanceOf(SocksError);
+        expect(result.error.message).toBe('SOCKS proxy closed during handshake');
     });
 });

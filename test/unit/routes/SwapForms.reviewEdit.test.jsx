@@ -102,6 +102,23 @@ describe('swap review editing', () => {
         expect(screen.getByLabelText('Receive at (optional)')).toBeVisible();
     });
 
+    it('treats a tiny plain decimal as positive without floating-point underflow', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging()}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        const tiny = `0.${'0'.repeat(400)}1`;
+        setAmount('Give amount (ALPHA)', tiny);
+        setAmount('Get amount (BETA)', '1');
+
+        expect(screen.queryByText('Give amount must be a positive decimal number.')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled();
+    });
+
     it('blocks non-positive same-chain amounts before review', async () => {
         render(
             <MessagingProvider shell="desktop" messaging={messaging()}>

@@ -17,6 +17,7 @@ import {
     formatTokenQuantity,
     normalizeLocalizedDecimal,
     countNonCommaBefore,
+    decimalToBaseUnits,
     decimalFromBaseUnits,
     formatDisplayAmount,
     formatHistoryAmount,
@@ -41,6 +42,16 @@ describe('shared/amountFormat display policy', () => {
     });
 
     it.each([
+        ['small positive exponent', '1e-8', '0.00000001'],
+        ['small negative exponent', '-1e-8', '-0.00000001'],
+        ['large positive exponent', '1.2e+21', '1,200,000,000,000,000,000,000'],
+        ['large negative exponent', '-1.2e+21', '-1,200,000,000,000,000,000,000'],
+    ])('expands a %s without float conversion', (_label, value, expected) => {
+        expect(formatDisplayAmount(value, 'en-US')).toBe(expected);
+        expect(formatDisplayAmount(value, 'en-US')).not.toMatch(/[eE]/);
+    });
+
+    it.each([
         ['incoming', '1.25000000', 'in', '+1.25'],
         ['outgoing', '1.25000000', 'out', '-1.25'],
         ['unknown direction', '1.25000000', null, '1.25'],
@@ -62,6 +73,12 @@ describe('shared/amountFormat formatTokenQuantity', () => {
         ['very large supply', '123456789012345678901234567890.5', 8, '123,456,789,012,345,678,901,234,567,890.5'],
     ])('formats a %s exactly', (_label, value, divisibility, expected) => {
         expect(formatTokenQuantity(value, divisibility, 'en-US')).toBe(expected);
+    });
+
+    it('applies asset precision and trimming after expanding exponent notation', () => {
+        expect(formatTokenQuantity('1e-8', 8, 'en-US')).toBe('0.00000001');
+        expect(formatTokenQuantity('-1.23000000e+21', 8, 'en-US'))
+            .toBe('-1,230,000,000,000,000,000,000');
     });
 });
 
@@ -123,6 +140,12 @@ describe('shared/amountFormat formatWithThousands', () => {
         expect(formatWithThousands(12345)).toBe('12,345');
     });
 
+    it('expands numeric arguments that stringify with exponents', () => {
+        expect(formatWithThousands(1e-8, 'en-US')).toBe('0.00000001');
+        expect(formatWithThousands(-1.2e21, 'en-US'))
+            .toBe('-1,200,000,000,000,000,000,000');
+    });
+
     it.each([
         ['de-DE', '1234.56', '1.234,56'],
         ['fr-FR', '1234.56', '1\u202f234,56'],
@@ -165,6 +188,14 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
         ['hi-IN', '1,234,56.78'],
     ])('rejects malformed %s input %s instead of guessing', (locale, input) => {
         expect(normalizeLocalizedDecimal(input, locale)).toBeNull();
+    });
+
+    it('keeps input normalization exact at parser boundaries', () => {
+        expect(normalizeLocalizedDecimal('  1.234,56  ', 'de-DE')).toBe('1234.56');
+        expect(normalizeLocalizedDecimal('9,007,199,254,740,993.01', 'en-US'))
+            .toBe('9007199254740993.01');
+        expect(normalizeLocalizedDecimal('.')).toBe('.');
+        expect(normalizeLocalizedDecimal('1e-8')).toBeNull();
     });
 });
 
@@ -250,6 +281,13 @@ describe('shared/amountFormat token precision validation', () => {
 });
 
 describe('shared/amountFormat exact rendering', () => {
+    it('converts validated decimal input to base units without a Number round trip', () => {
+        expect(decimalToBaseUnits('90071992.54740993', 8)).toBe(9007199254740993n);
+        expect(decimalToBaseUnits('1.000000001', 8)).toBeNull();
+        expect(decimalToBaseUnits('.', 8)).toBeNull();
+        expect(decimalToBaseUnits('1e-8', 8)).toBeNull();
+    });
+
     it.each([
         ['zero scale', '123', 0, '123'],
         ['fractional scale', '123', 2, '1.23'],

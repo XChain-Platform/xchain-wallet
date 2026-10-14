@@ -23,6 +23,8 @@ const COIN_SCHEMES = Object.freeze({
     dogecoin: { coin: 'dogecoin', tick: 'DOGE' },
 });
 
+const ROUTABLE_XCHAIN_ACTIONS = new Set(['send', 'receive', 'execute']);
+
 export const INVALID_DEEP_LINK_MESSAGE = 'This link is invalid or unsupported.';
 
 function invalidRoute() {
@@ -91,6 +93,10 @@ export function deepLinkRoute(raw, chainRegistry) {
     } catch {
         return invalidRoute();
     }
+    // The parser preserves unknown actions as send-shaped intents for generic
+    // URI tooling. External links accept only screens that require an explicit
+    // review action, so a typo or future privileged action fails closed here.
+    if (intent?.action && !ROUTABLE_XCHAIN_ACTIONS.has(intent.action)) return invalidRoute();
     if (intent?.kind === 'send') {
         let amount = intent.amount;
         try {
@@ -125,6 +131,20 @@ export function deepLinkRoute(raw, chainRegistry) {
 }
 
 /**
+ * Route a payload received through a registered protocol boundary. Unlike a
+ * scanner or paste field, every nonempty value here claims to be a wallet link,
+ * so an unrelated scheme is an invalid-link message rather than a no-op.
+ *
+ * @param {unknown} raw
+ * @param {any} chainRegistry
+ * @returns {ReturnType<typeof deepLinkRoute>}
+ */
+export function claimedDeepLinkRoute(raw, chainRegistry) {
+    if (typeof raw !== 'string' || raw.trim().length === 0) return null;
+    return deepLinkRoute(raw, chainRegistry) ?? invalidRoute();
+}
+
+/**
  * Claim parked links from main: once now, then again on every nudge. Only what
  * takePending returns is routed, so each link lands in at most one window. A
  * detached window claims nothing; it keeps the view it was opened on.
@@ -139,7 +159,7 @@ export function watchDeepLinks({ bridge, detached, chainRegistry, onRoute }) {
         Promise.resolve()
             .then(() => bridge.takePending())
             .then((event) => {
-                const route = live ? deepLinkRoute(event?.raw, chainRegistry) : null;
+                const route = live ? claimedDeepLinkRoute(event?.raw, chainRegistry) : null;
                 if (route) onRoute(route);
             })
             .catch(() => { /* a failed claim is dropped; the next nudge claims again */ });

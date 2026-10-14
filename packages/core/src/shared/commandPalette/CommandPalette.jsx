@@ -18,13 +18,10 @@
 // Keyboard (§33.4):
 //   ↑ / ↓    move the selection through the flat result list (wrapping)
 //   Enter    run the selected command and close
-//   Tab      jump the selection to the first result of the next category
-//   Shift+Tab   ... previous category
+//   Tab      close the palette and continue through the page tab order
 //   Esc      close
-// The search input keeps focus the whole time (it is the only tab stop),
-// so the arrow keys drive a `aria-activedescendant` selection rather than
-// roving DOM focus. That keeps the combobox pattern accessible and avoids a
-// focus-trap dance.
+// The search input keeps focus while the palette is active, so the arrow keys
+// drive an `aria-activedescendant` selection rather than roving DOM focus.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Icon } from '../../ui/index.js';
@@ -53,8 +50,8 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const listRef = useRef(/** @type {HTMLUListElement | null} */ (null));
     const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    // The input owns Tab (it jumps result categories), so this only returns
-    // focus to the control that opened the palette when it closes.
+    // The palette does not trap Tab, so this only returns focus to the control
+    // that opened the palette when another dismissal path closes it.
     useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef, trap: false });
 
     const results = useMemo(() => {
@@ -133,24 +130,6 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         command.run();
     };
 
-    // First index of the category that follows (or precedes) the currently
-    // selected result. Used by Tab / Shift+Tab (§33.4 "Tab cycles result
-    // categories"). Wraps around the ends.
-    const jumpCategory = (dir) => {
-        if (results.length === 0) return;
-        const current = results[activeIndex]?.category;
-        // Ordered list of distinct categories as they appear in results.
-        const order = [];
-        for (const r of results) {
-            if (!order.includes(r.category)) order.push(r.category);
-        }
-        if (order.length <= 1) return;
-        const ci = order.indexOf(current);
-        const nextCat = order[(ci + dir + order.length) % order.length];
-        const target = results.findIndex((r) => r.category === nextCat);
-        if (target >= 0) setActiveIndex(target);
-    };
-
     const onKeyDown = (e) => {
         switch (e.key) {
             case 'ArrowDown':
@@ -166,8 +145,7 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                 runAt(activeIndex);
                 break;
             case 'Tab':
-                e.preventDefault();
-                jumpCategory(e.shiftKey ? -1 : 1);
+                onClose();
                 break;
             default:
                 break;

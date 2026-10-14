@@ -14,9 +14,9 @@
 // layouts (once extracted) swap-compatible across shells.
 
 import { getRecentShellErrors } from './errorCapture.js';
+import { memoizeRetryablePromise } from './retryablePromise.js';
 
-let hostBridgePromise;
-const loadHostBridge = () => (hostBridgePromise ??= import('./hostBridge.js'));
+const loadHostBridge = memoizeRetryablePromise(() => import('./hostBridge.js'));
 
 // An arrow binding exported by name: the host route-table test reads a
 // declared parameter list as a computed send type, and the shell parity

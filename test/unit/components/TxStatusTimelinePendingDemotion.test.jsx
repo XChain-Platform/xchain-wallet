@@ -28,6 +28,7 @@ import { TxStatusTimeline } from '../../../packages/core/src/shared/components/T
 import {
     NETWORK_SEEN_WINDOW_MS,
     DROPPED_GRACE_MS,
+    pendingDisplayState,
 } from '../../../packages/core/src/shared/utils/pendingHistory.js';
 
 const NOW = Date.UTC(2026, 7, 27, 12, 10, 0);
@@ -133,14 +134,16 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
         expect(mempoolRow().textContent).toContain('Broadcast, awaiting network');
     });
 
-    it('asks "Dropped or replaced?" when a node stopped reporting it past the grace window', () => {
+    it('shows a plain failure when a node stopped reporting it past the grace window', () => {
         const gone = pendingEntry({
             origin: 'local',
             lastMempoolSeenMs: NOW - (DROPPED_GRACE_MS + 1000),
         });
         render(<TxStatusTimeline entry={gone} />);
         const row = mempoolRow();
-        expect(row.textContent).toContain('Dropped or replaced?');
+        expect(row.textContent).toContain('Failed');
+        expect(row.textContent).toContain('The network stopped reporting this transaction and it did not confirm');
+        expect(row.textContent).not.toContain('replaced?');
         expect(row.className).toContain('rowWarn');
     });
 
@@ -156,9 +159,17 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
     });
 
     it('labels an RBF replacement as replaced, not as a warning', () => {
-        render(<TxStatusTimeline entry={pendingEntry({ replaced: true, localStatus: 'rbf-replaced' })} />);
+        render(<TxStatusTimeline entry={pendingEntry({
+            replaced: true,
+            localStatus: 'rbf-replaced',
+            replacementTxHash: 'replacement-hash',
+        })} />);
         const row = mempoolRow();
         expect(row.textContent).toContain('Replaced');
+        expect(pendingDisplayState(pendingEntry({
+            replaced: true,
+            replacementTxHash: 'replacement-hash',
+        }), NOW)).toBe('replaced');
         expect(row.className).not.toContain('rowWarn');
     });
 

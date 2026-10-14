@@ -8,11 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useMemo } from 'react';
+import {
+    Children,
+    cloneElement,
+    isValidElement,
+    useMemo,
+    useSyncExternalStore,
+} from 'react';
 import { MessagingContext } from './MessagingContext.js';
 import { PrivacyBlurGate } from './PrivacyBlurGate.jsx';
 import { LocaleSync } from './LocaleSync.jsx';
 import { DisplayPrefsGate } from './DisplayPrefsGate.jsx';
+import { getLocale, onLocaleChange } from '../i18n/index.js';
+
+function reconcileForLocale(node) {
+    if (!isValidElement(node)) return node;
+    const children = Children.map(node.props.children, reconcileForLocale);
+    return cloneElement(node, undefined, children);
+}
 
 /**
  * Wraps the app shell so every shared route can reach the correct
@@ -34,13 +47,20 @@ import { DisplayPrefsGate } from './DisplayPrefsGate.jsx';
  * @param {import('react').ReactNode} props.children
  */
 export function MessagingProvider({ shell, messaging, children }) {
-    const value = useMemo(() => ({ shell, messaging }), [shell, messaging]);
+    // Locale is part of the shared render context so a runtime switch
+    // invalidates mounted screens while preserving their local state.
+    const locale = useSyncExternalStore(onLocaleChange, getLocale, getLocale);
+    const value = useMemo(() => ({ shell, messaging, locale }), [shell, messaging, locale]);
+    const renderedChildren = useMemo(
+        () => Children.map(children, reconcileForLocale),
+        [children, locale],
+    );
     return (
         <MessagingContext.Provider value={value}>
             <PrivacyBlurGate />
             <LocaleSync />
             <DisplayPrefsGate />
-            {children}
+            {renderedChildren}
         </MessagingContext.Provider>
     );
 }

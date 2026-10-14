@@ -35,6 +35,7 @@ import { useDropZone } from '../hooks/useDropZone.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { englishWordlist, isValidBip39Mnemonic } from '../../crypto/mnemonic.js';
+import { normalizeRecoveryPhrase } from '../../crypto/recoveryPhrase.js';
 import {
     COUNTERWALLET_WORDLIST,
     isValidCounterwalletMnemonic,
@@ -68,9 +69,7 @@ const COUNTERWALLET_WORDS = new Set(COUNTERWALLET_WORDLIST);
 const MAX_WORD_SUGGESTIONS = 5;
 
 function normalizePhraseEntry(value) {
-    return typeof value === 'string'
-        ? value.trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ')
-        : '';
+    return normalizeRecoveryPhrase(value);
 }
 
 function phraseFormat(value) {
@@ -81,9 +80,11 @@ function phraseFormat(value) {
 
 function phraseValidationMessage(value) {
     const words = value.split(' ');
-    const unknownWord = words.find((word) => !BIP39_WORDS.has(word) && !COUNTERWALLET_WORDS.has(word));
-    if (unknownWord) {
-        return `Unknown recovery phrase word "${unknownWord}". Check its spelling.`;
+    const unknownWordIndex = words.findIndex(
+        (word) => !BIP39_WORDS.has(word) && !COUNTERWALLET_WORDS.has(word),
+    );
+    if (unknownWordIndex !== -1) {
+        return `Word ${unknownWordIndex + 1} ("${words[unknownWordIndex]}") is not in the recovery phrase word list. Check its spelling.`;
     }
     if (words.every((word) => BIP39_WORDS.has(word))) {
         return 'Every word is in the BIP39 list, but the checksum does not match. Check the word order and spelling.';

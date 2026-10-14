@@ -304,13 +304,14 @@ export function Locked({ onUnlocked }) {
     }, [busy, clearUnlockingNoteTimer, inCaptureStep]);
 
     useEffect(() => {
-        if (busy || !restorePasswordFocusRef.current) return;
+        if (busy || isLockedOut || !restorePasswordFocusRef.current) return;
         restorePasswordFocusRef.current = false;
         inputRef.current?.focus();
         inputRef.current?.select();
-    }, [busy]);
+    }, [busy, isLockedOut]);
 
-    function finishFailedUnlock() {
+    function finishFailedUnlock({ clearPassword = false } = {}) {
+        if (clearPassword) setPassword('');
         restorePasswordFocusRef.current = true;
         setBusy(false);
     }
@@ -391,7 +392,7 @@ export function Locked({ onUnlocked }) {
                 setRemainingMs(nextRemaining);
                 setError(
                     nextRemaining > 0
-                        ? `Too many incorrect passwords on this device. Try again in ${formatCountdown(nextRemaining)}. Changing networks will not skip the wait.`
+                        ? null
                         : 'Incorrect password.',
                 );
                 haptic.error();
@@ -401,7 +402,7 @@ export function Locked({ onUnlocked }) {
                     : 'Could not unlock the wallet. Close and reopen the app, then try again.');
                 haptic.error();
             }
-            finishFailedUnlock();
+            finishFailedUnlock({ clearPassword: true });
         } finally {
             unlockInFlightRef.current = false;
         }
@@ -532,17 +533,13 @@ export function Locked({ onUnlocked }) {
             aria-live="polite"
         >
             <span>
-                {/* "incorrect passwords", never "attempts" or anything that
-                    reads as rate limiting: a tester who saw the old wording
-                    went looking for a VPN (rate-limits spec, the incident).
-                    "on this device" plus the explicit network sentence rule
-                    out that read directly, instead of relying on the tester
-                    to infer it from "incorrect passwords" alone. */}
-                Too many incorrect passwords on this device. Try again in{' '}
+                {/* The device scope and network guidance distinguish this
+                    local counter from a network-level restriction. */}
+                Too many incorrect passwords on this device. Wait{' '}
                 <span className={styles.lockoutCountdown}>
                     {formatCountdown(remainingMs)}
                 </span>
-                . Changing networks will not skip the wait.
+                {' '}before trying again. Changing networks will not skip the wait.
             </span>
         </div>
     ) : null;
@@ -798,7 +795,7 @@ export function Locked({ onUnlocked }) {
 
 
 /**
- * Format a remaining-ms value as a short, screen-reader-friendly string.
+ * Format a remaining-ms value with screen-reader-friendly time units.
  * Always rounds UP so "1s left" doesn't tick to "0s left" before the
  * lockout actually clears.
  *
@@ -807,13 +804,17 @@ export function Locked({ onUnlocked }) {
  */
 function formatCountdown(ms) {
     const totalSec = Math.max(0, Math.ceil(ms / 1000));
-    if (totalSec < 60) return `${totalSec}s`;
+    if (totalSec < 60) return `${totalSec} ${totalSec === 1 ? 'second' : 'seconds'}`;
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     if (mins < 60) {
-        return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`;
+        const minuteText = `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+        if (secs === 0) return minuteText;
+        return `${minuteText} ${secs} ${secs === 1 ? 'second' : 'seconds'}`;
     }
     const hours = Math.floor(mins / 60);
     const remMins = mins % 60;
-    return remMins === 0 ? `${hours}h` : `${hours}h ${remMins}m`;
+    const hourText = `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    if (remMins === 0) return hourText;
+    return `${hourText} ${remMins} ${remMins === 1 ? 'minute' : 'minutes'}`;
 }

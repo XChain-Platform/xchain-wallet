@@ -417,8 +417,16 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             title={stage === 'review' || stage === 'submitting' ? 'Review price publish' : 'My oracle'}
         />
     );
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
     );
 
     // The oracle-only facts that must sit in front of the signature on both

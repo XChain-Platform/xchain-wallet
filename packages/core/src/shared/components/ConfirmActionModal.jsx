@@ -424,6 +424,8 @@ export function ConfirmActionModal({
         </div>
     );
 
+    // The confirm page always opens at its top; it must not inherit how far
+    // the form behind it was scrolled.
     return (
         <Screen
             rootRef={pageRef}

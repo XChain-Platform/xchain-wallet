@@ -68,6 +68,12 @@ const PLATFORM_EXCEPTION_NAMES = new Set([
     'EncodingError', 'InvalidAccessError', 'OperationError',
 ]);
 
+// Built-in JavaScript subclasses carry engine-authored messages even when
+// their text lacks a stack prefix or another recognisable internal marker.
+const RUNTIME_ERROR_NAMES = new Set([
+    'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError',
+]);
+
 function isPlatformException(e) {
     if (typeof DOMException !== 'undefined' && e instanceof DOMException) return true;
     return PLATFORM_EXCEPTION_NAMES.has(String(e.name || ''));
@@ -131,6 +137,7 @@ export function isDeveloperMessage(err) {
     if (err && typeof err === 'object') {
         const e = /** @type {any} */ (err);
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
+        if (RUNTIME_ERROR_NAMES.has(String(e.name || ''))) return true;
         if (isPlatformException(e)) return true;
         if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }

@@ -81,12 +81,22 @@ export function sensitiveCopySupported(env = globalThis) {
 
 /**
  * Copy `value`, marking it sensitive when it is.
+ * Adapter failures resolve as `UNAVAILABLE` so UI click handlers never receive
+ * a rejected promise from a missing or restricted clipboard implementation.
  *
  * @param {string} value
  * @param {{ sensitive?: boolean, ttlSeconds?: number, env?: any }} [opts]
  * @returns {Promise<{ ok: boolean, native: boolean, reason?: string }>}
  */
 export async function copyText(value, opts = {}) {
+    try {
+        return await attemptCopyText(value, opts);
+    } catch {
+        return { ok: false, native: false, reason: CopyFailure.UNAVAILABLE };
+    }
+}
+
+async function attemptCopyText(value, opts) {
     const {
         sensitive = false,
         ttlSeconds = sensitiveAutoClearSeconds,

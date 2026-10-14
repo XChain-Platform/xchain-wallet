@@ -21,6 +21,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     unclaimedRewards,
     cooldownStatus,
@@ -127,7 +128,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 setAddressesByChain(byChain || {});
             })
             .catch((err) => {
-                if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setAddressesError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId, addressesReload]);
@@ -213,13 +214,13 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     ...(isValidatorChain ? [
                         messaging.getStakesForAddress({ chainId: cid, address: addr })
                             .then((r) => { out.stakes = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
-                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                            .catch((e) => { out.errors.push(userFacingMessage(e, 'Could not load staking positions. Try again.')); }),
                         messaging.getDelegationsForAddress({ chainId: cid, address: addr })
                             .then((r) => { out.delegations = extractRows(r); })
-                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                            .catch((e) => { out.errors.push(userFacingMessage(e, 'Could not load delegations. Try again.')); }),
                         messaging.getRewardsForAddress({ chainId: cid, address: addr })
                             .then((r) => { out.rewards = extractRows(r); })
-                            .catch((e) => { out.errors.push(e?.message || String(e)); }),
+                            .catch((e) => { out.errors.push(userFacingMessage(e, 'Could not load rewards. Try again.')); }),
                         // PC-47: the claim side of the unclaimed sum. Best-effort:
                         // a build without the route degrades to "nothing claimed
                         // yet", which OVERSTATES what is claimable, so the header
@@ -281,7 +282,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                             rows: [],
                             rewards: [],
                             rewardClaims: [],
-                            error: err?.message || 'Failed to load staking positions.',
+                            error: userFacingMessage(err, 'Failed to load staking positions.'),
                         },
                     }));
                 });

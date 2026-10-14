@@ -30,7 +30,6 @@ import {
     duplicateNameGroups,
     findContactByName,
     mergeContactGroup,
-    withEntriesAdded,
 } from '../utils/contactMerge.js';
 import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
@@ -406,6 +405,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setSubmitError('At least one address entry is required.');
             return;
         }
+        const nameOwner = findContactByName(contacts, formName);
+        if (nameOwner && nameOwner.id !== active?.id) {
+            setSubmitError(`A contact named "${nameOwner.name}" already exists.`);
+            return;
+        }
         // An address whose network cannot be read from its bytes (the shared
         // testnet/regtest version bytes) needs the user's word for it. Saving it
         // as 'unknown' is what put a question mark on every such contact and
@@ -446,20 +450,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     expectedUpdatedAt: editVersion,
                 });
             } else {
-                // A name the book already holds is the same person: add the
-                // address to that contact rather than start a second one.
-                const existing = findContactByName(contacts, formName);
-                if (existing) {
-                    await messaging.saveContact({
-                        record: withEntriesAdded(existing, cleanedEntries),
-                        expectedUpdatedAt: existing.updatedAt,
-                    });
-                    await loadContacts();
-                    setActiveId(existing.id);
-                    setMode('detail');
-                    setNotice(`Added to ${existing.name}.`);
-                    return;
-                }
                 await messaging.saveContact({
                     input: { name: formName.trim(), notes: formNotes, entries: cleanedEntries },
                 });

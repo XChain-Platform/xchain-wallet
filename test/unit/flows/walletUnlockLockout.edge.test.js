@@ -233,7 +233,7 @@ describe('lockout persistence failure edges', () => {
         expect(getRemainingMs({ failedAttempts: 3, lockedUntilMs: 1_000 }, 1_000)).toBe(0);
     });
 
-    it.skip('BUG: lockout state is lost when localStorage setItem throws', () => {
+    it('keeps lockout state in memory when localStorage setItem throws', () => {
         Object.defineProperty(globalThis, 'localStorage', {
             configurable: true,
             value: {
@@ -245,5 +245,7 @@ describe('lockout persistence failure edges', () => {
 
         recordFailure(1_000);
         expect(getLockoutState()).toEqual({ failedAttempts: 1, lockedUntilMs: 0 });
+        recordFailure(2_000);
+        expect(getLockoutState()).toEqual({ failedAttempts: 2, lockedUntilMs: 0 });
     });
 });

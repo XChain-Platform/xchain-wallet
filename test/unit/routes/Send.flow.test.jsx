@@ -450,6 +450,57 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('accepts optional BIP21 fields while refusing unsupported required fields', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: {
+                getData: () => `BITCOIN:${TO}?AMOUNT=0.25&LABEL=Coffee%20shop&EXTRA=kept`,
+            },
+        });
+
+        expect(toField).toHaveValue(TO);
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25');
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Coffee shop');
+
+        fireEvent.change(toField, { target: { value: '' } });
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?req-extra=needed` },
+        });
+
+        expect(toField).toHaveValue('');
+        expect(await screen.findByText(
+            'This payment request requires a feature this wallet does not support.',
+        )).toBeInTheDocument();
+    });
+
+    it.each([
+        ['malformed', 'bitcoin', TO, '../../evil'],
+        ['unsupported', 'bitcoin', TO, 'monero-mainnet'],
+        ['not held by this wallet', 'litecoin', LTC_TO, 'litecoin-mainnet'],
+    ])('refuses a BIP21 request for a %s network', async (
+        _label,
+        scheme,
+        address,
+        requestChainId,
+    ) => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: {
+                getData: () => `${scheme}:${address}?chain=${encodeURIComponent(requestChainId)}`,
+            },
+        });
+
+        expect(toField).toHaveValue('');
+        expect(await screen.findByText(
+            'This payment request names a network this wallet cannot use.',
+        )).toBeInTheDocument();
+    });
+
     it('validates a typed recipient on blur without interrupting typing', async () => {
         mount();
         const toField = await screen.findByLabelText(/^To$/);

@@ -76,7 +76,7 @@ describe('UR PSBT edge branches', () => {
         expect(() => parseUrFrame(frame)).toThrow(UrError);
     });
 
-    it.skip('rejects extra UR path segments (bug: parseUrFrame ignores trailing path data)', () => {
+    it('rejects extra UR path segments', () => {
         expect(() => parseUrFrame(`${ordered200.parts[0]}/ignored`)).toThrow(UrError);
     });
 });

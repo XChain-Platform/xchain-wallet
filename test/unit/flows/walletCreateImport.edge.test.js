@@ -105,6 +105,8 @@ describe('createWallet edge branches', () => {
 describe('importMnemonic edge branches', () => {
     it('normalizes pasted input and maps non-string input to empty text', () => {
         expect(normalizeMnemonic('  ABANDON\n\tabout  ')).toBe('abandon about');
+        expect(normalizeMnemonic('1. ABANDON\n2. about')).toBe('abandon about');
+        expect(normalizeMnemonic('2. abandon 1. about')).toBe('2. abandon 1. about');
         expect(normalizeMnemonic(null)).toBe('');
     });
 

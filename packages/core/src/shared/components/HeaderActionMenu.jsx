@@ -154,8 +154,18 @@ export function HeaderActionMenu({
                     aria-label="Header actions"
                     onKeyDown={(event) => {
                         if (!event.target.closest?.('[role="menuitem"]')) return;
+                        // Tab leaves the menu, so it closes without trapping focus.
+                        if (event.key === 'Tab') {
+                            close();
+                            return;
+                        }
                         const items = actionableItems(menuRef.current);
                         const index = items.indexOf(document.activeElement);
+                        if ((event.key === 'Enter' || event.key === ' ') && index >= 0) {
+                            event.preventDefault();
+                            items[index].click();
+                            return;
+                        }
                         let nextIndex = null;
                         if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
                         if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;

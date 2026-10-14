@@ -43,22 +43,13 @@ function isFreshAge(ageMs, ttlMs) {
     return ageMs >= 0 && ageMs <= ttlMs;
 }
 
-// CoinGecko's coin-id namespace. All networks (mainnet / testnet /
-// regtest) map to the same id per coin. The price of Bitcoin is the
-// same regardless of which network the user is currently holding it
-// on. Testnet / regtest coins are economically worthless, but it's
-// still useful to surface "what would this be worth on mainnet" on
-// the TokenDetail page rather than showing nothing.
+// CoinGecko's coin-id namespace. Only mainnet chains have a market
+// price. Demo wallets supply their own fixture prices before this
+// oracle is reached, while real testnet and regtest coins stay unpriced.
 const COINGECKO_ID_BY_CHAIN = {
     'bitcoin-mainnet': 'bitcoin',
-    'bitcoin-testnet': 'bitcoin',
-    'bitcoin-regtest': 'bitcoin',
     'litecoin-mainnet': 'litecoin',
-    'litecoin-testnet': 'litecoin',
-    'litecoin-regtest': 'litecoin',
     'dogecoin-mainnet': 'dogecoin',
-    'dogecoin-testnet': 'dogecoin',
-    'dogecoin-regtest': 'dogecoin',
 };
 
 /**
@@ -68,6 +59,7 @@ const COINGECKO_ID_BY_CHAIN = {
  * @property {number | null} change24hPct              percent, signed
  * @property {number[] | null} sparkline               historical price points (oldest → newest); only populated when includeSparkline
  * @property {number} fetchedAt                        epoch ms when this entry was cached
+ * @property {boolean} [stale]                         true when a failed refresh leaves an expired cached entry
  */
 
 /**
@@ -176,11 +168,11 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
             } catch (err) {
                 if (signal?.aborted) throw err;
                 spotErr = err && err.message ? String(err.message) : String(err);
-                // Surface cached entries even on failure (better than blank
-                // panels). New stale chains stay absent from `out`.
                 for (const lk of stale) {
                     const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
-                    if (cached) out[lk.chainId] = cached;
+                    if (!cached) continue;
+                    cached.stale = true;
+                    out[lk.chainId] = cached;
                 }
             }
         }
@@ -214,6 +206,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
                             marketCapFiat: null,
                             change24hPct: null,
                             fetchedAt: tNow - SPOT_TTL_MS - 1,
+                            stale: true,
                         }),
                         sparkline: series,
                     };

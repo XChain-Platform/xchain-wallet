@@ -142,20 +142,15 @@ export function LanguageRegionSection() {
     const LANGUAGES = buildLanguageOptions(settings.developerMode === true);
 
     const onLanguageChange = async (next) => {
-        // Flip the live i18n locale first so the UI updates immediately;
-        // the settings.update is the durable persistence that survives
-        // a restart. setLocale throws on unknown code; guard with the
-        // current `availableLocales()` set so a stale settings record
-        // can't crash the panel.
         try {
-            if (availableLocales().includes(next)) {
-                setI18nLocale(next);
-            }
+            if (!availableLocales().includes(next)) return;
+            // Registered locales apply synchronously. Lazy locale chunks
+            // finish loading before persistence so a failed chunk cannot
+            // become the next launch's saved language.
+            const applied = await setI18nLocale(next);
+            if (applied !== next) return;
+            await update({ language: next });
         } catch (_err) { /* never bubble */ }
-        try { await update({ language: next }); } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('language.update failed:', err);
-        }
     };
     const onCurrencySelect = async (next) => {
         setCurrencyError(null);

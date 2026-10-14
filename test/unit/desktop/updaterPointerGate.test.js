@@ -129,7 +129,7 @@ function fakeModule({ name = ARTIFACT, bytes = ARTIFACT_BYTES, version = VERSION
         },
         quitAndInstall() { calls.push('quitAndInstall'); },
     };
-    return { mod: { autoUpdater }, autoUpdater, calls, path };
+    return { mod: { autoUpdater }, autoUpdater, calls, handlers, path };
 }
 
 /** A feed that serves exactly what the case tells it to. */
@@ -308,18 +308,80 @@ describe('a feed that answers the verifier differently', () => {
     });
 
     it('refuses a pointer whose sha512 is not the bytes that arrived', async () => {
-        const { mod, calls } = fakeModule();
+        const { mod, calls, path } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ pointerText: pointer({ files: [[ARTIFACT, DEB_SHA512]] }) }),
         })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/is not the file that arrived/);
+        expect(existsSync(path)).toBe(false);
         expect(calls).not.toContain('quitAndInstall');
     });
 });
 
 describe('fail closed', () => {
+    it('removes a reported download when the download promise later fails', async () => {
+        const { mod, autoUpdater, calls, handlers, path } = fakeModule();
+        const events = [];
+        autoUpdater.downloadUpdate = async () => {
+            calls.push('downloadUpdate');
+            writeFileSync(path, ARTIFACT_BYTES);
+            handlers.get('update-downloaded')?.({ version: VERSION, downloadedFile: path });
+            throw new Error('download finalization failed');
+        };
+
+        const updater = await attach(mod, {
+            fetchImpl: feed(),
+            onEvent: (event) => events.push(event.type),
+        });
+        const result = await updater.downloadUpdate();
+
+        expect(result).toEqual({ ok: false, reason: 'download finalization failed' });
+        expect(events).toEqual(['downloaded', 'rejected']);
+        expect(existsSync(path)).toBe(false);
+        expect(await updater.restartAndInstall()).toEqual({
+            ok: false, reason: 'update is not ready',
+        });
+        expect(calls).not.toContain('quitAndInstall');
+    });
+
+    it('keeps the current version when the manifest network is unreachable', async () => {
+        const { mod, calls, path } = fakeModule();
+        const events = [];
+        const updater = await attach(mod, {
+            fetchImpl: async () => { throw new Error('offline'); },
+            onEvent: (event) => events.push(event.type),
+        });
+
+        const result = await updater.downloadUpdate();
+
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/unreachable/);
+        expect(events.at(-1)).toBe('rejected');
+        expect(existsSync(path)).toBe(false);
+        expect(await updater.restartAndInstall()).toEqual({
+            ok: false, reason: 'update is not ready',
+        });
+        expect(calls).not.toContain('quitAndInstall');
+    });
+
+    it('keeps the current version when the manifest server fails', async () => {
+        const { mod, calls, path } = fakeModule();
+        const updater = await attach(mod, {
+            fetchImpl: async () => ({ ok: false, status: 503 }),
+        });
+
+        const result = await updater.downloadUpdate();
+
+        expect(result).toEqual({ ok: false, reason: 'manifest fetch failed (503)' });
+        expect(existsSync(path)).toBe(false);
+        expect(await updater.restartAndInstall()).toEqual({
+            ok: false, reason: 'update is not ready',
+        });
+        expect(calls).not.toContain('quitAndInstall');
+    });
+
     it('never installs when the pointer cannot be fetched', async () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
@@ -354,13 +416,14 @@ describe('fail closed', () => {
             subkeys: [{ sign: true }],
             format: 'armored',
         });
-        const { mod, calls } = fakeModule();
+        const { mod, calls, path } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ signWithKey: await openpgp.readPrivateKey({ armoredKey: privateKey }) }),
         })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/signature does not verify/);
+        expect(existsSync(path)).toBe(false);
         expect(calls).not.toContain('quitAndInstall');
     });
 });

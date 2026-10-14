@@ -774,7 +774,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             // The browser's own wording ("Document is not focused") goes to
             // the log; the toast stays in plain words.
             console.error('Receive QR copy failed:', err); // eslint-disable-line no-console
-            showToast({ message: 'Could not copy the QR code. Clipboard access is unavailable.', variant: 'error' });
+            const { ok } = await copyText(qrUri || address?.address || '');
+            showToast(ok
+                ? { message: 'Could not copy the QR code, so the payment link was copied instead.' }
+                : { message: 'Could not copy the QR code. Clipboard access is unavailable.', variant: 'error' });
         }
     }, [qrDataUrl, qrUri, address?.address, canCopyImages, showToast]);
 

@@ -3,14 +3,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreatePollForm.jsx';
 import { DelegateVoteForm } from '../../../packages/core/src/shared/routes/DelegateVoteForm.jsx';
 import { GovernancePolls } from '../../../packages/core/src/shared/routes/GovernancePolls.jsx';
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -21,6 +22,14 @@ const ADDRESS = Object.freeze({
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
     signerId: 'signer-1',
+});
+
+beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    globalThis.localStorage?.clear();
+    globalThis.sessionStorage?.clear();
+    resetBackStackForTests();
 });
 
 function messagingWith(overrides = {}) {
@@ -35,6 +44,7 @@ function messagingWith(overrides = {}) {
         governancePolls: vi.fn().mockResolvedValue([]),
         governancePoll: vi.fn().mockResolvedValue(null),
         governancePollResults: vi.fn().mockResolvedValue([]),
+        governanceVotes: vi.fn().mockResolvedValue([]),
         composeVoteForConfirm: vi.fn().mockResolvedValue({ psbt: '00', encoding: 'psbt' }),
     };
     Object.assign(target, overrides);
@@ -348,6 +358,7 @@ describe('governance route audit', () => {
         }, messaging);
 
         const share = await screen.findByLabelText('0: Yes');
+        await waitFor(() => expect(messaging.governanceVotes).toHaveBeenCalled());
         fireEvent.change(share, { target: { value: 'not-a-number' } });
         fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
         expect(await screen.findByText('Each split share must be a positive number.')).toBeTruthy();

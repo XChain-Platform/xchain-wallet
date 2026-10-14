@@ -18,20 +18,26 @@ import {
     registerSigner,
     unregisterSigner,
 } from '../../../packages/web/src/signerBridge.js';
-import {
-    getTrezorConnect,
-    pairTrezorSigner,
-    resetTrezorConnect,
-} from '../../../packages/web/src/signers/trezorFactory.js';
 
 const hostedScript = 'https://connect.trezor.io/9/trezor-connect.js';
+let getTrezorConnect;
+let pairTrezorSigner;
+let resetTrezorConnect;
 
-beforeEach(() => {
-    resetTrezorConnect();
+beforeEach(async () => {
+    vi.clearAllMocks();
+    document.querySelector(`script[src="${hostedScript}"]`)?.remove();
     delete window.TrezorConnect;
     unregisterSigner('signer-1');
     unregisterSigner('signer-2');
     backgroundSignerBridge.clearAll();
+    vi.resetModules();
+    ({
+        getTrezorConnect,
+        pairTrezorSigner,
+        resetTrezorConnect,
+    } = await import('../../../packages/web/src/signers/trezorFactory.js'));
+    resetTrezorConnect();
 });
 
 afterAll(() => {

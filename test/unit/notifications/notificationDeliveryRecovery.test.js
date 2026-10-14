@@ -49,6 +49,45 @@ describe('notification delivery recovery', () => {
         expect(markTriggered).toHaveBeenCalledTimes(2);
     });
 
+    it('restores a delivered price alert after worker replacement without notifying twice', async () => {
+        const alert = {
+            id: 'alert-restart',
+            chainId: 'bitcoin-mainnet',
+            direction: 'above',
+            targetFiat: 70000,
+            fiatCurrency: 'usd',
+            status: 'armed',
+        };
+        let fired = [];
+        const notify = vi.fn(async () => true);
+        const makeWatcher = (markTriggered) => new PriceAlertWatcher({
+            getNativePrices: vi.fn(async () => ({
+                prices: { 'bitcoin-mainnet': { priceFiat: 71000 } },
+            })),
+            listArmedAlerts: vi.fn(async () => [alert]),
+            getSettings: vi.fn(async () => ({
+                privacy: { priceDataEnabled: true },
+                notifications: { priceAlerts: true },
+            })),
+            notify,
+            markTriggered,
+            loadFired: vi.fn(async () => fired),
+            saveFired: vi.fn(async (ids) => { fired = [...ids]; }),
+        });
+
+        const firstWorker = makeWatcher(vi.fn(async () => { throw new Error('vault write failed'); }));
+        await firstWorker.pollOnce();
+        expect(fired).toEqual(['alert-restart']);
+
+        const markTriggered = vi.fn(async () => {});
+        const restartedWorker = makeWatcher(markTriggered);
+        await restartedWorker.pollOnce();
+
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(markTriggered).toHaveBeenCalledWith('alert-restart');
+        expect(fired).toEqual([]);
+    });
+
     it('retries a governance notification after balance and delivery failures', async () => {
         const polls = [];
         const getBalances = vi.fn()

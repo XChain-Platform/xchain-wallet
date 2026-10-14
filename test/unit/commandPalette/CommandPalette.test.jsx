@@ -74,6 +74,7 @@ describe('CommandPalette', () => {
     it('renders a modal dialog with all commands when open', () => {
         render(<CommandPalette open onClose={() => {}} commands={makeCommands()} />);
         expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+        expect(getInput()).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('option', { name: /Home/ })).toBeTruthy();
         expect(screen.getByRole('option', { name: /Send/ })).toBeTruthy();
         expect(screen.getByRole('option', { name: /Settings/ })).toBeTruthy();
@@ -163,13 +164,20 @@ describe('CommandPalette', () => {
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-    it('Tab jumps the selection to the next category (§33.4)', () => {
-        render(<CommandPalette open onClose={() => {}} commands={makeCommands()} />);
-        // Start on Home (Navigate). Tab -> first row of the next category (Settings).
-        fireEvent.keyDown(getInput(), { key: 'Tab' });
-        expect(screen.getByRole('option', { name: /Settings/ })).toHaveAttribute('aria-selected', 'true');
-        fireEvent.keyDown(getInput(), { key: 'Tab', shiftKey: true });
-        expect(screen.getByRole('option', { name: /Home/ })).toHaveAttribute('aria-selected', 'true');
+    it.each([
+        ['Tab', false],
+        ['Shift+Tab', true],
+    ])('%s closes without selecting a command', (_label, shiftKey) => {
+        const commands = makeCommands();
+        const onClose = vi.fn();
+        render(<CommandPalette open onClose={onClose} commands={commands} />);
+
+        const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true });
+        fireEvent(getInput(), event);
+
+        expect(onClose).toHaveBeenCalledOnce();
+        expect(event.defaultPrevented).toBe(false);
+        for (const command of commands) expect(command.run).not.toHaveBeenCalled();
     });
 
     it('shows recently run catalogue commands first on the next open', () => {

@@ -66,10 +66,11 @@ async function writeAutoLockState(next) {
 }
 
 /**
- * Arm or disarm the backstop. Arming also stamps `lastActivity = now` so the
- * user always gets a full idle window after arming (never an immediate lock).
+ * Arm or disarm the backstop. A newly armed session starts a full idle window.
+ * Updating an armed session keeps its activity stamp so a shorter timeout
+ * takes effect against idle time that has already elapsed.
  *
- * @param {{ armed: boolean, idleMs?: number }} signal
+ * @param {{ armed: boolean, idleMs?: number, activity?: boolean }} signal
  * @param {number} now
  */
 export async function applyAutoLockSignal(signal, now) {
@@ -79,10 +80,16 @@ export async function applyAutoLockSignal(signal, now) {
         return;
     }
     const idleMs = Number(signal.idleMs);
+    const current = await readAutoLockState();
+    if (signal.activity === true && !current?.armed) return;
+    let lastActivity = now;
+    if (signal.activity !== true && current?.armed && current.lastActivity > 0) {
+        lastActivity = current.lastActivity;
+    }
     await writeAutoLockState({
         armed: true,
         idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 0,
-        lastActivity: now,
+        lastActivity,
     });
 }
 

@@ -157,6 +157,8 @@ export function FeesSection() {
                                     id={`fee-rate-${chainId}`}
                                     type="text"
                                     inputMode="decimal"
+                                    enterKeyHint="done"
+                                    autoComplete="off"
                                     defaultValue={formatWithThousands(settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate))}
                                     onBlur={(e) => {
                                         // Store the typed display rate as the integer smallest-unit per KB the schema requires.

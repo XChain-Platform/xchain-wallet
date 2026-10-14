@@ -918,8 +918,10 @@ export function DeployContractForm({ walletId, onBack }) {
                     : 'Publish contract'}
         />
     );
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );

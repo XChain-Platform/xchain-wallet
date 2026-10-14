@@ -21,6 +21,7 @@ import {
     sumStakingAmounts,
 } from '../../flows/stakingDashboard.js';
 import { latestFeedCreateForAddress } from '../../flows/broadcastQueries.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import dashStyles from './ActionsMenu.module.css';
 import styles from './OperatorDashboard.module.css';
 import { OperatorPublisherMode } from '../components/OperatorPublisherMode.jsx';
@@ -76,7 +77,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 setter((current) => ({
                     loading: false,
                     rows: background ? current.rows : [],
-                    error: err?.message || String(err),
+                    error: userFacingMessage(err, 'Please try again.'),
                 }));
             });
         }

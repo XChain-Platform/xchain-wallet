@@ -47,6 +47,9 @@ beforeEach(() => {
         renameWallet: vi.fn().mockResolvedValue({
             wallet: { id: 'wallet-1', name: 'Spending' },
         }),
+        renameAccount: vi.fn().mockResolvedValue({
+            account: { id: 'account-1', name: 'Spending' },
+        }),
     };
 });
 
@@ -61,7 +64,6 @@ describe('RenameWalletForm name validation', () => {
         mount({ initialName: 'Savings' });
 
         expect(screen.getByLabelText('Wallet name').value).toBe('Savings');
-        expect(screen.getByText('7 / 64')).toBeTruthy();
     });
 
     it('disables Save for an empty or whitespace-only name', () => {
@@ -97,35 +99,73 @@ describe('RenameWalletForm name validation', () => {
         expect(messaging.renameWallet).not.toHaveBeenCalled();
     });
 
-    it('limits names to 64 characters and updates the counter', async () => {
+    it('accepts 64 Unicode characters after trimming', async () => {
         mount({ initialName: '' });
         await waitFor(() => expect(messaging.listWallets).toHaveBeenCalledOnce());
         const input = screen.getByLabelText('Wallet name');
-        fireEvent.change(input, { target: { value: 'x'.repeat(64) } });
+        fireEvent.change(input, { target: { value: `  ${'🚀'.repeat(64)}  ` } });
 
-        expect(input.maxLength).toBe(64);
-        expect(screen.getByText('64 / 64')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-        fireEvent.change(input, { target: { value: 'x'.repeat(65) } });
+        await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalledWith({
+            walletId: 'wallet-1',
+            name: '🚀'.repeat(64),
+        }));
+    });
+
+    it('shows a plain error for names over 64 Unicode characters', async () => {
+        mount({ initialName: '' });
+        await waitFor(() => expect(messaging.listWallets).toHaveBeenCalledOnce());
+        const input = screen.getByLabelText('Wallet name');
+
+        fireEvent.change(input, { target: { value: '🚀'.repeat(65) } });
+
+        expect(input.value).toBe('🚀'.repeat(65));
+        expect(screen.getByText('Wallet name must be 64 characters or fewer.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
         expect(messaging.renameWallet).not.toHaveBeenCalled();
     });
 });
 
-describe('RenameAccountForm name length', () => {
-    it('uses the same 64-character limit and counter as wallet renames', () => {
+describe('RenameAccountForm name characters', () => {
+    it('preserves trimmed emoji and right-to-left text', async () => {
         render(
             <RenameAccountForm
                 accountId="account-1"
                 walletId="wallet-1"
-                initialName="Savings"
+                initialName="  חסכון 🚀  "
                 onBack={vi.fn()}
                 onRenamed={vi.fn()}
             />,
         );
 
-        expect(screen.getByLabelText('Account name').maxLength).toBe(64);
-        expect(screen.getByText('7 / 64')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(messaging.renameAccount).toHaveBeenCalledWith({
+            accountId: 'account-1',
+            name: 'חסכון 🚀',
+        }));
+    });
+
+    it('shows the same plain error over 64 Unicode characters', () => {
+        render(
+            <RenameAccountForm
+                accountId="account-1"
+                walletId="wallet-1"
+                initialName=""
+                onBack={vi.fn()}
+                onRenamed={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText('Account name'), {
+            target: { value: '🚀'.repeat(65) },
+        });
+
+        expect(screen.getByText('Account name must be 64 characters or fewer.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+        expect(messaging.renameAccount).not.toHaveBeenCalled();
     });
 });
 

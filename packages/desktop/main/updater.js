@@ -714,6 +714,12 @@ export async function attachUpdater({
             emit({ type: 'ready', info: { version } });
             return { ok: true };
         } catch (err) {
+            // The downloaded event can arrive before downloadUpdate rejects,
+            // so retain its path for the same rejection cleanup as every
+            // verification failure.
+            if (!artifactPath && downloaded?.downloadedFile) {
+                artifactPath = String(downloaded.downloadedFile);
+            }
             return reject(String(err?.message || err));
         }
 

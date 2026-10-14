@@ -7,6 +7,24 @@ import { describe, expect, it } from 'vitest';
 import { explorerPageUrl } from '../../../packages/core/src/shared/utils/explorerLinks.js';
 import { safeHttpUrl } from '../../../packages/core/src/shared/utils/externalUrl.js';
 
+const CHAIN_CASES = [
+    ['bitcoin-mainnet', 'BTC', 'https://explorer.xchain.io'],
+    ['bitcoin-testnet', 'TBTC', 'https://explorer.xchain.io'],
+    ['bitcoin-regtest', 'RBTC', 'http://localhost:18080'],
+    ['litecoin-mainnet', 'LTC', 'https://explorer.xchain.io'],
+    ['litecoin-testnet', 'TLTC', 'https://explorer.xchain.io'],
+    ['litecoin-regtest', 'RLTC', 'http://localhost:18080'],
+    ['dogecoin-mainnet', 'DOGE', 'https://explorer.xchain.io'],
+    ['dogecoin-testnet', 'TDOGE', 'https://explorer.xchain.io'],
+    ['dogecoin-regtest', 'RDOGE', 'http://localhost:18080'],
+];
+
+const PAGE_CASES = [
+    ['transaction', 'tx'],
+    ['address', 'address'],
+    ['block', 'block'],
+];
+
 describe('safeHttpUrl', () => {
     it.each([
         ['https://example.com/help', 'https://example.com/help'],
@@ -23,9 +41,32 @@ describe('safeHttpUrl', () => {
 });
 
 describe('explorerPageUrl', () => {
+    it.each(CHAIN_CASES.flatMap(([chainId, coin, base]) => (
+        PAGE_CASES.map(([kind, segment]) => [chainId, kind, coin, base, segment])
+    )))('builds the configured %s %s page', (chainId, kind, coin, base, segment) => {
+        expect(explorerPageUrl({ chainId, kind, value: 'id /?#%ü' }))
+            .toBe(`${base}/${coin}/${segment}/id%20%2F%3F%23%25%C3%BC`);
+    });
+
+    it.each(CHAIN_CASES.flatMap(([chainId, coin]) => (
+        PAGE_CASES.map(([kind, segment]) => [chainId, kind, coin, segment])
+    )))('isolates the %s endpoint override for %s pages', (chainId, kind, coin, segment) => {
+        const settings = {
+            sdkEndpoints: Object.fromEntries(CHAIN_CASES.map(([id]) => [id, {
+                custom: true,
+                explorerUrl: `https://${id}.example/explorer/`,
+            }])),
+        };
+
+        expect(explorerPageUrl({
+            chainId,
+            kind,
+            value: 'abc123',
+            settings,
+        })).toBe(`https://${chainId}.example/explorer/${coin}/${segment}/abc123`);
+    });
+
     it.each([
-        ['bitcoin-mainnet', 'transaction', 'abc123', 'https://explorer.xchain.io/BTC/tx/abc123'],
-        ['litecoin-testnet', 'address', 'tltc1 q', 'https://explorer.xchain.io/TLTC/address/tltc1%20q'],
         ['dogecoin-regtest', 'token', 'DOGE.CAT', 'http://localhost:18080/RDOGE/token/DOGE.CAT'],
         ['bitcoin-regtest', 'dispenser', 42, 'http://localhost:18080/RBTC/dispenser/42'],
         ['litecoin-mainnet', 'action', 0, 'https://explorer.xchain.io/LTC/action/0'],

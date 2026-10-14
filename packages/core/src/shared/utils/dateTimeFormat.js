@@ -32,7 +32,7 @@ export function formatLocalDateTime(timestamp, locale) {
 export function formatRelativeDateTime(timestamp, now = Date.now(), locale) {
     const date = dateFromTimestamp(timestamp);
     if (!date) return '';
-    const diffSeconds = Math.floor((date.getTime() - now) / 1000);
+    const diffSeconds = Math.trunc((date.getTime() - now) / 1000);
     if (Math.abs(diffSeconds) < 5) return 'just now';
     const ranges = [
         ['year', 365 * 86400],

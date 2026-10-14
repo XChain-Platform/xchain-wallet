@@ -463,10 +463,10 @@ export function TokenPicker({
         imageUrl: tok.imageUrl,
     });
     const resultsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const firstResult = () => resultsRef.current?.querySelector('button[aria-label^="Select "]');
     const handleSearchKeyDown = (event) => {
-        if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
-        const result = firstResult();
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return;
+        const results = Array.from(resultsRef.current?.querySelectorAll('button[aria-label^="Select "]') || []);
+        const result = event.key === 'ArrowUp' ? results.at(-1) : results[0];
         if (!result) return;
         event.preventDefault();
         if (event.key === 'Enter') result.click();
@@ -548,6 +548,7 @@ export function TokenPicker({
                     autoCapitalize="characters"
                     spellCheck={false}
                     aria-label="Search coins or tokens"
+                    aria-controls={balances !== null ? 'xc-token-picker-results' : undefined}
                 />
                 {tokenQuery ? (
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear token search">
@@ -598,7 +599,7 @@ export function TokenPicker({
                 </div>
             ) : null}
             {balances ? (
-                <div ref={resultsRef} role="group" aria-label="Coins and tokens">
+                <div id="xc-token-picker-results" ref={resultsRef} role="group" aria-label="Coins and tokens">
                     {rows.length > 0 ? (
                         <BalanceList
                             rows={renderedRows}

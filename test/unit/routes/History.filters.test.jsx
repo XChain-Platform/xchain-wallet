@@ -12,6 +12,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 
 const LTC = 'litecoin-regtest';
 const DOGE = 'dogecoin-regtest';
@@ -119,14 +120,18 @@ function chooseOption(triggerName, optionName) {
 }
 
 beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    globalThis.localStorage?.clear();
+    globalThis.sessionStorage?.clear();
+    resetBackStackForTests();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(FIXED_NOW);
-    globalThis.localStorage?.removeItem('xc:chainFilter:history:w1');
-    globalThis.localStorage?.removeItem('xc:historyGroupingMode:w1');
 });
 
 afterEach(() => {
     cleanup();
+    resetBackStackForTests();
     vi.useRealTimers();
 });
 

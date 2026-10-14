@@ -1447,6 +1447,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <BackupReminderCard
                         walletId={activeWalletId}
                         hasFunds={backupReminderHasFunds}
+                        isDemo={isDemoActive}
+                        walletMode={settings.settings ? walletMode : null}
                         onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
                     />
                 ) : null}

@@ -989,6 +989,9 @@ export function createBackgroundHost(deps) {
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
     const sendHold = injectedSendHold ?? createSendHoldRegistry();
+    // Popup and side panel share this host. Matching semantic sends stay
+    // exclusive through signing and broadcast while unrelated sends proceed.
+    const activeSendIntents = new Set();
 
     async function publishSurfaceState(kind, payload) {
         if (typeof surfaceStateEvents?.publish !== 'function') return;
@@ -1000,13 +1003,37 @@ export function createBackgroundHost(deps) {
     }
 
     async function sendWithHold(req, flowDeps) {
-        const opts = { ...req, ...flowDeps };
-        const beforeBroadcast = createHoldBeforeBroadcast({
-            sendHold,
-            holdId: opts.holdId,
-            undoSeconds: opts.undoSeconds,
-        });
-        return sendToken({ ...opts, beforeBroadcast });
+        const legs = Array.isArray(req?.legs) && req.legs.length > 0
+            ? req.legs
+            : [{ to: req?.to, tick: req?.tick, amount: req?.amount, memo: req?.memo }];
+        const intentKey = JSON.stringify([
+            req?.walletId ?? null,
+            req?.chainId ?? null,
+            req?.from?.address ?? null,
+            legs.map((leg) => [
+                leg?.to ?? null,
+                typeof leg?.tick === 'string' ? leg.tick.toUpperCase() : null,
+                leg?.amount == null ? null : String(leg.amount),
+                leg?.memo ?? null,
+            ]),
+        ]);
+        if (activeSendIntents.has(intentKey)) {
+            const err = new Error('A matching send is already in progress in another wallet window.');
+            err.name = 'SendAlreadyInProgressError';
+            throw err;
+        }
+        activeSendIntents.add(intentKey);
+        try {
+            const opts = { ...req, ...flowDeps };
+            const beforeBroadcast = createHoldBeforeBroadcast({
+                sendHold,
+                holdId: opts.holdId,
+                undoSeconds: opts.undoSeconds,
+            });
+            return await sendToken({ ...opts, beforeBroadcast });
+        } finally {
+            activeSendIntents.delete(intentKey);
+        }
     }
 
     // ONE reservation ledger per host, shared across every

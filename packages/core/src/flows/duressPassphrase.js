@@ -48,6 +48,7 @@
 // passphrase is never persisted.
 
 import { sha256 } from '@noble/hashes/sha2';
+import { logConsole } from '../shared/utils/logConsole.js';
 import { activatePanicMode, PANIC_ARMED_DURESS } from './panicMode.js';
 
 const STORAGE_KEY = 'xchain-wallet:duress';
@@ -56,6 +57,20 @@ const STORAGE_KEY = 'xchain-wallet:duress';
 export const DURESS_STORAGE_KEY = STORAGE_KEY;
 
 let memoryFallback = null;
+let memoryFallbackActive = false;
+let storageFailureLogged = false;
+
+function keepMemoryFallback(record) {
+    memoryFallback = record ? { ...record } : null;
+    memoryFallbackActive = true;
+    if (storageFailureLogged) return;
+    storageFailureLogged = true;
+    logConsole.record({
+        source: 'duress-passphrase',
+        level: 'warn',
+        message: 'local storage write failed; using in-memory state',
+    });
+}
 
 // Injected async persistence (native shells: the Keychain/Keystore-backed
 // guard slot). When set it is authoritative and localStorage is bypassed.
@@ -129,6 +144,7 @@ export async function configureDuressPersistence(store) {
     const generation = ++persistenceGeneration;
     persistentStore = store || null;
     memoryFallback = null;
+    memoryFallbackActive = false;
     if (!persistentStore) return;
     const configuredStore = persistentStore;
     try {
@@ -151,6 +167,7 @@ export async function configureDuressPersistence(store) {
 export function applyExternalDuressRecord(raw) {
     persistenceGeneration += 1;
     memoryFallback = coerceRecord(raw);
+    memoryFallbackActive = false;
 }
 
 /** Test seam: forget any injected persistence. */
@@ -158,10 +175,13 @@ export function __resetDuressPersistenceForTests() {
     persistenceGeneration += 1;
     persistentStore = null;
     memoryFallback = null;
+    memoryFallbackActive = false;
+    storageFailureLogged = false;
 }
 
 function readRecord() {
     if (persistentStore) return memoryFallback ? { ...memoryFallback } : null;
+    if (memoryFallbackActive) return memoryFallback ? { ...memoryFallback } : null;
     const store = getStorage();
     if (!store) return memoryFallback ? { ...memoryFallback } : null;
     try {
@@ -183,7 +203,7 @@ function writeRecord(record) {
     }
     const store = getStorage();
     if (!store) {
-        memoryFallback = record ? { ...record } : null;
+        keepMemoryFallback(record);
         return;
     }
     try {
@@ -192,8 +212,10 @@ function writeRecord(record) {
         } else {
             store.setItem(STORAGE_KEY, JSON.stringify(record));
         }
+        memoryFallback = null;
+        memoryFallbackActive = false;
     } catch (_err) {
-        memoryFallback = record ? { ...record } : null;
+        keepMemoryFallback(record);
     }
 }
 
@@ -258,7 +280,6 @@ export function setDuressPassphrase(passphrase) {
 /** Discard the stored duress passphrase. */
 export function clearDuressPassphrase() {
     writeRecord(null);
-    memoryFallback = null;
 }
 
 /**

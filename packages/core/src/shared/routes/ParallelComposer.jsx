@@ -19,6 +19,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -150,7 +151,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, hasDexSurface]);
@@ -297,7 +298,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 error: bad ? 'Incorrect password.' : submitFailureMessage(err, {
                     chainId: activeRow.chainId,
                     coinTicker: activeCoinTicker,
-                    fallback: err?.message || 'Sign failed.',
+                    fallback: 'Sign failed.',
                 }),
             });
         }
@@ -758,7 +759,10 @@ function parseParamsJson(json) {
         }
         return null;
     } catch (err) {
-        return `params JSON parse error: ${err?.message || String(err)}`;
+        return userFacingMessage(
+            err,
+            'Params JSON is not valid. Check the syntax and try again.',
+        );
     }
 }
 

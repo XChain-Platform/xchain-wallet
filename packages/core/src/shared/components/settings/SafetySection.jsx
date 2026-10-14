@@ -97,7 +97,9 @@ export function SafetySection() {
                 <input
                     key={String(settings.grace.testSendThresholdSats)}
                     type="text"
-                    inputMode="decimal"
+                    inputMode="numeric"
+                    enterKeyHint="done"
+                    autoComplete="off"
                     defaultValue={settings.grace.testSendThresholdSats}
                     onBlur={(e) => {
                         const raw = e.target.value.trim();
