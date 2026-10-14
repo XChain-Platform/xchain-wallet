@@ -113,6 +113,7 @@
     z-index: 1;
     width: var(--xc-button-height);
     height: var(--xc-button-height);
+    min-height: var(--xc-tap-min);
     display: inline-flex;
     align-items: center;
     justify-content: center;

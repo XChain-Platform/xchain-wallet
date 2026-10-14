@@ -76,7 +76,7 @@
 
 .coinList {
     position: absolute;
-    z-index: 20;
+    z-index: var(--xc-z-dropdown);
     inset-block-start: calc(100% + var(--xc-space-1));
     inset-inline-end: 0;
     min-width: 9rem;

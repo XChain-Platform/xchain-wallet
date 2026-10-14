@@ -18,6 +18,7 @@ import {
     unlockedShell,
     unlockButton,
 } from '../../fixtures/wallet.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const OLD_PASSWORD = 'original-password-1234';
 const NEW_PASSWORD = 'replacement-password-5678';
@@ -111,7 +112,7 @@ test.describe('Settings: change wallet password', () => {
         await test.step('the new password unlocks the same vault', async () => {
             await page.getByLabel('Password', { exact: true }).fill(NEW_PASSWORD);
             await unlockButton(page).click();
-            await expect(unlockedShell(page)).toBeVisible({ timeout: 120_000 });
+            await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
         });
 
         await test.step('biometric unlock is off when the device offers it', async () => {

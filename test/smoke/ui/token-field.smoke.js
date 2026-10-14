@@ -59,7 +59,9 @@ assert.match(css, /\.control\s*\{[^}]*font-size:\s*var\(--xc-control-font\)/s,
     'control uses the shared font');
 assert.match(css, /\.control\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s,
     'control uses the shared radius');
-for (const cls of ['field', 'label', 'control', 'text', 'tick', 'chain', 'placeholder', 'caret']) {
+// The chain badge left the field when chain badges became icon-only overlays,
+// so .chain is no longer a hook.
+for (const cls of ['field', 'label', 'control', 'text', 'tick', 'placeholder', 'caret']) {
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
 

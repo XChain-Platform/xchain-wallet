@@ -18,6 +18,7 @@ import {
     gotoSection,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..', '..');
@@ -48,7 +49,7 @@ async function enterDemo(page, origin) {
     if (await unlockedShell(page).isVisible().catch(() => false)) return;
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Try in demo mode' }).click();
-    await unlockedShell(page).waitFor({ state: 'visible', timeout: 120_000 });
+    await unlockedShell(page).waitFor({ state: 'visible', timeout: kdfStepTimeout() });
 }
 
 async function expectPinnedPopupChrome(page, routeName) {

@@ -18,6 +18,7 @@ import {
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import { EXTENSION_DIST } from '../../fixtures/extension.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const VIEWPORTS = [
     { width: 400, height: 800 },
@@ -170,7 +171,7 @@ test('side panel fits primary routes at narrow extension sizes', async () => {
 
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Try in demo mode' }).click();
-        await expect(unlockedShell(page)).toBeVisible({ timeout: 120_000 });
+        await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 
         for (const viewport of VIEWPORTS) {
             const viewportLabel = `${viewport.width}x${viewport.height}`;

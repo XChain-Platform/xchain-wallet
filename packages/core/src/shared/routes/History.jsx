@@ -2079,7 +2079,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
             {historyFetchedAt && entries.length > 0 ? (
                 <div className={styles.resultsHeader}>
-                    {loadingChains.size === 0 ? (
+                    {historyFetchedAt && loadingChains.size === 0 ? (
                         <StalenessLabel lastSyncedAt={historyFetchedAt} />
                     ) : <span />}
                 </div>

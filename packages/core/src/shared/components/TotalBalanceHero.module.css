@@ -62,7 +62,7 @@
     box-sizing: border-box;
     top: calc(100% + var(--xc-space-1));
     inset-inline-end: 0;
-    z-index: 20;
+    z-index: var(--xc-z-dropdown);
     width: min(260px, calc(100vw - (2 * var(--xc-space-2))));
     max-height: min(70vh, 520px);
     overflow-y: auto;
