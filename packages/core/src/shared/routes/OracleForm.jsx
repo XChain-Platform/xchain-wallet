@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -527,8 +527,12 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Publishing as</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     {/* The decoder's rows, so Memo and the fee as a percent show
@@ -612,11 +616,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
               * chain is the separate COIN field below, and dispensers on any
               * chain may read this oracle, so the two need not match.
               */}
-            <NetworkField
+            <ChainPicker
+                label="Network"
                 value={chainId}
                 onChange={setChainId}
                 chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
 
             {fromAddress ? (

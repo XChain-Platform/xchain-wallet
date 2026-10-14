@@ -10,7 +10,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
 
-const CHAIN_ID = 'bitcoin-mainnet';
+const CHAIN_ID = 'bitcoin-regtest';
 const FROM = {
     id: 'address-1',
     address: 'bc1qparallelfromaddress000000000000000000000',
@@ -70,6 +70,7 @@ describe('ParallelComposer confirmation', () => {
         expect(fromPicker.className).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Params (JSON object)' }).className).toBeTruthy();
         expect(screen.getByLabelText('Row 1 status: Pending')).toHaveTextContent('Pending');
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('states the no-rollback consequence in the required acknowledgement', async () => {

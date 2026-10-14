@@ -25,7 +25,7 @@ import { copyText } from '../clipboard.js';
 import { shareContent, ShareOutcome } from '../share.js';
 import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
@@ -1079,17 +1079,16 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 const isTokenSelection = !!prefillTickUpper
                     && nativeTicker
                     && prefillTickUpper !== nativeTicker;
-                // Standard token field: shows the selected token (or the
-                // chain's native coin) and reopens the picker to change it.
+                const selectedTick = isTokenSelection ? prefillTickUpper : (nativeTicker || '');
                 return (
-                    <TokenField
-                        label="Token"
-                        value={{
-                            chainId: descriptor.id,
-                            tick: isTokenSelection ? prefillTickUpper : (nativeTicker || ''),
-                        }}
-                        onOpenPicker={onChangeAsset || onBack}
-                    />
+                    <button
+                        type="button"
+                        className={styles.assetCard}
+                        onClick={onChangeAsset || onBack}
+                        aria-label={`Change asset (currently ${selectedTick})`}
+                    >
+                        <TickerIcon chainId={descriptor.id} tick={selectedTick} size={48} />
+                    </button>
                 );
             })() : null}
 

@@ -349,9 +349,11 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                         {chip}
                     </div>
                     <div className={`${L.rowMeta} ${S.rowMeta}`}>
-                        <span className={S.metaItem}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        </span>
+                        {descriptor ? (
+                            <span className={S.metaItem}>
+                                <ChainBadge descriptor={descriptor} size="sm" showName={false} />
+                            </span>
+                        ) : null}
                         <span className={S.metaItem}>#{it.row.action_index}</span>
                         <span className={S.metaItem}><AddressText address={it.owner.address} /></span>
                     </div>
@@ -602,8 +604,12 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                 </span>
             </p>
             <dl className={F.detailsList}>
-                <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                {descriptor ? (
+                    <>
+                        <dt className={F.detailsLabel}>Chain</dt>
+                        <dd className={F.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                    </>
+                ) : null}
                 <dt className={F.detailsLabel}>Swap</dt>
                 <dd className={F.detailsValue}>#{row.action_index}</dd>
                 <dt className={F.detailsLabel}>From</dt>

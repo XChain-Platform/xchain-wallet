@@ -861,8 +861,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         {/* ChainBadge takes a descriptor, not an id: passing an
                             id crashed this screen on every successful signing. */}
                         {chainRegistry.get(chainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" />
-                            : <span>{chainId}</span>}
+                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" showName={false} />
+                            : null}
                         <AddressText address={selectedAddress?.address || ''} />
                     </div>
                 </div>
@@ -1153,6 +1153,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         if (error) setError(null);
                     }}
                     label="Chain"
+                    hideNetworkKind
                 />
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
