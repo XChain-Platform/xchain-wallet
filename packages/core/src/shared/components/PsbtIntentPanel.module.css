@@ -62,6 +62,14 @@
     font-size: var(--xc-text-xs);
 }
 
+.addr,
+.value,
+.totalsValue,
+.details code {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .dataOutput {
     color: var(--xc-text-muted);
     font-style: italic;

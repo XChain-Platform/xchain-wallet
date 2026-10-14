@@ -96,6 +96,8 @@
     flex-wrap: wrap;
     align-items: baseline;
     column-gap: 6px;
+    direction: ltr;
+    unicode-bidi: isolate;
     min-width: 0;
     font-family: var(--xc-font-mono);
     font-size: 32px;

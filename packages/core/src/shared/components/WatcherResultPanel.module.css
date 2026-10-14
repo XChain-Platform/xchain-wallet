@@ -49,6 +49,13 @@
 
 .successMono {
     font-family: var(--xc-font-mono, monospace);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.machineText {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .successTxidBlock {

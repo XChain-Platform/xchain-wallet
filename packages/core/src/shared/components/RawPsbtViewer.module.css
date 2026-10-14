@@ -87,6 +87,12 @@
     word-break: break-all;
 }
 
+.hex,
+.json {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .placeholder {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

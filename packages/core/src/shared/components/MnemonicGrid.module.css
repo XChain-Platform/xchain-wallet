@@ -58,6 +58,8 @@
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
+    direction: ltr;
+    unicode-bidi: isolate;
     padding: var(--xc-space-1) var(--xc-space-2);
     background: var(--xc-surface);
     border-radius: var(--xc-radius-sm);

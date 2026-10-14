@@ -85,6 +85,17 @@
     color: var(--xc-text-muted);
 }
 
+.trigger svg,
+.itemIcon svg {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+:global([dir='rtl']) .trigger svg,
+:global([dir='rtl']) .itemIcon svg {
+    transform: scaleX(-1);
+}
+
 /* The surface the user is already on: present for orientation, not a link. */
 .here {
     width: 100%;
