@@ -38,6 +38,7 @@ import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js'
 import { resolveChangeAddress } from './changeAddress.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 import { withAdsPlanAtEncode } from './buildActionPsbt.js';
+import { assertReferencedOfferActionable } from './marketExpiry.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -133,6 +134,8 @@ export async function submitAction({
     }
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
+
+    await assertReferencedOfferActionable({ sdkRegistry, chainId, actionData });
 
     // §36.3 ADS: resolve the donation plan ONCE up front against the
     // current settings snapshot. If `canSubmit`, schedule a customOutput
