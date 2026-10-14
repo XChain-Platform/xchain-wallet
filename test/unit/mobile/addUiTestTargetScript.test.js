@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
+    existsSync,
     mkdirSync,
     mkdtempSync,
     readFileSync,
@@ -21,7 +22,10 @@ afterEach(() => {
     for (const fixture of fixtures.splice(0)) rmSync(fixture, { recursive: true, force: true });
 });
 
-describe('add-uitest-target.rb', () => {
+// The script needs the macOS system ruby; Linux CI venues have none.
+const describeWithRuby = existsSync('/usr/bin/ruby') ? describe : describe.skip;
+
+describeWithRuby('add-uitest-target.rb', () => {
     it('creates the UI-test target, sorted sources, dependency, and both schemes', () => {
         const fixture = makeFixture({ existingTarget: false, appScheme: false });
         const result = run(fixture);
