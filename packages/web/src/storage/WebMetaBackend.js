@@ -26,6 +26,7 @@
 // key/value store so tests can run against an in-memory stand-in.
 
 import { storage as coreStorage } from '@xchain-wallet/core';
+import { persistWithQuotaRecovery } from '@xchain-wallet/core/storage/Vault.js';
 
 const { VaultCorruptError, VaultUnavailableError } = coreStorage;
 
@@ -79,9 +80,12 @@ export class WebMetaBackend {
     /** @param {unknown} obj */
     async save(obj) {
         try {
-            if (!this._storage) throw new Error('localStorage is not available');
-            this._storage.setItem(this._key, JSON.stringify(obj));
+            await persistWithQuotaRecovery(() => {
+                if (!this._storage) throw new Error('localStorage is not available');
+                this._storage.setItem(this._key, JSON.stringify(obj));
+            });
         } catch (err) {
+            if (err?.name === 'StorageQuotaError') throw err;
             throw new Error(`WebMetaBackend.save: metadata could not be persisted: ${err?.message || err}`);
         }
     }
