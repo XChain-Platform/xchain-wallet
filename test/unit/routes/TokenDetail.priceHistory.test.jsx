@@ -67,6 +67,7 @@ beforeAll(() => {
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
 const CHAIN = 'bitcoin-regtest';
+const MAINNET_CHAIN = 'bitcoin-mainnet';
 
 function renderDetail(walletId, { assetInfo, tokenProps } = {}) {
     const messaging = {
@@ -91,7 +92,7 @@ function renderNativeDetail() {
         getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'EUR' }),
         getNativePricesRequest: vi.fn().mockResolvedValue({
             prices: {
-                [CHAIN]: {
+                [MAINNET_CHAIN]: {
                     priceFiat: 40000,
                     marketCapFiat: 1200000000,
                     change24hPct: 1.5,
@@ -100,17 +101,18 @@ function renderNativeDetail() {
                 },
             },
         }),
-        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+        getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
     };
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
         React.createElement(TokenDetail, {
             walletId: 'real-wallet',
-            chainId: CHAIN,
+            chainId: MAINNET_CHAIN,
             tick: 'BTC',
             kind: 'native',
             quantity: '200000000',
+            divisibility: 8,
             fiatRate: 50,
             onBack() {},
         }),
@@ -125,7 +127,7 @@ describe('TokenDetail price history', () => {
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
             getTokenInfo: vi.fn(() => new Promise((resolve) => { finishInfo.push(resolve); })),
-            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
             getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
             listGatedContent: vi.fn().mockResolvedValue([]),
             getSupplyHistory: vi.fn(() => new Promise((resolve) => { finishHistory = resolve; })),
@@ -134,7 +136,7 @@ describe('TokenDetail price history', () => {
             <MessagingProvider shell="web" messaging={messaging}>
                 <TokenDetail
                     walletId="w1"
-                    chainId={CHAIN}
+                    chainId={MAINNET_CHAIN}
                     tick="SUPPLYPROBE"
                     kind="token"
                     quantity="100"
@@ -174,7 +176,7 @@ describe('TokenDetail price history', () => {
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'USD' }),
             getNativePricesRequest: vi.fn(() => new Promise((resolve) => { finishPrices = resolve; })),
-            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
             listPriceAlertsForWallet: vi.fn().mockResolvedValue([]),
             savePriceAlert: vi.fn().mockResolvedValue(undefined),
             clearPriceAlert: vi.fn().mockResolvedValue(undefined),
@@ -183,10 +185,11 @@ describe('TokenDetail price history', () => {
             <MessagingProvider shell="web" messaging={messaging}>
                 <TokenDetail
                     walletId="real-wallet"
-                    chainId={CHAIN}
+                    chainId={MAINNET_CHAIN}
                     tick="BTC"
                     kind="native"
                     quantity="200000000"
+                    divisibility={8}
                     onBack={() => {}}
                     onReceive={() => {}}
                 />
@@ -203,7 +206,7 @@ describe('TokenDetail price history', () => {
         await act(async () => {
             finishPrices({
                 prices: {
-                    [CHAIN]: {
+                    [MAINNET_CHAIN]: {
                         priceFiat: 40000,
                         marketCapFiat: 1200000000,
                         change24hPct: 1.5,
@@ -228,7 +231,7 @@ describe('TokenDetail price history', () => {
         expect(await screen.findByText('€1.20B')).toBeTruthy();
         expect(screen.queryByText('$40,000.00')).toBeNull();
         expect(messaging.getNativePricesRequest).toHaveBeenLastCalledWith({
-            chainIds: [CHAIN],
+            chainIds: [MAINNET_CHAIN],
             includeSparkline: true,
             fiatCurrency: 'EUR',
         });
@@ -257,8 +260,8 @@ describe('TokenDetail price history', () => {
         expect(screen.queryByText('No price history yet')).toBeNull();
     });
 
-    it('keeps a DEX-derived fiat rate labelled when token metadata has no market price', async () => {
-        renderDetail('real-wallet', {
+    it('keeps a demo DEX-derived fiat rate labelled when token metadata has no market price', async () => {
+        renderDetail('demo-wallet', {
             assetInfo: { creator: 'bcrt1qx' },
             tokenProps: { fiatRate: 2, fiatRateSource: 'market', divisibility: 0 },
         });
@@ -266,6 +269,54 @@ describe('TokenDetail price history', () => {
         expect(await screen.findByText('Price (DEX)')).toBeTruthy();
         expect(screen.getByText('$2.00')).toBeTruthy();
         expect(screen.getByText(/DEX price/)).toBeTruthy();
+    });
+
+    it('does not show fiat from a balance snapshot on a real test-network wallet', async () => {
+        renderDetail('real-wallet', {
+            assetInfo: { creator: 'bcrt1qx' },
+            tokenProps: { fiatRate: 2, fiatRateSource: 'market', divisibility: 0 },
+        });
+
+        expect(await screen.findByText('No price history yet')).toBeTruthy();
+        expect(screen.queryByText('$2.00')).toBeNull();
+        expect(screen.queryByText(/DEX price/)).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(screen.getByText('Estimated value').nextElementSibling).toHaveTextContent('-');
+    });
+
+    it('renders dashes instead of non-finite native market values', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'USD' }),
+            getNativePricesRequest: vi.fn().mockResolvedValue({
+                prices: {
+                    [MAINNET_CHAIN]: {
+                        priceFiat: Number.NaN,
+                        marketCapFiat: Number.POSITIVE_INFINITY,
+                        change24hPct: 'NaN',
+                        sparkline: null,
+                    },
+                },
+            }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="real-wallet"
+                    chainId={MAINNET_CHAIN}
+                    tick="BTC"
+                    kind="native"
+                    quantity="1"
+                    divisibility={8}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('No price history yet')).toBeTruthy();
+        expect(view.container.textContent).not.toMatch(/NaN|Infinity/);
+        expect(screen.getByText('Price').nextElementSibling).toHaveTextContent('-');
+        expect(screen.getByText('Market cap').nextElementSibling).toHaveTextContent('-');
     });
 
     it('keeps token details usable when the market panel throws and retries it inline', async () => {

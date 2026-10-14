@@ -61,6 +61,14 @@ describe('TokenDetail supply chart', () => {
         expect(messaging.getSupplyHistory).toHaveBeenCalledWith({ chainId: CHAIN, tick: 'SUPPLYPROBE' });
     });
 
+    it('labels decimal supply history as whole-token units', async () => {
+        renderDetail({ history: [{ height: 1, supply: '1.25' }, { height: 2, supply: '2.5' }] });
+
+        expect(await screen.findByRole('img', {
+            name: 'Supply of SUPPLYPROBE over time, latest 2.5',
+        })).toBeTruthy();
+    });
+
     it('hides the chart for fewer than two points or a missing lookup', async () => {
         const first = renderDetail({ history: [{ height: 1, supply: 10 }] });
         await waitFor(() => expect(first.messaging.getSupplyHistory).toHaveBeenCalled());
@@ -136,7 +144,7 @@ describe('TokenDetail supply chart', () => {
         };
         render(
             <MessagingProvider shell="web" messaging={nativeMessaging}>
-                <TokenDetail walletId="w1" chainId={CHAIN} tick="BTC" kind="native" quantity="1" onBack={() => {}} />
+                <TokenDetail walletId="w1" chainId="bitcoin-mainnet" tick="BTC" kind="native" quantity="1" onBack={() => {}} />
             </MessagingProvider>,
         );
         await waitFor(() => expect(getNativePricesRequest).toHaveBeenCalled());
