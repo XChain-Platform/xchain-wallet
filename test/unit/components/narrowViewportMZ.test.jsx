@@ -126,7 +126,9 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(source).toMatch(/\.field\s*\{[^}]*min-width:\s*0/s);
         expect(source).toMatch(/\.control\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
         expect(source).toMatch(/\.placeholder\s*\{[^}]*min-width:\s*0[^}]*text-overflow:\s*ellipsis/s);
-        expect(source).toMatch(/\.error\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        // The validation message is the shared Input error, which wraps long text.
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        expect(inputCss).toMatch(/\.error\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     });
 
     it('reflows a ToastHost card with a long message and action label', () => {

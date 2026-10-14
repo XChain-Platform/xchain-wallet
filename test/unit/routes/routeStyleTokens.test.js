@@ -94,7 +94,7 @@ describe('route styles use the shared geometry tokens (staking, settings, wizard
 
         expect(wizard).toMatch(/\/\* The fixed measure[^*]+\*\/\s*max-width:\s*560px/);
         expect(wizard).toMatch(/\/\* The native checkbox[^*]+\*\/\s*margin-top:\s*3px/);
-        expect(unavailable).toMatch(/\/\* The underline[^*]+\*\/\s*text-underline-offset:\s*3px/);
-        expect(unavailable).toMatch(/\/\* The focus outline[^*]+\*\/\s*outline-offset:\s*2px/);
+        // The escape link is a kit Button now, so the route keeps no underline or focus offsets.
+        expect(unavailable).not.toMatch(/text-underline-offset|outline-offset/);
     });
 });

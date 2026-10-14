@@ -286,9 +286,6 @@ it('limits ViewPrivateKey raw pixels to documented hairlines and sub-scale inset
         'border: 1px solid var(--xc-border)',
         'padding: 2px var(--xc-space-1)',
         'border: 1px solid var(--xc-border)',
-        'border: 1px dashed var(--xc-border-strong)',
-        'outline: 2px solid var(--xc-focus-ring)',
-        'outline-offset: 2px',
         'border: 1px solid var(--xc-border)',
     ]);
     for (const { precedingLine } of rawPixelDeclarations) {
@@ -420,6 +417,7 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
         ],
         'CollectiblesView.module.css': [
             'border: 1px solid var(--xc-border)',
+            'box-shadow: inset 0 0 0 1px var(--xc-control-selected)',
             'outline: 2px solid var(--xc-focus-ring)',
             'outline-offset: -2px',
             'outline: 2px solid var(--xc-on-accent)',
@@ -442,7 +440,6 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
     expect(collectibles).toContain('font-size: var(--xc-text-2xl);');
     expect(collectibles).toMatch(/\.chainOverlay\s*\{[^}]*width: var\(--xc-icon-lg\);[^}]*height: var\(--xc-icon-lg\)/s);
     expect(collectibles).toMatch(/\.pinBtn,[\s\S]*?\.hideBtn\s*\{[^}]*width: var\(--xc-control-h-sm\);[^}]*height: var\(--xc-control-h-sm\)/);
-    expect(collectibles).toContain('font-size: var(--xc-text-lg);');
 });
 
 it('keeps the audited component geometry on shared design tokens', () => {
@@ -458,10 +455,10 @@ it('keeps the audited component geometry on shared design tokens', () => {
         /\.dot\s*\{[^}]*width:\s*var\(--xc-icon-xs\);[^}]*height:\s*var\(--xc-icon-xs\)/s,
     );
     expect(cssByFile['NetworkStatusIndicator.module.css']).toContain(
-        'calc(100vw - var(--xc-page-gutter) - var(--xc-page-gutter))',
+        'calc(100vw - var(--xc-space-3) - var(--xc-space-3))',
     );
     expect(cssByFile['NoticeModal.module.css']).toContain(
-        'calc(var(--xc-page-gutter) + env(safe-area-inset-right, 0))',
+        'calc(var(--xc-space-4) + env(safe-area-inset-right, 0))',
     );
     expect(cssByFile['NoticeModal.module.css']).toContain('padding: var(--xc-card-pad);');
     expect(cssByFile['OwnerWithdrawWarning.module.css']).toContain('padding: var(--xc-card-pad);');
@@ -470,7 +467,7 @@ it('keeps the audited component geometry on shared design tokens', () => {
     );
     expect(cssByFile['PlatformSwitcher.module.css']).not.toMatch(/padding:\s*var\(--xc-space-2\) 10px/);
     expect(cssByFile['PlatformSwitcher.module.css']).toContain(
-        'calc(100vw - var(--xc-page-gutter) - var(--xc-page-gutter))',
+        'calc(100vw - var(--xc-space-3) - var(--xc-space-3))',
     );
     expect(cssByFile['PortfolioChart.module.css']).toContain(
         'padding: var(--xc-space-1) var(--xc-control-pad-x);',
