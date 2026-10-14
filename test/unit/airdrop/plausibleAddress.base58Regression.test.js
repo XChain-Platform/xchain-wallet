@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { isPlausibleAddress } from '../../../packages/core/src/airdrop/parseRecipients.js';
 
 describe('isPlausibleAddress Base58 validation', () => {
-    // BUG: The broad lowercase alphabet check accepts zero in legacy-length Base58 candidates.
-    it.skip('rejects Base58-forbidden characters in a legacy-length candidate', () => {
+    // No HRP before its only `1`, so this is not Bech32 and the zero must fail Base58.
+    it('rejects Base58-forbidden characters in a legacy-length candidate', () => {
         expect(isPlausibleAddress(`1${'A'.repeat(24)}0`)).toBe(false);
     });
 });
