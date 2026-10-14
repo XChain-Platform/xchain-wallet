@@ -191,7 +191,7 @@ export function ConnectedSitesSection() {
     if (error) return <Status text={`Connected sites unavailable: ${error}`} tone="error" />;
 
     return (
-        <FormPage as="div" sectioned label="Connected sites and dApp permissions">
+        <FormPage as="div" sectioned fullWidth label="Connected sites and dApp permissions">
             <FormSection
                 title="Connected sites"
                 description="Review dApp connections and control each site's permissions."

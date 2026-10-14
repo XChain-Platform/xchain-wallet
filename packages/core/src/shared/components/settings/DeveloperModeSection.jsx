@@ -103,7 +103,7 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
     };
 
     return (
-        <FormPage as="div" sectioned label="Developer mode settings">
+        <FormPage as="div" sectioned fullWidth label="Developer mode settings">
             <FormSection title="Developer options">
                 <ToggleRow
                     label="Developer Mode"

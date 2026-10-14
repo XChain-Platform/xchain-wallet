@@ -12,7 +12,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
+import layoutStyles from '../../../packages/core/src/shared/components/settings/DisplaySection.module.css';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import formStyles from '../../../packages/core/src/ui/FormPage.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
 afterEach(() => cleanup());
@@ -57,20 +59,24 @@ describe('DisplaySection', () => {
         const chain = await screen.findByRole('combobox', { name: 'Token chain' });
         const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
         const action = screen.getByRole('button', { name: 'Watch token' });
+        expect(screen.getByRole('group', { name: 'Display settings' })).toHaveClass(formStyles.fullWidth);
         expect(chain.parentElement.parentElement).toHaveClass(inputStyles.md);
         expect(ticker.parentElement.parentElement).toHaveClass(inputStyles.md);
         expect(action).toHaveClass(buttonStyles.md);
     });
 
-    it('centres md actions beside watched-token fields', async () => {
+    it('aligns display fields and equal-height watched-token controls in one grid', async () => {
         setup({ pinnedTokens: ['bitcoin-mainnet:XCP'] });
         const ticker = await screen.findByRole('textbox', { name: 'Token ticker' });
         const tickerField = ticker.parentElement.parentElement;
         const watchForm = ticker.closest('form');
 
         expect(tickerField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(watchForm.style.alignItems).toBe('center');
+        expect(watchForm).toHaveClass(layoutStyles.fieldRow);
+        expect(tickerField.parentElement).toHaveClass(layoutStyles.watchControls);
         expect(screen.getByRole('button', { name: 'Watch token' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(screen.getByRole('combobox', { name: 'Small-balance threshold' }).parentElement.parentElement.parentElement).toHaveClass(layoutStyles.fieldRow);
+        expect(screen.getByRole('combobox', { name: 'Balance number format' }).parentElement.parentElement.parentElement).toHaveClass(layoutStyles.fieldRow);
 
         const search = screen.getByRole('searchbox', { name: 'Search pinned and hidden tokens' });
         fireEvent.change(search, { target: { value: 'X' } });
