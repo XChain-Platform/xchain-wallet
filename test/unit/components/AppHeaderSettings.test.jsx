@@ -160,11 +160,13 @@ describe('AppHeader settings gear', () => {
         fireEvent.click(screen.getByText('Savings'));
         expect(onOpenWalletPicker).toHaveBeenCalledOnce();
         expect(onOpenAccountPicker).not.toHaveBeenCalled();
+        expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull();
 
-        // The popover closes on navigation; reopen for the account row.
-        fireEvent.click(gear());
+        // Navigation closes both settings layers; reopen them for the account row.
+        openAppSettings();
         fireEvent.click(screen.getByText('Account 2'));
         expect(onOpenAccountPicker).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull();
     });
 
     it('omits the account section until a wallet is active', () => {
@@ -397,6 +399,25 @@ describe('AppHeader action row', () => {
         expect(trigger).toHaveFocus();
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
+
+    it('closes the action menu when route-change focus enters the page', async () => {
+        const renderLayout = (routeKey) => (
+            <FullLayoutWithNav
+                routeKey={routeKey}
+                header={<AppHeader onScan={() => {}} />}
+            >
+                <main id="xc-main"><h1>{routeKey}</h1></main>
+            </FullLayoutWithNav>
+        );
+        const view = render(renderLayout('home'));
+        openHeaderMenu();
+        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
+
+        view.rerender(renderLayout('wallets'));
+
+        await waitFor(() => expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull());
+        expect(screen.getByRole('heading', { name: 'wallets' })).toHaveFocus();
+    });
 });
 
 describe('HeaderSettingsButton section gating', () => {
@@ -572,6 +593,25 @@ describe('HeaderSettingsButton section gating', () => {
 
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(document.activeElement).toBe(trigger);
+    });
+
+    it('closes the settings popover when route-change focus enters the page', async () => {
+        render(
+            <>
+                <HeaderSettingsButton
+                    activeWallet={{ id: 'w1', name: 'Main' }}
+                    onOpenWalletPicker={() => {}}
+                />
+                <main id="xc-main"><h1 tabIndex={-1}>Wallets</h1></main>
+            </>,
+        );
+        fireEvent.click(gear());
+
+        screen.getByRole('heading', { name: 'Wallets' }).focus();
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
+        });
     });
 
     it('does not treat a stale network filter as active when the section is unwired', () => {
