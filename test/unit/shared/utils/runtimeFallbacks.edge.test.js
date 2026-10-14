@@ -71,8 +71,7 @@ describe('date-time formatter fallbacks', () => {
         expect(formatRelativeDateTime(1_700_000_000, 1_700_000_005_000)).toBe('5 seconds ago');
     });
 
-    // Bug: formatRelativeDateTime rounds a sub-five-second past offset down to five seconds.
-    it.skip('keeps 4.999 seconds in the just-now window', () => {
+    it('keeps 4.999 seconds in the just-now window', () => {
         expect(formatRelativeDateTime(1_700_000_000, 1_700_000_004_999)).toBe('just now');
     });
 });
