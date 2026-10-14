@@ -142,6 +142,11 @@ export async function exportPrivateKey({
 
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
+    let importedKeyEntry;
+    if (addressRecord.source === 'imported-wif') {
+        importedKeyEntry = wallet.importedKeys.find((entry) => entry.addressId === addressId);
+        if (!importedKeyEntry) throw new ImportedKeyMissingError(addressId);
+    }
     if (!(await addressBelongsToWallet(vault, addressRecord, wallet))) {
         throw new AddressWalletMismatchError(addressId, walletId);
     }
@@ -195,9 +200,6 @@ export async function exportPrivateKey({
     }
 
     if (addressRecord.source === 'imported-wif') {
-        const entry = wallet.importedKeys.find((k) => k.addressId === addressId);
-        if (!entry) throw new ImportedKeyMissingError(addressId);
-
         const masterKey = await deriveMasterKeyAsync(password, wallet.kdfParams);
         try {
             // Password probe. For seed-backed wallets we decrypt the
@@ -211,7 +213,7 @@ export async function exportPrivateKey({
                 try {
                     wifBytes = await decrypt(
                         masterKey,
-                        base64ToBytes(entry.encryptedWif),
+                        base64ToBytes(importedKeyEntry.encryptedWif),
                     );
                 } catch {
                     throw new WrongPasswordError();
@@ -227,7 +229,7 @@ export async function exportPrivateKey({
                 }
                 wifBytes = await decrypt(
                     masterKey,
-                    base64ToBytes(entry.encryptedWif),
+                    base64ToBytes(importedKeyEntry.encryptedWif),
                 );
             }
             try {
@@ -280,7 +282,8 @@ export async function exportPrivateKey({
 
 async function addressBelongsToWallet(vault, address, wallet) {
     if (address.source === 'imported-wif') {
-        return wallet.importedKeys.some((entry) => entry.addressId === address.id);
+        return wallet.importedKeys.some((entry) => entry.addressId === address.id)
+            && (address.signerId == null || address.signerId === wallet.id);
     }
     if (typeof address.accountId !== 'string' || address.accountId.length === 0) return false;
     const account = await vault.accounts.get(address.accountId);

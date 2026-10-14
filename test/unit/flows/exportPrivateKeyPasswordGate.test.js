@@ -24,6 +24,7 @@ const address = {
     address: 'test-address',
     chain: 'bitcoin',
     network: 'regtest',
+    signerId: 'w1',
 };
 const wallet = {
     id: 'w1',
@@ -70,7 +71,7 @@ describe('exportPrivateKey password confirmation', () => {
     });
 
     it('rejects an address that is not owned by the requested wallet', async () => {
-        const foreignWallet = { ...wallet, importedKeys: [] };
+        const foreignWallet = { ...wallet, id: 'w2' };
         const foreignVault = {
             addresses: { get: vi.fn(async () => address) },
             wallets: { get: vi.fn(async () => foreignWallet) },
