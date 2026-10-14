@@ -84,7 +84,10 @@ describe('History large-list performance', () => {
         const startedAt = performance.now();
         const view = mountHistory(rows);
 
-        await screen.findByText('Block 100,000', {}, { timeout: 20_000 });
+        // The block label rides on the newest row's accessible description.
+        await waitFor(() => {
+            expect(view.container.querySelector('[data-history-row][aria-description*="Block 100,000"]')).not.toBeNull();
+        }, { timeout: 20_000 });
         const elapsedMs = performance.now() - startedAt;
         const renderedRows = view.container.querySelectorAll('[data-history-key]');
 
