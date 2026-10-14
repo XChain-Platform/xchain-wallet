@@ -1,22 +1,5 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//
-// Current offenders for merge coordination:
-// - packages/core/src/shared/components/BalanceList.jsx
-// - packages/core/src/shared/components/NetworkStatusIndicator.jsx
-// - packages/core/src/shared/components/ReachabilityBanner.jsx
-// - packages/core/src/shared/components/TokenField.jsx
-// - packages/core/src/shared/routes/BridgeMoveForm.jsx
-// - packages/core/src/shared/routes/DispenserExplorer.jsx
-// - packages/core/src/shared/routes/DispenserForm.jsx
-// - packages/core/src/shared/routes/Home.jsx
-// - packages/core/src/shared/routes/ImportWallet.jsx
-// - packages/core/src/shared/routes/MarketsList.jsx
-// - packages/core/src/shared/routes/SweepForm.jsx
-// - packages/core/src/shared/routes/TokenAdminForm.jsx
-// - packages/core/src/shared/routes/TokenPicker.jsx
-// - packages/extension/src/popup/App.jsx
-// - packages/web/src/App.jsx
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
@@ -29,6 +12,7 @@ const SCAN_ROOTS = [
     resolve(ROOT, 'packages/core/src/shared/components'),
     resolve(ROOT, 'packages/web/src'),
     resolve(ROOT, 'packages/extension/src/popup'),
+    resolve(ROOT, 'packages/desktop/renderer'),
 ];
 const EXCLUDED_DIRECTORIES = new Set([
     resolve(ROOT, 'packages/core/src/shared/components/settings'),
