@@ -141,7 +141,7 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `title` | centered title text |
 | `titleIcon` | optional inline icon to the left of the title (accent-colored) |
 | `backDisabled` | disables the back button while a submit is in flight; the chevron stays visible but inert |
-| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as medium icon controls |
+| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as icon controls at the Back control size (small), with a touch-floor hit area, so the header keeps one height |
 | `nested` | marks a sub-screen that shares its parent route id (a Settings section, a Contacts detail, a review step), so Back always shows |
 
 **When Back shows**: the chevron is left out on a route the visible navigation links to directly, so the nav row is the way out. With the sidebar or icon rail on screen that is every sidebar destination (Home, History, Send, Receive, Scan, DEX, Marketplace, Dispensers, Contracts, Messaging, Contacts, Lists, Payments due, Settings); with the bottom tab bar it is Home, History, Send and Scan. Every other screen keeps Back. The lists live in `routeRegistry.js` (`NAV_SURFACE_DESTINATIONS`), and LeftNav and BottomTabBar build their rows from them, so a new route gets Back without a flag. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture still runs `onBack`.
