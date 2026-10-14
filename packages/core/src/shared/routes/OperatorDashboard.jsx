@@ -179,7 +179,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 </Button>
             )}>
                 <header className={styles.identity}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : <span>{chainId}</span>}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="md" showName={false} /> : null}
                     <AddressText address={address} />
                 </header>
 

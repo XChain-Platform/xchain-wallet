@@ -53,9 +53,11 @@ for (const cls of ['field', 'label', 'control', 'text', 'tick', 'chain', 'placeh
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
 
-// --- Send adopts it (with a bare-input fallback when no picker) ---------
+// --- Send keeps asset selection icon-only -------------------------------
 
-assert.match(sendJs, /import \{ TokenField \} from '\.\.\/components\/TokenField\.jsx'/, 'Send imports TokenField');
-assert.match(sendJs, /<TokenField[\s\S]{0,240}onOpenPicker=\{\(\) => onChangeAsset\(/, 'Send wires TokenField to the asset picker');
+assert.doesNotMatch(sendJs, /import \{ TokenField \}/, 'Send does not import the text-bearing TokenField');
+assert.match(sendJs, /import \{ TickerIcon \}/, 'Send renders the shared token icon');
+assert.match(sendJs, /<SelectedTokenHero[\s\S]{0,500}onChangeAsset=\{onChangeAsset/, 'Send wires its icon-only hero to the asset picker');
+assert.match(sendJs, /<AssetIconPicker[\s\S]{0,300}onOpen=\{\(\) => setTokenPickerRecipientId/, 'recipient asset icons open the token picker');
 
 console.log('token-field smoke OK');

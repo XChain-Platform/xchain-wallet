@@ -510,8 +510,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     const pollInfo = (
         <dl className={styles.detailsList}>
-            <dt className={styles.detailsLabel}>Chain</dt>
-            <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+            {descriptor ? (
+                <>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                </>
+            ) : null}
             <dt className={styles.detailsLabel}>Token</dt>
             <dd className={styles.detailsValue}>{poll.tick || 'n/a'}</dd>
             {poll.question ? (<><dt className={styles.detailsLabel}>Question</dt><dd className={styles.detailsValue}>{poll.question}</dd></>) : null}

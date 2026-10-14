@@ -454,12 +454,35 @@
     border-radius: var(--xc-radius-sm);
 }
 
-.heroWrap {
+.heroAsset {
+    margin: 0 auto var(--xc-space-3);
+}
+
+.assetPickerControl {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-1);
-    margin: 0 0 var(--xc-space-3);
+}
+
+.assetPickerButton {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-tap-min);
+    height: var(--xc-tap-min);
+    padding: 2px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-text);
+    cursor: pointer;
+}
+
+.assetPickerButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
 }
 
 .heroIconWrapInteractive {
@@ -480,18 +503,6 @@
 .heroIconWrapInteractive:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 4px;
-}
-
-.heroName {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    color: var(--xc-text);
-    text-align: center;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-top: var(--xc-space-1);
 }
 
 .heroIconWrap {

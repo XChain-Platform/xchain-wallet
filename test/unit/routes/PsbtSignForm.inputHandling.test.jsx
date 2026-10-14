@@ -28,22 +28,22 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     };
 });
 
-const BTC = 'bitcoin-mainnet';
-const LTC = 'litecoin-mainnet';
+const BTC = 'bitcoin-regtest';
+const LTC = 'litecoin-testnet';
 const PSBT_HEX = '70736274ff01020304';
 const PSBT_BASE64 = 'cHNidP8BAgME';
 
 const ADDRESSES = Object.freeze({
     [BTC]: [{
         id: 'btc-address',
-        address: 'bc1qexampleexampleexampleexampleexampleex',
+        address: 'bcrt1qexampleexampleexampleexampleexample',
         publicKey: '02aa',
         derivationPath: "m/84'/0'/0'/0/0",
         source: 'hd',
     }],
     [LTC]: [{
         id: 'ltc-address',
-        address: 'ltc1qexampleexampleexampleexampleexamplex',
+        address: 'tltc1qexampleexampleexampleexampleexample',
         publicKey: '02bb',
         derivationPath: "m/84'/2'/0'/0/0",
         source: 'hd',
@@ -123,6 +123,7 @@ describe('PSBT form input controls', () => {
             chainId: LTC,
             psbtHex: PSBT_HEX,
         }));
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('counts unique BBQr frames and closes the scanner after assembly', async () => {

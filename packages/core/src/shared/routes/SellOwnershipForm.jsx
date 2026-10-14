@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -17,7 +17,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -514,7 +514,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Chain" value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId} />
+                    {descriptor ? <DetailRow label="Chain" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
                     <DetailRow label="Mechanism" value={mechanismLabel} />
@@ -622,7 +622,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+            <ChainPicker
+                label="Network"
+                value={chainId}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                chainRegistry={chainRegistry}
+                hideNetworkKind
+            />
 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Selling the name</dt>
@@ -697,10 +704,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             </div>
 
             {getMode === 'token' ? (
-                <TokenField
-                    label="Price token"
-                    value={getTick && chainId ? { chainId, tick: getTick } : null}
-                    onOpenPicker={() => setTokenPickerOpen(true)}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    icon={getTick && chainId
+                        ? <TickerIcon chainId={chainId} tick={getTick} size={40} />
+                        : <Icon.TokenIcon />}
+                    aria-label={getTick ? `Price token: ${getTick}. Change asset` : 'Choose price token'}
+                    onClick={() => setTokenPickerOpen(true)}
                 />
             ) : null}
 

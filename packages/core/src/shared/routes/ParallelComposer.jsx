@@ -634,7 +634,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
 
             {descriptor ? (
                 <p className={styles.hint} style={{ textAlign: 'left', marginTop: 'var(--xc-space-2)' }}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
+                    <ChainBadge descriptor={descriptor} size="sm" showName={false} />
                 </p>
             ) : null}
         </FormSection>
@@ -646,10 +646,12 @@ function RowDetail({ row, addressesByChain }) {
     const fromAddress = (addressesByChain[row.chainId] || []).find((a) => a.id === row.fromAddressId);
     return (
         <dl className={styles.detailsList}>
-            <dt className={styles.detailsLabel}>Chain</dt>
-            <dd className={styles.detailsValue}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-            </dd>
+            {descriptor ? (
+                <>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                </>
+            ) : null}
             <dt className={styles.detailsLabel}>From</dt>
             <dd className={styles.detailsValue}>
                 {fromAddress ? <AddressText address={fromAddress.address} /> : 'unknown'}
