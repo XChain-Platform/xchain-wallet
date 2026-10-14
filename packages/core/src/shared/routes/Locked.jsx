@@ -550,6 +550,8 @@ export function Locked({ onUnlocked }) {
             ) : null}
             actions={(
                 <div className={styles.unlockActions}>
+                    {/* During a lockout the banner says how long to wait and the
+                        button only goes disabled, so the countdown is said once. */}
                     <Button
                         type="submit"
                         variant="primary"
@@ -557,7 +559,7 @@ export function Locked({ onUnlocked }) {
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
                     >
-                        {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
+                        Unlock Wallet
                     </Button>
                     {biometricAvailable ? (
                         <Button
