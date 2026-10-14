@@ -126,3 +126,11 @@ for (const appPath of [
 }
 
 console.log('toast-host smoke OK');
+
+// The style guide's toast example names the real prop (variant), so code
+// copied from it shows the intended tone.
+{
+    const guide = readFileSync(join(web, 'src', 'style-guide', 'sections', 'StatesSection.jsx'), 'utf8');
+    assert.ok(!/showToast\(\{\s*kind:/.test(guide), 'style guide toast example does not use a kind prop');
+    assert.ok(/showToast\(\{\s*variant:/.test(guide), 'style guide toast example uses the variant prop');
+}
