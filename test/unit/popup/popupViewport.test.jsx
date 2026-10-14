@@ -148,10 +148,12 @@ describe('extension popup main screens at 360x600', () => {
         expect(css.home).toMatch(/\.quickAction\s*\{[\s\S]*?min-width:\s*0/);
     });
 
-    it('keeps 360px action labels on one line without flex shrinking', () => {
+    it('keeps 360px action labels whole without flex shrinking', () => {
+        // A row never squeezes a button below its label; a label wider than
+        // the whole column wraps inside the button instead of spilling out.
         expect(css.button).toMatch(
-            /\.btn\s*\{[^}]*flex-shrink:\s*0[^}]*white-space:\s*nowrap/s,
+            /\.btn\s*\{[^}]*flex-shrink:\s*0[^}]*white-space:\s*normal/s,
         );
-        expect(css.button).toMatch(/\.label\s*\{[^}]*white-space:\s*nowrap/s);
+        expect(css.button).not.toMatch(/\.label\s*\{[^}]*white-space:\s*nowrap/s);
     });
 });
