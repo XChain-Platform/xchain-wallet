@@ -174,7 +174,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         const candidates = airdropLib.parsePaste(trimmedDestination);
         const classified = airdropLib.classifyRecipients(candidates, descriptor);
         if (candidates.length !== 1 || classified.valid.length !== 1) {
-            setFormError(`Destination must be one valid address for ${descriptor?.displayName || chainId}.`);
+            setFormError('Destination must be one valid address for the selected chain.');
             return false;
         }
         if (owner && trimmedDestination.toLowerCase() === owner.toLowerCase()) {
@@ -230,7 +230,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 {...lane.confirmProps}
                 walletId={walletId}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 signerReady={signerReady}
                 credentialsReady={(lane.hw
                     ? lane.confirmProps.hwStatus === 'available'
@@ -306,7 +306,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
                 <dt className={styles.detailsLabel}>Chain</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
@@ -325,7 +325,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
 
             <Input
                 label="Destination"
-                hint={`New owner's address on ${descriptor?.displayName || chainId}.`}
+                hint="New owner's address on the selected chain."
                 value={destination}
                 onChange={(event) => { setDestination(event.target.value); setFormError(null); }}
                 autoComplete="off"

@@ -433,7 +433,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                             return (
                                 <div key={row.chainId}>
                                     <dt className={styles.detailsLabel}>
-                                        {d ? <ChainBadge descriptor={d} size="sm" /> : row.chainId}
+                                        {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Chain'}
                                     </dt>
                                     <dd className={styles.detailsValue}>
                                         {row.legacy ? (

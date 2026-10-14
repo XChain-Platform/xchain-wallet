@@ -145,11 +145,15 @@ describe('MultisigCosignerShare address selection', () => {
             .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
         mount();
         selectAddress('address-1');
-        expect(await screen.findByLabelText('Cosigner share payload')).toBeTruthy();
+        expect(await screen.findByRole('img', {
+            name: 'QR code for multisig cosigner share payload',
+        })).toBeTruthy();
 
         selectAddress('address-2');
 
-        expect(screen.queryByLabelText('Cosigner share payload')).toBeNull();
+        expect(screen.queryByRole('img', {
+            name: 'QR code for multisig cosigner share payload',
+        })).toBeNull();
         expectNoValues();
         resolveSecond({ ...INFO, pubkey: '03abcdef' });
         expect(await screen.findByTestId('cosigner-share-public-key'))
@@ -158,12 +162,13 @@ describe('MultisigCosignerShare address selection', () => {
 });
 
 describe('MultisigCosignerShare key details', () => {
-    it('shows the same complete public payload as QR and copyable text', async () => {
+    it('keeps the complete public payload in the QR and copy action without rendering network text', async () => {
         mount({ networkKind: 'mainnet' });
         selectAddress();
 
-        const text = await screen.findByLabelText('Cosigner share payload');
-        const payload = JSON.parse(text.value);
+        await waitFor(() => expect(toDataURL).toHaveBeenCalled());
+        const payloadText = toDataURL.mock.calls.at(-1)[0];
+        const payload = JSON.parse(payloadText);
         expect(payload).toEqual({
             type: 'xchain-multisig-cosigner',
             version: 1,
@@ -178,7 +183,9 @@ describe('MultisigCosignerShare key details', () => {
         expect(await screen.findByRole('img', {
             name: 'QR code for multisig cosigner share payload',
         })).toHaveAttribute('src', 'data:image/png,cosigner-share');
-        expect(toDataURL).toHaveBeenCalledWith(text.value, expect.any(Object));
+        expect(toDataURL).toHaveBeenCalledWith(payloadText, expect.any(Object));
+        expect(screen.queryByLabelText('Cosigner share payload')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         expect(screen.getByRole('note')).toHaveTextContent(
             /compare the master fingerprint and derivation path.*separate trusted channel/i,
         );
@@ -229,10 +236,10 @@ describe('MultisigCosignerShare key details', () => {
         expect(await screen.findByText('Not available from this signer')).toBeTruthy();
         expect(screen.queryByTestId('cosigner-share-xpub')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Copy xpub' })).toBeNull();
-        expect(screen.getByLabelText('Cosigner share payload')).not.toHaveValue(
-            expect.stringContaining(privateAccount.privateExtendedKey),
-        );
-        expect(JSON.parse(screen.getByLabelText('Cosigner share payload').value).xpub).toBeNull();
+        await waitFor(() => expect(toDataURL).toHaveBeenCalled());
+        const payloadText = toDataURL.mock.calls.at(-1)[0];
+        expect(payloadText).not.toContain(privateAccount.privateExtendedKey);
+        expect(JSON.parse(payloadText).xpub).toBeNull();
     });
 
     it('marks an empty signer field as unavailable', async () => {

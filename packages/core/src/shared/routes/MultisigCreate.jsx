@@ -388,7 +388,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>Configuration</dt>
                     <dd className={styles.detailsValue}>
@@ -436,6 +436,7 @@ export function MultisigCreate({ walletId, onBack }) {
                     onChange={setChainId}
                     chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                     chainRegistry={chainRegistry}
+                    hideNetworkKind
                 />
                 {rows.map((row, i) => (
                     <CosignerRow
@@ -499,7 +500,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>Configuration</dt>
                     <dd className={styles.detailsValue}>

@@ -115,13 +115,6 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
                             size={200}
                             alt={t('multisig.share.qrAlt')}
                         />
-                        <textarea
-                            readOnly
-                            aria-label={t('multisig.share.payloadAriaLabel')}
-                            value={sharePayload}
-                            rows={8}
-                            style={payloadTextStyle}
-                        />
                         <CopyButton
                             value={sharePayload}
                             label={t('multisig.share.copyPayload')}
@@ -200,13 +193,4 @@ const payloadStyle = {
     alignItems: 'flex-start',
     gap: 'var(--xc-space-2)',
     margin: 'var(--xc-space-3) 0',
-};
-
-const payloadTextStyle = {
-    boxSizing: 'border-box',
-    width: '100%',
-    resize: 'vertical',
-    fontFamily: 'var(--xc-font-mono)',
-    fontSize: 'var(--xc-text-xs)',
-    overflowWrap: 'anywhere',
 };

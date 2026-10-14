@@ -135,6 +135,7 @@ describe('MigrateToBip39 safety and completion', () => {
 
         await act(async () => resolveCreate({ walletId: 'wallet-new' }));
         expect(await screen.findByText('New BIP39 wallet ready')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         expect(getBackupVerifiedAt('wallet-new')).not.toBeNull();
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2));
 

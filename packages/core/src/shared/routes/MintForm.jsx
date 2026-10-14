@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -557,7 +557,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                             ? 'Create unsigned transaction: mint'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: mint`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: mint`}
+                                : 'Sign mint'}
                     </Button>
                 )}
             >
@@ -565,7 +565,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -624,7 +624,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -723,7 +723,14 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
                 <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    <ChainPicker
+                        label="Network"
+                        value={chainId}
+                        onChange={setChainId}
+                        chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                        chainRegistry={chainRegistry}
+                        hideNetworkKind
+                    />
                 </>
             )}
 

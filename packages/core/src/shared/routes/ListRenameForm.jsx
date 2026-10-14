@@ -280,7 +280,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 {...lane.confirmProps}
                 walletId={walletId}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 chainId={chainId}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
@@ -356,7 +356,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 </dd>
                 <dt className={styles.detailsLabel}>Chain</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>

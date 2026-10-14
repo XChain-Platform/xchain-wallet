@@ -121,6 +121,7 @@ describe('MultisigCreate local cosigner', () => {
         await mount(mkMessaging());
         expect(screen.getByText(/currently available only on Bitcoin networks/i)).toBeTruthy();
         expect(screen.queryByText(/§10\.3/)).toBeNull();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('auto-fills the master fingerprint from the unlocked wallet', async () => {
@@ -173,7 +174,7 @@ describe('MultisigCreate local cosigner', () => {
             fireEvent.click(screen.getByRole('button', { name: /^Network:/i }));
         });
         await act(async () => {
-            fireEvent.click(screen.getByRole('option', { name: /Bitcoin BTC.*testnet/i }));
+            fireEvent.click(screen.getAllByRole('option', { name: 'Bitcoin BTC' })[1]);
         });
 
         expect(screen.getByText(/select a local address on the chosen network/i)).toBeTruthy();

@@ -180,7 +180,8 @@ describe('multisig jsdom flow', () => {
         fireEvent.change(screen.getByLabelText('Address to share'), {
             target: { value: LOCAL_ADDRESS.id },
         });
-        const shared = JSON.parse((await screen.findByLabelText('Cosigner share payload')).value);
+        await waitFor(() => expect(toDataURL).toHaveBeenCalled());
+        const shared = JSON.parse(toDataURL.mock.calls.at(-1)[0]);
         expect(shared).toEqual({
             type: 'xchain-multisig-cosigner',
             version: 1,
