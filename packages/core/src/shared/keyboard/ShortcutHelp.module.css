@@ -1,14 +1,15 @@
 /* §34.3 shortcut-help modal. Theme-token driven; tracks light/dark + forced
    contrast automatically. */
 
+/* Fixed to the viewport, not the content pane, so the scrim also dims the
+   app header and the navigation, as every other modal's scrim does. */
 .overlay {
-    position: absolute;
+    position: fixed;
     box-sizing: border-box;
     inset: 0;
-    box-sizing: border-box;
     max-height: var(--xc-viewport-h, 100vh);
     z-index: var(--xc-z-modal);
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
     display: flex;
     align-items: flex-start;
     justify-content: center;
