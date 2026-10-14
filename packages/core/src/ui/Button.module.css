@@ -35,6 +35,12 @@
     overflow-wrap: anywhere;
 }
 
+/* The display above outranks the browser's own [hidden] rule, so a button
+   given the hidden attribute stayed on screen. */
+.btn[hidden] {
+    display: none;
+}
+
 .icon {
     display: inline-flex;
     align-items: center;
