@@ -24,10 +24,14 @@ describe('iOS native privacy boundaries', () => {
         expect(entries.map(([key]) => key).sort()).toEqual([
             'NSCameraUsageDescription',
             'NSFaceIDUsageDescription',
+            'NSLocalNetworkUsageDescription',
+            'NSPhotoLibraryUsageDescription',
         ]);
         expect(Object.fromEntries(entries)).toMatchObject({
             NSCameraUsageDescription: expect.stringMatching(/camera.*scan QR codes/i),
             NSFaceIDUsageDescription: expect.stringMatching(/Face ID.*unlock.*does not approve/i),
+            NSLocalNetworkUsageDescription: expect.stringMatching(/nodes.*services.*local network/i),
+            NSPhotoLibraryUsageDescription: expect.stringMatching(/photo library.*attachments.*imports/i),
         });
         for (const [, text] of entries) expect(text).not.toMatch(/[<$>&]|\$\(/);
     });
