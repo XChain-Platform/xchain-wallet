@@ -84,7 +84,7 @@
     --xc-icon-size: var(--xc-icon-md);
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    /* Two pixels clear of the 1px border so the focus outline stays inside it. */
+    /* This half-grid inset keeps the toggle centered inside the input border. */
     inset-inline-end: 2px;
     top: 50%;
     transform: translateY(-50%);
