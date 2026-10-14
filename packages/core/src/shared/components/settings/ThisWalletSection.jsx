@@ -25,6 +25,7 @@ import { useToast } from '../ToastHost.jsx';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearBalanceCache } from '../../utils/balanceCache.js';
+import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
 import { Status } from './_settingsPrimitives.jsx';
 import styles from './ThisWalletSection.module.css';
 
@@ -301,17 +302,46 @@ function ChangePasswordRow({ walletId, disabled }) {
 
         setBusy(true);
         setError(null);
+        let result;
         try {
-            await messaging.changePassword({ walletId, currentPassword, newPassword });
-            reset();
-            setOpen(false);
-            showToast({ message: 'Wallet password changed.', variant: 'success' });
+            result = await messaging.changePassword({ walletId, currentPassword, newPassword });
         } catch (err) {
             setError(isWrongPasswordError(err)
                 ? 'Current wallet password is incorrect.'
                 : (err?.message || 'Could not change the wallet password.'));
-        } finally {
             setBusy(false);
+            return;
+        }
+
+        // The change is committed. A biometric enrolment wraps the unlock
+        // password as it was, so it would now release a password the wallet
+        // no longer opens with; retire it here, in the context that holds it.
+        // A failure is said on screen, never swallowed: the old password is
+        // still wrapped on this device until the enrolment goes.
+        let biometricCleared = false;
+        let biometricError = false;
+        try {
+            biometricCleared = await retireBiometricAfterPasswordChange(result);
+        } catch {
+            biometricError = true;
+        }
+        reset();
+        setOpen(false);
+        setBusy(false);
+        if (biometricError) {
+            showToast({
+                message: 'Wallet password changed, but biometric unlock could not be turned off. '
+                    + 'Turn it off in Settings, then turn it on again with the new password.',
+                variant: 'error',
+            });
+        } else if (biometricCleared) {
+            showToast({
+                message: 'Wallet password changed. Biometric unlock was turned off; '
+                    + 'turn it on again in Settings to use it with the new password.',
+                variant: 'success',
+            });
+        } else {
+            showToast({ message: 'Wallet password changed.', variant: 'success' });
         }
     };
 

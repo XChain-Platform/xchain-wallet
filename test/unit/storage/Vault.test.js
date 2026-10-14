@@ -8,6 +8,7 @@ import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 import { emptyDocument, encodeDocument } from '../../../packages/core/src/storage/codec.js';
 import { createContact } from '../../../packages/core/src/schemas/contact.js';
+import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
 
 const KEY = new Uint8Array(32).fill(29);
 
@@ -143,5 +144,149 @@ describe('storage/Vault concurrency and consistency', () => {
         await reopened.open();
         expect((await reopened.wallets.get('legacy-wallet')).multisigs[0].id)
             .toBe(first.multisigs[0].id);
+    });
+});
+
+describe('storage/Vault rekey (password change)', () => {
+    const NEXT = new Uint8Array(32).fill(41);
+    const walletRecord = (id, seed) => ({
+        ...createWallet({
+            name: `Wallet ${id}`,
+            origin: 'created',
+            format: 'bip39',
+            passphraseEnabled: false,
+            encryptedSeed: seed,
+            kdfParams: { algorithm: 'argon2id', salt: 'c2FsdA==', iterations: 1, memory: 8192, parallelism: 1 },
+        }),
+        id,
+    });
+
+    async function opened(backend = new InMemoryBackend()) {
+        const vault = new Vault({ backend, masterKey: KEY });
+        await vault.open();
+        await vault.wallets.put(walletRecord('w1', 'c2VhbGVkLW9sZA=='));
+        await vault.wallets.put(walletRecord('w2', 'b3RoZXItc2VhbA=='));
+        return { vault, backend };
+    }
+
+    it('compares a candidate key in constant shape and never matches a wrong length', async () => {
+        const { vault } = await opened();
+        expect(vault.keyMatches(new Uint8Array(KEY))).toBe(true);
+        expect(vault.keyMatches(NEXT)).toBe(false);
+        expect(vault.keyMatches(new Uint8Array(31).fill(29))).toBe(false);
+    });
+
+    it('seals the document under the new key with the replaced wallets, in one write', async () => {
+        const { vault, backend } = await opened();
+        const saveSpy = vi.spyOn(backend, 'save');
+        const replaced = { ...(await vault.wallets.get('w1')), encryptedSeed: 'c2VhbGVkLW5ldw==' };
+
+        await vault.rekey({ masterKey: NEXT, wallets: [replaced] });
+
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        expect(vault.keyMatches(NEXT)).toBe(true);
+        await expect(new Vault({ backend, masterKey: KEY }).open()).rejects.toMatchObject({ name: 'AeadAuthError' });
+        const reopened = new Vault({ backend, masterKey: NEXT });
+        await reopened.open();
+        expect((await reopened.wallets.get('w1')).encryptedSeed).toBe('c2VhbGVkLW5ldw==');
+        expect((await reopened.wallets.get('w2')).encryptedSeed).toBe('b3RoZXItc2VhbA==');
+        // Later writes land under the new key too.
+        await vault.wallets.put({ ...(await vault.wallets.get('w2')), name: 'Renamed' });
+        const again = new Vault({ backend, masterKey: NEXT });
+        await again.open();
+        expect((await again.wallets.get('w2')).name).toBe('Renamed');
+    });
+
+    it('takes its own copy of the new key', async () => {
+        const { vault, backend } = await opened();
+        const caller = new Uint8Array(NEXT);
+        await vault.rekey({ masterKey: caller, wallets: [] });
+        caller.fill(0);
+        await vault.wallets.put({ ...(await vault.wallets.get('w1')), name: 'After zeroing' });
+        const reopened = new Vault({ backend, masterKey: NEXT });
+        await reopened.open();
+        expect((await reopened.wallets.get('w1')).name).toBe('After zeroing');
+    });
+
+    it('a failed write leaves the stored blob, the key and the document as they were', async () => {
+        class RefusingBackend extends InMemoryBackend {
+            refuse = false;
+
+            async save(blob) {
+                if (this.refuse) throw new Error('write refused');
+                await super.save(blob);
+            }
+        }
+        const { vault, backend } = await opened(new RefusingBackend());
+        backend.refuse = true;
+        const replaced = { ...(await vault.wallets.get('w1')), encryptedSeed: 'c2VhbGVkLW5ldw==' };
+
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [replaced] })).rejects.toThrow('write refused');
+
+        expect(vault.keyMatches(KEY)).toBe(true);
+        expect((await vault.wallets.get('w1')).encryptedSeed).toBe('c2VhbGVkLW9sZA==');
+        backend.refuse = false;
+        await vault.wallets.put({ ...(await vault.wallets.get('w2')), name: 'Still writable' });
+        const reopened = new Vault({ backend, masterKey: KEY });
+        await reopened.open();
+        expect((await reopened.wallets.get('w1')).encryptedSeed).toBe('c2VhbGVkLW9sZA==');
+        expect((await reopened.wallets.get('w2')).name).toBe('Still writable');
+    });
+
+    it('refuses an unknown wallet id or an invalid record before writing', async () => {
+        const { vault, backend } = await opened();
+        const saveSpy = vi.spyOn(backend, 'save');
+        await expect(vault.rekey({ wallets: [walletRecord('nope', 'eA==')] })).rejects.toThrow(/no wallet/);
+        await expect(vault.rekey({ wallets: [{ id: 'w1' }] })).rejects.toMatchObject({ name: 'VaultValidationError' });
+        await expect(vault.rekey({ masterKey: new Uint8Array(16) })).rejects.toThrow(/32-byte/);
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(vault.keyMatches(KEY)).toBe(true);
+    });
+
+    it('reports a close that lands while the blob saves, and isOpen follows the handle', async () => {
+        const { vault, backend } = await opened();
+        expect(vault.isOpen).toBe(true);
+        const realSave = backend.save.bind(backend);
+        backend.save = async (blob) => {
+            await realSave(blob);
+            vault.close();
+        };
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [] })).resolves.toBe(false);
+        expect(vault.isOpen).toBe(false);
+        // The blob itself was written under the new key.
+        await new Vault({ backend, masterKey: NEXT }).open();
+    });
+
+    it('writes when the wallets are still the records the replacements were prepared from', async () => {
+        const { vault } = await opened();
+        const read = await vault.wallets.list();
+        const replaced = { ...read[0], encryptedSeed: 'c2VhbGVkLW5ldw==' };
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [replaced], readWallets: read })).resolves.toBe(true);
+        expect(vault.keyMatches(NEXT)).toBe(true);
+    });
+
+    it('refuses, writing nothing, when a wallet changed or appeared after the read', async () => {
+        const { vault, backend } = await opened();
+        const read = await vault.wallets.list();
+        const replaced = { ...read[0], encryptedSeed: 'c2VhbGVkLW5ldw==' };
+
+        // A rename of another wallet lands while the replacements are prepared.
+        await vault.wallets.put({ ...read[1], name: 'Renamed meanwhile' });
+        const saveSpy = vi.spyOn(backend, 'save');
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [replaced], readWallets: read }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(vault.keyMatches(KEY)).toBe(true);
+        expect((await vault.wallets.get('w2')).name).toBe('Renamed meanwhile');
+        expect((await vault.wallets.get('w1')).encryptedSeed).toBe('c2VhbGVkLW9sZA==');
+
+        // A wallet added after the read is refused the same way.
+        const reread = await vault.wallets.list();
+        await vault.wallets.put(walletRecord('w3', 'dGhpcmQ='));
+        await expect(vault.rekey({ masterKey: NEXT, wallets: [], readWallets: reread }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+        // The one save is the w3 put itself; the refused rekey added none.
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        expect(vault.keyMatches(KEY)).toBe(true);
     });
 });

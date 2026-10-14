@@ -43,6 +43,7 @@ import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
 import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
 import { compiledPayloadByteLen, envelopeEncoderOpts } from '../flows/envelopeSelection.js';
 import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
+import { assertBuiltActionMatchesIntent } from '../flows/verifyBuiltAction.js';
 
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
 
@@ -248,6 +249,9 @@ export function assertCompleteEnvelope(built, action) {
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
  * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after every currently signable transaction is signed and before anything is broadcast
+ * @property {boolean} [verifyBuiltTx]   atomic path only: run the confirm pipeline's tamper checks on the
+ *                                       PSBT the encoder returns before the signer sees it (flows/verifyBuiltAction.js).
+ *                                       Set by callers whose approval came before the build, such as a dApp signAction.
  */
 
 /**
@@ -283,6 +287,7 @@ export async function submitWithSigner({
     waitOpts,
     onProgress = () => {},
     beforeBroadcast,
+    verifyBuiltTx = false,
 }) {
     if (!sdkRegistry) throw new Error('submitWithSigner: sdkRegistry is required');
     if (!actionData?.action) throw new Error('submitWithSigner: actionData.action is required');
@@ -515,6 +520,23 @@ export async function submitWithSigner({
             deferredOutputs = Array.isArray(effectiveEncoderOpts.customOutputs)
                 ? effectiveEncoderOpts.customOutputs.slice()
                 : [];
+        }
+
+        // An approval given before this build (a dApp signAction) has not seen
+        // these bytes, so they are held to the confirm pipeline's checks before
+        // any signer is asked. Read after createTx: the ADS fold appends its
+        // donation to this same array on the way in. Throws, unsigned, on a
+        // mismatch; never changes the bytes of a build that passes.
+        if (verifyBuiltTx) {
+            assertBuiltActionMatchesIntent({
+                sdk,
+                encoded,
+                actionString: bareNativePayment ? null : createResult.actionString,
+                bareNativePayment,
+                customOutputs: effectiveEncoderOpts.customOutputs,
+                ownAddresses: [effectiveEncoderOpts.sourceAddress, effectiveEncoderOpts.change],
+                rawData: effectiveEncoderOpts.rawData,
+            });
         }
     }
 

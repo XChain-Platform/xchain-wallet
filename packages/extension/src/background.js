@@ -33,9 +33,11 @@ import {
 } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import {
+    ChromeMetaBackend,
     ChromeSessionBackend,
     ChromeStorageBackend,
 } from './storage/index.js';
+import { createVaultKeyring } from './background/vaultKeyring.js';
 import {
     ApprovalBroker,
     attachChromeRuntime,
@@ -334,6 +336,13 @@ async function buildHost() {
         chainRegistry,
         sdkRegistry,
         signerPool,
+        // A password change re-seals the vault and must move the cached
+        // session key and signing password with it (vaultKeyring.js).
+        vaultKeyring: createVaultKeyring({
+            metaBackend: new ChromeMetaBackend(),
+            sessionBackend: new ChromeSessionBackend(),
+            signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
+        }),
         broadcastQueueStore,
         approvals: approvalBroker,
         surfaceStateEvents,

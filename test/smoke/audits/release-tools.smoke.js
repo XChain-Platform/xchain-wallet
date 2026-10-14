@@ -1116,6 +1116,8 @@ try {
         check('verify.sh surfaces the skipped gate to whoever checks the release',
             /dev-mock gate state is 'SKIPPED'/.test(skipVerify.stderr), skipVerify.stderr);
     }
+    // Stop the gpg-agent the throwaway GNUPGHOME spawned before removing it.
+    spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: gpgEnv });
     rmSync(gnupgHome, { recursive: true, force: true });
 } finally {
     rmSync(work, { recursive: true, force: true });
