@@ -990,16 +990,30 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 source address. Paid transaction fees are not refunded.
             </p>
 
+            <Input
+                id="swap-memo"
+                label="Memo"
+                optional
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
+
             <Button
-                variant="ghost"
+                variant="link"
                 size="sm"
                 icon={null}
+                className={styles.advancedToggle}
+                aria-expanded={showAdvanced}
+                aria-controls="swap-advanced-options"
                 onClick={() => setShowAdvanced((v) => !v)}
             >
-                {showAdvanced ? 'Hide advanced options' : 'Advanced options (receive address, lists)'}
+                Advanced options
+                <Icon.ChevronDownIcon
+                    style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                />
             </Button>
             {showAdvanced ? (
-                <>
+                <div id="swap-advanced-options" className={styles.advancedOptions}>
                     <AddressField
                         label="Receive at (optional)"
                         hint="Address where you receive the get side. Defaults to your source address."
@@ -1021,14 +1035,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
                     </div>
                     <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
-                </>
+                </div>
             ) : null}
-
-            <Input
-                label="Memo (optional)"
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-            />
 
             {feeTiers ? (
                 <FeeSelector
