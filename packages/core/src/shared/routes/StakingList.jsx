@@ -19,7 +19,8 @@ import {
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
-import { tickerColor } from '../components/BalanceList.jsx';
+import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
@@ -116,7 +117,10 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const [addressesReload, setAddressesReload] = useState(0);
     const [stakingReload, setStakingReload] = useState(0);
 
+    // In-page filters: free-text search plus a chain filter that names each
+    // chain without its network kind.
     const [query, setQuery] = useState('');
+    const [network, setNetwork] = useState('all');
 
     useEffect(() => {
         let cancelled = false;
@@ -356,10 +360,11 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
         return allRows.filter((row) => {
+            if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
             if (!q) return true;
             return row.searchHaystack.includes(q);
         });
-    }, [allRows, query]);
+    }, [allRows, query, network]);
 
     const header = (
         <PageHeader
@@ -440,6 +445,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     aria-label="Search staking positions"
                 />
             </div>
+            <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
         </div>
     );
 

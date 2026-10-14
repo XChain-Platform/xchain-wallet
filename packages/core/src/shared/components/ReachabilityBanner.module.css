@@ -74,20 +74,32 @@
     display: none;
 }
 
-.coinList {
+/* The panel opens below the notice line, never above the header, and grows
+   to its content instead of scrolling inside itself. */
+.detailPanel {
     position: absolute;
     z-index: var(--xc-z-dropdown);
     inset-block-start: calc(100% + var(--xc-space-1));
     inset-inline-end: 0;
     min-width: 9rem;
-    margin: 0;
     padding: var(--xc-space-2);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-surface-raised, var(--xc-surface));
     color: var(--xc-text);
     box-shadow: var(--xc-shadow-popover);
+    white-space: nowrap;
+}
+
+.coinList {
+    margin: 0;
+    padding: 0;
     list-style: none;
+}
+
+.staleness {
+    margin: var(--xc-space-1) 0 0;
+    color: var(--xc-text-muted);
 }
 
 .coin {

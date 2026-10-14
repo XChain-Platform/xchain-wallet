@@ -77,8 +77,12 @@ assert.ok(
     /filterChainIdsByActiveNetwork/.test(explorerSrc),
     'explorer scopes its chain fan-out to the active Settings network',
 );
-assert.ok(!/<Select\b|chainFilter|networkKind\}/.test(explorerSrc),
-    'explorer renders no route-level chain selector or network-kind label');
+// Operator ruling: the chain filter stays, but its options name the chain
+// without the network kind.
+assert.ok(/<Select\b[\s\S]*?label="Chain"/.test(explorerSrc) && /chainFilter/.test(explorerSrc),
+    'explorer keeps a chain filter');
+assert.ok(!/networkKind\}/.test(explorerSrc),
+    'explorer renders no network-kind label');
 assert.ok(
     /tickerReferenceError\(q, \{ noun: 'Token search', allowRef: true \}\)/.test(explorerSrc),
     'explorer validates token input shape through the shared reference grammar',

@@ -91,6 +91,13 @@ describe('ReachabilityBanner', () => {
         }
     });
 
+    it('adds the last-checked age to the Details panel', () => {
+        mount({ perChain: [chain()], lastChecked: Date.now() - 120_000 });
+
+        fireEvent.click(screen.getByText('Details'));
+        expect(screen.getByText('Last checked 2m ago.')).toBeInTheDocument();
+    });
+
     it('renders nothing for a chain that is current', () => {
         mount({ overall: 'normal', perChain: [chain({ mode: 'normal', freshness: { explorer: { stale: false } } })] });
         expect(screen.queryByRole('status')).toBeNull();

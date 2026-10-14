@@ -92,8 +92,9 @@ for (const call of ['isDemoWallet', 'synthesizeDemoStaking', 'synthesizeDemoCont
 
 // 5. List-pattern chrome: header "+", search, and rows
 // that hand a { kind, chainId, address, contractActionIndex? } ref up.
-assert.ok(!/NetworkFilterDropdown/.test(listSrc),
-    'StakingList omits the redundant network filter');
+// Operator ruling: the chain filter stays; it names chains, never network kinds.
+assert.ok(/<NetworkFilterDropdown\b/.test(listSrc),
+    'StakingList keeps its chain filter');
 assert.ok(/aria-label="Search staking positions"/.test(listSrc),
     'StakingList renders the free-text search input');
 assert.ok(/local\.addBtn/.test(listSrc) && /Icon\.PlusIcon/.test(listSrc),
@@ -105,8 +106,8 @@ assert.ok(/onOpenStake\(row\.ref\)/.test(listSrc),
     'StakingList rows hand their position ref to onOpenStake');
 assert.ok(/kind:\s*'validator'/.test(listSrc) && /kind:\s*'contract'/.test(listSrc),
     'StakingList builds both validator and contract row refs');
-assert.ok(!/coinFromChainId/.test(listSrc),
-    'StakingList does not retain hidden coin-family filtering');
+assert.ok(/network !== 'all' && coinFromChainId\(row\.chainId\) !== network/.test(listSrc),
+    'StakingList filters rows by the chosen chain only');
 
 // 6. §42.7.4 at-a-glance rewards stay on the root, as a per-row chip
 // on the validator rows (the root is kind-neutral: no page-level

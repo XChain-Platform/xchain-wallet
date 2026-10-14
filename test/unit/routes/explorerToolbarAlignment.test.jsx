@@ -38,12 +38,16 @@ describe('explorer toolbar control alignment', () => {
         );
 
         const row = container.querySelector(`.${dispenserStyles.filterRow}`);
-        // Operator ruling: searches span the active network, so there is no chain select.
-        expect(within(row).queryByRole('combobox', { name: 'Chain' })).toBeNull();
+        const select = within(row).getByRole('combobox', { name: 'Chain' });
         const search = within(row).getByRole('textbox', { name: 'Token ticker' });
         const action = within(row).getByRole('button', { name: 'Search' });
 
+        expect(fieldFor(select)).toHaveClass(inputStyles.md);
         expect(fieldFor(search)).toHaveClass(inputStyles.md);
+        // Chain options name the chain without the network word.
+        for (const option of within(select).getAllByRole('option')) {
+            expect(option.textContent).not.toMatch(/mainnet|testnet|regtest/i);
+        }
         expect(action).toHaveClass(buttonStyles.md);
     });
 

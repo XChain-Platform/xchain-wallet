@@ -772,11 +772,11 @@ export function LinkForm({ walletId, onBack }) {
                 options={[
                     {
                         value: 'chain1',
-                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" /> : 'Chain A',
+                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" showName /> : 'Chain A',
                     },
                     {
                         value: 'chain2',
-                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" /> : 'Chain B',
+                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" showName /> : 'Chain B',
                         disabled: !chain2Id || chain2Id === chain1Id,
                     },
                 ]}

@@ -11,8 +11,8 @@
 // ReachabilityBanner: §49.1 / §49.2 / G152.
 //
 // The compact notice sits below persistent app chrome and reports only the
-// user-facing consequence. Its disclosure identifies affected coins without
-// exposing service names or network kinds.
+// user-facing consequence. Its Details disclosure identifies affected coins
+// and when they were last checked, without service names or network kinds.
 
 import { useReachability } from '../hooks/useReachability.js';
 import { branding as brandingLib, registry as registryLib } from '../../index.js';
@@ -28,7 +28,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {number} [props.startupGraceMs] override the cold-start silence window
  */
 export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGraceMs }) {
-    const { loading, overall, perChain, refresh } = useReachability({
+    const { loading, overall, perChain, refresh, lastChecked } = useReachability({
         chainIds,
         intervalMs,
         confirmMs,
@@ -38,6 +38,9 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     if (overall !== 'degraded' && overall !== 'offline') return null;
 
     const coins = affectedCoins(perChain);
+    const staleness = lastChecked
+        ? `Last checked ${formatAgo(Date.now() - lastChecked)} ago.`
+        : '';
 
     return (
         <div
@@ -55,21 +58,26 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
             >
                 {loading ? 'Checking…' : 'Try again'}
             </button>
-            {coins.length > 0 ? (
+            {coins.length > 0 || staleness ? (
                 <details className={styles.details}>
                     <summary className={styles.detailsToggle}>Details</summary>
-                    <ul className={styles.coinList} aria-label="Affected coins">
-                        {coins.map((coin) => (
-                            <li key={coin.key} className={styles.coin}>
-                                {coin.iconUrl ? (
-                                    <img src={coin.iconUrl} alt="" aria-hidden="true" />
-                                ) : (
-                                    <span className={styles.coinFallback} aria-hidden="true" />
-                                )}
-                                <span>{coin.name}</span>
-                            </li>
-                        ))}
-                    </ul>
+                    <div className={styles.detailPanel}>
+                        {coins.length > 0 ? (
+                            <ul className={styles.coinList} aria-label="Affected coins">
+                                {coins.map((coin) => (
+                                    <li key={coin.key} className={styles.coin}>
+                                        {coin.iconUrl ? (
+                                            <img src={coin.iconUrl} alt="" aria-hidden="true" />
+                                        ) : (
+                                            <span className={styles.coinFallback} aria-hidden="true" />
+                                        )}
+                                        <span>{coin.name}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : null}
+                        {staleness ? <p className={styles.staleness}>{staleness}</p> : null}
+                    </div>
                 </details>
             ) : null}
         </div>
@@ -95,6 +103,12 @@ function affectedCoins(perChain) {
         });
     }
     return coins;
+}
+
+function formatAgo(diffMs) {
+    if (diffMs < 60_000) return `${Math.max(1, Math.round(diffMs / 1000))}s`;
+    if (diffMs < 3_600_000) return `${Math.round(diffMs / 60_000)}m`;
+    return `${Math.round(diffMs / 3_600_000)}h`;
 }
 
 function coinNameFromChainId(chainId) {

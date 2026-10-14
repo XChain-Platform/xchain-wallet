@@ -106,7 +106,8 @@ describe('staking chooser and list read states', () => {
 
         await screen.findByRole('listitem');
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
-        expect(screen.queryByRole('button', { name: 'Filter by network' })).toBeNull();
+        // The chain filter stays (operator ruling); it names chains, never network kinds.
+        expect(screen.getByRole('button', { name: 'Filter by network' })).toBeInTheDocument();
     });
 
     it('surfaces an address read failure instead of presenting an empty chooser', async () => {
