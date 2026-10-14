@@ -58,11 +58,9 @@ assert.ok(doge);
 assert.equal(doge.sats, 25_000_000);
 assert.equal(doge.coinAmount, '0.25');
 
-// Unknown coin family → still returns a result, but with confidence='low'
-// and zero sats so callers can detect the absence cleanly.
+// Unknown coin family → unavailable rather than a zero-fee estimate.
 const mystery = estimateNativeSendFee({ chainId: 'mystery-coin', chainRegistry: registry });
-assert.ok(mystery);
-assert.equal(mystery.sats, 0);
+assert.equal(mystery, null);
 
 // Missing inputs → null
 assert.equal(estimateNativeSendFee({}), null);

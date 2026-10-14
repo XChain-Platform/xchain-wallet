@@ -35,20 +35,53 @@ describe('fee estimate guard and boundary branches', () => {
             .resolves.toBeNull();
     });
 
-    it('returns a truthful zero placeholder for a chain without static tiers', () => {
+    it('returns no estimate for a chain without safe static tiers', () => {
         expect(estimateNativeSendFee({
             chainId: 'custom', chainRegistry: { get: () => ({ coin: 'custom' }) }, speed: 'fast',
-        })).toEqual({
-            sats: 0,
-            coinAmount: '0',
-            source: 'static-placeholder',
-            confidence: 'low',
-            speed: 'fast',
-        });
+        })).toBeNull();
+    });
+
+    it('keeps the Dogecoin slow default at its relay floor', () => {
+        const chainRegistry = {
+            get: () => ({ coin: 'dogecoin', feeStrategy: { unit: 'sats-per-kbyte' } }),
+        };
+        expect(estimateNativeSendFee({ chainId: 'doge', chainRegistry, speed: 'low' }))
+            .toMatchObject({ rateValue: 1, sats: 25_000_000 });
     });
 
     it.each(['-1', '0.000000001', 'not-a-rate'])('refuses an invalid custom rate %s', (rate) => {
         expect(customFeeEstimate({ chainId: 'btc', chainRegistry: bitcoinRegistry, rate })).toBeNull();
+    });
+
+    it('returns no estimate when a registry lookup fails', async () => {
+        const chainRegistry = { get: () => { throw new Error('registry unavailable'); } };
+        expect(estimateNativeSendFee({ chainId: 'btc', chainRegistry })).toBeNull();
+        await expect(fetchNativeSendFeeTiers({ chainId: 'btc', chainRegistry })).resolves.toBeNull();
+    });
+
+    it.each([
+        ['below the relay floor', 0.005],
+        ['above the chain sanity ceiling', 100_000],
+    ])('falls back when a live rate is %s', async (_label, rate) => {
+        const tiers = await fetchNativeSendFeeTiers({
+            chainId: 'btc',
+            chainRegistry: bitcoinRegistry,
+            messaging: { estimateFee: async () => ({ normal: { rate } }) },
+        });
+        expect(tiers.normal).toMatchObject({
+            source: 'static-placeholder', rateValue: 6, sats: 1_500,
+        });
+    });
+
+    it('keeps fallback tiers at or above a valid live relay floor', async () => {
+        const tiers = await fetchNativeSendFeeTiers({
+            chainId: 'btc',
+            chainRegistry: bitcoinRegistry,
+            messaging: { estimateFee: async () => ({ minimumRate: 10 }) },
+        });
+        expect(tiers.minimumRate).toBe(10);
+        expect(tiers.low).toMatchObject({ source: 'static-placeholder', rateValue: 10, sats: 2_500 });
+        expect(tiers.normal).toMatchObject({ source: 'static-placeholder', rateValue: 10, sats: 2_500 });
     });
 
     it('clamps invalid converter inputs without producing non-finite settings', () => {

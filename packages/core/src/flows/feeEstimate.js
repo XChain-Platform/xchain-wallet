@@ -66,6 +66,7 @@ export function resolveFeeUnit(descriptor) {
 
 /**
  * Per-chain fee tier table. Each tier and `minimumRate` use a per-byte rate
+ * and `maximumRate` matches the encoder's per-chain estimate sanity ceiling.
  * (sat/vB on BTC/LTC, koinu/byte on DOGE). `txSize` is the assumed virtual
  * size in vbytes (BTC/LTC) or raw bytes (DOGE uses per-kB of raw size for
  * minrelayfee). The DISPLAY unit is not here: it comes from the chain
@@ -75,6 +76,7 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
     bitcoin: {
         txSize: 250,
         minimumRate: 1,
+        maximumRate: 1_000,
         tiers: {
             low: { rate: 1, label: 'Slow', etaMinutes: 60 },
             normal: { rate: 6, label: 'Normal', etaMinutes: 30 },
@@ -84,6 +86,7 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
     litecoin: {
         txSize: 250,
         minimumRate: 1,
+        maximumRate: 1_000,
         tiers: {
             low: { rate: 1, label: 'Slow', etaMinutes: 5 },
             normal: { rate: 1, label: 'Normal', etaMinutes: 3 },
@@ -95,10 +98,9 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
         // 100_000 koinu/B. Tier rates are koinu per byte.
         txSize: 250,
         minimumRate: 100_000,
+        maximumRate: 1_000_000,
         tiers: {
-            // Below mainnet's minrelayfee. Many nodes will reject;
-            // included only because some Doge nodes still relax it.
-            low: { rate: 10_000, label: 'Slow', etaMinutes: 5 },
+            low: { rate: 100_000, label: 'Slow', etaMinutes: 5 },
             normal: { rate: 100_000, label: 'Normal', etaMinutes: 1 },
             fast: { rate: 200_000, label: 'Fast', etaMinutes: 1 },
         },
@@ -137,19 +139,11 @@ const DEFAULT_FETCH_TIMEOUT_MS = 4_000;
  */
 export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_SPEED } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
-    const desc = chainRegistry.get(chainId);
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
-    if (!table) {
-        return {
-            sats: 0,
-            coinAmount: '0',
-            source: 'static-placeholder',
-            confidence: 'low',
-            speed,
-        };
-    }
+    if (!table) return null;
     const resolvedSpeed = Object.hasOwn(table.tiers, speed) ? speed : DEFAULT_SPEED;
     const tier = table.tiers[resolvedSpeed];
     const unit = resolveFeeUnit(desc);
@@ -184,7 +178,7 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
  */
 export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
-    const desc = chainRegistry.get(chainId);
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
@@ -217,7 +211,7 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
     if (scaledRate === null) return null;
     const numericRate = Number(rate);
     if (!Number.isFinite(numericRate)) return null;
-    const desc = chainRegistry.get(chainId);
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
@@ -357,7 +351,7 @@ export async function fetchNativeSendFeeTiers({
     timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
 } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
-    const desc = chainRegistry.get(chainId);
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
@@ -386,17 +380,15 @@ export async function fetchNativeSendFeeTiers({
                 if (sdk.unit !== undefined && sdk.unit !== unit) {
                     return estimateNativeSendFeeTiers({ chainId, chainRegistry });
                 }
+                const minimumRate = usableRate(table, sdk.minimumRate)
+                    ? sdk.minimumRate
+                    : table.minimumRate;
                 return {
-                    low: shapeSdkTier({ table, sdk: sdk.low, unit, fallback: table.tiers.low, speed: 'low' }),
-                    normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal' }),
-                    fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast' }),
+                    low: shapeSdkTier({ table, sdk: sdk.low, unit, fallback: table.tiers.low, speed: 'low', minimumRate }),
+                    normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal', minimumRate }),
+                    fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast', minimumRate }),
                     unit,
-                    minimumRate: perByteRateToDisplay(
-                        unit,
-                        usableRate(table, sdk.minimumRate)
-                            ? sdk.minimumRate
-                            : table.minimumRate,
-                    ),
+                    minimumRate: perByteRateToDisplay(unit, minimumRate),
                 };
             }
         } catch {
@@ -409,9 +401,11 @@ export async function fetchNativeSendFeeTiers({
     return estimateNativeSendFeeTiers({ chainId, chainRegistry });
 }
 
-function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
-    const live = sdk && typeof sdk === 'object' && usableRate(table, sdk.rate);
-    const ratePerByte = live ? sdk.rate : fallback.rate;
+function shapeSdkTier({ table, sdk, unit, fallback, speed, minimumRate }) {
+    const live = sdk && typeof sdk === 'object'
+        && usableRate(table, sdk.rate)
+        && sdk.rate >= minimumRate;
+    const ratePerByte = live ? sdk.rate : Math.max(fallback.rate, minimumRate);
     const sats = computeSats(table, ratePerByte);
     return {
         sats,
@@ -429,8 +423,17 @@ function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
 
 function usableRate(table, rate) {
     return Number.isFinite(rate)
-        && rate > 0
+        && rate >= table.minimumRate
+        && rate <= table.maximumRate
         && Number.isSafeInteger(Math.ceil(rate * table.txSize));
+}
+
+function getDescriptor(chainRegistry, chainId) {
+    try {
+        return chainRegistry.get(chainId);
+    } catch {
+        return null;
+    }
 }
 
 function computeSats(table, ratePerByte) {

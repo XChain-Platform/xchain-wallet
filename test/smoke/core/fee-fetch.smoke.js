@@ -115,7 +115,7 @@ const dogeLiveMsg = {
     estimateFee: async () => ({
         unit: 'DOGE/kB',
         // SDK reports per-byte koinu rates per the contract.
-        normal: { rate: 80_000 },
+        normal: { rate: 100_000 },
     }),
 };
 const dogeLive = await fetchNativeSendFeeTiers({
@@ -124,10 +124,10 @@ const dogeLive = await fetchNativeSendFeeTiers({
     chainRegistry: registry,
 });
 assert.equal(dogeLive.normal.source, 'sdk');
-// 80_000 koinu/byte × 250 = 20_000_000 koinu
-assert.equal(dogeLive.normal.sats, 20_000_000);
-// rateValue is the displayed value: 80_000 * 1000 / 1e8 = 0.8 DOGE/kB
-assert.equal(dogeLive.normal.rateValue, 0.8);
+// 100_000 koinu/byte × 250 = 25_000_000 koinu
+assert.equal(dogeLive.normal.sats, 25_000_000);
+// rateValue is the displayed value: 100_000 * 1000 / 1e8 = 1 DOGE/kB
+assert.equal(dogeLive.normal.rateValue, 1);
 
 // --- unknown chain → null --------------------------------------------
 
