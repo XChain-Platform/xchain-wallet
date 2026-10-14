@@ -567,6 +567,7 @@ export function Settings({
             const SectionComponent = section.Component;
             const subpageHeader = (
                 <PageHeader
+                    nested
                     onBack={closeSubpage}
                     backDisabled={section.id === 'this-wallet' && walletManagementBusy}
                     backLabel={t('shell.settings.back')}

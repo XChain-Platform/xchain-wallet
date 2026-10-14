@@ -12,6 +12,21 @@ import { useEffect, useMemo, useRef } from 'react';
 import { t } from '../i18n/index.js';
 
 /**
+ * True when the field label adds something to the message. A message that
+ * already opens with the label ("Password must be at least 8 characters.")
+ * would otherwise read "Password: Password must be...".
+ *
+ * @param {{ label?: string, message: string }} error
+ */
+function showsLabel(error) {
+    const label = String(error.label || '').trim().toLowerCase();
+    if (!label) return false;
+    const message = String(error.message || '').trim().toLowerCase();
+    // "Word 5" opens "Word 5 does not match" but not "Word 50 does not match".
+    return !(message.startsWith(label) && !/^[\p{L}\p{N}]/u.test(message.slice(label.length)));
+}
+
+/**
  * Focusable validation summary. Every field-specific error is a link so the
  * user can move directly from the summary to the control that needs attention.
  *
@@ -65,7 +80,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
                                 onClick={(event) => focusField(event, error.id)}
                                 style={{ color: 'inherit', textDecoration: 'underline' }}
                             >
-                                {error.label ? <span>{error.label}: </span> : null}
+                                {showsLabel(error) ? <span>{error.label}: </span> : null}
                                 <span>{error.message}</span>
                             </a>
                         ) : error.message}

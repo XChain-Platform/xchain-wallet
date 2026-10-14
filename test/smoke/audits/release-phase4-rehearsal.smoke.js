@@ -41,7 +41,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-    announcedGateFallback, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
+    announcedGateFallback, argConflicts, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
     gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probeEnv, scopeMismatch,
     signingPathFiles, STEPS, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
@@ -166,6 +166,62 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
             'the blocker of a dev-mock gate refusal is sign.sh\'s own refusal line');
     }
 
+    // The pristine-clone and ceremony-record gates run after the GPG key is named and before the
+    // dev-mock gate, and they echo free text (absent-field placeholders, marker bodies, porcelain paths).
+    const provRefusal = (why) => 'sign.sh: ceremony record refuses this signing: /tmp/stage/records/PROVENANCE.txt\n'
+        + `  ${why}\n`
+        + '  The manifest would claim these bytes came from v9.9.9 when the\n'
+        + '  ceremony that built them says otherwise. Re-run android-ceremony.sh\n'
+        + '  without --rehearsal from a clean checkout of the tag.\n';
+    const earlyRefusals = [
+        [provRefusal("rehearsal is 'missing', expected 'no'"), 'sign.sh: ceremony record refuses this signing: /tmp/stage/records/PROVENANCE.txt'],
+        [provRefusal("dirty_paths is 'missing', expected '0'"), 'sign.sh: ceremony record refuses this signing: /tmp/stage/records/PROVENANCE.txt'],
+        [provRefusal("tag_commit is 'missing': the build named no tagged commit"), 'sign.sh: ceremony record refuses this signing: /tmp/stage/records/PROVENANCE.txt'],
+        [provRefusal("head 'missing' is not tag_commit 'abc123'"), 'sign.sh: ceremony record refuses this signing: /tmp/stage/records/PROVENANCE.txt'],
+        ['sign.sh: ceremony record refuses this signing: /tmp/stage/records/DO-NOT-PUBLISH.txt exists:\n'
+            + '    rehearsal build: UNSIGNED store profile, missing tag, passphrase from file\n'
+            + '    gpg: not run\n'
+            + '  These are rehearsal artifacts. Re-run android-ceremony.sh without\n'
+            + '  --rehearsal from a clean checkout of the tag, into a fresh --output.\n',
+        'sign.sh: ceremony record refuses this signing: /tmp/stage/records/DO-NOT-PUBLISH.txt exists:'],
+        ['sign.sh: /repo has uncommitted changes; refusing to sign.\n'
+            + '    ?? docs/missing-UNSIGNED.md\n'
+            + '  Build and sign from a throwaway clone, never the shared worktree.\n',
+        'sign.sh: /repo has uncommitted changes; refusing to sign.'],
+        ['sign.sh: /tmp/missing-tree is not checked out at v9.9.9.\n'
+            + '  HEAD:      0123abcd\n  v9.9.9:      4567ef01\n'
+            + '  Sign from a fresh clone checked out at the release tag.\n',
+        'sign.sh: /tmp/missing-tree is not checked out at v9.9.9.'],
+        ["sign.sh: tag 'v9.9.9' does not exist in /tmp/missing-tree\n"
+            + '  Sign from a fresh clone checked out AT the release tag.\n',
+        "sign.sh: tag 'v9.9.9' does not exist in /tmp/missing-tree"],
+    ];
+    for (const [output, blocker] of earlyRefusals) {
+        assert.equal(classify(output), 'gpg-key-named',
+            `a pristine-clone or ceremony-record refusal means only the GPG key was named: ${blocker}`);
+        assert.equal(firstRefusal(output), blocker, 'the blocker of an early-gate refusal is sign.sh\'s own refusal line');
+    }
+    // The input-dir refusal comes before the GPG key check, so the tag matcher must not read it as gpg-key-named.
+    assert.equal(classify("sign.sh: input dir '/tmp/stage-gone' does not exist\n"), 'invoked',
+        'a refusal before the GPG key check claims no gpg-key-named depth');
+
+    // Pin the refusal wording the early-gate matchers read, so a rewording fails here instead of
+    // falling through to the generic lane-scope match.
+    {
+        const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+        const signSrc = readFileSync(join(walletRoot, 'tools', 'release', 'sign.sh'), 'utf8');
+        const libSrc = readFileSync(join(walletRoot, 'tools', 'release', 'lib.sh'), 'utf8');
+        for (const literal of ['echo "sign.sh: $REPO_ROOT has uncommitted changes; refusing to sign."',
+            'echo "sign.sh: $REPO_ROOT is not checked out at $TAG."',
+            'echo "sign.sh: tag \'$TAG\' does not exist in $REPO_ROOT"']) {
+            assert.ok(signSrc.includes(literal), `sign.sh no longer prints ${literal}; update classify() with it`);
+        }
+        for (const literal of ['echo "sign.sh: ceremony record refuses this signing: $marker exists:"',
+            'echo "sign.sh: ceremony record refuses this signing: $prov"', "${rehearsal:-missing}"]) {
+            assert.ok(libSrc.includes(literal), `lib.sh no longer carries ${literal}; update classify() and these fixtures`);
+        }
+    }
+
     const gpgAfterGates = 'signature gate ok (2 verified, 0 recorded-not-verified)\n'
         + 'launch probe ok (1 launched and still alive, 2 not probed on this host, 0 non-app file(s) ignored)\n'
         + 'gpg: signing failed: Inappropriate ioctl for device\n';
@@ -209,7 +265,8 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         assert.equal(classify(quiet), 'invoked', `a non-refusal gate mention claimed depth: ${quiet.split('\n')[0]}`);
     }
     assert.equal(classify('something nobody recognises\n'), 'invoked', 'unrecognised output stays conservative');
-    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates, ...devMockRefusals]) {
+    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates, ...devMockRefusals,
+        ...earlyRefusals.map(([out]) => out)]) {
         assert.ok(STEPS.includes(classify(output)), 'classify returned a step STEPS does not list');
     }
 }
@@ -351,6 +408,30 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         .length, 1, 'a run that skipped the dev-mock gate must not be pinned');
     assert.deepEqual(scopeMismatch({ output: 'sign.sh: hashing artifacts in <input> ...\n', lane: null }), [],
         'a full-scope run with the gate in place is consistent');
+}
+
+// sign.sh refuses --staging with --lane only after its dev-mock gate, so the tool refuses the pair
+// itself before probing, and the committed pin can never record that combination.
+{
+    assert.equal(argConflicts({ lane: 'mac', staging: true }).length, 1, 'argConflicts must refuse --lane with --staging');
+    for (const ok of [{ lane: 'mac', staging: false }, { lane: null, staging: true }, { lane: null, staging: false }]) {
+        assert.deepEqual(argConflicts(ok), [], `argConflicts refused a combination sign.sh accepts: ${JSON.stringify(ok)}`);
+    }
+    assert.ok(!(pin.lane && pin.releaseSet === 'staging'),
+        'the committed pin pairs a lane with the staging set, which sign.sh refuses, so it records a run the ceremony rejected');
+
+    // Drive only `probe`, which writes nothing: a regressed guard would reach sign.sh, never the pin file.
+    const tool = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tools', 'release', 'phase4-rehearsal.mjs');
+    const work = mkdtempSync(join(tmpdir(), 'phase4-args-'));
+    try {
+        const r = spawnSync(process.execPath, [tool, 'probe', '--repo', work, '--tag', 'v0.0.0', '--input', work,
+            '--lane', 'mac', '--staging'], { encoding: 'utf8' });
+        assert.equal(r.status, 2, `probe with --lane and --staging must exit 2 before sign.sh runs; got ${r.status}`);
+        assert.match(r.stderr, /refusing: --staging cannot be combined with --lane/);
+        assert.doesNotMatch(`${r.stdout}${r.stderr}`, /reached:|sign\.sh:/, 'probe ran sign.sh despite the conflict');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
 }
 
 const d = drift();

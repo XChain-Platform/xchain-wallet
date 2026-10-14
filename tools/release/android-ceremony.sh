@@ -33,8 +33,10 @@
 #     XCHAIN_BUILD_ANDROID_FULL=1
 #                          also build the SECOND direct APK at the `default`
 #                          profile, for the audience that avoids
-#                          Play deliberately. Off by default: its lane is
-#                          NOT-SHIPPED, so no release demands it yet.
+#                          Play deliberately. Off by default, but its lane
+#                          (android-full) is SHIPPED since v0.341.3, so a
+#                          release covering that lane needs this set;
+#                          without it the set signs only as --lane android.
 #
 # NO PASSWORD IS EVER PASSED ON A COMMAND LINE OR READ FROM THE
 # ENVIRONMENT. jarsigner and apksigner both prompt when the password
@@ -487,10 +489,10 @@ fi
 # it, rather than document the coupling and leave the self-custody audience
 # with Play's restrictions they went out of their way to avoid.
 #
-# OPT-IN, like XCHAIN_BUILD_APPX and XCHAIN_BUILD_SNAP, and for the same
-# reason those are: `android-full` is NOT-SHIPPED in shipped-lanes.txt, so
-# no release demands this file yet. An unset variable leaves the ceremony
-# behaving exactly as it did before this block existed.
+# OPT-IN, like XCHAIN_BUILD_APPX and XCHAIN_BUILD_SNAP: an unset variable
+# leaves the store-only ceremony behaving exactly as it did before this block
+# existed. `android-full` is SHIPPED in shipped-lanes.txt since v0.341.3, so
+# a release whose lane scope includes it needs this file.
 #
 # ORDERED AFTER the store artifacts are signed, verified AND staged in
 # OUTPUT_DIR (3a), so a failure here cannot cost the ones Play is waiting on.
@@ -603,9 +605,9 @@ if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
     echo "    $FULL_APK_NAME   (direct download, FULL feature set)"
     echo
     echo "    The full APK is a SECOND build, not derived from the AAB, because"
-    echo "    the default profile compiles different code in. Its lane is"
-    echo "    NOT-SHIPPED until the release that first publishes it flips"
-    echo "    tools/release/shipped-lanes.txt in the same commit."
+    echo "    the default profile compiles different code in. Its lane"
+    echo "    (android-full) is SHIPPED, so sign it together with the store"
+    echo "    pair: --lane android,android-full."
 fi
 echo
 echo "==> K10 certificate fingerprint. This is the value users verify, and the"

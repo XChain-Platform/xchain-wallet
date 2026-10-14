@@ -194,8 +194,8 @@ export function ConnectedSitesSection() {
     return (
         <FormPage as="div" sectioned fullWidth label={t('settings.connectedSites.connectedSitesAndDappPermissions')}>
             <FormSection
-                title={t('settings.connectedSites.connectedSites')}
-                description="Review dApp connections and control each site's permissions."
+                title={t('settings.connectedSites.allowedSites')}
+                description={t('settings.page.reviewDappConnectionsAndControl')}
             >
                 {(!sites || sites.length === 0) ? (
                     <EmptyState
@@ -340,7 +340,7 @@ function BlocklistAuditPanel({ confirm }) {
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.siteBlockHistory')}
-            description="Shows the 50 most recent changes, with the newest last. Use this history to spot a site that was blocked or unblocked unexpectedly."
+            description={t('settings.connectedSites.showsThe50MostRecent')}
         >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -492,7 +492,7 @@ function SignThrottlePanel() {
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.signRequestThrottle')}
-            description={`Limits how many signing requests a single site can make in a short window; anything over the limit is rejected until the window resets. Lower numbers harden against abuse; higher numbers help during heavy normal use. Defaults: ${SIGN_THROTTLE_DEFAULT_BURST} per ${SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000} s.`}
+            description={t('settings.connectedSites.limitsHowManySigningRequests', { SIGN_THROTTLE_DEFAULT_BURST, value: SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000 })}
         >
             <p style={ROW_HINT}>
                 {t('settings.connectedSites.currentlyInEffect')} <strong>{effectiveBurst}</strong> {t('settings.connectedSites.per')}{' '}

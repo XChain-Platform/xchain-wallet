@@ -157,7 +157,7 @@ export function VerifySignatureForm({ onBack }) {
                         borderRadius: 'var(--xc-radius-md)',
                         background: 'var(--xc-surface)',
                         border: `1px solid ${result === 'valid' ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
-                        color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger)',
+                        color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger-fg)',
                         fontWeight: 600,
                     }}
                 >

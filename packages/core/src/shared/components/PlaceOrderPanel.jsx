@@ -38,6 +38,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
@@ -88,6 +89,7 @@ const EXPIRATION_PRESETS = [
  */
 export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice, onOrderPlaced }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const [side, setSide] = useState(/** @type {'buy' | 'sell'} */ ('buy'));
@@ -651,6 +653,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
         return (
             <FormPage
+                demoGuard={demoGuard}
                 label={t('components.placeOrderPanel.reviewOrder')}
                 intro={summary || `${side === 'buy' ? 'Buy' : 'Sell'} order`}
                 onSubmit={handleSubmit}
@@ -775,6 +778,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     return (
         <FormPage
+            demoGuard={demoGuard}
             label={t('components.placeOrderPanel.placeOrder2')}
             onSubmit={handleReview}
             noValidate
@@ -912,7 +916,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             <div style={{ marginTop: 'var(--xc-space-2)' }}>
                                 <Checkbox
                                     label={t('components.placeOrderPanel.enableCoinpayAutoPay')}
-                                    description="We monitor for matches on your orders and send payment for them automatically."
+                                    description={t('components.placeOrderPanel.weMonitorForMatchesOn')}
                                     checked={autopayEnabled}
                                     onChange={(e) => setAutopayEnabled(e.target.checked)}
                                 />

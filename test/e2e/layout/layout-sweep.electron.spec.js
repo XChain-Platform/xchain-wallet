@@ -18,12 +18,12 @@
 //
 //     pnpm --filter @xchain-wallet/desktop build:renderer
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test, _electron as electron } from '@playwright/test';
+import { expect, test, _electron as electron } from '@playwright/test';
 import { createSweep } from './sweep.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -88,10 +88,14 @@ for (const [width, height] of SIZES) {
                 }
             };
 
-            const sweep = createSweep(page, { venue, outDir: join(OUT_ROOT, venue), restart });
+            const outDir = join(OUT_ROOT, venue);
+            const sweep = createSweep(page, { venue, outDir, restart });
             sweepRef = sweep;
             await sweep.onboarding({ demo: true });
             await sweep.unlocked();
+            // Check harness coverage, not findings: the walk wrote at least one parseable screen line.
+            const measured = readFileSync(join(outDir, 'results.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+            expect(measured.length, 'harness coverage: the sweep measured no screen').toBeGreaterThan(0);
         } finally {
             await app.close();
         }

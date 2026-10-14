@@ -25,8 +25,8 @@ import {
     INPUT,
     ROW,
     ROW_HINT,
+    ROW_TITLE,
     ROW_LABEL,
-    ROW_VALUE,
     SELECT,
     STACK,
     SettingsLoadError,
@@ -70,7 +70,7 @@ export function SafetySection() {
     return (
         <div style={STACK}>
             <div style={ROW}>
-                <span style={ROW_LABEL}>{t('settings.safety.autoLockTimeout')}</span>
+                <span style={ROW_TITLE}>{t('settings.safety.autoLockTimeout')}</span>
                 <select
                     value={String(autolockValue)}
                     onChange={(e) => onAutolockChange(e.target.value)}
@@ -89,7 +89,7 @@ export function SafetySection() {
             </div>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_LABEL}>{t('settings.safety.newRecipientTestSendWarning')}</span>
+                    <span style={ROW_TITLE}>{t('settings.safety.newRecipientTestSendWarning')}</span>
                     <span id="test-send-threshold-hint" style={ROW_HINT}>
                         {t('settings.safety.forNativeCoinSendsAbove')}
                     </span>
@@ -130,12 +130,12 @@ export function SafetySection() {
             ) : null}
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_LABEL}>{t('settings.safety.lookalikeAddressWarnings')}</span>
+                    <span style={ROW_TITLE}>{t('settings.safety.lookalikeAddressWarnings')}</span>
                     <span style={ROW_HINT}>
                         {t('settings.safety.theSendFormWarnsWhen')}
                     </span>
                 </div>
-                <span style={ROW_VALUE}>{t('settings.safety.alwaysOn')}</span>
+                <span style={ROW_LABEL}>{t('settings.safety.alwaysOn')}</span>
             </div>
             <UndoSendRow />
             <BiometricRow />
@@ -143,12 +143,12 @@ export function SafetySection() {
             <DuressPassphraseRow />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_LABEL}>{t('settings.safety.backupReminders')}</span>
+                    <span style={ROW_TITLE}>{t('settings.safety.backupReminders')}</span>
                     <span style={ROW_HINT}>
                         {t('settings.safety.shownAutomaticallyForWalletsWithout')}
                     </span>
                 </div>
-                <span style={ROW_VALUE}>{t('settings.safety.automatic')}</span>
+                <span style={ROW_LABEL}>{t('settings.safety.automatic')}</span>
             </div>
         </div>
     );

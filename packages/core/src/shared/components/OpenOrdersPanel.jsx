@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, AddressText, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from './WatcherResultPanel.jsx';
@@ -59,6 +60,7 @@ const NUMERIC_CELL_STYLE = {
  */
 export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
     const [balancesHidden] = useBalancesHidden();
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
@@ -333,7 +335,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                 }}
                             >
                                 <span style={{
-                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)',
+                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)',
                                     fontWeight: 600,
                                 }}>
                                     {r.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
@@ -397,6 +399,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem' }}>
                         {t('components.openOrdersPanel.thisSubmitsACancellationTransaction')}
                     </p>
+                    {demoGuard.note}
+                    {demoGuard.dialog}
                     {submitError ? (
                         <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
                             {submitError}
@@ -417,7 +421,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                             variant="danger"
                             size="sm"
                             loading={submitting || cancelLane.composing}
-                            disabled={submitting || cancelLane.composing}
+                            disabled={demoGuard.blocked || submitting || cancelLane.composing}
                         >
                             {t('components.openOrdersPanel.cancelOrder2')}
                         </Button>

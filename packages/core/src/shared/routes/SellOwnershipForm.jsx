@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -71,6 +72,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -488,6 +490,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review ownership sale"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -598,6 +601,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`Sell ${tokenUpper} name`}
             onSubmit={handleReview}
             inert={actionConfirm.composing ? '' : undefined}

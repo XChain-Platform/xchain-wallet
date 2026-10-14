@@ -33,6 +33,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -146,6 +147,7 @@ async function readCandidates({ messaging, chainId, addresses }) {
  */
 export function UnionListForm({ walletId, chainId: initialChainId, activeAccountId, onBack, onDone = onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const [chainId, setChainId] = useState(initialChainId || null);
@@ -335,6 +337,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create union list"
             onSubmit={handleReview}
             sectioned

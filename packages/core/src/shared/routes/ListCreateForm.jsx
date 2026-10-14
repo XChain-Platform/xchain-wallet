@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -87,6 +88,7 @@ function metaFieldError(field, value) {
 export function ListCreateForm({ walletId, chainId: initialChainId, initialType, editResolutionActive = null, onBack }) {
     const [chainId, setChainId] = useState(initialChainId || null);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -575,6 +577,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -713,6 +716,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // stage === 'form'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}

@@ -8,14 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
-import { ROUTE_NAV_GROUPS, ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
-import { NoticesRouteContext } from './noticesRoute.js';
+import {
+    ROUTE_NAV_GROUPS,
+    ROUTE_NAV_SECTIONS,
+    SIDEBAR_PRIMARY_DESTINATIONS,
+    SIDEBAR_SECONDARY_DESTINATIONS,
+} from '../routeRegistry.js';
+import { NavSurfaceContext } from './navSurface.js';
+import {
+    NoticesRouteContext,
+    ReachabilityNoticeHiddenContext,
+    ShellNoticesContext,
+} from './noticesRoute.js';
 import styles from './LeftNav.module.css';
 import { t } from '../../i18n/index.js';
+import screenStyles from '../../ui/Screen.module.css';
 
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
@@ -42,6 +54,30 @@ import { t } from '../../i18n/index.js';
  */
 
 export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
+
+// Labels and icons for the nav rows, shared with BottomTabBar's thumb row.
+// Which rows exist, and in what order, comes from the destination lists in
+// routeRegistry.js, which PageHeader also reads to decide where Back is
+// redundant.
+const LEFT_NAV_ITEMS = [
+    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
+    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
+    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
+    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
+    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon, requiresDex: true },
+    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
+    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
+    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
+    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+    // PC-15: COINPAY obligations queue; badge = payable pending count.
+    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
+];
+
+/** The label and icon row for a nav destination id. */
+export const navItem = (id) => LEFT_NAV_ITEMS.find((row) => row.id === id);
 
 export function activeLeftNavItem(currentView) {
     return ROUTE_NAV_SECTIONS[currentView] || 'home';
@@ -82,44 +118,27 @@ export function LeftNav({
     badges = {},
 }) {
     const activeItem = activeLeftNavItem(currentView);
-    const primary = [
-        { id: 'home', label: t('home.title'), Icon: Icon.HomeIcon },
-        { id: 'history', label: t('history.title'), Icon: Icon.HistoryIcon },
-        // Signer mode's own hint promises "Send / receive screens
-        // are hidden; this wallet does not broadcast". Absent, not disabled,
-        // for the reason the DEX row below is absent: a greyed Send row still
-        // reads as a capability the device has, and the whole value of the
-        // mode is that an air-gapped user can believe the removal.
-        ...(isSignerMode ? [] : [
-            { id: 'send', label: t('send.title'), Icon: Icon.SendIcon },
-            { id: 'receive', label: t('home.receive'), Icon: Icon.ReceiveIcon },
-        ]),
-        { id: 'scan', label: t('scan.title'), Icon: Icon.ScanIcon },
-        // Absent, not greyed, when the build has no DEX surface: the store
-        // build compiles those routes out, so the destination does
-        // not exist, and a visibly disabled exchange tab asks an app reviewer
-        // the same question a working one does.
-        ...(hasDexSurface
-            ? [
-                { id: 'markets', label: t('nav.dex'), Icon: Icon.MarketIcon },
-                { id: 'market-activity', label: t('nav.marketplace'), Icon: Icon.LineChartIcon },
-            ]
-            : []),
-        { id: 'dispensers-list', label: t('routes.addressList.dispensers'), Icon: Icon.DollarIcon },
-        // Gate Contracts on a VM address, matching Home and the command
-        // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
-        ...(hasVmAddress
-            ? [{ id: 'contracts-list', label: t('home.contracts'), Icon: Icon.ContractIcon }]
-            : []),
-        { id: 'messaging', label: t('home.messaging'), Icon: Icon.MessageIcon },
-    ];
-
-    const secondary = [
-        { id: 'contacts', label: t('components.contactsPickerScreen.contacts'), Icon: Icon.UsersIcon },
-        { id: 'lists', label: t('nav.lists'), Icon: Icon.TokenListIcon },
-        // PC-15: COINPAY obligations queue; badge = payable pending count.
-        { id: 'obligations', label: t('nav.paymentsDue'), Icon: Icon.ClockIcon },
-    ];
+    // Signer mode's own hint promises "Send / receive screens
+    // are hidden; this wallet does not broadcast". Absent, not disabled,
+    // for the reason the DEX rows are absent: a greyed Send row still
+    // reads as a capability the device has, and the whole value of the
+    // mode is that an air-gapped user can believe the removal.
+    // DEX rows are absent, not greyed, when the build has no DEX surface: the
+    // store build compiles those routes out, so the destination does not
+    // exist, and a visibly disabled exchange tab asks an app reviewer the
+    // same question a working one does.
+    // Contracts is gated on a VM address, matching Home and the command
+    // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
+    const shown = (id) => {
+        const item = navItem(id);
+        if (item.spendable && isSignerMode) return false;
+        if (item.requiresDex && !hasDexSurface) return false;
+        if (item.requiresVm && !hasVmAddress) return false;
+        return true;
+    };
+    const toRows = (ids) => ids.filter(shown).map(navItem);
+    const primary = toRows(SIDEBAR_PRIMARY_DESTINATIONS);
+    const secondary = toRows(SIDEBAR_SECONDARY_DESTINATIONS);
 
     const handleKeyDown = (event) => {
         const direction = {
@@ -291,11 +310,15 @@ function skipToMain(e) {
  *
  * The `header` slot (§49 / Cluster G FOLLOWUP 4) renders persistent
  * chrome above the route content so it survives route changes, so Home
- * no longer has to mount it itself. The `notices` slot below it holds
- * the stacked banners (queued broadcasts, reachability, …). Only the
- * notices scroll when the stack grows past its compact-tier cap: the
- * header row hosts anchored popovers (the settings gear, the scan menu),
- * and a scroll box around it would clip them to its own height.
+ * no longer has to mount it itself. It never clips: the header row hosts
+ * anchored popovers (the settings gear, the scan menu).
+ *
+ * The `notices` (queued broadcasts, reachability, update notices) are not
+ * toolbar content. They stay mounted here, so their state survives route
+ * changes, but render into a detached host that the route's `<Screen>`
+ * moves into its scrolling body, below the page header and above the route
+ * content (see noticesRoute.js). A route without a Screen shows them in a
+ * fallback slot at the top of the route area.
  *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav
@@ -311,20 +334,40 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     const previousRouteKeyRef = useRef(routeKey);
     const sidebar = showsSidebar(tier) ? nav : null;
     const bar = showsBottomBar(tier) ? bottomBar : null;
+    // PageHeader reads which surface is on screen to drop a Back control
+    // that would duplicate a visible nav row.
+    const navSurface = sidebar ? 'sidebar' : (bar ? 'tabBar' : null);
 
-    // Route bodies reserve a scrollbar lane on both inline edges; notices
-    // above them sit outside that scroller, so they read the lane width here
-    // to keep the same inset as route content.
-    useEffect(() => {
-        const root = document.documentElement;
-        if (!globalThis.CSS?.supports?.('scrollbar-gutter: stable')) return;
-        const probe = document.createElement('div');
-        probe.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden';
-        document.body.appendChild(probe);
-        const lane = probe.offsetWidth - probe.clientWidth;
-        probe.remove();
-        root.style.setProperty('--xc-scrollbar-lane', `${Math.max(0, lane)}px`);
-    }, []);
+    const [noticesHost] = useState(() => {
+        const host = document.createElement('div');
+        host.className = styles.notices;
+        return host;
+    });
+    const noticesFallbackRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const noticeSlotsRef = useRef(/** @type {HTMLElement[]} */ ([]));
+    const [reachabilityHidden, setReachabilityHidden] = useState(0);
+    const hasNotices = Boolean(notices);
+    // The newest claiming Screen shows the notices; with none, the fallback slot.
+    const placeNotices = () => {
+        (noticeSlotsRef.current.at(-1) ?? noticesFallbackRef.current)?.appendChild(noticesHost);
+    };
+    const shellNotices = useMemo(() => (hasNotices ? {
+        claim(slot) {
+            noticeSlotsRef.current.push(slot);
+            placeNotices();
+            return () => {
+                noticeSlotsRef.current = noticeSlotsRef.current.filter((s) => s !== slot);
+                placeNotices();
+            };
+        },
+        setReachabilityHidden,
+    } : null), [hasNotices]);
+
+    // Child Screens claim the host in their own layout effects, which run
+    // before this one; anything left unclaimed goes to the fallback slot.
+    useLayoutEffect(() => {
+        if (hasNotices && !noticesHost.parentNode) placeNotices();
+    });
 
     useEffect(() => {
         if (previousRouteKeyRef.current === routeKey) return;
@@ -359,14 +402,22 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
-                {notices ? (
-                    <div className={styles.notices}>
-                        <NoticesRouteContext.Provider value={routeKey ?? null}>
+                {hasNotices ? createPortal(
+                    <NoticesRouteContext.Provider value={routeKey ?? null}>
+                        <ReachabilityNoticeHiddenContext.Provider value={reachabilityHidden > 0}>
                             {notices}
-                        </NoticesRouteContext.Provider>
-                    </div>
+                        </ReachabilityNoticeHiddenContext.Provider>
+                    </NoticesRouteContext.Provider>,
+                    noticesHost,
                 ) : null}
-                <div className={styles.mainBody}>{children}</div>
+                <div className={styles.mainBody}>
+                    {hasNotices ? <div ref={noticesFallbackRef} className={screenStyles.noticesFallback} /> : null}
+                    <NavSurfaceContext.Provider value={navSurface}>
+                        <ShellNoticesContext.Provider value={shellNotices}>
+                            {children}
+                        </ShellNoticesContext.Provider>
+                    </NavSurfaceContext.Provider>
+                </div>
             </div>
             {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}
         </div>

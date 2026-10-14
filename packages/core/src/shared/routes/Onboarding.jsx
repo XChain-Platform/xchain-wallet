@@ -375,7 +375,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         <PageHeader
             onBack={onBack}
             backLabel={t('onboarding.backToWallets')}
-            title={mustGraduate ? t('onboarding.leaveTheDemo') : t('walletPicker.add')}
+            title={t('walletPicker.add')}
         />
     ) : null;
 
@@ -395,7 +395,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         <img
                             src={branding.logoUrl()}
                             alt={branding.PRODUCT_NAME}
-                            className={isFull ? styles.logoFull : styles.logoPopup}
+                            className={`${isFull ? styles.logoFull : styles.logoPopup} ${styles.licenseLogo}`}
                         />
                     )}
                     actions={(

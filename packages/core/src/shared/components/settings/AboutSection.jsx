@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { copyText } from '../../clipboard.js';
+import { nativePlatformName } from '../../nativeShell.js';
 import {
     LICENSE_FILE,
     LICENSE_NAME,
@@ -186,7 +187,7 @@ export function AboutSection() {
             </Row>
             <Row label={t('settings.about.platform')}>
                 <span style={ROW_VALUE}>
-                    {diagnosticMeta?.platform || (shell === 'popup' ? t('settings.about.extension') : shell)}
+                    {diagnosticMeta?.platform || platformLabel(shell)}
                 </span>
             </Row>
             <Row label={t('settings.about.updateChannel')}>
@@ -219,7 +220,7 @@ export function AboutSection() {
                         repo on GitHub to read what they're agreeing to. */}
                     <Button
                         size="sm"
-                        variant="ghost"
+                        variant="secondary"
                         onClick={() => setLicenseOpen((open) => !open)}
                         aria-expanded={licenseOpen}
                         aria-controls="full-license-text"
@@ -285,7 +286,7 @@ export function AboutSection() {
                 )}
             </Row>
             <Row label={t('settings.about.diagnostics')}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center', justifyContent: 'flex-end' }}>
                     <Button
                         size="sm"
                         variant="ghost"
@@ -353,11 +354,25 @@ export function AboutSection() {
     );
 }
 
+// When a narrow row wraps its value under the label, the value keeps to the
+// row end, where every other Settings control sits.
+const ROW_END = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    marginInlineStart: 'auto',
+    minWidth: 0,
+    maxWidth: '100%',
+    textAlign: 'end',
+};
+
 function Row({ label, children }) {
     return (
         <div style={ROW}>
             <span style={ROW_LABEL}>{label}</span>
-            {children}
+            <div style={ROW_END}>{children}</div>
         </div>
     );
 }
@@ -399,12 +414,17 @@ function DocLink({ path, label }) {
     );
 }
 
+/** Shell name for display; a Capacitor build reports its OS, not the "web" shell it wraps. */
+function platformLabel(shell) {
+    return nativePlatformName() || (shell === 'popup' ? 'extension' : shell);
+}
+
 function prepareDiagnosticDump(dump, shell) {
     const sanitized = sanitizeDiagnosticValue(dump);
     const report = sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
         ? sanitized
         : {};
-    const platform = shell === 'popup' ? 'extension' : shell;
+    const platform = platformLabel(shell);
     const wallet = report.wallet && typeof report.wallet === 'object' ? report.wallet : {};
     const build = report.build && typeof report.build === 'object' ? report.build : {};
     const buildId = build.buildId || runtimeBuildHash();

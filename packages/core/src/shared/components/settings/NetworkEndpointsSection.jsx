@@ -330,7 +330,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         <FormSection
             headingLevel="h3"
             title={`${descriptor.displayName}${networkSuffix}`}
-            description={isCustom ? 'Custom' : 'Default'}
+            description={isCustom ? t('ui.feeSelector.custom') : t('settings.endpoints.default')}
             className={styles.endpointCard}
         >
             <UrlField
@@ -366,18 +366,22 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                     {t('settings.endpoints.urlFormatIsCheckedHere')}
                 </div>
             ) : null}
-            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                {isCustom || dirty ? (
-                    <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
-                        {t('settings.endpoints.resetToDefault')}
-                    </Button>
-                ) : null}
-                {dirty || editing ? (
-                    <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
-                        {saving ? t('send.saveRecipient.saving') : t('history.contact.save')}
-                    </Button>
-                ) : null}
-            </div>
+            {/* The action row renders only with an action in it, so an untouched
+                default card keeps even padding instead of a blank gap at its foot. */}
+            {isCustom || dirty || editing ? (
+                <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                    {isCustom || dirty ? (
+                        <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
+                            {t('settings.endpoints.resetToDefault')}
+                        </Button>
+                    ) : null}
+                    {dirty || editing ? (
+                        <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
+                            {saving ? t('send.saveRecipient.saving') : t('history.contact.save')}
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
         </FormSection>
     );
 }

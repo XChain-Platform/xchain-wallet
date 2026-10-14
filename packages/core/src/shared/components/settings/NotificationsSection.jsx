@@ -372,13 +372,13 @@ function SoundsBlock({ settings, update }) {
             <div style={ROW}>
                 <Switch
                     label={t('settings.notifications.notificationSounds')}
-                    description="Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply."
+                    description={t('settings.notifications.playASoundWithEach')}
                     checked={enabled}
                     onChange={(event) => onToggle(event.target.checked)}
                 />
             </div>
             <NotificationSaveError
-                message={saveError === 'enabled' ? 'Could not save the notification sound setting. Try again.' : null}
+                message={saveError === 'enabled' ? t('settings.notifications.couldNotSaveTheNotification') : null}
             />
             {enabled ? (
                 <div style={MANAGER}>
@@ -416,7 +416,7 @@ function SoundsBlock({ settings, update }) {
                                     </span>
                                 </div>
                                 <NotificationSaveError
-                                    message={saveError === family.key ? 'Could not save this notification sound. Try again.' : null}
+                                    message={saveError === family.key ? t('settings.notifications.couldNotSaveThisNotification') : null}
                                 />
                             </div>
                         );
@@ -467,13 +467,13 @@ function QuietHoursRow({ settings, update }) {
             <div style={ROW}>
                 <Switch
                     label={t('settings.notifications.quietHours')}
-                    description="Pause all notifications, including price alerts, during a daily time window."
+                    description={t('settings.notifications.pauseAllNotificationsIncludingPrice')}
                     checked={qh.enabled === true}
                     onChange={(event) => onToggle(event.target.checked)}
                 />
             </div>
             <NotificationSaveError
-                message={saveError === 'enabled' ? 'Could not save quiet hours. Try again.' : null}
+                message={saveError === 'enabled' ? t('settings.notifications.couldNotSaveQuietHours') : null}
             />
             {qh.enabled ? (
                 <div style={MANAGER}>
@@ -497,7 +497,7 @@ function QuietHoursRow({ settings, update }) {
                         {qh.start} {t('settings.notifications.to2')} {qh.end} {t('settings.notifications.yourDeviceSLocalTime')}
                     </span>
                     <NotificationSaveError
-                        message={saveError === 'start' || saveError === 'end' ? 'Could not save quiet hours. Try again.' : null}
+                        message={saveError === 'start' || saveError === 'end' ? t('settings.notifications.couldNotSaveQuietHours') : null}
                     />
                 </div>
             ) : null}
@@ -584,7 +584,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
             {loading ? (
                 <span role="status" style={ROW_HINT}>{t('settings.notifications.loadingPriceAlerts')}</span>
             ) : error ? (
-                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>
+                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
                     {t('settings.notifications.couldNotLoadPriceAlerts')}{' '}
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>{t('common.tryAgain')}</Button>
                 </span>
@@ -651,7 +651,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 ))
             )}
 
-            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>{actionError}</span> : null}
+            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{actionError}</span> : null}
             {!loading && !error ? (
                 <PriceAlertForm
                     key={editingAlert?.id || 'new'}

@@ -64,6 +64,7 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
 
     const header = (
         <PageHeader
+            nested
             onBack={onBack}
             title={t('components.contactsPickerScreen.contacts')}
             titleIcon={<Icon.UsersIcon />}

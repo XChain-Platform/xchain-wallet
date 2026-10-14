@@ -155,7 +155,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         const side = await screen.findByText('Sell');
         const price = screen.getByText('2.00000000');
         expect(screen.getByText('10.00000000')).toBeInTheDocument();
-        expect(side.style.color).toBe('var(--xc-danger)');
+        expect(side.style.color).toBe('var(--xc-danger-fg)');
         expect(price.style.textAlign).toBe('right');
         expect(price.style.fontVariantNumeric).toBe('tabular-nums');
         expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');

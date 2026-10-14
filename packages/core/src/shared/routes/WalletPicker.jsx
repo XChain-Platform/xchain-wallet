@@ -163,7 +163,7 @@ export function WalletPicker({
                             {onShowDetails ? (
                                 <Button
                                     type="button"
-                                    icon={null}
+                                    icon={<Icon.InfoIcon />}
                                     variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('walletPicker.detailsFor', { wallet: walletName })}
@@ -173,9 +173,7 @@ export function WalletPicker({
                                         e.stopPropagation();
                                         onShowDetails(w.id);
                                     }}
-                                >
-                                    <Icon.InfoIcon />
-                                </Button>
+                                />
                             ) : null}
                         </div>
                     );

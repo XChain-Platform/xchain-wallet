@@ -211,6 +211,42 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(messaging.addImportedWallet).toHaveBeenCalledTimes(2);
     });
 
+    it('replaces a developer error from the save with recovery copy', async () => {
+        const messaging = makeMessaging({
+            addImportedWallet: vi.fn().mockRejectedValue(new Error('wallet.addImported: password is required')),
+        });
+        const context = renderMigration(messaging);
+        await reachVerify(context);
+        answerQuiz();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/Your recovery phrase is still here/);
+        expect(document.body.textContent).not.toMatch(/wallet\.addImported/);
+    });
+
+    it('explains a shell that cannot add a second wallet in plain words', async () => {
+        const context = renderMigration();
+        await reachVerify(context);
+        answerQuiz();
+        context.messaging.addImportedWallet = undefined;
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(/not supported in this version of the app/);
+        expect(alert.textContent).not.toMatch(/messaging\.|shell/);
+    });
+
+    it('asks the user to check the wallet list when the save returns no wallet id', async () => {
+        const context = renderMigration(makeMessaging({ addImportedWallet: vi.fn().mockResolvedValue({}) }));
+        await reachVerify(context);
+        answerQuiz();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(/Check your wallet list before trying again/);
+        expect(alert.textContent).not.toMatch(/walletId/);
+    });
+
     it('reports address-loading failure and retries without recreating the wallet', async () => {
         let oldAddressAttempts = 0;
         const messaging = makeMessaging({

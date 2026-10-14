@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useRouteIsNavDestination } from '../shared/components/navSurface.js';
 import { useBackHandler } from './backStack.js';
 import { Button } from './Button.jsx';
 import { BackIcon } from './icons/index.jsx';
@@ -16,6 +17,12 @@ import { t } from '../i18n/index.js';
 
 /**
  * Shared secondary-toolbar header used by every routed screen.
+ *
+ * The Back chevron is left out on a screen the visible navigation already
+ * links to (a sidebar destination while the sidebar shows, a bottom-bar tab
+ * while the tab bar shows); see NAV_SURFACE_DESTINATIONS in
+ * routeRegistry.js. The system Back gesture still runs `onBack` there, and
+ * the leading lane keeps its width so the title stays centred.
  *
  * Encapsulates the 3-column grid layout, chevron alignment (lines up
  * under the AppHeader logo via a negative margin-inline-start), title
@@ -32,6 +39,10 @@ import { t } from '../i18n/index.js';
  *   button. Defaults to "Back to previous screen".
  * @param {boolean} [props.backDisabled]              disables the back button
  *   (e.g. while a submit is in flight). The chevron stays visible but inert.
+ * @param {boolean} [props.nested]                    marks a sub-screen that
+ *   shares its parent's route id (a Settings section, a Contacts detail, a
+ *   review step). Such a screen always shows Back, even when the visible
+ *   navigation links to the route itself.
  * @param {import('react').ReactNode} props.title     centered title text.
  * @param {string} [props.titleId]                    id for naming the screen body.
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef] ref for moving focus to the screen heading.
@@ -46,6 +57,7 @@ export function PageHeader({
     onBack,
     backLabel = t('ui.pageHeader.backToPreviousScreen'),
     backDisabled = false,
+    nested = false,
     title,
     titleId,
     titleRef,
@@ -53,12 +65,14 @@ export function PageHeader({
     trailing = null,
 }) {
     useBackHandler(onBack, backDisabled, 'route');
+    const reachableFromNav = useRouteIsNavDestination();
+    const showBack = Boolean(onBack) && !(reachableFromNav && !nested);
     const accessibleBackLabel = backLabel.trim().toLowerCase() === 'back'
         ? 'Back to previous screen'
         : backLabel;
     return (
         <div className={styles.header}>
-            {onBack ? (
+            {showBack ? (
                 <Button
                     size="sm"
                     variant="secondary"

@@ -79,7 +79,7 @@ const LEVEL_COLORS = {
     log: 'var(--xc-text-muted)',
     info: 'var(--xc-text)',
     warn: 'var(--xc-warning, #C28A00)',
-    error: 'var(--xc-danger)',
+    error: 'var(--xc-danger-fg)',
 };
 
 const FILTER_CHIP = {

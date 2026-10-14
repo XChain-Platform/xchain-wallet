@@ -206,7 +206,7 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
                 className={`${tableStyles.cell} ${tableStyles.numeric}`}
                 data-label="Price"
                 title={level.displayPrice}
-                style={{ color: side === 'bid' ? 'var(--xc-success)' : 'var(--xc-danger)' }}
+                style={{ color: side === 'bid' ? 'var(--xc-success)' : 'var(--xc-danger-fg)' }}
             >
                 {onPick ? (
                     <button

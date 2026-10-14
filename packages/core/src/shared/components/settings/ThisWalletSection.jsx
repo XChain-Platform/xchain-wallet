@@ -18,20 +18,38 @@ import {
     CopyButton,
     FormSection,
     Input,
-    SectionHeader,
 } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { KeyQR } from '../KeyQR.jsx';
 import { useToast } from '../ToastHost.jsx';
+import { addressTypeLabel } from '../../utils/addressTypeLabel.js';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
-import { Status } from './_settingsPrimitives.jsx';
+import { SettingsActionRow, Status } from './_settingsPrimitives.jsx';
 import styles from './ThisWalletSection.module.css';
 import { t } from '../../../i18n/index.js';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
+
+const chainRegistry = registryLib.defaultRegistry();
+
+// Name a chain as the network pickers do: display name, plus the network kind off mainnet.
+function chainDisplayName(chainId) {
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor?.displayName) return chainId;
+    return descriptor.networkKind && descriptor.networkKind !== 'mainnet'
+        ? `${descriptor.displayName} ${descriptor.networkKind}`
+        : descriptor.displayName;
+}
+
+// Head an exported key with plain names; the account path line keeps the technical detail.
+function publicKeyTitle(entry) {
+    const chain = chainDisplayName(entry.chainId);
+    return entry.addressType ? `${chain} (${addressTypeLabel(entry.addressType)})` : chain;
+}
 
 function isWrongPasswordError(err) {
     return err?.name === 'AeadAuthError' || err?.name === 'InvalidPasswordError';
@@ -227,22 +245,19 @@ export function ThisWalletSection({
                     onConfirm={onConfirmRemove}
                 />
             ) : (
-                <section className={styles.row}>
-                    <SectionHeader
-                        title={t('settings.thisWallet.removeWallet')}
-                        description="Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery."
-                        trailing={(
-                            <Button
-                                variant="danger"
-                                size="sm"
-                                icon={null}
-                                onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
-                            >
-                                {t('settings.thisWallet.remove')}
-                            </Button>
-                        )}
-                    />
-                </section>
+                <SettingsActionRow
+                    label={t('settings.thisWallet.removeWallet')}
+                    hint={t('settings.thisWallet.deletesTheWalletAndAll')}
+                >
+                    <Button
+                        variant="danger"
+                        size="sm"
+                        icon={null}
+                        onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
+                    >
+                        {t('settings.thisWallet.remove')}
+                    </Button>
+                </SettingsActionRow>
             )}
         </div>
     );
@@ -362,7 +377,7 @@ function ChangePasswordRow({ walletId, disabled }) {
         <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} aria-busy={busy}>
             <FormSection
                 title={t('settings.thisWallet.changeWalletPassword')}
-                description={`Use at least ${MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger. Keep it safe because it cannot be recovered.`}
+                description={t('settings.thisWallet.useAtLeastCharactersA', { MIN_WALLET_PASSWORD_LENGTH })}
                 className={styles.panel}
             >
                 <Input
@@ -425,7 +440,7 @@ function PublicKeyExport({
     return (
         <FormSection
             title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
-            description="An extended public key does not contain private keys and cannot spend funds. Anyone with it can derive and monitor every address below that account path, including future addresses. Share it only with a watch-only wallet you trust."
+            description={t('settings.thisWallet.anExtendedPublicKeyDoes')}
             className={styles.panel}
         >
             {stage === 'password' ? (
@@ -455,8 +470,8 @@ function PublicKeyExport({
                     {entries.map((entry) => (
                         <FormSection
                             key={`${entry.chainId}:${entry.path}`}
-                            title={`${entry.chainId}${entry.addressType ? ` (${entry.addressType})` : ''}`}
-                            description={entry.path ? `Account path: ${entry.path}` : undefined}
+                            title={publicKeyTitle(entry)}
+                            description={entry.path ? t('settings.thisWallet.accountPath', { path: entry.path }) : undefined}
                             headingLevel="h3"
                             className={styles.keyPanel}
                         >
@@ -465,7 +480,7 @@ function PublicKeyExport({
                                 <KeyQR
                                     value={entry.xpub}
                                     size={180}
-                                    alt={t('settings.thisWallet.qrCodeForExtendedPublic', { chainId: entry.chainId })}
+                                    alt={t('settings.thisWallet.qrCodeForExtendedPublic', { chainId: chainDisplayName(entry.chainId) })}
                                 />
                                 <CopyButton
                                     value={entry.xpub}
@@ -486,24 +501,20 @@ function PublicKeyExport({
 
 function Row({ label, hint, actionLabel, onClick, disabled = false }) {
     return (
-        <section className={styles.row}>
-            <SectionHeader
-                title={label}
-                description={hint}
-                trailing={actionLabel && onClick ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        icon={null}
-                        onClick={onClick}
-                        disabled={disabled}
-                    >
-                        {actionLabel}
-                    </Button>
-                ) : null}
-            />
-        </section>
+        <SettingsActionRow label={label} hint={hint}>
+            {actionLabel && onClick ? (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
+                    onClick={onClick}
+                    disabled={disabled}
+                >
+                    {actionLabel}
+                </Button>
+            ) : null}
+        </SettingsActionRow>
     );
 }
 

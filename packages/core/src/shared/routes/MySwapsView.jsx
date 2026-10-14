@@ -42,6 +42,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { countdownText } from '../../market/obligationStatus.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -438,6 +439,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
  * transaction.
  */
 function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { chainId, owner, row } = item;
     const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
@@ -657,6 +659,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={isCancel ? 'Cancel swap' : 'Edit swap'}
             onSubmit={submit}
             status={validationError || error ? (

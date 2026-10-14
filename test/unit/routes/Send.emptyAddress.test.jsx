@@ -65,8 +65,14 @@ describe('Send from an address holding no coin', () => {
     it('shows a Receive action instead of the form when the selected chain is empty', async () => {
         const { onReceive } = mount('0');
 
-        const template = await screen.findByRole('group', { name: 'Send' });
-        expect(within(template).getByRole('heading', { name: 'Nothing to send yet' }))
+        const heading = await screen.findByRole('heading', { name: 'Nothing to send yet' });
+        // The empty state is the page's content at full width: directly in
+        // the page body, with no card or dashed box around it.
+        const emptyState = heading.closest('[role="status"]');
+        expect(emptyState.parentElement).toBe(screen.getByRole('main'));
+        expect(emptyState.className).toMatch(/plain/);
+        expect(screen.queryByRole('group', { name: 'Send' })).toBeNull();
+        expect(within(emptyState).getByText('Receive coins or tokens on this chain before creating a payment.'))
             .toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Send' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));

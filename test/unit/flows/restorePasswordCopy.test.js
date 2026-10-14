@@ -196,6 +196,24 @@ describe('restoreFailureMessage names the password it is talking about', () => {
         expectUserFacing(m);
     });
 
+    it('a file that is not a backup envelope is named as such, without core field names', () => {
+        for (const raw of [
+            'unexpected magic "undefined"',
+            'file is not valid JSON (Unexpected token h in JSON at position 0)',
+            'unsupported formatVersion 9 (expected 1)',
+            'encryption.kdf.algorithm must be "argon2id"',
+            'payload must be a base64 string',
+        ]) {
+            const err = new Error(raw);
+            err.name = 'BackupFormatError';
+            for (const reason of [err, raw]) {
+                const m = restoreFailureMessage(reason);
+                expect(m).toBe('That is not a wallet backup file this app can read. Choose the backup file you exported, or paste its whole contents.');
+                expectUserFacing(m);
+            }
+        }
+    });
+
     it('still says something for a failure it has never seen', () => {
         // The fallback matters most: an unclassified error is exactly the one
         // that used to reach the screen with a function name glued to it.

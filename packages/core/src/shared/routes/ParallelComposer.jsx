@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -80,6 +81,7 @@ const newRowId = () => `row-${++nextRowId}`;
  */
 export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -470,6 +472,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         ].join(' ');
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Sign parallel actions"
                 status={activeRow.status === 'failed' && activeRow.error ? (
                     <StatusMessage variant="error" className={styles.error}>{activeRow.error}</StatusMessage>
@@ -533,6 +536,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     if (stage === 'review') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review parallel actions"
                 actions={(
                     <>
@@ -582,6 +586,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Compose parallel actions"
             onSubmit={async (event) => {
                 event.preventDefault();

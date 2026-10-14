@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -55,6 +56,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -501,6 +503,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('gatedPublish.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
@@ -629,6 +632,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('gatedPublish.gatedContent')}
             onSubmit={handleReview}
             noValidate

@@ -585,7 +585,7 @@ export function Locked({ onUnlocked }) {
                                 <DemoExitConfirm
                                     busy={demoWipeBusy}
                                     error={demoWipeError}
-                                    message="This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions. Make sure you have every recovery phrase or backup file you need. This cannot be undone."
+                                    message={t('locked.thisPermanentlyDeletesEveryWallet2')}
                                     onConfirm={handleExitDemo}
                                     onCancel={() => { setDemoConfirmOpen(false); setDemoWipeError(null); }}
                                 />

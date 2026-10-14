@@ -395,6 +395,7 @@ export function ConfirmActionModal({
     // signature is in flight (both exits locked).
     const header = (
         <PageHeader
+            nested
             onBack={handleReject}
             backDisabled={exitsLocked}
             title={t('common.confirm')}

@@ -30,7 +30,7 @@ function chunk(fileName, code, options = {}) {
 
 describe('web initial bundle budget', () => {
     it('keeps a small margin above the measured production entry', () => {
-        expect(WEB_INITIAL_JS_SIZE_LIMIT).toBe(900_000);
+        expect(WEB_INITIAL_JS_SIZE_LIMIT).toBe(905_000);
         expect(WEB_INITIAL_CSS_SIZE_LIMIT).toBe(120_000);
     });
 

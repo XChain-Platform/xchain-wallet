@@ -336,7 +336,7 @@ export function DisplaySection() {
             <div style={ROW}>
                 <Switch
                     label={t('settings.display.hideSmallBalances')}
-                    description="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
+                    description={t('settings.display.collapseBalancesBelowTheSelected')}
                     checked={settings.privacy?.hideSmallBalances === true}
                     onChange={(event) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: event.target.checked } })}
                 />
@@ -345,7 +345,7 @@ export function DisplaySection() {
             <div style={ROW}>
                 <Switch
                     label={t('settings.display.hideUnknownTokens')}
-                    description="Collapse unpriced tokens without a name or image unless you pinned, watched, issued, or placed them in an order. Hidden tokens stay available from the expandable Hidden tokens list."
+                    description={t('settings.display.collapseUnpricedTokensWithoutA')}
                     checked={settings.hideUnknownTokens === true}
                     onChange={(event) => updateDisplay('hideUnknownTokens', { hideUnknownTokens: event.target.checked })}
                 />
@@ -390,12 +390,12 @@ export function DisplaySection() {
 
             <FormSection
                 title={t('settings.display.rowAffordances')}
-                description="Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active."
+                description={t('settings.display.chooseWhetherBalanceRowsShow')}
             >
             <div style={ROW}>
                 <Switch
                     label={t('settings.display.showPinButtonOnRows')}
-                    description="Display a star on each balance row for pinning or unpinning the token on Home."
+                    description={t('settings.display.displayAStarOnEach')}
                     checked={showPinAffordance}
                     onChange={(event) => setPinAffordance(event.target.checked)}
                 />
@@ -404,7 +404,7 @@ export function DisplaySection() {
             <div style={ROW}>
                 <Switch
                     label={t('settings.display.showHideButtonOnRows')}
-                    description="Display a hide affordance on each balance row to collapse the token into the Hidden section."
+                    description={t('settings.display.displayAHideAffordanceOn')}
                     checked={showHideAffordance}
                     onChange={(event) => setHideAffordance(event.target.checked)}
                 />
@@ -414,7 +414,7 @@ export function DisplaySection() {
 
             <FormSection
                 title={t('settings.display.watchedTokens', { length: watched.length })}
-                description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
+                description={t('settings.display.addATokenByChain')}
             >
             <form className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }} onSubmit={addWatchedToken}>
                 <div style={ROW_COPY}>
@@ -476,7 +476,7 @@ export function DisplaySection() {
 
             <FormSection
                 title={t('settings.display.pinnedTokens', { length: pinned.length })}
-                description="Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin."
+                description={t('settings.display.pinnedTokensFloatToThe')}
             >
             {(pinned.length > 0 || hidden.length > 0) ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)' }}>
@@ -562,7 +562,7 @@ export function DisplaySection() {
 
             <FormSection
                 title={t('settings.display.hiddenTokens', { length: hidden.length })}
-                description={'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.'}
+                description={t('settings.display.hiddenTokensCollapseIntoThe')}
             >
                 <DisplaySaveError error={saveError} controlKey="hiddenTokens" />
                 {hidden.length === 0 ? (
@@ -610,7 +610,7 @@ export function DisplaySection() {
 
             <FormSection
                 title={t('settings.display.listPreferences')}
-                description={'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."'}
+                description={t('settings.display.rememberTheLastSelectedChain')}
             >
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>

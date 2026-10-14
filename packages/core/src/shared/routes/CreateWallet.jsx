@@ -376,7 +376,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 <FormPage
                     ref={stageFormRef}
                     label={t('createWallet.walletCreationStatus')}
-                    description="XChain Platform is encrypting your wallet with your password. This can take a minute on some devices. Keep the app open."
+                    description={t('createWallet.xchainPlatformIsEncryptingYour')}
                     progress={<span aria-current="step">{t('createWallet.step3Of3')}</span>}
                     aria-live="polite"
                     actions={<Button loading icon={<Icon.CheckIcon />}>{t('createWallet.createWallet')}</Button>}
@@ -392,8 +392,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 label={t('createWallet.verifyRecoveryPhrase')}
                 onSubmit={handleSubmitVerify}
                 description={isFull
-                    ? 'Enter the requested words from the recovery phrase you wrote down.'
-                    : 'Enter the requested words to confirm your recovery phrase.'}
+                    ? t('createWallet.enterTheRequestedWordsFrom')
+                    : t('createWallet.enterTheRequestedWordsTo')}
                 progress={<span aria-current="step">{t('createWallet.step3Of3')}</span>}
                 status={<FormErrorSummary
                     errors={[
@@ -469,8 +469,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 ref={stageFormRef}
                 label={t('importWallet.recoveryPhrase')}
                 description={isFull
-                    ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. ${RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.`
-                    : `Write these ${wordCount} words on paper and store your recovery phrase safely. ${RECOVERY_PHRASE_WARNING}`}
+                    ? t('createWallet.theseWordsAreYourRecovery', { words: wordCount === 24 ? 'twentyFour' : 'twelve', RECOVERY_PHRASE_WARNING })
+                    : t('createWallet.writeTheseWordsOnPaper', { wordCount, RECOVERY_PHRASE_WARNING })}
                 progress={<span aria-current="step">{t('createWallet.step2Of3')}</span>}
                 status={persistError ? (
                     <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
@@ -533,8 +533,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             label={t('createWallet.createWallet')}
             onSubmit={handlePasswordSubmit}
             description={isFull
-                ? 'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.'
-                : 'Your password encrypts this wallet on this device.'}
+                ? t('createWallet.yourPasswordEncryptsThisWallet')
+                : t('createWallet.yourPasswordEncryptsThisWallet2')}
             visual={isFull ? (
                 <img
                     src={branding.logoUrl()}
@@ -642,7 +642,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                             id="create-bip39-passphrase"
                             type="password"
                             label={t('importWallet.passphrase.label')}
-                            hint={t('createWallet.requiredWhenEnabledCapitalizationAnd')}
+                            hint={t('createWallet.requiredWhenEnabled')}
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);

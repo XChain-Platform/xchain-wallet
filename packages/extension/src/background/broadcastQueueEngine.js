@@ -417,13 +417,19 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         // The read is still failing, or the store is dormant, so neither
         // persist below can write and the blob keeps this wallet; the
         // recovering load or the lease reload drops it instead.
-        if ((!queueStore.loaded || queueStore.dormant) && !queueStore.sealed) queueStore.prunedWallets?.add(walletId);
+        const unwritable = !queueStore.loaded || queueStore.dormant;
+        // A loaded store records the removal too, before its save: a refused
+        // save leaves the wallet in the blob, and only the ledger drops it on the next boot.
+        const heldOnDisk = queueStore.storage && queuedBroadcasts.has(walletId);
+        if ((unwritable || heldOnDisk) && !queueStore.sealed) queueStore.prunedWallets?.add(walletId);
         const hadEntries = queuedBroadcasts.delete(walletId);
         recoveredWallets.delete(walletId);
         reconciledWallets.delete(walletId);
         const owedBefore = queueStore.owed.length;
         queueStore.owed = queueStore.owed.filter((s) => s.walletId !== walletId);
-        if (hadEntries) await persistQueue();
+        // A save that landed dropped the wallet and retired its ledger key, so the
+        // live set forgets it too (a plain Set delete; the ledger is already clear).
+        if (hadEntries && await persistQueue()) queueStore.prunedWallets?.delete(walletId);
         if (queueStore.owed.length !== owedBefore) await persistOwedSettlements();
     }
     function getQueue(walletId) {
@@ -509,7 +515,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * judgement: it rides the same `xchain.broadcastQueue` key the queue
      * snapshot does, so it is gone in exactly the failure this read serves.
      *
-     * Three conditions bound what comes back, and each is a refusal:
+     * Four conditions bound what comes back, and each is a refusal:
      *   - the record's `fromAddress` belongs to THIS wallet. An unreadable
      *     table or an empty address set restores nothing rather than guessing,
      *     because a wrong join would list one wallet's signed bytes under
@@ -520,7 +526,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      *     can reach are exactly the ones no live call owns.
      *   - no owed settlement names it. A journaled write belongs to an entry
      *     whose broadcast or discard already happened.
-     * The last two are sampled before the vault reads as well as after, and an
+     *   - a 'broadcasting' record was created before this store was built.
+     *     submitAction holds its record at 'broadcasting' across the phase-1
+     *     broadcast, the reveal and the whole P2SH phase 2 (a hardware
+     *     signature included), and tx.replace and broadcast.signedTx hold theirs
+     *     across the network call, with no queue entry naming any of them. A
+     *     record this process created is therefore a live call's, or one the
+     *     map or journal already holds; one a dead process left behind predates
+     *     the next store and comes back on that boot. An unparseable createdAt
+     *     keeps the record restorable.
+     * The second and third are sampled before the vault reads as well as after, and an
      * id held at either moment is skipped. A route drops its entry only after
      * the record is terminal or journaled, and the journal drops a record only
      * once its write lands, so a record read stale mid-scan is still named by
@@ -562,10 +577,11 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         const held = heldPendingTxIds(walletId);
         for (const id of heldBeforeReads) held.add(id);
         const restorable = candidates
-            .filter(({ record: r }) => r
+            .filter(({ record: r, resumedClaim }) => r
                 && typeof r.txHex === 'string' && r.txHex
                 && typeof r.id === 'string' && !held.has(r.id)
-                && owned.has(r.fromAddress))
+                && owned.has(r.fromAddress)
+                && !(resumedClaim && createdInThisProcess(r)))
             .sort((a, b) => String(a.record.createdAt || '').localeCompare(String(b.record.createdAt || '')));
         for (const { record, resumedClaim } of restorable) {
             // Entries name a registry chain id; records name coin plus network.
@@ -591,6 +607,12 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 adsCommit: null,
             });
         }
+    }
+    // Whether a record was created after this store was built (a store with no boot stamp claims none).
+    function createdInThisProcess(record) {
+        const created = Date.parse(record.createdAt);
+        return Number.isFinite(queueStore.bootedAt) && Number.isFinite(created)
+            && created > queueStore.bootedAt;
     }
     // PendingTx ids a live queue entry or an owed settlement names right now.
     function heldPendingTxIds(walletId) {

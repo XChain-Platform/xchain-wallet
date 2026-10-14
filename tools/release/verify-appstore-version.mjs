@@ -77,6 +77,7 @@
 // Usage:
 //   node tools/release/verify-appstore-version.mjs
 //   node tools/release/verify-appstore-version.mjs --json
+//     (App Review's detail is printed as presence and length, never its values)
 //
 // Credentials, the same four the archive and export lanes take:
 //   APPLE_API_KEY      the .p8 file CONTENTS (or APPLE_API_KEY_PATH, a path)
@@ -702,8 +703,18 @@ export async function fetchVersionRecord({ token, bundleId, marketing = null, fe
         const res = await fetchImpl(`https://api.appstoreconnect.apple.com${path}`, {
             headers: { Authorization: `Bearer ${token}` },
         });
-        const body = await res.json().catch(() => ({}));
-        return { status: res.status, body };
+        let parsed = true;
+        const body = await res.json().catch(() => { parsed = false; return {}; });
+        return { status: res.status, body, parsed };
+    };
+
+    // Read one follow-up resource; anything but a parsed 200 is a read that
+    // failed, never an empty answer (an empty answer would be judged as a fault)
+    const read = async (path, what) => {
+        const res = await get(path);
+        if (res.status === 200 && res.parsed) return res.body;
+        const how = res.parsed ? `HTTP ${res.status}` : `HTTP ${res.status} with an unreadable body`;
+        throw new UnreadableRecord(`${how} reading ${what} (${path}), so the record cannot be judged`);
     };
 
     const apps = await get(`/v1/apps?filter[bundleId]=${encodeURIComponent(bundleId)}`);
@@ -741,10 +752,28 @@ export async function fetchVersionRecord({ token, bundleId, marketing = null, fe
         ageRating: {},
     };
 
-    const buildRel = await get(`/v1/appStoreVersions/${version.id}/build`);
-    if (buildRel.body.data) {
-        const b = await get(`/v1/builds/${buildRel.body.data.id}`);
-        const at = b.body.data?.attributes ?? {};
+    try {
+        await readFollowUps(read, record, app, version);
+    } catch (err) {
+        // Report a failed read as inconclusive explicitly; the caller's 401 pattern would match a version id
+        if (err instanceof UnreadableRecord) return { error: err.message, verdict: 'inconclusive' };
+        throw err;
+    }
+    return { record };
+}
+
+/** A follow-up App Store Connect read that did not answer, so nothing it holds can be judged. */
+class UnreadableRecord extends Error {}
+
+/**
+ * Fill the record from the reads after version selection. A `200` carrying
+ * `data: null` is Apple's own "not there" and is judged as such.
+ */
+async function readFollowUps(read, record, app, version) {
+    const buildRel = await read(`/v1/appStoreVersions/${version.id}/build`, 'the attached build');
+    if (buildRel.data) {
+        const b = await read(`/v1/builds/${buildRel.data.id}`, 'the build');
+        const at = b.data?.attributes ?? {};
         record.build = {
             version: at.version,
             processingState: at.processingState,
@@ -753,39 +782,58 @@ export async function fetchVersionRecord({ token, bundleId, marketing = null, fe
         };
     }
 
-    const rd = await get(`/v1/appStoreVersions/${version.id}/appStoreReviewDetail`);
-    record.reviewDetail = rd.body.data?.attributes ?? {};
+    const rd = await read(`/v1/appStoreVersions/${version.id}/appStoreReviewDetail`, 'the App Review detail');
+    record.reviewDetail = rd.data?.attributes ?? {};
 
-    const locs = await get(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`);
-    for (const loc of locs.body.data ?? []) {
-        const sets = await get(`/v1/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`);
-        for (const set of sets.body.data ?? []) {
-            const shots = await get(`/v1/appScreenshotSets/${set.id}/appScreenshots`);
+    const locs = await read(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`, 'the version localizations');
+    for (const loc of locs.data ?? []) {
+        const sets = await read(`/v1/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`, 'the screenshot sets');
+        for (const set of sets.data ?? []) {
+            const shots = await read(`/v1/appScreenshotSets/${set.id}/appScreenshots`, 'the screenshots');
             record.screenshotSets.push({
                 displayType: set.attributes.screenshotDisplayType,
-                count: (shots.body.data ?? []).length,
-                states: (shots.body.data ?? []).map((s) => s.attributes.assetDeliveryState?.state),
+                count: (shots.data ?? []).length,
+                states: (shots.data ?? []).map((s) => s.attributes.assetDeliveryState?.state),
                 // Apple's MD5 of the bytes it received, which is the only
                 // handle there is on WHICH images the console actually holds.
-                checksums: (shots.body.data ?? []).map((s) => s.attributes.sourceFileChecksum ?? null),
+                checksums: (shots.data ?? []).map((s) => s.attributes.sourceFileChecksum ?? null),
             });
         }
     }
 
-    const infos = await get(`/v1/apps/${app.id}/appInfos`);
-    const info = infos.body.data?.[0];
+    const infos = await read(`/v1/apps/${app.id}/appInfos`, 'the app infos');
+    const info = infos.data?.[0];
     if (info) {
         record.appInfo.ageRating = info.attributes.appStoreAgeRating;
-        const rating = await get(`/v1/appInfos/${info.id}/ageRatingDeclaration`);
-        record.ageRating = rating.body.data?.attributes ?? {};
-        const il = await get(`/v1/appInfos/${info.id}/appInfoLocalizations`);
-        const enUS = (il.body.data ?? []).find((l) => l.attributes.locale === 'en-US') ?? il.body.data?.[0];
+        const rating = await read(`/v1/appInfos/${info.id}/ageRatingDeclaration`, 'the age rating declaration');
+        record.ageRating = rating.data?.attributes ?? {};
+        const il = await read(`/v1/appInfos/${info.id}/appInfoLocalizations`, 'the app info localizations');
+        const enUS = (il.data ?? []).find((l) => l.attributes.locale === 'en-US') ?? il.data?.[0];
         record.appInfo.privacyPolicyUrl = enUS?.attributes?.privacyPolicyUrl ?? null;
         record.appInfo.name = enUS?.attributes?.name;
         record.appInfo.subtitle = enUS?.attributes?.subtitle;
     }
+}
 
-    return { record };
+/**
+ * Reduce App Review's detail to what is safe to print: presence and length per
+ * string, booleans as they are, and whether the demo seed is filled. Shaped as
+ * an allowlist so a field Apple adds later is reduced too, never echoed.
+ *
+ * @param {object} rd  record.reviewDetail as fetched
+ * @returns {object}
+ */
+export function redactReviewDetail(rd) {
+    const out = {};
+    for (const [key, value] of Object.entries(rd ?? {})) {
+        if (typeof value === 'boolean') out[key] = value;
+        else if (typeof value === 'string') out[key] = { present: value.trim() !== '', length: value.length };
+        else if (value === null || value === undefined) out[key] = { present: false, length: 0 };
+        else out[key] = { present: true };
+    }
+    const notes = typeof rd?.notes === 'string' ? rd.notes : '';
+    out.seedFilled = notes.trim() !== '' && !notes.includes(SEED_PLACEHOLDER);
+    return out;
 }
 
 const USAGE = `verify-appstore-version.mjs - would App Store Connect actually accept a
@@ -804,7 +852,9 @@ Options:
                     version carrying that release's marketing version (none
                     is a failure); without one, the single iOS version still
                     open for submission (none or several is inconclusive).
-  --json            machine-readable outcome
+  --json            machine-readable outcome. App Review's detail (contact,
+                    demo login, notes holding the demo seed) is reported as
+                    presence and length only, never its values.
   -h, --help        print this and exit 0
 
 READS LIVE APP STORE CONNECT STATE, and writes nothing. --help is answered
@@ -875,7 +925,9 @@ export async function checkAppStoreVersion({
     }
 
     const outcome = classifyVersionRecord(fetched.record, ships, pinnedListingDigests(wsRoot), releaseTag);
-    return { ...outcome, record: fetched.record, ships, bundleId, tag: releaseTag };
+    // Judge the raw review detail but return it redacted: after Phase 7 its notes hold a funded demo seed
+    const record = { ...fetched.record, reviewDetail: redactReviewDetail(fetched.record.reviewDetail) };
+    return { ...outcome, record, ships, bundleId, tag: releaseTag };
 }
 
 async function main() {

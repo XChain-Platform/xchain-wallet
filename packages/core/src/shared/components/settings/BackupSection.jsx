@@ -70,7 +70,7 @@ import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
-import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsActionRow, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 import { t } from '../../../i18n/index.js';
 
@@ -629,15 +629,11 @@ function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
 
 function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
     return (
-        <SectionHeader
-            title={label}
-            description={hint}
-            trailing={(
-                <Button variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
-                    {actionLabel}
-                </Button>
-            )}
-        />
+        <SettingsActionRow label={label} hint={hint}>
+            <Button variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
+                {actionLabel}
+            </Button>
+        </SettingsActionRow>
     );
 }
 
@@ -708,7 +704,7 @@ function RevealedMnemonic({
     return (
         <FormSection
             title={t('settings.backup.yourRecoveryPhrase')}
-            description={`${RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.`}
+            description={t('settings.backup.writeItOnPaperOr', { RECOVERY_PHRASE_WARNING })}
             className={`${styles.formSection} ${styles.recoverySheet}`}
         >
             <div className={styles.sheetMeta} data-xc-recovery-sheet>{t('settings.backup.wallet')} {walletName}</div>
@@ -821,7 +817,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
     return (
         <FormSection
             title={t('settings.backup.testBackup')}
-            description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active chain from it and lists any that don't match. Nothing is saved.`}
+            description={t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
             className={styles.formSection}
         >
             <Textarea
@@ -1096,7 +1092,7 @@ function BackupExportResult({ result, onDone }) {
             <SectionHeader
                 as="h3"
                 title={t('settings.backup.optionalBackupPointerQr')}
-                description="After uploading the encrypted file to an HTTPS address you control, enter that address to make a QR for another device. The QR contains only the address and wallet name. It does not contain the backup file or password."
+                description={t('settings.backup.afterUploadingTheEncryptedFile')}
             />
             <Input
                 type="url"
@@ -1205,7 +1201,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
     return (
         <FormSection
             title={t('settings.backup.publishLabelsOnChain')}
-            description="The labels + contacts are encrypted under a key derived from this wallet's seed and stored on the blockchain. Only someone who already has your seed can decrypt them. The transaction pays a network fee."
+            description={t('settings.backup.theLabelsContactsAreEncrypted')}
             className={styles.formSection}
         >
             {chains === null ? (
@@ -1342,7 +1338,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
     return (
         <FormSection
             title={t('settings.backup.checkChainForBackedUp')}
-            description="Decrypts the labels + contacts FILE this wallet's seed published on the chain below, if any, and merges anything found into this wallet. Nothing already here is removed."
+            description={t('settings.backup.decryptsTheLabelsContactsFile')}
             className={styles.formSection}
         >
             {chains === null ? (

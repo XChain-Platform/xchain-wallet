@@ -86,7 +86,8 @@ for device in "${devices[@]}"; do
     dest="$outdir/$slug"
     rm -rf "$dest"; mkdir -p "$dest"
 
-    udid="$(xcrun simctl list devices available | grep -F "$device (" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
+    # Let a no-match grep pass under pipefail so the missing-simulator message below prints
+    udid="$(xcrun simctl list devices available | { grep -F "$device (" || true; } | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
     if [ -z "$udid" ]; then
         echo "screenshots: no available simulator named '$device'" >&2
         echo "Available:" >&2

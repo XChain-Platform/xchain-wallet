@@ -13,8 +13,9 @@ import { Icon } from '@xchain-wallet/core/ui';
 import {
     formatBadgeCount,
     isNavItemActive,
+    navItem,
 } from './LeftNav.jsx';
-import { ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
+import { ROUTE_NAV_SECTIONS, TAB_BAR_DESTINATIONS } from '../routeRegistry.js';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -60,13 +61,9 @@ import { t } from '../../i18n/index.js';
  * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
  */
 
-const PRIMARY_TABS = [
-    { id: 'home', get label() { return t('home.title'); }, Icon: Icon.HomeIcon },
-    { id: 'history', get label() { return t('history.title'); }, Icon: Icon.HistoryIcon },
-    // `spendable` marks the two rows signer mode promises are gone.
-    { id: 'send', get label() { return t('send.title'); }, Icon: Icon.SendIcon, spendable: true },
-    { id: 'scan', get label() { return t('scan.title'); }, Icon: Icon.ScanIcon },
-];
+// The thumb-row tabs, in TAB_BAR_DESTINATIONS order, with the sidebar's labels
+// and icons. `spendable` marks the Send row signer mode promises is gone.
+const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map(navItem);
 
 const SHEET_PRIMARY = [
     { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },

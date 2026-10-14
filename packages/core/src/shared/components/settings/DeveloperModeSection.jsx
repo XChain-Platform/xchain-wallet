@@ -131,14 +131,12 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                     hint={t('settings.developer.unlocksTestNetworksEndpointOverrides')}
                     checked={developerMode}
                     onChange={onDeveloperModeToggle}
-                    embedded
                 />
                 <ToggleRow
                     label={t('settings.developer.learnMode')}
                     hint={t('settings.developer.addsPlainLanguageExplanationsTo')}
                     checked={Boolean(settings.learnMode)}
                     onChange={(v) => onToggle('learnMode', v)}
-                    embedded
                 />
                 {developerMode ? (
                     <ToggleRow
@@ -146,7 +144,6 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                         hint={t('settings.developer.inTheWebAppDisplay')}
                         checked={Boolean(settings.showVariantBadge)}
                         onChange={(v) => onToggle('showVariantBadge', v)}
-                        embedded
                     />
                 ) : null}
             </FormSection>
@@ -172,7 +169,6 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                             checked={Boolean(settings.autoApproveLocalhost)}
                             disabled={!settings.developerMode}
                             onChange={(v) => onToggle('autoApproveLocalhost', v)}
-                            embedded
                         />
                         <AutoSignLocalhostRow
                             developerMode
@@ -200,7 +196,6 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
         <SettingsFieldRow
             label={t('settings.developer.cachePasswordForLocalhostAuto')}
             hint={t('settings.developer.inDeveloperModeKeepAn')}
-            embedded
         >
             <Select
                 value={current}
@@ -366,7 +361,7 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
             <SectionHeader
                 as="h3"
                 title={descriptor.displayName}
-                description={`${descriptor.id} · explorer ${descriptor.explorer?.defaultUrl}:${descriptor.explorer?.defaultPort}`}
+                description={t('settings.developer.explorer', { id: descriptor.id, value: descriptor.explorer?.defaultUrl, value2: descriptor.explorer?.defaultPort })}
                 trailing={activated ? (
                     <span className={styles.active}>{t('settings.developer.active')}</span>
                 ) : (

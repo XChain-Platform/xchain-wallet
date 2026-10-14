@@ -42,7 +42,7 @@ const GROUP_HEADER = {
     fontWeight: 600,
     color: 'var(--xc-text)',
     marginTop: 'var(--xc-space-3)',
-    marginBottom: 'var(--xc-space-1)',
+    marginBottom: 0,
 };
 const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
 const SHORTCUT_ROW = {
@@ -190,7 +190,7 @@ export function KeyboardSection() {
             </p>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
             {SHORTCUT_GROUPS.map((group) => (
-                <section key={group}>
+                <section key={group} style={STACK}>
                     <h2 style={GROUP_HEADER}>{group}</h2>
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
@@ -240,7 +240,7 @@ export function KeyboardSection() {
                     })}
                 </section>
             ))}
-            <section>
+            <section style={STACK}>
                 <h3 style={GROUP_HEADER}>{t('settings.display.defaults')}</h3>
                 <div style={ROW}>
                     <span style={ROW_LABEL}>{t('settings.keyboard.restoreEveryCustomShortcutTo')}</span>

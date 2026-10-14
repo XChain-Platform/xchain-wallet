@@ -1354,13 +1354,6 @@ export function AddressList({
                     ) : null}
                     </div>
 
-                    <div className={local.tabsRow} role="tablist" aria-label={t('routes.addressList.addressSections')}>
-                    {/* The tab stays native because the kit has no tab control. */}
-                    <button type="button" role="tab" aria-selected="true" className={`${local.tab} ${local.tabActive}`}>
-                        {t('routes.addressList.about')}
-                    </button>
-                    </div>
-
                     <div className={local.tabPanel}>
                     <FormSection title={t('routes.addressList.about')} headingLevel="h3" className={local.detailCard}>
                         {/* The testid is derived from the label so every detail field is

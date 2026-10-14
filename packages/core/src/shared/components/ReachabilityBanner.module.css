@@ -1,10 +1,12 @@
-/* §49.1 / §49.2 - Compact reachability notice below the app header. */
+/* §49.1 / §49.2 - Compact reachability notice, the first row of the page
+   content below the page header, at the content's full width. */
 
 .notice {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    border-block: 1px solid;
+    border: 1px solid;
+    border-radius: var(--xc-radius-sm);
 }
 
 .banner {
@@ -18,9 +20,6 @@
     font-size: var(--xc-text-xs);
     line-height: 1.2;
     white-space: nowrap;
-    /* The notices slot owns the inset, so the strip lines up with route
-       content on every screen. */
-    margin-inline: 0;
 }
 
 .degraded {

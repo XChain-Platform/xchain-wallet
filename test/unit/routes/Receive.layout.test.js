@@ -28,8 +28,10 @@ describe('Receive action layout', () => {
         expect(css).toMatch(
             /\.receiveQrDisplay > \*\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;/,
         );
+        // The QR card spans the form; only the code inside it is capped.
+        expect(css).toMatch(/\.qrBox\s*\{[^}]*max-width:\s*none;/);
         expect(css).toMatch(
-            /\.receiveQrDisplay > \.qrActions\s*\{[^}]*justify-content:\s*flex-start;/,
+            /\.qrSurface\s*\{[^}]*max-width:\s*var\(--xc-qr-frame-size\);[^}]*margin-inline:\s*auto;/,
         );
         expect(receive).toMatch(
             /qrStyles\.frame[\s\S]*?<AddressField[\s\S]*?\{qrActionsContent\}/,
@@ -42,8 +44,12 @@ describe('Receive action layout', () => {
         )?.[0] || '';
         expect(viewportWidth).toBeGreaterThanOrEqual(360);
         expect(qrCss).toMatch(/\.actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/);
+        // Receive overrides the shared row with two equal columns of one height.
         expect(css).toMatch(
-            /\.qrActions > \*\s*\{[^}]*flex:\s*0 0 auto;[^}]*height:\s*var\(--xc-control-h-md\);[^}]*white-space:\s*nowrap;/,
+            /\.qrActions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/,
+        );
+        expect(css).toMatch(
+            /\.qrActions > \*\s*\{[^}]*width:\s*100%;[^}]*height:\s*var\(--xc-control-h-md\);[^}]*white-space:\s*nowrap;/,
         );
         expect(css).toMatch(/\.qrActions > \* > span\s*\{[^}]*white-space:\s*nowrap;/);
         expect(css).not.toMatch(/\.qrActions\s*\{[^}]*flex-direction:\s*column;/);
@@ -69,7 +75,7 @@ describe('Receive action layout', () => {
 
     it('caps the complete QR column to the visible height on landscape phones', () => {
         expect(css).toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.receiveQrDisplay\s*\{[\s\S]*?max-width: min\(100%, calc\(var\(--xc-viewport-h, 100vh\) - 9rem\)\);[\s\S]*?margin-inline: auto;/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.qrSurface\s*\{[\s\S]*?max-width: min\(var\(--xc-qr-frame-size\), calc\(var\(--xc-viewport-h, 100vh\) - 11rem\)\);/,
         );
         // The receive QR box is also the shared QrDisplay frame, which owns its box model.
         const qrDisplayCss = readFileSync('packages/core/src/ui/QrDisplay.module.css', 'utf8');

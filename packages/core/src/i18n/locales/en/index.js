@@ -22,11 +22,14 @@
 // `t()` in `i18n/index.js` renders the matched template through
 // formatjs (`IntlMessageFormat` from `intl-messageformat`), so the full
 // ICU grammar is available: plural, select, selectordinal, number and
-// date skeletons, nested patterns and offset. Templates here use only
-// plural and select today, which is a choice about the copy, not a
-// limit of the runtime. The plural/select-only subset the wallet
-// shipped before v0.334 survives as `legacyFormat()` in `i18n/index.js`
-// and is reached only when formatjs refuses to parse a template.
+// date skeletons, nested patterns and offset. The plural/select-only
+// subset the wallet shipped before v0.334 survives as `legacyFormat()`
+// in `i18n/index.js`, and it is reached on two routes: formatjs throws
+// while parsing or rendering the template, or the caller omits an
+// argument formatjs coerces (a `number`, `plural`, `selectordinal`,
+// `date` or `time` one). The second route prints each missing argument
+// as its bare `{name}` token and applies no number formatting, so pass
+// every coerced argument a template names.
 //
 // Adding a new locale: copy this directory to `locales/<bcp47>/index.js`,
 // translate every value, then call
@@ -42,6 +45,8 @@ export const en = {
     'common.clear': 'Clear',
     'common.copyTransactionId': 'Copy transaction ID',
     'common.tryAgain': 'Try again',
+    'balances.unchecked.title': "Balances couldn't be checked",
+    'balances.unchecked.body': 'Your balance may be out of date. Try again to refresh it.',
     'common.openNetworkSettings': 'Open network settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',
@@ -465,7 +470,7 @@ export const en = {
     'importWallet.phrase.placeholder': 'word word word…',
     'importWallet.phrase.freeWalletCount': '{count} / 12 words',
     'importWallet.phrase.wordCount':
-        '{count, plural, one {# word entered (use 12, 15, 18, 21, or 24)} other {# words entered (use 12, 15, 18, 21, or 24)}}',
+        '{count, plural, one {# word entered} other {# words entered}}',
     'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
     'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
     'importWallet.phrase.suggestions': 'BIP39 word suggestions',
@@ -519,6 +524,9 @@ export const en = {
         "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; use the field below to send those too.",
     'issue.sendInitialMintOptional': 'Send the initial mint to (optional)',
     'issue.sendInitialMintHint': 'Leave blank to keep the minted tokens at the issuing address.',
+
+    // --- demo wallet guard ----------------------------------------
+    'demo.guard.blocked': "Demo wallets can't move funds. Create a real wallet to continue.",
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
@@ -1455,7 +1463,6 @@ export const en = {
     'settings.about.buildIdentifier': 'Build identifier',
     'settings.about.notAvailable': 'not available',
     'settings.about.platform': 'Platform',
-    'settings.about.extension': 'extension',
     'settings.about.updateChannel': 'Update channel',
     'settings.about.checkForNewVersions': 'Check for new versions',
     'settings.about.license': 'License',
@@ -1820,8 +1827,6 @@ export const en = {
         'This extra secret combines with your recovery phrase to create a different wallet and must match exactly when you restore. Hardware wallets handle it on the device.',
     'createWallet.saveThisPassphraseSeparatelyFrom':
         "Save this passphrase separately from your recovery phrase. You need both to restore this wallet. It can't be reset or recovered, and a missing or mistyped passphrase opens a different wallet without warning. Capitalization and spaces matter.",
-    'createWallet.requiredWhenEnabledCapitalizationAnd':
-        'Required when enabled. Capitalization and spaces matter.',
     'extension.connection.unableToReconnect': 'Unable to reconnect',
     'extension.connection.reconnectingToWallet': 'Reconnecting to wallet…',
     'extension.connection.theWalletBackgroundIsNot':
@@ -1901,7 +1906,6 @@ export const en = {
     'routes.addressList.secret': 'Secret',
     'routes.addressList.xchain': 'XChain',
     'routes.addressList.deleting': 'Deleting…',
-    'routes.addressList.addressSections': 'Address sections',
     'routes.addressList.about': 'About',
     'routes.addressList.help': '{label} help',
     'routes.addressList.onChainPreferences': 'On-chain preferences',
@@ -2510,7 +2514,6 @@ export const en = {
     'home.tabs.nfts': 'NFTs',
     'home.tabs.defi': 'DeFi',
     'home.tabs.activity': 'Activity',
-    'nav.marketplace': 'Marketplace',
     'settings.notifications.transactionConfirmations': 'Transaction confirmations',
     'settings.notifications.notifyOnTheFirstConfirmation':
         'Notify on the first confirmation of a sent transaction.',
@@ -2626,6 +2629,74 @@ export const en = {
     'shell.header.walletPrefix': 'Wallet: ',
     'components.stalenessLabel.updated': 'Updated {when}',
     'components.stalenessLabel.offline': 'Offline, showing saved data',
+    'settings.connectedSites.allowedSites': 'Allowed sites',
+    'createWallet.requiredWhenEnabled': 'Required when enabled.',
+    'settings.thisWallet.deletesTheWalletAndAll':
+        'Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery.',
+    'settings.display.collapseBalancesBelowTheSelected':
+        'Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible.',
+    'settings.display.collapseUnpricedTokensWithoutA':
+        'Collapse unpriced tokens without a name or image unless you pinned, watched, issued, or placed them in an order. Hidden tokens stay available from the expandable Hidden tokens list.',
+    'settings.display.chooseWhetherBalanceRowsShow':
+        'Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active.',
+    'settings.display.displayAStarOnEach':
+        'Display a star on each balance row for pinning or unpinning the token on Home.',
+    'settings.display.displayAHideAffordanceOn':
+        'Display a hide affordance on each balance row to collapse the token into the Hidden section.',
+    'settings.display.addATokenByChain':
+        'Add a token by chain and ticker to keep it in Balances even when its balance is zero.',
+    'settings.display.pinnedTokensFloatToThe':
+        'Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.',
+    'settings.display.hiddenTokensCollapseIntoThe':
+        'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.',
+    'settings.display.rememberTheLastSelectedChain':
+        'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."',
+    'settings.notifications.playASoundWithEach':
+        'Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply.',
+    'settings.notifications.couldNotSaveTheNotification':
+        "Couldn't save the notification sound setting. Try again.",
+    'settings.notifications.couldNotSaveThisNotification':
+        "Couldn't save this notification sound. Try again.",
+    'settings.notifications.pauseAllNotificationsIncludingPrice':
+        'Pause all notifications, including price alerts, during a daily time window.',
+    'settings.notifications.couldNotSaveQuietHours': "Couldn't save quiet hours. Try again.",
+    'settings.backup.writeItOnPaperOr':
+        '{RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.',
+    'settings.backup.enterTheRecoveryPhraseFrom':
+        "Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first {value} addresses on every active chain from it and lists any that don't match. Nothing is saved.",
+    'settings.backup.afterUploadingTheEncryptedFile':
+        "After uploading the encrypted file to an HTTPS address you control, enter that address to make a QR for another device. The QR contains only the address and wallet name. It doesn't contain the backup file or password.",
+    'settings.backup.theLabelsContactsAreEncrypted':
+        "The labels + contacts are encrypted under a key derived from this wallet's seed and stored on the blockchain. Only someone who already has your seed can decrypt them. The transaction pays a network fee.",
+    'settings.backup.decryptsTheLabelsContactsFile':
+        "Decrypts the labels + contacts FILE this wallet's seed published on the chain below, if any, and merges anything found into this wallet. Nothing already here is removed.",
+    'settings.connectedSites.showsThe50MostRecent':
+        'Shows the 50 most recent changes, with the newest last. Use this history to spot a site that was blocked or unblocked unexpectedly.',
+    'settings.connectedSites.limitsHowManySigningRequests':
+        'Limits how many signing requests a single site can make in a short window; anything over the limit is rejected until the window resets. Lower numbers harden against abuse; higher numbers help during heavy normal use. Defaults: {SIGN_THROTTLE_DEFAULT_BURST} per {value} s.',
+    'settings.thisWallet.useAtLeastCharactersA':
+        "Use at least {MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger. Keep it safe because it can't be recovered.",
+    'settings.thisWallet.anExtendedPublicKeyDoes':
+        "An extended public key doesn't contain private keys and can't spend funds. Anyone with it can derive and monitor every address below that account path, including future addresses. Share it only with a watch-only wallet you trust.",
+    'settings.thisWallet.accountPath': 'Account path: {path}',
+    'components.placeOrderPanel.weMonitorForMatchesOn':
+        'We monitor for matches on your orders and send payment for them automatically.',
+    'settings.developer.explorer': '{id} · explorer {value}:{value2}',
+    'settings.endpoints.default': 'Default',
+    'createWallet.xchainPlatformIsEncryptingYour':
+        'XChain Platform is encrypting your wallet with your password. This can take a minute on some devices. Keep the app open.',
+    'createWallet.enterTheRequestedWordsFrom':
+        'Enter the requested words from the recovery phrase you wrote down.',
+    'createWallet.enterTheRequestedWordsTo': 'Enter the requested words to confirm your recovery phrase.',
+    'createWallet.theseWordsAreYourRecovery':
+        'These {words, select, twentyFour {twenty-four} other {twelve}} words are your recovery phrase. Write them on paper and store them in a safe place. {RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.',
+    'createWallet.writeTheseWordsOnPaper':
+        'Write these {wordCount} words on paper and store your recovery phrase safely. {RECOVERY_PHRASE_WARNING}',
+    'createWallet.yourPasswordEncryptsThisWallet':
+        'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.',
+    'createWallet.yourPasswordEncryptsThisWallet2': 'Your password encrypts this wallet on this device.',
+    'locked.thisPermanentlyDeletesEveryWallet2':
+        "This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions. Make sure you have every recovery phrase or backup file you need. This can't be undone.",
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {
