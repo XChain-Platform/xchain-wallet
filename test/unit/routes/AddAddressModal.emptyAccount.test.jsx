@@ -67,6 +67,7 @@ describe('Add address on an account with no addresses', () => {
         expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy();
         // The picker preselects the first active chain rather than nothing.
         expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
     });
 
     it('generates the first address on an active chain', async () => {

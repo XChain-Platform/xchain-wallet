@@ -71,8 +71,7 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                 <>
                     Agent accounts let an automated agent share a 2-of-2 address with
                     this wallet. This wallet signs each request automatically when it
-                    fits the policy you set, and asks you to approve it. Bitcoin-only
-                    at launch.
+                    fits the policy you set, and asks you to approve it.
                 </>
             )}
             toolbar={accounts.length > 0
@@ -99,7 +98,7 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                                     subtitle={<AddressText address={a.aggregateAddress} truncate />}
                                     trailing={(
                                         <span style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexShrink: 0 }}>
-                                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
                                             <span style={{
                                                 fontSize: '0.8em',
                                                 color: a.enabled ? 'var(--xc-success, green)' : 'var(--xc-text-muted)',

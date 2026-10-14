@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -93,11 +93,11 @@ function rawTransactionMismatch(decoded, descriptor) {
     const types = new Set((descriptor.addressTypes || []).map(String));
     const hasTaproot = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'Taproot');
     if (hasTaproot && !types.has('p2tr')) {
-        return `This transaction contains a Taproot output, which ${descriptor.displayName} does not support here. Pick the network that created the transaction.`;
+        return 'This transaction contains a Taproot output that the active network does not support. Pick the network that created the transaction.';
     }
     const hasSegwit = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'SegWit');
     if (hasSegwit && !types.has('p2wpkh')) {
-        return `This transaction contains a SegWit output, which ${descriptor.displayName} does not support here. Pick the network that created the transaction.`;
+        return 'This transaction contains a SegWit output that the active network does not support. Pick the network that created the transaction.';
     }
     return null;
 }
@@ -235,7 +235,6 @@ function RawTransactionBroadcast({
                 </div>
                 {txid ? (
                     <>
-                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
@@ -287,7 +286,7 @@ function RawTransactionBroadcast({
                     </>
                 )}
             >
-                <ChainBadge descriptor={descriptor} size="sm" />
+                <ChainBadge descriptor={descriptor} size="sm" showName={false} />
                 <p>
                     This signed transaction spends {preview.decoded.inputs.length} input{preview.decoded.inputs.length === 1 ? '' : 's'}
                     {' '}and creates {preview.decoded.outputs.length} output{preview.decoded.outputs.length === 1 ? '' : 's'}.
@@ -306,7 +305,7 @@ function RawTransactionBroadcast({
                     />
                 </dl>
                 <p className={styles.hint}>
-                    Raw transaction data does not identify mainnet, testnet, or regtest. Confirm that the selected network is the one that created it.
+                    Raw transaction data does not identify its network. Confirm that the selected network is the one that created it.
                 </p>
                 {broadcastTime.showElapsed ? (
                     <p role="status" className={styles.hint} data-testid="raw-broadcast-elapsed">
@@ -330,7 +329,7 @@ function RawTransactionBroadcast({
             actions={<Button type="submit" variant="primary">Preview transaction</Button>}
         >
             <BroadcastKindPicker value="transaction" onChange={onKindChange} />
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} hideNetworkKind />
             <Textarea
                 label="Signed transaction hex"
                 hint="Spaces and line breaks are ignored. Only complete hexadecimal bytes are accepted."
@@ -850,7 +849,6 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 </div>
                 {txid ? (
                     <>
-                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
@@ -896,16 +894,12 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                : 'Sign'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -962,7 +956,6 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1026,7 +1019,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 <LockedTokenContext chainId={chainId} tick={initialTick.toUpperCase()} />
             ) : (
                 <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
                 </>
             )}
 

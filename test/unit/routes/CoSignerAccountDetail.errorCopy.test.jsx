@@ -113,6 +113,7 @@ describe('CoSignerAccountDetail clipboard control', () => {
         mountAccount();
 
         expect(await screen.findByRole('button', { name: 'Copy funding address' })).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
     });
 });
 

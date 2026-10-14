@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1229,7 +1229,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1323,16 +1322,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     >
                         {hw
                             ? `Sign ${listNoun} on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign ${listNoun} on ${descriptor.displayName}` : `Sign ${listNoun}`)}
+                            : `Sign ${listNoun}`}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{listDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -1457,17 +1452,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         >
                             {hw
                                 ? `Sign airdrop on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign airdrop on ${descriptor.displayName}` : 'Sign airdrop')}
+                                : 'Sign airdrop'}
                         </Button>
                     </>
                 )}
             >
                 <p className={styles.summary}>{airdropDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -1545,9 +1536,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             {' '}{listReconcile.expectedCount} addresses you submitted:
                             {' '}{listReconcile.missing.length} {listReconcile.missing.length === 1 ? 'was' : 'were'}
                             {' '}rejected by the network, most often because
-                            {' '}{listReconcile.missing.length === 1 ? 'it is' : 'they are'} not
-                            {' '}{descriptor?.displayName || chainId} address
-                            {listReconcile.missing.length === 1 ? '' : 'es'}. This airdrop pays
+                            {' '}{listReconcile.missing.length === 1 ? 'it does' : 'they do'} not
+                            {' '}belong to the active network. This airdrop pays
                             {' '}{listReconcile.storedCount}. The rejected
                             {' '}{listReconcile.missing.length === 1 ? 'address' : 'addresses'}:
                             {' '}{listReconcile.missing.join(', ')}.
@@ -1704,7 +1694,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         that control only renders when an address IS resolved.
                         Same shape as ListCreateForm / ControllerBindForm, which
                         have always reset here. */}
-                    <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
                 </>
             )}
 
@@ -1861,8 +1851,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for
                                 another network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'}
-                                {' '}skipped. This airdrop pays on
-                                {' '}{descriptor?.displayName || chainId}, which cannot deliver to
+                                {' '}skipped because this airdrop cannot deliver to
                                 {' '}{recipients.wrongNetwork.length === 1 ? 'it' : 'them'}.
                             </p>
                             <DiagnosticDetails
@@ -1870,7 +1859,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
-                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                    message: 'Does not belong to the active network.',
                                 }))}
                             />
                         </div>
