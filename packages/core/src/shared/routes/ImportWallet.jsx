@@ -1057,33 +1057,6 @@ export function ImportWallet({
                 <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
                     {t('importWallet.recoveryPhrase')}
                 </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <ClipboardPasteButton
-                        disabled={busy}
-                        label={t('importWallet.pastePhrase')}
-                        onPaste={(text) => {
-                            if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
-                            const normalized = normalizePhraseEntry(text);
-                            setMnemonic(normalized);
-                            setMnemonicCursor(normalized.length);
-                            if (error) setError(null);
-                        }}
-                    />
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        icon={null}
-                        onClick={() => {
-                            setScanning((s) => !s);
-                            if (error) setError(null);
-                        }}
-                        disabled={busy}
-                        aria-pressed={scanning}
-                    >
-                        {scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
-                    </Button>
-                </div>
             </div>
             {scanning ? (
                 <div className={styles.scannerBox}>
@@ -1123,9 +1096,44 @@ export function ImportWallet({
                     autoCapitalize="off"
                     autoCorrect="off"
                     autoComplete="off"
-                    rows={3}
+                    // Two text rows plus the action strip keep the empty box
+                    // the height the three-row box had; it grows as words come.
+                    rows={2}
                     disabled={busy}
                     aria-describedby="xc-mnemonic-status"
+                    actions={(
+                        <>
+                            <ClipboardPasteButton
+                                disabled={busy}
+                                label={t('importWallet.pastePhrase')}
+                                onPaste={(text) => {
+                                    if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
+                                    const normalized = normalizePhraseEntry(text);
+                                    setMnemonic(normalized);
+                                    setMnemonicCursor(normalized.length);
+                                    if (error) setError(null);
+                                }}
+                                // Inside the box there is no room for its own
+                                // notice, so a clipboard failure becomes the
+                                // form's error instead.
+                                onMessage={(message) => { if (message) setError(message); }}
+                            />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                icon={null}
+                                onClick={() => {
+                                    setScanning((s) => !s);
+                                    if (error) setError(null);
+                                }}
+                                disabled={busy}
+                                aria-pressed={scanning}
+                            >
+                                {scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
+                            </Button>
+                        </>
+                    )}
                 />
                 <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
                     <span>
