@@ -45,8 +45,9 @@ async function acceptLicense(page) {
 }
 
 async function switchActiveNetwork(page, network) {
-    await page.getByLabel('Active network').selectOption(network);
-    await expect(page.getByRole('dialog', { name: `Switch to ${network === 'regtest' ? 'Regtest' : 'Mainnet'}?` }))
+    await page.getByLabel('Active network', { exact: true }).selectOption(network);
+    const label = network.charAt(0).toUpperCase() + network.slice(1);
+    await expect(page.getByRole('dialog', { name: `Switch to ${label}?` }))
         .toBeVisible();
 
     const reloaded = page.waitForEvent('domcontentloaded', { timeout: 120_000 });
@@ -92,12 +93,15 @@ test('desktop network round trip leaves Receive usable', async () => {
         }
         await page.getByRole('button', { name: 'Back to settings' }).click();
 
-        await switchActiveNetwork(page, 'regtest');
+        // The demo may start on either network; go to the other one and back.
+        const start = await page.getByLabel('Active network', { exact: true }).inputValue();
+        const away = start === 'regtest' ? 'mainnet' : 'regtest';
+        await switchActiveNetwork(page, away);
         await expectNoCredentialError(page, runtimeErrors);
 
         await openSettings(page);
-        await expect(page.getByLabel('Active network')).toHaveValue('regtest');
-        await switchActiveNetwork(page, 'mainnet');
+        await expect(page.getByLabel('Active network', { exact: true })).toHaveValue(away);
+        await switchActiveNetwork(page, start);
         await expectNoCredentialError(page, runtimeErrors);
 
         await gotoSection(page, 'Receive');
