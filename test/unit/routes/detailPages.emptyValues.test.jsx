@@ -60,7 +60,9 @@ function mount(child, messaging) {
 function expectNoEmptyDetailCells(container) {
     expect(container.textContent).not.toMatch(/\b(?:undefined|null|NaN)\b/);
     for (const cell of container.querySelectorAll('dd, td')) {
-        expect(cell.textContent.trim()).not.toBe('');
+        // An icon-only chain badge fills its cell with a named image instead of text.
+        const named = cell.querySelector('[role="img"][aria-label]')?.getAttribute('aria-label') || '';
+        expect(cell.textContent.trim() || named).not.toBe('');
     }
 }
 
