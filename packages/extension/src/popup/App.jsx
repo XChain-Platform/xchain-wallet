@@ -260,15 +260,15 @@ export function App() {
 
     if (activeTabSupport === 'checking') {
         return (
-            <main role="status" aria-live="polite">
+            <main role="status" aria-live="polite" className="popup-background-connection">
                 <p>{t('extension.popup.checkingPage')}</p>
             </main>
         );
     }
     if (activeTabSupport === 'unsupported') {
         return (
-            <main role="status" aria-live="polite">
-                <p>{t('extension.popup.unsupportedPage')}</p>
+            <main role="status" aria-live="polite" className="popup-background-connection">
+                <h1>{t('extension.popup.unsupportedPage')}</h1>
                 <p>{t('extension.popup.unsupportedPageHint')}</p>
             </main>
         );
