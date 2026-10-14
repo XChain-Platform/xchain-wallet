@@ -121,6 +121,30 @@ for (const phone of LANDSCAPE_PHONES) {
             });
         });
 
+        test('docks the message composer inside the page gutter', async ({ page }) => {
+            test.slow();
+            await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+            await gotoSection(page, 'Messaging');
+            await page.getByRole('main').getByRole('button').filter({ hasText: 'Got it, thanks!' }).first().click();
+            const footer = page.locator('footer').first();
+            await expect(footer.getByRole('textbox')).toBeVisible();
+            await settle(page);
+            const geometry = await footer.evaluate((el) => {
+                const bar = el.firstElementChild.getBoundingClientRect();
+                const box = el.getBoundingClientRect();
+                return {
+                    start: bar.left - box.left,
+                    end: box.right - bar.right,
+                    top: bar.top - box.top,
+                    bottomGap: window.innerHeight - bar.bottom,
+                };
+            });
+            expect(geometry.start, 'composer start gutter').toBe(12);
+            expect(geometry.end, 'composer end gutter').toBe(12);
+            expect(geometry.top, 'composer clears the footer border').toBeGreaterThan(1);
+            expect(geometry.bottomGap, 'composer clears the bottom edge').toBeGreaterThan(0);
+        });
+
         test('keeps Send reachable above a soft keyboard', async ({ page }) => {
             test.slow();
             await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
