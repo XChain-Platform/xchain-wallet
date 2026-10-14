@@ -126,15 +126,12 @@ export function AdsSection() {
                     ? Math.ceil(resolved.triggerAmountSats / resolved.perTxAmountSats)
                     : null;
                 const displayName = descriptor?.displayName || chainId;
-                const networkSuffix = descriptor && descriptor.networkKind !== 'mainnet'
-                    ? ` · ${descriptor.networkKind}`
-                    : '';
                 const donationAddress = descriptor?.adsDonationAddress || '';
                 const isPlaceholder = donationAddress === ADS_DONATION_ADDRESS_PLACEHOLDER;
                 return (
                     <div key={chainId} style={CHAIN_BLOCK}>
                         <div style={{ fontWeight: 600, color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                            {displayName}{networkSuffix}
+                            {displayName}
                         </div>
 
                         <div style={FIELD_ROW}>

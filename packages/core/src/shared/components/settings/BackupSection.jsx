@@ -438,7 +438,7 @@ export function BackupSection({ activeWallet }) {
                 <ActionConfirmScreen
                     confirmAction={actionConfirm.confirmAction}
                     screenVariant={screenVariantFor(shell)}
-                    chainLabel={publishPreparation?.chainId || ''}
+                    chainLabel={chainDisplayName(publishPreparation?.chainId)}
                     signerReady={signerReady}
                     password={publishPassword}
                     onPasswordChange={(value) => {
@@ -931,6 +931,12 @@ function DryRunReport({ result, onDone }) {
 
 const chainRegistry = registryLib.defaultRegistry();
 
+function chainDisplayName(chainId) {
+    if (!chainId) return '';
+    return chainRegistry.get(chainId)?.displayName
+        || String(chainId).replace(/-(?:mainnet|testnet|regtest)$/i, '');
+}
+
 function DryRunChainReport({ chain }) {
     const descriptor = chain.chainId ? chainRegistry.get(chain.chainId) : null;
     const typeLabel = ADDRESS_TYPE_LABEL[chain.addressType] || chain.addressType;
@@ -958,7 +964,9 @@ function DryRunChainReport({ chain }) {
         <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
                 <span>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chain.chainId}{' '}
+                    {descriptor
+                        ? <ChainBadge descriptor={descriptor} size="sm" showNetworkKind={false} />
+                        : chainDisplayName(chain.chainId)}{' '}
                     <span style={{ color: 'var(--xc-text-muted)' }} title={chain.addressType}>{typeLabel}</span>
                 </span>
                 <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
@@ -1219,7 +1227,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                 >
                     {/* Native options are the required children of the style guide Select. */}
                     {chains.map((cid) => (
-                        <option key={cid} value={cid}>{cid}</option>
+                        <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
                     ))}
                 </Select>
             )}
@@ -1290,7 +1298,9 @@ function PublishLabelsReport({ result, onDone }) {
                 <dt style={ROW_HINT}>Transaction ID</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
                 <dt style={ROW_HINT}>Chain</dt>
-                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.chainId || '-'}</dd>
+                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                    {chainDisplayName(result?.chainId) || '-'}
+                </dd>
                 <dt style={ROW_HINT}>Encrypted size</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.sizeBytes ?? 0} bytes</dd>
                 <dt style={ROW_HINT}>Discovery name</dt>
@@ -1367,7 +1377,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                 >
                     {/* Native options are the required children of the style guide Select. */}
                     {chains.map((cid) => (
-                        <option key={cid} value={cid}>{cid}</option>
+                        <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
                     ))}
                 </Select>
             )}
@@ -1411,7 +1421,7 @@ function restoreLabelsMessage(result) {
     if (result.skipped === 'wif-only') {
         return 'This wallet was imported from a private key only. There is no seed to check on-chain backups with.';
     }
-    const chainLabel = result.chainId || result.requestedChainId || 'this chain';
+    const chainLabel = chainDisplayName(result.chainId || result.requestedChainId) || 'this chain';
     if (result.restored === true) {
         const contacts = Number(result.contactsAdded || 0) + Number(result.contactsUpdated || 0);
         const labels = Number(result.addressesUpdated || 0);
