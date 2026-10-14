@@ -1578,14 +1578,19 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             iconLabel="Change dispenser address"
                         />
                     ) : (
+                        // A new address does not exist until preview, so the
+                        // field says so as a placeholder; as a value the
+                        // sentence went through the address shortener and
+                        // read "New di…eview)".
                         <AddressField
                             label="Dispenser address"
                             icon="addresses"
                             value={addressMode === 'new'
-                                ? 'New dispenser address (generated at preview)'
+                                ? ''
                                 : (addressMode === 'existing' && existingAddress
                                     ? existingAddress.address
                                     : fromAddress.address)}
+                            placeholder={addressMode === 'new' ? 'New address, made at preview' : undefined}
                             readOnly
                             onChange={() => {}}
                             onIconClick={() => setAddressPickerOpen(true)}
