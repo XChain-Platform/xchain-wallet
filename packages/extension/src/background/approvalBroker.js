@@ -56,7 +56,6 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {(path: string) => string} [getUrl]             chrome.runtime.getURL replacement
  * @property {BrokerWindowDeps} [windows]                    chrome.windows replacement
  * @property {{ onRemoved?: { addListener(fn: (tabId: number) => void): void } }} [tabs] chrome.tabs replacement
- * @property {{ onSuspend?: { addListener(fn: () => void): void } }} [runtime] chrome.runtime replacement
  * @property {{ setBadgeText?: (details: { text: string }) => Promise<void> | void }} [action] chrome.action replacement
  * @property {string} [approvalPath]                         default 'approval.html'
  * @property {{ width?: number, height?: number }} [windowSize]
@@ -92,7 +91,6 @@ export class ApprovalBroker {
                 globalThis.chrome?.windows
             );
         this._tabs = deps.tabs ?? globalThis.chrome?.tabs;
-        this._runtime = deps.runtime ?? globalThis.chrome?.runtime;
         this._action = deps.action ?? globalThis.chrome?.action;
         this._timeoutMs = deps.timeoutMs ?? APPROVAL_TIMEOUT_MS;
         // Wrapped, not stored bare: Chrome throws "Illegal invocation" when the
@@ -116,10 +114,6 @@ export class ApprovalBroker {
         if (this._tabs?.onRemoved?.addListener) {
             this._onTabRemoved = this._onTabRemoved.bind(this);
             this._tabs.onRemoved.addListener(this._onTabRemoved);
-        }
-        if (this._runtime?.onSuspend?.addListener) {
-            this._onRuntimeSuspend = this._onRuntimeSuspend.bind(this);
-            this._runtime.onSuspend.addListener(this._onRuntimeSuspend);
         }
     }
 
@@ -291,10 +285,6 @@ export class ApprovalBroker {
         for (const [id, entry] of this._pending) {
             if (entry.requesterTabId === tabId) this._rejectPending(id);
         }
-    }
-
-    _onRuntimeSuspend() {
-        void this.cancelAll();
     }
 
     /** @param {string} id */

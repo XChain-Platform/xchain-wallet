@@ -72,6 +72,7 @@ import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
     attachLayoutModeListener,
+    currentLayoutMode,
     readLayoutMode,
 } from './background/layoutMode.js';
 import { attachExtensionCommandListener } from './background/extensionCommands.js';
@@ -83,8 +84,8 @@ import { createRestartStringSetStorage } from './background/restartStateStorage.
 
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
-// settings UI. The user's preference is honoured the next time they
-// click the toolbar icon; no extension reload needed.
+// settings UI. The controller keeps the applied mode in memory so a
+// keyboard gesture can call chrome.sidePanel.open synchronously.
 (async () => {
     const mode = await readLayoutMode();
     await applyLayoutMode(mode);
@@ -679,13 +680,11 @@ const { lockWalletNow, maybeAutoLock } = lockBackstop;
 
 attachExtensionCommandListener({
     commandsApi: typeof chrome === 'undefined' ? null : chrome.commands,
-    openWallet: async (tab) => {
-        if (await readLayoutMode() === 'sidepanel' && chrome.sidePanel?.open) {
-            let windowId = tab?.windowId;
-            if (!Number.isInteger(windowId)) {
-                const lastFocused = await chrome.windows.getLastFocused();
-                windowId = lastFocused?.id;
-            }
+    openWallet: (tab) => {
+        if (currentLayoutMode() === 'sidepanel' && chrome.sidePanel?.open) {
+            const windowId = Number.isInteger(tab?.windowId)
+                ? tab.windowId
+                : chrome.windows?.WINDOW_ID_CURRENT;
             if (Number.isInteger(windowId)) return chrome.sidePanel.open({ windowId });
         }
         return chrome.action.openPopup();
