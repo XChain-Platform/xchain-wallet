@@ -117,7 +117,11 @@ installProcessErrorHandlers();
 // `win.loadFile(...)` target in createWindow: they are the same directory
 // said twice, and a drift between them locks the app out of its own IPC.
 const APP_ROOT = join(here, '..', 'renderer', 'dist');
-const MIN_VISUAL_ZOOM_LEVEL = 0.5;
+// Pinch zoom may magnify but never shrink below 1: a lower floor lets
+// Chromium show the page at that scale, which widens the layout viewport past
+// the window so the fixed-height shell fills only part of it and the whole
+// document scrolls.
+const MIN_VISUAL_ZOOM_LEVEL = 1;
 const MAX_VISUAL_ZOOM_LEVEL = 3;
 
 /**

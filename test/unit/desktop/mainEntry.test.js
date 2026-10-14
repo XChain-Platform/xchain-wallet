@@ -608,13 +608,15 @@ describe('desktop main entry point', () => {
         });
     });
 
-    it('starts at 100 percent zoom and allows bounded visual zoom', async () => {
+    it('starts at 100 percent zoom and allows pinch zoom only above it', async () => {
         const { createWindow } = await import('../../../packages/desktop/main/index.js');
 
         const win = createWindow();
 
         expect(win.options.webPreferences.zoomFactor).toBe(1);
-        expect(win.webContents.setVisualZoomLevelLimits).toHaveBeenCalledExactlyOnceWith(0.5, 3);
+        // A floor below 1 shows the page zoomed out, so the fixed-height shell
+        // fills part of the window and the whole document scrolls.
+        expect(win.webContents.setVisualZoomLevelLimits).toHaveBeenCalledExactlyOnceWith(1, 3);
     });
 
     it('contains a renderer load rejection and reveals a recoverable window', async () => {
