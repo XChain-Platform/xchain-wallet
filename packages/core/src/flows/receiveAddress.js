@@ -15,8 +15,8 @@
 //
 // "Unused" means not held by a persisted Address record and not reported
 // as funded on-chain. The scan takes the LOWEST unheld, unfunded index so
-// a deleted empty record can be recovered without offering a previously
-// funded receive address again.
+// a deleted empty record can be recovered without offering a funded
+// receive address a second time.
 
 import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
