@@ -3750,6 +3750,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
         || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '')
         || entry.source
         || '';
+    const linkedTo = entry.link
+        ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
+        : '';
     const rowDescription = entry.blockIndex ? [
         t('history.row.block', { block: formatDecimalAmount(entry.blockIndex) }),
         chainTip ? t('history.row.confirmations', {
@@ -3769,10 +3772,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 label={actionDisplayLabel(actionKind) || actionDisplayLabel(entry.action)}
                 context={(
                     <>
-                        {entry.link ? <span aria-label={t('history.row.linkedTo', {
-                            ticker: entry.link.peerCoinTicker,
-                            index: entry.link.peerActionIndex,
-                        })}>🔗</span> : null}
+                        {linkedTo ? <span role="img" aria-label={linkedTo} title={linkedTo}>🔗</span> : null}
                         {verify ? (
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
                         ) : null}
