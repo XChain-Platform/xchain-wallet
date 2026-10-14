@@ -293,12 +293,20 @@ export function HeaderSettingsButton({
                     document.body,
                 ) : null}
             </div>
-            {confirmDialog.request ? (
-                <ConfirmModal
-                    {...confirmDialog.request}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
+            {/* Rendered in place, the confirm sat inside the header's stacking
+                context and the body-level popover painted over it. Portaled
+                beside the popover it stacks on top; like the popover, its
+                presses stop at the portal so the open menu and popover
+                underneath do not read them as outside clicks and unmount it. */}
+            {confirmDialog.request && typeof document !== 'undefined' ? createPortal(
+                <div data-header-settings-confirm="" onMouseDown={(event) => event.stopPropagation()}>
+                    <ConfirmModal
+                        {...confirmDialog.request}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={confirmDialog.onCancel}
+                    />
+                </div>,
+                document.body,
             ) : null}
         </>
     );

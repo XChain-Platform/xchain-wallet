@@ -546,6 +546,32 @@ describe('HeaderSettingsButton section gating', () => {
         await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest'));
     });
 
+    it('stacks the network confirm beside the body-level popover and keeps both open on its presses', () => {
+        render(
+            <HeaderSettingsButton
+                activeNetwork="testnet"
+                developerMode
+                onActiveNetworkChange={() => Promise.resolve()}
+            />,
+        );
+
+        fireEvent.click(gear());
+        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
+        fireEvent.change(screen.getByLabelText('Active network in header'), {
+            target: { value: 'regtest' },
+        });
+        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
+        // Both are body-level layers, and the confirm comes after the popover
+        // in paint order, so the popover can never cover it.
+        const confirmLayer = dialog.closest('[data-header-settings-confirm]');
+        expect(confirmLayer?.parentElement).toBe(document.body);
+        expect(popover.compareDocumentPosition(confirmLayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.mouseDown(within(dialog).getByRole('button', { name: 'Cancel' }));
+        expect(screen.getByRole('dialog', { name: 'Switch to Regtest?' })).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
+    });
+
     it('does not guess a network badge before settings load', () => {
         render(
             <HeaderSettingsButton
