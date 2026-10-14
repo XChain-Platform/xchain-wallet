@@ -1140,6 +1140,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {!isDemoActive ? (
                     <Button
                         type="button"
+                        variant="secondary"
                         className={styles.quickAction}
                         onClick={onReceive}
                         disabled={!onReceive}
@@ -1151,6 +1152,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {onExchange ? (
                     <Button
                         type="button"
+                        variant="secondary"
                         className={styles.quickAction}
                         onClick={() => runNetworkAction('Exchange', onExchange)}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
@@ -1163,6 +1165,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {homeMoreActions.length === 1 ? (
                     <Button
                         type="button"
+                        variant="secondary"
                         className={styles.quickAction}
                         onClick={homeMoreActions[0].onSelect}
                         aria-label={homeMoreActions[0].label}
@@ -1175,6 +1178,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
                         <Button
                             type="button"
+                            variant="secondary"
                             className={styles.quickAction}
                             aria-haspopup="menu"
                             aria-expanded={homeMoreOpen}
@@ -1641,6 +1645,7 @@ function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
         return (
             <Button
                 type="button"
+                variant="secondary"
                 className={styles.quickAction}
                 onClick={onOffline}
                 aria-disabled="true"
@@ -1654,6 +1659,7 @@ function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
     return (
         <Button
             type="button"
+            variant="secondary"
             className={styles.quickAction}
             onClick={onSend}
             disabled={!onSend}

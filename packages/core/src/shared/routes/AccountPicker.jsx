@@ -153,6 +153,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                 <Button
                                     type="button"
                                     icon={<Icon.PencilIcon />}
+                                    variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('accountPicker.renameLabel', { label })}
                                     title={t('accountPicker.renameTitle')}

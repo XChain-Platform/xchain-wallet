@@ -2849,7 +2849,8 @@ function AppInner() {
                         activeWalletId ? (
                             <>
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
-                                <ReachabilityBanner />
+                                {/* Demo data is fixture data and never stale, so no reachability notice. */}
+                                {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                             </>
                         ) : null
                     }

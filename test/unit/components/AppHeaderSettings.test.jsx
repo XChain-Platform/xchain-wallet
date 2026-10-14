@@ -696,3 +696,21 @@ describe('network status', () => {
         expect(screen.queryByRole('button', { name: /Network/ })).toBeNull();
     });
 });
+
+describe('AppHeader search-only menu', () => {
+    it('marks a menu holding only Search so a rail with Search can hide it', () => {
+        // The desktop window has no pop-out row; this flag stands for that shell.
+        globalThis.xchainWalletWindow = {};
+        try {
+            const { container } = render(<AppHeader onCommandPalette={() => {}} />);
+            expect(container.querySelector('[data-header-menu="search-only"]')).not.toBeNull();
+        } finally {
+            delete globalThis.xchainWalletWindow;
+        }
+    });
+
+    it('keeps the menu unmarked when it holds more than Search', () => {
+        const { container } = render(<AppHeader onCommandPalette={() => {}} onScan={() => {}} />);
+        expect(container.querySelector('[data-header-menu]')).toBeNull();
+    });
+});

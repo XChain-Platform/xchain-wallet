@@ -37,7 +37,9 @@
     font-size: var(--xc-text-xs);
 }
 
-.quickAction {
+/* Two classes so the tile look outranks the kit Button variant whatever
+   order the bundler emits the stylesheets in. */
+.quickActions .quickAction {
     appearance: none;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-accent-primary);
@@ -59,7 +61,7 @@
     text-align: center;
 }
 
-.quickAction > span:last-child {
+.quickActions .quickAction > span:last-child {
     max-width: 100%;
     overflow-wrap: anywhere;
 }
@@ -70,16 +72,16 @@
     }
 }
 
-.quickAction:hover:not(:disabled) {
+.quickActions .quickAction:hover:not(:disabled) {
     background: var(--xc-bg-muted);
 }
 
-.quickAction:focus-visible {
+.quickActions .quickAction:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: calc(var(--xc-space-1) / 2);
 }
 
-.quickAction:disabled {
+.quickActions .quickAction:disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
@@ -177,6 +179,19 @@
     overflow-wrap: normal;
     word-break: keep-all;
     hyphens: none;
+}
+
+/* In the four-column grid the icon sits above its label, so a label gets the
+   whole tile width and never runs into the next tile; a long label wraps
+   between whole words. */
+@media not all and (min-width: 1024px) {
+    .actionsFull > button {
+        flex-direction: column;
+        gap: var(--xc-space-1);
+        padding-block: var(--xc-space-2);
+        white-space: normal;
+        text-align: center;
+    }
 }
 
 @media (min-width: 1024px) {

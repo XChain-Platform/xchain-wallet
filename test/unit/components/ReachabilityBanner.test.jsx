@@ -21,6 +21,7 @@ const useReachability = vi.hoisted(() => vi.fn());
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ useReachability }));
 
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
+import { NoticesRouteContext } from '../../../packages/core/src/shared/components/noticesRoute.js';
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
 
 const chain = (over = {}) => ({
@@ -113,6 +114,23 @@ describe('ReachabilityBanner', () => {
         expect(panel.parentElement).toBe(line.parentElement);
         const panelRule = css.match(/\.detailPanel\s*\{[^}]*\}/s)?.[0] || '';
         expect(panelRule).not.toMatch(/position:\s*absolute|overflow|max-height/);
+    });
+
+    it('closes Details when the route changes', () => {
+        useReachability.mockReturnValue({
+            loading: false, overall: 'degraded', perChain: [chain()], refresh: () => {}, lastChecked: Date.now(),
+        });
+        const view = render(
+            <NoticesRouteContext.Provider value="home"><ReachabilityBanner /></NoticesRouteContext.Provider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+        expect(screen.getByRole('button', { name: 'Details' })).toHaveAttribute('aria-expanded', 'true');
+
+        view.rerender(
+            <NoticesRouteContext.Provider value="settings"><ReachabilityBanner /></NoticesRouteContext.Provider>,
+        );
+        expect(screen.getByRole('button', { name: 'Details' })).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('list', { name: 'Affected coins' })).toBeNull();
     });
 
     it('announces only the reachability state when poll details rerender', () => {

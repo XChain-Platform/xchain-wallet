@@ -102,7 +102,9 @@
     }
 }
 
-.rowMenuBtn {
+/* Scoped to the row so the absolute placement outranks the kit Button's
+   position and variant whatever order the stylesheets load in. */
+.rowWrap .rowMenuBtn {
     appearance: none;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
@@ -124,13 +126,13 @@
     line-height: 1;
 }
 
-.rowMenuBtn:hover {
+.rowWrap .rowMenuBtn:hover {
     background: var(--xc-bg-muted);
     color: var(--xc-text);
     border-color: var(--xc-accent-primary);
 }
 
-.rowMenuBtn:focus-visible {
+.rowWrap .rowMenuBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }

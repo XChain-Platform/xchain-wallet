@@ -124,9 +124,17 @@ export function HeaderActionMenu({
         { id: 'pop-out', label: 'Open in new window', Icon: Icon.ExternalLinkIcon, handler: popOut },
         { id: 'more', label: 'More wallet actions', Icon: Icon.MoreIcon, handler: onMore },
     ].filter((row) => typeof row.handler === 'function');
+    // A menu holding only Search repeats the rail's Search button; the layout
+    // hides this trigger whenever a visible rail already offers it.
+    const searchOnly = !settings && platformLinks.length === 0
+        && rows.length > 0 && rows.every((row) => row.id === 'search');
 
     return (
-        <div ref={wrapRef} className={styles.actionWrap}>
+        <div
+            ref={wrapRef}
+            className={styles.actionWrap}
+            data-header-menu={searchOnly ? 'search-only' : undefined}
+        >
             <span ref={triggerRef} className={styles.actionTrigger}>
                 <Button
                     variant="secondary"

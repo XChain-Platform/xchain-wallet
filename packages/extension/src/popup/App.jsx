@@ -2861,7 +2861,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             activeNetwork={settings?.activeNetwork}
                         />
                     )}
-                    notices={<ReachabilityBanner />}
+                    // Demo data is fixture data and never stale, so no reachability notice.
+                    notices={isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}

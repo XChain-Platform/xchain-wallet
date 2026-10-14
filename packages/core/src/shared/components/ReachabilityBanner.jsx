@@ -14,9 +14,10 @@
 // user-facing consequence. Its Details disclosure identifies affected coins
 // and when they were last checked, without service names or network kinds.
 
-import { useId, useState } from 'react';
+import { useContext, useEffect, useId, useState } from 'react';
 import { useReachability } from '../hooks/useReachability.js';
 import { branding as brandingLib, registry as registryLib } from '../../index.js';
+import { NoticesRouteContext } from './noticesRoute.js';
 import styles from './ReachabilityBanner.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -37,6 +38,9 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     });
     const [detailsOpen, setDetailsOpen] = useState(false);
     const panelId = useId();
+    // Details belong to the screen they were opened on.
+    const routeKey = useContext(NoticesRouteContext);
+    useEffect(() => { setDetailsOpen(false); }, [routeKey]);
 
     if (overall !== 'degraded' && overall !== 'offline') return null;
 

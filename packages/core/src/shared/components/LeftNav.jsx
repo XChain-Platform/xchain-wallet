@@ -13,6 +13,7 @@ import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
 import { ROUTE_NAV_GROUPS, ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
+import { NoticesRouteContext } from './noticesRoute.js';
 import styles from './LeftNav.module.css';
 
 /**
@@ -349,13 +350,21 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
         <div
             ref={layoutRef}
             data-xc-tier={tier}
+            // Marks a visible rail, whose Search makes a search-only header menu redundant.
+            data-xc-rail={sidebar ? 'shown' : undefined}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
             <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
-                {notices ? <div className={styles.notices}>{notices}</div> : null}
+                {notices ? (
+                    <div className={styles.notices}>
+                        <NoticesRouteContext.Provider value={routeKey ?? null}>
+                            {notices}
+                        </NoticesRouteContext.Provider>
+                    </div>
+                ) : null}
                 <div className={styles.mainBody}>{children}</div>
             </div>
             {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}

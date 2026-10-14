@@ -164,6 +164,7 @@ export function WalletPicker({
                                 <Button
                                     type="button"
                                     icon={null}
+                                    variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('walletPicker.detailsFor', { wallet: walletName })}
                                     title={t('walletDetails.title')}

@@ -438,3 +438,9 @@
         --xc-page-top: var(--xc-space-2);
     }
 }
+
+/* The header menu trigger is redundant when it would hold only Search and a
+   visible rail already shows a Search button. */
+.layout[data-xc-rail='shown'] :global([data-header-menu='search-only']) {
+    display: none;
+}
