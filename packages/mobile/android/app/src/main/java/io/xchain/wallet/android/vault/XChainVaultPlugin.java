@@ -23,7 +23,12 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -65,6 +70,11 @@ public class XChainVaultPlugin extends Plugin {
     private VaultBiometricSidecar sidecar;
     // One derivation at a time: two concurrent 64 MiB allocations is how a low-end phone runs out of memory.
     private ExecutorService kdfExecutor;
+    private ExecutorService updateExecutor;
+
+    private static final String UPDATE_FEED_URL =
+        "https://downloads.xchain.io/wallet/android/latest.json";
+    private static final int UPDATE_FEED_MAX_BYTES = 4096;
 
     @Override
     public void load() {
@@ -78,12 +88,18 @@ public class XChainVaultPlugin extends Plugin {
             thread.setDaemon(true);
             return thread;
         });
+        updateExecutor = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "xchain-update-check");
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     @Override
     protected void handleOnDestroy() {
         // A recreated activity loads a fresh plugin; let this one's thread finish and exit.
         if (kdfExecutor != null) kdfExecutor.shutdown();
+        if (updateExecutor != null) updateExecutor.shutdown();
     }
 
     // -----------------------------------------------------------------
@@ -293,6 +309,72 @@ public class XChainVaultPlugin extends Plugin {
         reply.put("installer", installer);
         reply.put("channel", isStoreInstaller(installer) ? "store" : "direct");
         call.resolve(reply);
+    }
+
+    /**
+     * Fetch the one direct-APK update feed through Android's network stack.
+     *
+     * The bridge accepts no URL or request options, so it is not a
+     * general-purpose native HTTP proxy outside the CSP. Every failure is a
+     * plain unavailable reply because an offline update check is expected and
+     * must not produce a native rejection or console noise.
+     */
+    @PluginMethod
+    public void fetchDirectUpdateFeed(final PluginCall call) {
+        try {
+            updateExecutor.execute(() -> fetchDirectUpdateFeedInBackground(call));
+        } catch (RejectedExecutionException e) {
+            call.resolve(updateFeedUnavailable());
+        }
+    }
+
+    private static void fetchDirectUpdateFeedInBackground(PluginCall call) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(UPDATE_FEED_URL).openConnection();
+            connection.setRequestMethod("GET");
+            connection.setInstanceFollowRedirects(false);
+            connection.setUseCaches(false);
+            connection.setConnectTimeout(10_000);
+            connection.setReadTimeout(10_000);
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                call.resolve(updateFeedUnavailable());
+                return;
+            }
+            String body;
+            try (InputStream input = connection.getInputStream()) {
+                body = readUpdateFeed(input);
+            }
+            if (body == null) {
+                call.resolve(updateFeedUnavailable());
+                return;
+            }
+            JSObject reply = new JSObject();
+            reply.put("status", "OK");
+            reply.put("body", body);
+            call.resolve(reply);
+        } catch (Exception e) {
+            call.resolve(updateFeedUnavailable());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static String readUpdateFeed(InputStream input) throws java.io.IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] chunk = new byte[1024];
+        int count;
+        while ((count = input.read(chunk)) != -1) {
+            if (output.size() + count > UPDATE_FEED_MAX_BYTES) return null;
+            output.write(chunk, 0, count);
+        }
+        return new String(output.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    private static JSObject updateFeedUnavailable() {
+        JSObject reply = new JSObject();
+        reply.put("status", "UNAVAILABLE");
+        return reply;
     }
 
     /**

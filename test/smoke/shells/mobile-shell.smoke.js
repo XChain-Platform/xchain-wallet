@@ -398,6 +398,7 @@ const jsSources = [
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'backends.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'nativeBiometricProvider.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'update', 'installOrigin.js'), 'utf8'),
+    readFileSync(join(wsRoot, 'packages', 'web', 'src', 'update', 'directUpdateCheck.js'), 'utf8'),
 ].join('\n');
 const calledFromJs = new Set(
     [...jsSources.matchAll(/callNativeVault\(\s*'(\w+)'/g)].map((m) => m[1]),
