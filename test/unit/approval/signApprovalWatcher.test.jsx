@@ -68,4 +68,47 @@ describe('SignApproval in watcher mode', () => {
         expect(screen.queryByRole('button', { name: /^(Approve|Sign in)$/i })).toBeNull();
         expect(messaging.resolveApproval).not.toHaveBeenCalled();
     });
+
+    it.each([
+        ['signMessage', { payload: { address: 'bcrt1qwatcher', message: 'hello' } }],
+        ['signPsbt', { payload: {
+            psbtHex: '70736274ff',
+            signingPaths: [{ address: 'bcrt1qwatcher' }],
+        } }],
+        ['signAction', {
+            action: 'MINT',
+            payload: { from: { address: 'bcrt1qwatcher' } },
+        }],
+        ['signIn', { payload: {
+            addresses: [{ chainId: 'bitcoin-regtest', address: 'bcrt1qwatcher' }],
+        } }],
+    ])('refuses a %s dApp request for a watch-only account without offering approval', async (kind, request) => {
+        messaging.getSettings.mockResolvedValueOnce({ walletMode: 'full' });
+        messaging.getAddressesByChain.mockResolvedValueOnce({
+            'bitcoin-regtest': [{
+                id: 'watch-address',
+                address: 'bcrt1qwatcher',
+                derivationPath: null,
+                source: 'watch-only',
+            }],
+        });
+
+        render(
+            <SignApproval
+                id="watch-only-account"
+                kind={kind}
+                payload={{
+                    origin: 'https://app.example',
+                    chainId: 'bitcoin-regtest',
+                    ...request,
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        expect(await screen.findByText('This watch-only account cannot sign.')).toBeTruthy();
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+        expect(messaging.resolveApproval).not.toHaveBeenCalled();
+    });
 });

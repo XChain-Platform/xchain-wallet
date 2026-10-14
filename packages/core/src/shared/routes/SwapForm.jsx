@@ -32,7 +32,12 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import {
@@ -176,16 +181,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (!Object.keys(byChain)[0]) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before creating a swap.',
-                    );
+                if (!Object.keys(signingByChain)[0]) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any chain yet. Use Receive to generate one before creating a swap.');
                     return;
                 }
                 // Don't clobber a caller-seeded chain (ManageToken sell flow).
-                setChainId((c) => pickDefaultChainId(byChain, { explicitChainId: c, settings }));
+                setChainId((c) => pickDefaultChainId(signingByChain, { explicitChainId: c, settings }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
