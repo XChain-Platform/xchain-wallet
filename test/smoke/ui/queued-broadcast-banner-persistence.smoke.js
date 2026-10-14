@@ -50,7 +50,7 @@ assert.ok(
     'FullLayoutWithNav renders the header above the route body when supplied',
 );
 assert.ok(
-    /\{notices \? <div className=\{styles\.notices\}>\{notices\}<\/div> : null\}/.test(navJsx),
+    /\{notices \? \(\s*<div className=\{styles\.notices\}>\s*<NoticesRouteContext\.Provider value=\{routeKey \?\? null\}>\s*\{notices\}\s*<\/NoticesRouteContext\.Provider>\s*<\/div>\s*\) : null\}/.test(navJsx),
     'FullLayoutWithNav renders the notices above the route body when supplied',
 );
 assert.ok(/<div className=\{styles\.mainBody\}>\{children\}<\/div>/.test(navJsx),
