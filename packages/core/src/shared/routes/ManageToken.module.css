@@ -50,10 +50,14 @@
     overflow-wrap: anywhere;
 }
 
+.heroBadges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+    margin-inline-start: auto;
+}
+
 .lockBadge {
-    position: absolute;
-    top: var(--xc-space-3);
-    inset-inline-end: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     display: inline-flex;
