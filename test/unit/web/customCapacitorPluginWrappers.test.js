@@ -19,6 +19,10 @@ import {
     copyText,
 } from '../../../packages/core/src/shared/clipboard.js';
 import {
+    shareContent,
+    ShareOutcome,
+} from '../../../packages/core/src/shared/share.js';
+import {
     __setLinksPluginForTests,
     subscribeToNativeDeepLinks,
 } from '../../../packages/web/src/deeplinks/nativeDeepLinks.js';
@@ -77,6 +81,80 @@ describe('XChainClipboard wrapper', () => {
         const result = await copyText(SECRET, { sensitive: true, env });
         expect(result).toEqual({ ok: false, native: true, reason: CopyFailure.UNAVAILABLE });
         expect(JSON.stringify(result)).not.toContain(SECRET);
+        expect(writeText).not.toHaveBeenCalled();
+    });
+});
+
+describe('App share wrapper', () => {
+    it('prefers native share over Web Share and clipboard', async () => {
+        const nativeShare = vi.fn(async () => ({ completed: true }));
+        const webShare = vi.fn();
+        const writeText = vi.fn();
+        const env = {
+            Capacitor: {
+                isNativePlatform: () => true,
+                Plugins: { App: { share: nativeShare } },
+            },
+            navigator: { share: webShare, clipboard: { writeText } },
+        };
+
+        await expect(shareContent(
+            { title: 'Receive BTC', text: 'Send BTC', url: 'bitcoin:bc1qexample' },
+            { env, fallbackText: 'bitcoin:bc1qexample' },
+        )).resolves.toBe(ShareOutcome.SHARED);
+        expect(nativeShare).toHaveBeenCalledOnce();
+        expect(webShare).not.toHaveBeenCalled();
+        expect(writeText).not.toHaveBeenCalled();
+    });
+
+    it('falls back from native share to Web Share, then clipboard', async () => {
+        const order = [];
+        const env = {
+            Capacitor: {
+                isNativePlatform: () => true,
+                Plugins: {
+                    App: {
+                        share: vi.fn(async () => {
+                            order.push('native');
+                            throw new Error('native unavailable');
+                        }),
+                    },
+                },
+            },
+            navigator: {
+                share: vi.fn(async () => {
+                    order.push('web');
+                    throw new Error('web unavailable');
+                }),
+                clipboard: {
+                    writeText: vi.fn(async () => { order.push('copy'); }),
+                },
+            },
+        };
+
+        await expect(shareContent(
+            { title: 'Receive BTC', url: 'bitcoin:bc1qexample' },
+            { env, fallbackText: 'bitcoin:bc1qexample' },
+        )).resolves.toBe(ShareOutcome.COPIED);
+        expect(order).toEqual(['native', 'web', 'copy']);
+    });
+
+    it('does not fall through when the native share sheet is canceled', async () => {
+        const webShare = vi.fn();
+        const writeText = vi.fn();
+        const env = {
+            Capacitor: {
+                isNativePlatform: () => true,
+                Plugins: { App: { share: vi.fn(async () => ({ completed: false })) } },
+            },
+            navigator: { share: webShare, clipboard: { writeText } },
+        };
+
+        await expect(shareContent(
+            { url: 'bitcoin:bc1qexample' },
+            { env, fallbackText: 'bitcoin:bc1qexample' },
+        )).resolves.toBe(ShareOutcome.CANCELED);
+        expect(webShare).not.toHaveBeenCalled();
         expect(writeText).not.toHaveBeenCalled();
     });
 });

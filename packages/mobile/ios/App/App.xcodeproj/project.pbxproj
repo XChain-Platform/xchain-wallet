@@ -24,6 +24,7 @@
 		XC1000B00000000000000003 /* VaultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000003 /* VaultStore.swift */; };
 		XC1000B00000000000000004 /* VaultBiometricSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000004 /* VaultBiometricSidecar.swift */; };
 		XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1014A00000000000000001 /* XChainClipboardPlugin.swift */; };
+		XC1060B00000000000000001 /* XChainAppPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1060A00000000000000001 /* XChainAppPlugin.swift */; };
 		XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000006 /* XChainLinksPlugin.swift */; };
 		XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000001 /* VaultArgon2id.swift */; };
 		XC1040B00000000000000002 /* argon2.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000002 /* argon2.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
@@ -81,6 +82,7 @@
 		XC1000A00000000000000004 /* VaultBiometricSidecar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultBiometricSidecar.swift; sourceTree = "<group>"; };
 		XC1000A00000000000000005 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Version.xcconfig; path = Version.xcconfig; sourceTree = SOURCE_ROOT; };
 		XC1014A00000000000000001 /* XChainClipboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = clipboard/XChainClipboardPlugin.swift; sourceTree = "<group>"; };
+		XC1060A00000000000000001 /* XChainAppPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XChainAppPlugin.swift; sourceTree = "<group>"; };
 		XC1000A00000000000000006 /* XChainLinksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/XChainLinksPlugin.swift; sourceTree = "<group>"; };
 		XC1040A00000000000000001 /* VaultArgon2id.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultArgon2id.swift; sourceTree = "<group>"; };
 		XC1040A00000000000000002 /* argon2.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/argon2.c; sourceTree = "<group>"; };
@@ -162,6 +164,7 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				XC1000A00000000000000001 /* MainViewController.swift */,
+				XC1060A00000000000000001 /* XChainAppPlugin.swift */,
 				XC1037A00000000000000001 /* DisabledCapacitorPlugins.swift */,
 				XC1000A00000000000000002 /* XChainVaultPlugin.swift */,
 				XC1000A00000000000000003 /* VaultStore.swift */,
@@ -378,6 +381,7 @@
 				XC1040B00000000000000006 /* thread.c in Sources */,
 				XC1040B00000000000000007 /* blake2b.c in Sources */,
 				XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */,
+				XC1060B00000000000000001 /* XChainAppPlugin.swift in Sources */,
 				XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 			);

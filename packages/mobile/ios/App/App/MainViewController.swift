@@ -57,6 +57,7 @@ class MainViewController: CAPBridgeViewController {
     }
 
     override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(XChainAppPlugin())
         bridge?.registerPluginInstance(XChainVaultPlugin())
         // SSC-4. Same silent-failure shape as the vault: without
         // this line the SPA finds no clipboard plugin, and a sensitive copy
