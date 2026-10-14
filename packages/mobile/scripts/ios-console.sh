@@ -48,7 +48,7 @@
 #   packages/mobile/scripts/ios-console.sh                    # build, install, stream
 #   packages/mobile/scripts/ios-console.sh "iPhone 17 Pro Max"
 #   SKIP_BUILD=1 packages/mobile/scripts/ios-console.sh       # reuse what is installed
-#   DURATION=20 packages/mobile/scripts/ios-console.sh        # stop after N seconds
+#   DURATION=20 packages/mobile/scripts/ios-console.sh        # stop after N seconds, or when the app exits
 #   LOG=/tmp/run.log packages/mobile/scripts/ios-console.sh   # also tee to a file
 
 set -euo pipefail
@@ -118,9 +118,18 @@ if [ -n "${DURATION:-}" ]; then
         xcrun simctl launch --console --terminate-running-process "$udid" "$bundle_id" \
         > "$out" 2>&1 &
     console=$!
-    sleep "$DURATION"
-    kill "$console" 2>/dev/null || true
+    # The window closes after DURATION seconds or as soon as the console ends
+    # on its own (the app exited), whichever comes first. The timer writes to
+    # nothing, so a caller reading this script's output is never held open by
+    # it. /bin/bash on macOS is 3.2, which has no `wait -n`, hence the poll.
+    sleep "$DURATION" >/dev/null 2>&1 &
+    timer=$!
+    while kill -0 "$console" 2>/dev/null && kill -0 "$timer" 2>/dev/null; do
+        sleep 0.05
+    done
+    kill "$console" "$timer" 2>/dev/null || true
     wait "$console" 2>/dev/null || true
+    wait "$timer" 2>/dev/null || true
     cat "$out"
 else
     SIMCTL_CHILD_NSUnbufferedIO=YES \

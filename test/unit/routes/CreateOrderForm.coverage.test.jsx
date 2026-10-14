@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const state = vi.hoisted(() => ({
     watcher: false,
@@ -132,6 +132,16 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('CreateOrderForm coverage', () => {
+    it('names each side once: the section says You give, its radio group says what it picks', async () => {
+        await renderForm();
+
+        expect(screen.getAllByText('You give')).toHaveLength(1);
+        expect(screen.getAllByText('You get')).toHaveLength(1);
+        const give = screen.getByRole('region', { name: 'You give' });
+        expect(within(give).getByRole('group', { name: 'Asset type' })).toBeInTheDocument();
+        expect(screen.queryByRole('group', { name: 'You give' })).toBeNull();
+    });
+
     it('exposes kit choice controls through their native semantic roles', async () => {
         await renderForm();
 

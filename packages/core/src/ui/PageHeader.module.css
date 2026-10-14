@@ -9,9 +9,11 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
-    /* Holds the toolbar height when neither lane has a control (Back hidden
-       on a top-level destination, no trailing action). */
-    min-height: var(--xc-page-header-side);
+    /* Holds the row at the Back control's height (a small Button) when Back
+       is hidden on a top-level destination, so the header is the same height
+       whether Back shows or not. The side lane token is the larger trailing
+       control size and would make a Back-less header taller. */
+    min-height: var(--xc-control-h-sm);
 }
 
 .back {

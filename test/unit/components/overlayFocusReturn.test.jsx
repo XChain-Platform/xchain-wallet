@@ -118,7 +118,7 @@ describe('overlay focus return', () => {
         expect(onParentBack).not.toHaveBeenCalled();
     });
 
-    it('closes a nested network list before the settings dialog', () => {
+    it('closes a nested network list before the settings dialog', async () => {
         render(
             <HeaderSettingsButton
                 chainRegistry={chainRegistry}
@@ -129,7 +129,8 @@ describe('overlay focus return', () => {
         );
         const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
         fireEvent.click(settingsTrigger);
-        const filterTrigger = screen.getByRole('button', { name: /All networks/ });
+        // The chain filter is a lazy chunk inside the popover.
+        const filterTrigger = await screen.findByRole('button', { name: /All networks/ });
         fireEvent.click(filterTrigger);
 
         fireEvent.keyDown(window, { key: 'Escape' });

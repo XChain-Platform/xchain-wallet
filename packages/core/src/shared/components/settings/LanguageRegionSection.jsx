@@ -26,6 +26,7 @@ import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
+    INPUT,
     ROW,
     ROW_COPY,
     ROW_HINT,
@@ -93,7 +94,7 @@ const CONTROLS = {
     width: 'min(100%, 280px)',
 };
 const CURRENCY_INPUT = {
-    ...SELECT,
+    ...INPUT,
     width: '100%',
 };
 const CURRENCY_LIST = {

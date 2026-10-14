@@ -124,8 +124,10 @@ test('choice controls retain their values through order and Send review', async 
     await test.step('Markets order radios and checkbox survive a review round trip', async () => {
         await openPaletteRoute(page, 'Create order');
         const main = page.getByRole('main');
-        const give = main.getByRole('group', { name: 'You give', exact: true });
-        const receive = main.getByRole('group', { name: 'You get', exact: true });
+        const give = main.getByRole('region', { name: 'You give', exact: true })
+            .getByRole('group', { name: 'Asset type', exact: true });
+        const receive = main.getByRole('region', { name: 'You get', exact: true })
+            .getByRole('group', { name: 'Asset type', exact: true });
         const receiveToken = receive.getByRole('radio', { name: 'A token' });
 
         await receiveToken.check();

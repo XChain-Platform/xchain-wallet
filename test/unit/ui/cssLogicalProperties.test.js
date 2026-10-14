@@ -358,7 +358,9 @@ describe('wallet CSS logical properties', () => {
 
         expect(assetCard).toMatch(/\.chevron:dir\(rtl\)[^{]*\{[^}]*transform:\s*scaleX\(-1\)/s);
         expect(badge).toMatch(/\.badge:dir\(rtl\)[^{]*\{[^}]*safe-area-inset-right/s);
-        expect(badge).toMatch(/\.picker:dir\(rtl\)[^{]*\{[^}]*background-position:\s*left/s);
+        // The badge picker takes its chevron, and its RTL side, from the shared select rule.
+        expect(badge).not.toMatch(/\.picker[^{]*\{[^}]*background-position/s);
+        expect(read('packages/core/src/ui/tokens.css')).toMatch(/\[dir='rtl'\] select[^{]*\{[^}]*background-position:\s*left/s);
         expect(shell).toMatch(/\.sidebarFrame:dir\(rtl\)[^{]*\{[^}]*box-shadow:\s*16px/s);
         expect(approval.match(/dir="ltr"/g)).toHaveLength(3);
     });

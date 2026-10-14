@@ -291,7 +291,9 @@ describe('AppHeader action row', () => {
         const close = screen.getByRole('button', { name: 'Close' });
         expect(close.className).toMatch(/secondary/);
         expect(close.className).toMatch(/iconOnly/);
-        expect(close.className).toMatch(/sm/);
+        // The same md close as every other dialog, sheet and the palette.
+        expect(close.className).toMatch(/(^|\s|_)md(_|\s|$)/);
+        expect(close.className).not.toMatch(/(^|\s|_)sm(_|\s|$)/);
     });
 
 
@@ -501,7 +503,7 @@ describe('HeaderSettingsButton section gating', () => {
         expect(screen.getByText('Main')).toBeTruthy();
     });
 
-    it('renders the network section and reports changes when fully wired', () => {
+    it('renders the network section and reports changes when fully wired', async () => {
         const onNetworkFilterChange = vi.fn();
         render(
             <HeaderSettingsButton
@@ -512,7 +514,8 @@ describe('HeaderSettingsButton section gating', () => {
             />,
         );
         fireEvent.click(gear());
-        expect(screen.getByText('Chain filter')).toBeTruthy();
+        // The chain filter is a lazy chunk inside the popover.
+        expect(await screen.findByText('Chain filter')).toBeTruthy();
         const networkTrigger = screen.getByRole('button', { expanded: false, name: /All networks/ });
         expect(networkTrigger).toHaveAttribute('title', 'All networks');
         fireEvent.click(networkTrigger);
@@ -544,6 +547,53 @@ describe('HeaderSettingsButton section gating', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Switch network' }));
 
         await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest'));
+    });
+
+    it('moves focus into the body-level popover on open and back to the trigger on Escape', async () => {
+        render(
+            <HeaderSettingsButton
+                activeWallet={{ id: 'w1', name: 'Main wallet' }}
+                onOpenWalletPicker={() => {}}
+                activeNetwork="testnet"
+                onActiveNetworkChange={() => Promise.resolve()}
+            />,
+        );
+        gear().focus();
+        fireEvent.click(gear());
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
+        expect(popover.contains(document.activeElement)).toBe(true);
+        expect(document.activeElement).toHaveTextContent('Main wallet');
+
+        fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
+        expect(document.activeElement).toBe(gear());
+    });
+
+    it('stacks the network confirm beside the body-level popover and keeps both open on its presses', () => {
+        render(
+            <HeaderSettingsButton
+                activeNetwork="testnet"
+                developerMode
+                onActiveNetworkChange={() => Promise.resolve()}
+            />,
+        );
+
+        fireEvent.click(gear());
+        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
+        fireEvent.change(screen.getByLabelText('Active network in header'), {
+            target: { value: 'regtest' },
+        });
+        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
+        // Both are body-level layers, and the confirm comes after the popover
+        // in paint order, so the popover can never cover it.
+        const confirmLayer = dialog.closest('[data-header-settings-confirm]');
+        expect(confirmLayer?.parentElement).toBe(document.body);
+        expect(popover.compareDocumentPosition(confirmLayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.mouseDown(within(dialog).getByRole('button', { name: 'Cancel' }));
+        expect(screen.getByRole('dialog', { name: 'Switch to Regtest?' })).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
     });
 
     it('does not guess a network badge before settings load', () => {

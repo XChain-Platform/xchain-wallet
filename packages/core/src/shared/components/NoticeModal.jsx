@@ -12,7 +12,7 @@ import { useEffect, useId, useRef } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
-import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 /**
  * Small centered status modal for quick "it happened" confirmations
@@ -32,7 +32,9 @@ export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
     const titleId = useId();
     const messageId = useId();
     useFocusTrap(panelRef, { active: true });
-    useInertBackground(rootRef, { active: true });
+    // The trap also inerts the background outside the modal root. A second
+    // inert lock here outlived the trap on close, so the browser refused the
+    // focus hand-back to the opener.
     useBackHandler(onClose);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };

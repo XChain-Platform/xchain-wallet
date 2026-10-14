@@ -71,6 +71,11 @@ export const en = {
         '{count, plural, one {Show # small balance} other {Show # small balances}}',
     'balanceList.smallBalances.hide':
         '{count, plural, one {Hide # small balance} other {Hide # small balances}}',
+    'balanceList.rowChainSpeech': 'on {chain}',
+    'createOrder.side.assetType': 'Asset type',
+    'common.allNetworks': 'All networks',
+    'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
+    'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
     'addressList.hidden.show':
         '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
     'addressList.hidden.hide':
@@ -102,6 +107,9 @@ export const en = {
     'backupReminder.remindTomorrow': 'Remind me tomorrow',
 
     // --- settings ------------------------------------------------
+    'settings.toggle.turnOn': 'Turn on',
+    'settings.developerMode.switchAccessibleLabel': 'Turn on developer mode',
+    'settings.ads.switchAccessibleLabel': 'Turn on Automatic Donation System',
     'settings.network.label': 'Network',
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchTitle': 'Switch to {network}?',
@@ -262,6 +270,13 @@ export const en = {
     'walletDetails.name': 'Name',
     'walletDetails.type': 'Type',
     'walletDetails.origin': 'Origin',
+    'walletDetails.originLabel.created': 'Generated in this wallet',
+    'walletDetails.originLabel.demo': 'Created for demo mode',
+    'walletDetails.originLabel.importedMnemonic': 'Imported from a recovery phrase',
+    'walletDetails.originLabel.importedWif': 'Imported single private key',
+    'walletDetails.originLabel.importedBackup': 'Restored from backup file',
+    'walletDetails.originLabel.importedFreewallet': 'Imported from FreeWallet',
+    'walletDetails.originLabel.unknown': 'Not recorded',
     'walletDetails.passphrase': 'BIP39 passphrase status',
     'walletDetails.created': 'Created',
     'walletDetails.demoWallet': 'Demo wallet (throwaway)',
@@ -471,6 +486,8 @@ export const en = {
     'importWallet.phrase.freeWalletCount': '{count} / 12 words',
     'importWallet.phrase.wordCount':
         '{count, plural, one {# word entered} other {# words entered}}',
+    // {expected} is the accepted counts already joined as an "or" list.
+    'importWallet.phrase.wrongWordCount': 'Expected {expected} words, got {count}.',
     'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
     'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
     'importWallet.phrase.suggestions': 'BIP39 word suggestions',

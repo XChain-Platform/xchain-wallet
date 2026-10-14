@@ -959,46 +959,44 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     return { offers, sales, dexOrders, dexSwaps };
 }
 
-// Five contacts seeded into a fresh demo wallet so the address book, Send
-// picker, Contacts screen, and message inbox all show realistic contact data.
-// Each spans one to three chains. Addresses are illustrative demo strings
-// (AddressText truncates them); the first contact's Bitcoin address doubles as
-// a messaging counterparty, so one inbox row shows a contact name in place of
-// an address while the others show raw addresses for contrast.
+// Five demo contacts, one to three chains each. Addresses are valid mainnet
+// addresses hashed from the contact name (no one holds the keys), since the
+// edit form re-validates them on save. Erin's Bitcoin address is also an
+// inbox counterparty, so one inbox row shows a contact name.
 const DEMO_CONTACTS = [
     {
         name: 'Erin Calloway',
         entries: [
-            { chain: 'bitcoin', address: 'demo1erincallowaybtc0000000000000000001', label: 'Main' },
-            { chain: 'litecoin', address: 'demoLerincallowayltc0000000000000000001', label: 'LTC' },
-            { chain: 'dogecoin', address: 'demoDerincallowaydoge000000000000000001', label: 'DOGE tips' },
+            { chain: 'bitcoin', address: 'bc1q3wkwr0udwwkynvuy53tct3r4jfgek5v2c3pftc', label: 'Main' },
+            { chain: 'litecoin', address: 'ltc1qqtte56w7s7gst5evtgc64p0vczch7g574fawyk', label: 'LTC' },
+            { chain: 'dogecoin', address: 'DCchvMkFGrjDx28gZsgQro4jexPZ8QDC68', label: 'DOGE tips' },
         ],
     },
     {
         name: 'Marcus Webb',
         entries: [
-            { chain: 'bitcoin', address: 'demo1marcuswebbbtc00000000000000000002', label: 'Cold storage' },
-            { chain: 'litecoin', address: 'demoLmarcuswebbltc00000000000000000002', label: '' },
+            { chain: 'bitcoin', address: 'bc1q9dtk64wl74dyllt0mjmsw609a5hry6r7j8l4fu', label: 'Cold storage' },
+            { chain: 'litecoin', address: 'ltc1qncndj80v4q7pkmymyqz4zhe8jqtwe5pvx38jel', label: '' },
         ],
     },
     {
         name: 'Priya Nair',
         entries: [
-            { chain: 'bitcoin', address: 'demo1priyanairbtc000000000000000000003', label: '' },
+            { chain: 'bitcoin', address: 'bc1q52zecvw8lrg75c3xypsld6w4qyc6s8x3aplpw9', label: '' },
         ],
     },
     {
         name: 'Diego Santos',
         entries: [
-            { chain: 'litecoin', address: 'demoLdiegosantosltc0000000000000000004', label: 'Savings' },
-            { chain: 'dogecoin', address: 'demoDdiegosantosdoge000000000000000004', label: '' },
+            { chain: 'litecoin', address: 'ltc1qp86vwem7c3f4w4u6j4rf5sh5p958lcp2r985a9', label: 'Savings' },
+            { chain: 'dogecoin', address: 'DN2LX8cnzuW3M5RRADSxyp43k6CWyKNRph', label: '' },
         ],
     },
     {
         name: 'Yuki Tanaka',
         entries: [
-            { chain: 'bitcoin', address: 'demo1yukitanakabtc00000000000000000005', label: 'Trading' },
-            { chain: 'dogecoin', address: 'demoDyukitanakadoge0000000000000000005', label: 'Memes' },
+            { chain: 'bitcoin', address: 'bc1q6g6t6t3kd4hlynpc60udg5s3ygw38n58fgajfd', label: 'Trading' },
+            { chain: 'dogecoin', address: 'DT9cQMVsSvZoTETsDo9bAn6Zb13ALzCZYs', label: 'Memes' },
         ],
     },
 ];

@@ -73,12 +73,9 @@ import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/Update
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
-import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
-import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
-import { dismissAllOverlays } from '@xchain-wallet/core/ui/backStack.js';
+import { dismissAllOverlays, useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { coinFamiliesForUser } from '../../core/src/registry/visibility.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -107,10 +104,17 @@ import { subscribeToNativeDeepLinks } from './deeplinks/nativeDeepLinks.js';
 import { canApplyNativeIntent, useNativeAppLifecycle } from './platform/nativeAppLifecycle.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
-import { DevVariantBadge } from './DevVariantBadge.jsx';
+import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import devShellStyles from './DevVariantShell.module.css';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
+
+// Overlays opened by a key or a developer toggle, never needed for first
+// paint. App mounts each one the first time it opens, then keeps it mounted.
+const loadCommandPaletteHost = () => import('./CommandPaletteHost.jsx');
+const CommandPaletteHost = lazyRoute(loadCommandPaletteHost, 'CommandPaletteHost');
+const ShortcutHelp = lazyRoute(() => import('@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx'), 'ShortcutHelp');
+const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVariantBadge');
 
 const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
 const WalletPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletPicker.jsx'), 'WalletPicker');
@@ -285,7 +289,11 @@ function BottomTabBarWithObligations({ badges, ...rest }) {
 function GatedDevVariantBadge({ state }) {
     const { settings } = useSettings();
     if (!settings?.developerMode || !settings?.showVariantBadge) return null;
-    return <DevVariantBadge state={state} />;
+    return (
+        <Suspense fallback={null}>
+            <DevVariantBadge state={state} />
+        </Suspense>
+    );
 }
 
 function AppInner() {
@@ -439,9 +447,10 @@ function AppInner() {
         active: globalScannerOpen,
         initialFocusRef: globalScannerRef,
     });
-    // The overlay covers the content area but not the navigation, so the
-    // bottom bar, the rail and the header stay live underneath it. Any
-    // navigation therefore closes it; otherwise the scanner (and the camera)
+    // Escape and the system Back gesture close the scanner like any other
+    // modal; its own Back control is a route-level handler that Escape skips.
+    useBackHandler(globalScannerOpen ? () => setGlobalScannerOpen(false) : undefined);
+    // Any view change closes the scanner; otherwise it (and the camera)
     // stayed on screen over whatever view the user had moved to (LG K51,
     // 2026-10-12: palette "Scan a QR code", then Home, then History). The nav
     // handlers also close it directly, for a tap on the view already shown.
@@ -554,6 +563,20 @@ function AppInner() {
     // help modal. Disabled while locked, while the palette owns the keys, and
     // while the help modal itself is open.
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+    // The palette and the help modal are lazy chunks. Each mounts the first
+    // time it opens and stays mounted after, so later opens and closes behave
+    // exactly as an always-mounted overlay does.
+    const paletteMounted = useRef(false);
+    if (palette.open) paletteMounted.current = true;
+    const shortcutHelpMounted = useRef(false);
+    if (shortcutHelpOpen) shortcutHelpMounted.current = true;
+    // Fetch the palette chunk once the wallet is unlocked and the screen has
+    // painted, so the first Cmd/Ctrl+K opens without waiting on the network.
+    const unlockedNow = status.state === 'unlocked';
+    useEffect(() => {
+        if (!unlockedNow) return undefined;
+        return deferNonCriticalWork(() => { loadCommandPaletteHost().catch(() => {}); });
+    }, [unlockedNow]);
     // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
@@ -2944,19 +2967,11 @@ function AppInner() {
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
             };
-            const paletteCommands = [
-                ...buildCommands(paletteCtx),
-                ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
-                ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
-                ...sitesToCommands(paletteSites, paletteEntityCtx),
-                ...settingsSectionsToCommands(paletteEntityCtx),
-                ...helpToCommands(paletteEntityCtx),
-            ];
             // §33.3: free-form intents like "send 100 MYTOKEN" open Send
             // prefilled. Send falls back to the first chain when the prefill
             // carries no chainId, so amount + tick alone is enough. A
             // txid/date-shaped query offers "search history".
-            const paletteParseQuery = (q) => parseFreeformCommands(q, {
+            const paletteParseCtx = {
                 isSignerMode,
                 isDemoWallet: isDemoWallet(activeWalletId),
                 composeSend: ({ amount, tick }) => {
@@ -2970,7 +2985,7 @@ function AppInner() {
                     setHistoryReturnTo('home');
                     palette.navigate('history');
                 },
-            });
+            };
             // Assigned rather than returned directly so the whole unlocked
             // tree (both nav surfaces AND the route, Home included) sits under
             // one CoinpayObligationsProvider, which is the tree's only
@@ -3099,53 +3114,74 @@ function AppInner() {
                             aria-labelledby="xc-global-scanner-title"
                             tabIndex={-1}
                             style={{
-                                position: 'absolute',
+                                // A modal: it inerts the header and navigation, so it
+                                // covers them too rather than leaving dead controls on show.
+                                position: 'fixed',
                                 inset: 0,
+                                boxSizing: 'border-box',
+                                padding: 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)',
                                 zIndex: 'var(--xc-z-overlay)',
                                 background: 'var(--xc-bg)',
                                 display: 'flex',
                                 flexDirection: 'column',
                             }}
                         >
-                            <ScanRoute
-                                embedded
-                                titleId="xc-global-scanner-title"
-                                onBack={() => setGlobalScannerOpen(false)}
-                                onClassified={(outcome) => {
-                                    setGlobalScannerOpen(false);
-                                    if (outcome.kind === 'send') {
-                                        if (unlockedView === 'contacts') {
-                                            setContactScanPrefill({
-                                                address: outcome.address,
-                                                chainId: outcome.chainId,
-                                            });
-                                        } else {
-                                            setSendPrefill({
-                                                address: outcome.address,
-                                                amount: outcome.amount,
-                                                tick: outcome.tick,
-                                                chainId: outcome.chainId,
-                                                memo: outcome.memo,
-                                            });
-                                            setUnlockedView('send');
+                            {/* ScanRoute is a lazy chunk; without its own boundary the first
+                                open suspends the whole shell into the route error screen. */}
+                            <Suspense fallback={<Loading />}>
+                                <ScanRoute
+                                    embedded
+                                    titleId="xc-global-scanner-title"
+                                    onBack={() => setGlobalScannerOpen(false)}
+                                    onClassified={(outcome) => {
+                                        setGlobalScannerOpen(false);
+                                        if (outcome.kind === 'send') {
+                                            if (unlockedView === 'contacts') {
+                                                setContactScanPrefill({
+                                                    address: outcome.address,
+                                                    chainId: outcome.chainId,
+                                                });
+                                            } else {
+                                                setSendPrefill({
+                                                    address: outcome.address,
+                                                    amount: outcome.amount,
+                                                    tick: outcome.tick,
+                                                    chainId: outcome.chainId,
+                                                    memo: outcome.memo,
+                                                });
+                                                setUnlockedView('send');
+                                            }
+                                        } else if (outcome.kind === 'receive') {
+                                            setUnlockedView('receive');
+                                        } else if (outcome.kind === 'psbt') {
+                                            setScannedPsbt(outcome.psbtHex || null);
+                                            setUnlockedView('sign-psbt');
                                         }
-                                    } else if (outcome.kind === 'receive') {
-                                        setUnlockedView('receive');
-                                    } else if (outcome.kind === 'psbt') {
-                                        setScannedPsbt(outcome.psbtHex || null);
-                                        setUnlockedView('sign-psbt');
-                                    }
-                                }}
-                            />
+                                    }}
+                                />
+                            </Suspense>
                         </div>
                     ) : null}
-                    <CommandPalette
-                        open={palette.open}
-                        onClose={palette.closePalette}
-                        commands={paletteCommands}
-                        parseQuery={paletteParseQuery}
-                    />
-                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
+                    {paletteMounted.current ? (
+                        <Suspense fallback={null}>
+                            <CommandPaletteHost
+                                open={palette.open}
+                                onClose={palette.closePalette}
+                                ctx={paletteCtx}
+                                entityCtx={paletteEntityCtx}
+                                tokenRows={paletteTokenRows}
+                                contacts={paletteContacts}
+                                sites={paletteSites}
+                                navigate={palette.navigate}
+                                parseCtx={paletteParseCtx}
+                            />
+                        </Suspense>
+                    ) : null}
+                    {shortcutHelpMounted.current ? (
+                        <Suspense fallback={null}>
+                            <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
+                        </Suspense>
+                    ) : null}
                 </FullLayoutWithNav>
             );
             return (

@@ -26,14 +26,14 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChainBadge, useReducedMotion } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { defaultRegistry } from '../../registry/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useToast } from './ToastHost.jsx';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import styles from './QueuedBroadcastBanner.module.css';
 
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 /**
  * @param {object} props
