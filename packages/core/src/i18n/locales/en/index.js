@@ -2692,6 +2692,11 @@ export const en = {
     'createWallet.yourPasswordEncryptsThisWallet2': 'Your password encrypts this wallet on this device.',
     'locked.thisPermanentlyDeletesEveryWallet2':
         "This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions. Make sure you have every recovery phrase or backup file you need. This can't be undone.",
+    'routes.manageToken.locked': 'Locked',
+    'routes.manageToken.unlocked': 'Unlocked',
+    'routes.manageToken.pausedIndefinitely': 'Paused indefinitely',
+    'routes.manageToken.pausedUntilBlock': 'Paused until block {resumeBlock}',
+    'routes.manageToken.paused': 'Paused',
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {

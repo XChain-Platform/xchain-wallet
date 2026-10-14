@@ -589,16 +589,16 @@ export function ManageToken({
                             <span className={styles.heroBadges}>
                                 {locked ? (
                                     <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
-                                        <Icon.LockIcon />Locked
+                                        <Icon.LockIcon />{t('routes.manageToken.locked')}
                                     </span>
                                 ) : (
                                     <span className={`${styles.lockBadge} ${styles.lockBadgeUnlocked}`}>
-                                        <Icon.UnlockIcon />Unlocked
+                                        <Icon.UnlockIcon />{t('routes.manageToken.unlocked')}
                                     </span>
                                 )}
                                 {sleepState.paused ? (
-                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? 'Paused indefinitely' : (sleepState.resumeBlock ? `Paused until block ${sleepState.resumeBlock}` : 'Paused')}>
-                                        <Icon.LockIcon />Paused
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? t('routes.manageToken.pausedIndefinitely') : (sleepState.resumeBlock ? t('routes.manageToken.pausedUntilBlock', { resumeBlock: sleepState.resumeBlock }) : t('routes.manageToken.paused'))}>
+                                        <Icon.LockIcon />{t('routes.manageToken.paused')}
                                     </span>
                                 ) : null}
                             </span>
