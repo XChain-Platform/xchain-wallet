@@ -559,18 +559,17 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <FormPage
             label="Batch composer"
             sectioned
-            intro={(
-                <>
-                Queue up to 250 actions to run together in one transaction from one address. You can issue one new
-                token plus as many of its sub-tokens (JDOG, then JDOG.1, JDOG.2, ...) as you like, and mint any
-                number of different tokens (once each). A contract deploy can be queued too, but only one per
-                batch, since each one runs expensive setup work. No batches inside a batch. FILE-gated content
-                uses the dedicated publisher instead.
-                </>
-            )}
             status={constraintError ? <StatusMessage variant="error" className={styles.error}>{constraintError}</StatusMessage> : null}
             actions={<Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>}
         >
+            <details>
+                <summary>Batch limits</summary>
+                <p className={styles.hint}>
+                    Queue up to 250 actions from one address. A batch can issue one new token plus its sub-tokens,
+                    mint different tokens once each, and deploy one contract. It cannot contain another batch.
+                    Use the dedicated publisher for FILE-gated content.
+                </p>
+            </details>
             <FormSection title="Batch settings">
                 <Select
                     label="Chain"

@@ -108,6 +108,9 @@ describe('CoSignerAccountList states', () => {
         }]));
 
         await screen.findByText('Build agent');
+        const disclosure = screen.getByText('How agent accounts work').closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent('shares a 2-of-2 address');
         expect(screen.getByText('Active')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /Build agent/ }));
         expect(onOpen).toHaveBeenCalledWith('account-1');

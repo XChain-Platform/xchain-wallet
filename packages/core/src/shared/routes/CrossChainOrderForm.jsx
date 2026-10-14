@@ -544,13 +544,6 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             label="Create cross-chain order"
             onSubmit={handleReview}
             sectioned
-            intro={(
-                <>
-                    Your order waits on the network&apos;s order book and fills automatically, possibly in parts,
-                    as matching offers arrive.
-                    For an all-or-nothing single fill use Cross-chain swap.
-                </>
-            )}
             status={validationError || formError ? (
                 <>
                     {validationError ? <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage> : null}
@@ -571,6 +564,13 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 </>
             )}
         >
+            <details>
+                <summary>How orders fill</summary>
+                <p className={styles.hint}>
+                    The order waits on the network&apos;s order book and fills automatically, possibly in parts.
+                    Use Cross-chain swap for an all-or-nothing single fill.
+                </p>
+            </details>
             <FormSection title="You give">
                     <ChainPicker
                         label="Give chain"

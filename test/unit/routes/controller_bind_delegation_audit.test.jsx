@@ -70,20 +70,22 @@ function mountDelegation(options) {
 afterEach(() => cleanup());
 
 describe('controller binding and signing-key delegation disclosures', () => {
-    it('explains binding, unbinding, and review before signing', async () => {
+    it('keeps binding guidance in a collapsed disclosure', async () => {
         mountController();
 
-        expect(await screen.findByText(/Binding lets a guard contract approve or block/)).toBeTruthy();
-        expect(screen.getByText(/Use Unbind on this screen to remove the guard later/)).toBeTruthy();
-        expect(screen.getByText(/review the source address, guard, action class, and fee before signing/)).toBeTruthy();
+        const disclosure = (await screen.findByText('How controller bindings work')).closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent(/guard contract approves or blocks/);
+        expect(screen.queryByText(/review the source address, guard, action class, and fee before signing/)).toBeNull();
     });
 
-    it('explains delegation, its revocation path, and review before signing', async () => {
+    it('keeps delegation guidance in a collapsed disclosure', async () => {
         mountDelegation();
 
-        expect(await screen.findByText(/Delegating lets the selected Ed25519 key sign hub actions/)).toBeTruthy();
-        expect(screen.getByText(/Use Revoke delegation from the staking details to remove the key later/)).toBeTruthy();
-        expect(screen.getByText(/review the source address, signing key, and fee before signing/)).toBeTruthy();
+        const disclosure = (await screen.findByText('How signing-key delegation works')).closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent(/selected Ed25519 key can sign hub actions/);
+        expect(screen.queryByText(/review the source address, signing key, and fee before signing/)).toBeNull();
     });
 
     it.each([
@@ -92,7 +94,7 @@ describe('controller binding and signing-key delegation disclosures', () => {
     ])('shows the unsigned watch-only state on the initial %s form', async (_name, mount) => {
         mount({ walletMode: 'watcher' });
 
-        expect(await screen.findByText(/Watch-only mode creates an unsigned transaction here and cannot sign it/)).toBeTruthy();
+        expect(await screen.findByText(/Watch-only mode creates an unsigned transaction and cannot sign it/)).toBeTruthy();
     });
 
     it.each([

@@ -641,16 +641,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         <FormPage
             label={`${verb} controller`}
             onSubmit={handleReview}
-            intro={(
-                <>
-                    Binding lets a guard contract approve or block the selected actions for this token or address.
-                    {' '}Use Unbind on this screen to remove the guard later, after any cooldown finishes.
-                    {' '}You will review the source address, guard, action class, and fee before signing.
-                    {isWatcherMode
-                        ? ' Watch-only mode creates an unsigned transaction here and cannot sign it.'
-                        : ''}
-                </>
-            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -665,6 +655,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 </Button>
             )}
         >
+            <details>
+                <summary>How controller bindings work</summary>
+                <p className={styles.hintLeft}>
+                    A guard contract approves or blocks the selected actions for this token or address. Unbind
+                    removes the guard after any cooldown finishes.
+                    {isWatcherMode ? ' Watch-only mode creates an unsigned transaction and cannot sign it.' : ''}
+                </p>
+            </details>
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField

@@ -714,7 +714,6 @@ export function AddressList({
                 <FormPage
                     label="Generate address at index"
                     onSubmit={handleAdvancedGenerate}
-                    intro="Advanced option for recovering or recreating a known receive address. The index must not already be held by this account."
                     status={advancedError ? (
                         <StatusMessage variant="error" className={styles.error}>
                             {advancedError}
@@ -781,7 +780,7 @@ export function AddressList({
                             setAdvancedError(null);
                         }}
                         onWheel={blurNumberInputOnWheel}
-                        hint="Use the exact external address index you want to derive."
+                        hint="Use the exact external index of the receive address you want to recover or recreate. It must not already be held by this account."
                         disabled={advancedBusy}
                         autoFocus
                     />

@@ -476,12 +476,6 @@ export function CoinpayForm({
             <FormPage
                 label="Review matched order payment"
                 onSubmit={handleSubmit}
-                intro={(
-                    <>
-                    Pay {amountLabel} to complete
-                    matched order #{summary.actionIndex}.
-                    </>
-                )}
                 status={submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : stage === 'submitting' ? (

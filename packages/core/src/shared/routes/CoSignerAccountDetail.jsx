@@ -236,7 +236,6 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
             <FormPage
                 label="Edit agent account"
                 onSubmit={saveEdit}
-                intro="Editing the policy changes only the rules; the account's address and keys stay the same."
                 status={editError ? <StatusMessage variant="error">{editError}</StatusMessage> : null}
                 actions={(
                     <>
@@ -245,6 +244,10 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                     </>
                 )}
             >
+                <details>
+                    <summary>What changes?</summary>
+                    <p className={styles.hint}>Only the policy rules change. The account address and keys stay the same.</p>
+                </details>
                 <Input label="Account name" value={name} onChange={(e) => setName(e.target.value)} />
                 <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
             </FormPage>,
