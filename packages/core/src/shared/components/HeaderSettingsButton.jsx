@@ -100,6 +100,20 @@ export function HeaderSettingsButton({
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
+    const popoverRef = popoverPlacement.ref;
+    // The popover is portaled to the body, so Tab from its trigger walked the
+    // page behind it (and closed an owning menu) and its controls were out of
+    // keyboard reach. Opening moves focus to its first control; closing hands
+    // it back to the trigger.
+    useEffect(() => {
+        if (!open) return undefined;
+        const frame = requestAnimationFrame(() => {
+            popoverRef.current?.querySelector(
+                'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            )?.focus();
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [open, popoverRef]);
 
     useEffect(() => {
         if (!open) return undefined;

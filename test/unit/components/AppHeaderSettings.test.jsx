@@ -546,6 +546,27 @@ describe('HeaderSettingsButton section gating', () => {
         await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest'));
     });
 
+    it('moves focus into the body-level popover on open and back to the trigger on Escape', async () => {
+        render(
+            <HeaderSettingsButton
+                activeWallet={{ id: 'w1', name: 'Main wallet' }}
+                onOpenWalletPicker={() => {}}
+                activeNetwork="testnet"
+                onActiveNetworkChange={() => Promise.resolve()}
+            />,
+        );
+        gear().focus();
+        fireEvent.click(gear());
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
+        expect(popover.contains(document.activeElement)).toBe(true);
+        expect(document.activeElement).toHaveTextContent('Main wallet');
+
+        fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
+        expect(document.activeElement).toBe(gear());
+    });
+
     it('stacks the network confirm beside the body-level popover and keeps both open on its presses', () => {
         render(
             <HeaderSettingsButton
