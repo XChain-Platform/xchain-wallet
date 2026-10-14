@@ -1,5 +1,10 @@
 .page {
     min-width: 0;
+    /* One gap between every stacked settings row, whether it is a drill-in
+       row on the page or a field row inside a section, so the list reads as
+       one evenly spaced column. */
+    --xc-settings-row-gap: var(--xc-space-2);
+    --xc-section-gap: var(--xc-settings-row-gap);
 }
 
 .searchField {

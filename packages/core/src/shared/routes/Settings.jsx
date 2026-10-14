@@ -29,6 +29,14 @@ import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
+import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+
+// Names the network the wallet is actually on, so the Network row never claims
+// Mainnet while a test network is active.
+function activeNetworkLabel(value) {
+    const id = normalizeActiveNetwork(value);
+    return id.charAt(0).toUpperCase() + id.slice(1);
+}
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
@@ -428,7 +436,9 @@ export function Settings({
             description: settings?.developerMode === true
                 ? 'Choose Mainnet, Testnet, or Regtest to control which chains the wallet queries and displays; changing the network reloads the page.'
                 : settings?.developerMode === false
-                    ? 'Mainnet is active. Turn on Developer mode to choose a test network.'
+                    ? (normalizeActiveNetwork(settings.activeNetwork) === 'mainnet'
+                        ? 'Mainnet is active. Turn on Developer mode to choose a test network.'
+                        : `${activeNetworkLabel(settings.activeNetwork)} is active. Turn on Developer mode to switch networks.`)
                     : 'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
             keywords: settings?.developerMode === true
                 ? 'network active mainnet testnet regtest filter chain switch mode dev'
@@ -922,7 +932,7 @@ function UpdateCheckPanel() {
 
 function PanelBlock({ title, description, children }) {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-3)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-settings-row-gap)' }}>
             <SectionHeader
                 className={settingsStyles.sectionHeader}
                 title={title}

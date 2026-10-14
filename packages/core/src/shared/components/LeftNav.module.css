@@ -362,12 +362,10 @@
 }
 
 .layout[data-xc-tier='rail'] {
-    --xc-page-gutter: var(--xc-space-4);
     --xc-page-top: var(--xc-space-4);
 }
 
 .layout[data-xc-tier='full'] {
-    --xc-page-gutter: var(--xc-space-6);
     --xc-page-top: var(--xc-space-4);
 }
 

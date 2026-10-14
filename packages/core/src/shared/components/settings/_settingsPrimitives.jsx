@@ -35,7 +35,7 @@ export const ROW = {
 export const STACK = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
+    gap: 'var(--xc-settings-row-gap)',
 };
 export const ROW_LABEL = { color: 'var(--xc-text-muted)' };
 export const ROW_VALUE = { color: 'var(--xc-text)', fontWeight: 500 };
