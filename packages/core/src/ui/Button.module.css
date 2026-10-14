@@ -25,7 +25,11 @@
     max-width: 100%;
     min-width: 0;
     text-align: center;
-    white-space: nowrap;
+    /* flex-shrink: 0 keeps a row from squeezing a short label onto two lines;
+       a label wider than its whole column still wraps instead of spilling
+       out of the button. */
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .icon {
@@ -40,7 +44,7 @@
     align-items: center;
     justify-content: center;
     min-width: 0;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .btn:focus-visible {

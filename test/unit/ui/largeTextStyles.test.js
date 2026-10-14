@@ -77,8 +77,10 @@ describe('large text layout styles', () => {
 
         expect(rule(button, '.btn')).toMatch(/max-width:\s*100%/);
         expect(rule(button, '.btn')).toMatch(/flex-shrink:\s*0/);
-        expect(rule(button, '.btn')).toMatch(/white-space:\s*nowrap/);
-        expect(rule(button, '.label')).toMatch(/white-space:\s*nowrap/);
+        // Whole labels: never truncated; one wider than its column wraps.
+        expect(rule(button, '.btn')).toMatch(/white-space:\s*normal/);
+        expect(rule(button, '.btn')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(rule(button, '.label')).not.toMatch(/white-space:\s*nowrap/);
         expect(rule(button, '.label')).not.toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(balances, '.name')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(balances, '.name')).toMatch(/min-width:\s*0/);

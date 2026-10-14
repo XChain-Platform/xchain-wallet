@@ -54,14 +54,13 @@ describe('Recovery screen phone layouts', () => {
         expect(panel).toMatch(/box-sizing:\s*border-box/);
     });
 
-    it('lets vault recovery copy wrap and keeps its action on one bounded line within 360px', () => {
+    it('lets vault recovery copy and actions wrap within 360px', () => {
         const vaultCss = readFileSync(
             resolve(process.cwd(), 'packages/core/src/shared/routes/VaultUnavailable.module.css'),
             'utf8',
         );
         const wrap = vaultCss.match(/\.wrap\s*\{[^}]*\}/)[0];
-        // The restore action is a kit Button: it stays on one line, bounded by
-        // the column, so its label must stay short enough for a 360px phone.
+        // The restore action is a kit Button, so its wrapping lives on .btn.
         const buttonCss = readFileSync(
             resolve(process.cwd(), 'packages/core/src/ui/Button.module.css'),
             'utf8',
@@ -73,9 +72,6 @@ describe('Recovery screen phone layouts', () => {
         expect(wrap).toMatch(/max-width:\s*100%/);
         expect(wrap).toMatch(/overflow-wrap:\s*anywhere/);
         expect(restoreAction).toMatch(/max-width:\s*100%/);
-        expect(restoreAction).toMatch(/white-space:\s*nowrap/);
-        const en = readFileSync(resolve(process.cwd(), 'packages/core/src/i18n/locales/en/index.js'), 'utf8');
-        const restoreLabel = /'vaultUnavailable\.restore':\s*'([^']+)'/.exec(en)[1];
-        expect(restoreLabel.length).toBeLessThanOrEqual(40);
+        expect(restoreAction).toMatch(/white-space:\s*normal/);
     });
 });

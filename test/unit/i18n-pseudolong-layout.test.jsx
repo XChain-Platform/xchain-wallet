@@ -317,14 +317,16 @@ describe('pseudo-long narrow layouts', () => {
         expect(getByText('Closing soon')).toBeVisible();
         expect(getByText('Bitcoin')).toBeVisible();
         for (const [css, selector] of [
-            [buttonCss, '.btn'],
             [chipCss, '.chip'],
             [chainBadgeCss, '.badge'],
         ]) {
             expect(rule(css, selector)).toMatch(/flex-shrink:\s*0/);
             expect(rule(css, selector)).toMatch(/white-space:\s*nowrap/);
         }
-        expect(rule(buttonCss, '.label')).toMatch(/white-space:\s*nowrap/);
+        // A button never shrinks below its label in a row, but a label wider
+        // than the whole column wraps inside the button rather than spilling out.
+        expect(rule(buttonCss, '.btn')).toMatch(/flex-shrink:\s*0/);
+        expect(rule(buttonCss, '.btn')).toMatch(/white-space:\s*normal/);
         for (const listCss of [dispensersCss, stakingCss]) {
             expect(rule(listCss, '.row')).toMatch(/min-width:\s*0/);
             expect(rule(listCss, '.body')).toMatch(/min-width:\s*0/);
