@@ -149,7 +149,7 @@ describe('Receive QR copy and share toasts', () => {
             });
 
             expect(await screen.findByText(MOBILE_ADDRESS)).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: /^Token:/ })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Change asset/ })).toBeInTheDocument();
             expect(screen.getByRole('textbox', { name: /^Amount/ })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Share QR payment link' })).toBeInTheDocument();
@@ -190,7 +190,7 @@ describe('Receive QR copy and share toasts', () => {
             const copy = screen.getByRole('button', { name: 'Copy payment link' });
             const share = screen.getByRole('button', { name: 'Share QR payment link' });
             const generate = screen.getByRole('button', { name: 'Generate new address' });
-            const token = screen.getByRole('button', { name: /^Token:/ });
+            const token = screen.getByRole('button', { name: /^Change asset/ });
 
             expect(precedes(qr, address)).toBe(true);
             expect(precedes(address, copy)).toBe(true);
@@ -218,7 +218,7 @@ describe('Receive QR copy and share toasts', () => {
         const user = userEvent.setup();
         renderReceive();
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
-        const token = await screen.findByRole('button', { name: /^Token:/ });
+        const token = await screen.findByRole('button', { name: /^Change asset/ });
         token.focus();
 
         await user.tab();
@@ -536,7 +536,7 @@ describe('Receive address handling', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('button', { name: /Token:.*PEPE/i })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Change asset \(currently PEPE on /i })).toBeInTheDocument();
         await waitFor(() => expect(qrToDataURL.mock.calls.some(
             ([value]) => value.includes('tick=PEPE'),
         )).toBe(true));

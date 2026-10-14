@@ -243,7 +243,7 @@ describe('extension popup keyboard flows', () => {
             routeMessaging(),
         ));
 
-        const token = await screen.findByRole('button', { name: /^Token:/ });
+        const token = await screen.findByRole('button', { name: /^Change asset/ });
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
         token.focus();
         await user.tab();

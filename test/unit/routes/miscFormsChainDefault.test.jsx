@@ -263,7 +263,7 @@ describe('PsbtSignForm chain default', () => {
 });
 
 describe('Receive chain default', () => {
-    const tokenButton = async () => screen.findByRole('button', { name: /^Token: / });
+    const tokenButton = async () => screen.findByRole('button', { name: /^Change asset / });
 
     it('opens on the last-used chain, not the first-created one', async () => {
         mount(Receive, {}, messagingWith());

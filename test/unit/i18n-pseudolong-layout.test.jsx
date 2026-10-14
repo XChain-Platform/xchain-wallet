@@ -71,9 +71,6 @@ const SCREEN_TEXT_RULES = {
         [sendCss, '.successHint'],
     ],
     Receive: [
-        [receiveCss, '.assetText'],
-        [receiveCss, '.assetName'],
-        [receiveCss, '.assetSub'],
         [receiveCss, '.hint'],
     ],
     Settings: [

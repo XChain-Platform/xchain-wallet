@@ -151,7 +151,7 @@ describe('Receive keyboard operation', () => {
             screen.getByRole('textbox', { name: 'Deposits' }),
             screen.getByRole('button', { name: 'Choose receive address' }),
             screen.getByRole('textbox', { name: 'Address label' }),
-            screen.getByRole('button', { name: /^Token:/ }),
+            screen.getByRole('button', { name: /^Change asset/ }),
             screen.getByRole('textbox', { name: 'Amount (BTC)' }),
         ];
 
