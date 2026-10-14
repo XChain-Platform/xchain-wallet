@@ -15,7 +15,7 @@
 // fiat the input edits `fiatAmount` and the parent derives the coin
 // amount via priceLookup.
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Button, Input, Icon } from '@xchain-wallet/core/ui';
 import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { inspectFieldPaste } from '../../ui/Input.jsx';
@@ -119,6 +119,25 @@ export function AmountField({
         const usesDotDecimal = formatWithThousands('1.1').includes('.');
         onAmountFieldChange(normalized, usesDotDecimal ? normalizedCursor : null);
     };
+    // The Paste and Max buttons sit over the field at fixed lanes sized for the
+    // English labels. A longer translation widens a button past its lane and the
+    // two overlap, so each lane grows to the measured button. English measures
+    // narrower than the default lane, so its layout is unchanged.
+    const wrapRef = useRef(null);
+    const [measured, setMeasured] = useState({ max: 0, paste: 0 });
+    useLayoutEffect(() => {
+        const root = wrapRef.current;
+        if (!root) return;
+        const widthOf = (selector) => Math.ceil(root.querySelector(selector)?.getBoundingClientRect().width || 0);
+        const next = { max: widthOf(`.${styles.maxAction}`), paste: widthOf(`.${styles.pasteAction} button`) };
+        setMeasured((prev) => (prev.max === next.max && prev.paste === next.paste ? prev : next));
+    });
+    const lane = (px) => (px > 0
+        ? `max(calc(var(--amount-control-height) + var(--xc-space-8)), calc(${px}px + var(--xc-space-2)))`
+        : undefined);
+    const maxLane = lane(measured.max);
+    const pasteLane = lane(measured.paste);
+
     const priceSourceLabel = fiatRate?.source === 'market' ? ' · DEX price' : '';
 
     let derivedText = '';
@@ -135,11 +154,15 @@ export function AmountField({
 
     return (
         <div className={styles.amountBlock}>
-            <div className={[
-                styles.amountFieldWrap,
-                styles[size] || '',
-                onMax ? styles.hasMax : '',
-            ].filter(Boolean).join(' ')}>
+            <div
+                ref={wrapRef}
+                className={[
+                    styles.amountFieldWrap,
+                    styles[size] || '',
+                    onMax ? styles.hasMax : '',
+                ].filter(Boolean).join(' ')}
+                style={(onMax ? maxLane : pasteLane) ? { '--amount-action-width': onMax ? maxLane : pasteLane } : undefined}
+            >
                 <Input
                     ref={inputRef}
                     size={size}
@@ -156,7 +179,7 @@ export function AmountField({
                     // already clear both; a 320px field keeps 120px for digits.
                     style={{
                         paddingInlineEnd: onMax
-                            ? 'calc(var(--amount-action-width) * 2)'
+                            ? `calc(var(--amount-action-width) + ${pasteLane || 'var(--amount-action-width)'})`
                             : 'calc(var(--amount-action-width) + var(--xc-space-2))',
                     }}
                 />

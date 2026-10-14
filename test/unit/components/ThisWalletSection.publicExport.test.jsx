@@ -72,7 +72,7 @@ describe('ThisWalletSection password change', () => {
         expect(screen.getByText(/unique, longer password is stronger/i)).toBeInTheDocument();
         fill({ confirm: 'different-password' });
 
-        expect(screen.getByText('Passwords do not match.')).toBeInTheDocument();
+        expect(screen.getByText('Passwords don\'t match.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
         expect(messaging.changePassword).not.toHaveBeenCalled();
     });
