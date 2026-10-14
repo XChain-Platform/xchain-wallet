@@ -63,6 +63,7 @@ vi.mock('../../../packages/core/src/shared/utils/pickQuizPositions.js', () => ({
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateWallet } from '../../../packages/core/src/shared/routes/CreateWallet.jsx';
+import { readActiveWallet } from '../../../packages/core/src/shared/utils/activeWalletMemory.js';
 
 function wallet(messaging = { importMnemonic: vi.fn() }) {
     return (
@@ -101,6 +102,7 @@ function answerQuiz() {
 }
 
 beforeEach(() => {
+    localStorage.clear();
     hookValues.clear();
     mocks.generateBip39Mnemonic.mockReset().mockReturnValue(PHRASE);
     mocks.nextPaint.mockReset().mockResolvedValue();
@@ -129,18 +131,62 @@ describe('CreateWallet lifecycle guards', () => {
         expect(document.querySelectorAll(`.${buttonStyles.primary}`)).toHaveLength(1);
     });
 
-    it('keeps one generated phrase through mnemonic-step rerenders', () => {
+    it('keeps one generated phrase across both Back paths', () => {
         mocks.generateBip39Mnemonic.mockReturnValueOnce(PHRASE).mockReturnValue(SECOND_PHRASE);
         render(wallet());
         enterPasswordStep();
 
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous step' }));
+        enterPasswordStep();
+        startQuiz();
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
         fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
-        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
 
         expect(mocks.generateBip39Mnemonic).toHaveBeenCalledTimes(1);
         expect(screen.getByText('abandon')).toBeInTheDocument();
         expect(screen.queryByText('account')).toBeNull();
+    });
+
+    it('checks each requested position without revealing a wrong answer', async () => {
+        const importMnemonic = vi.fn().mockResolvedValue({ walletId: 'wallet-1' });
+        render(wallet({ importMnemonic }));
+        enterPasswordStep();
+        startQuiz();
+
+        const expectedAnswers = new Map([
+            [2, 'ability'],
+            [4, 'about'],
+            [6, 'absent'],
+        ]);
+        for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
+            const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
+            const answer = position === 6 ? 'absorb' : expectedAnswers.get(position);
+            fireEvent.change(input, { target: { value: answer } });
+        }
+        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+
+        const error = await screen.findByRole('alert');
+        expect(error).toHaveTextContent('Word 6 does not match your written copy.');
+        expect(error).not.toHaveTextContent('absent');
+        expect(importMnemonic).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText('Word 6'), { target: { value: 'absent' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+
+        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ mnemonic: PHRASE }));
+        expect(readActiveWallet()).toBe('wallet-1');
+    });
+
+    it('does not persist a wallet when the flow is abandoned before verification', () => {
+        const importMnemonic = vi.fn();
+        const view = render(wallet({ importMnemonic }));
+        enterPasswordStep();
+
+        view.unmount();
+
+        expect(importMnemonic).not.toHaveBeenCalled();
+        expect(readActiveWallet()).toBeNull();
     });
 
     it('does not persist when the verification step has no quiz positions', async () => {
