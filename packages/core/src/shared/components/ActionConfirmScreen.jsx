@@ -272,6 +272,7 @@ export function ActionConfirmScreen({
             sourceAddress={sourceAddress}
             sourceName={sourceName}
             signingWallet={sourceIdentity.wallet}
+            isHardwareSigner={Boolean(hwSource)}
             chainLabel={chainLabel}
             feeText={displayedFee}
             totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}

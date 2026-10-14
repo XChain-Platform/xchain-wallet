@@ -78,6 +78,36 @@ describe('ConfirmActionModal', () => {
         expect(screen.queryByTestId('contract-call-warning')).toBeNull();
     });
 
+    it('shows a payment summary once and truncates its destination with AddressText', () => {
+        const destination = 'bcrt1qz0l4ngaddre55thatneed5truncat10n9x7w2';
+        const summary = `Send 0.01 BTC on Bitcoin to ${destination}`;
+        render(<ConfirmActionModal {...base({
+            decoded: {
+                summary,
+                details: [
+                    { label: 'Token', value: 'BTC' },
+                    { label: 'Amount', value: '0.01' },
+                    { label: 'Destination', value: destination },
+                ],
+                warnings: [],
+            },
+        })} />);
+
+        const modal = screen.getByTestId('confirm-modal');
+        const intentSummary = screen.getByTestId('action-intent').querySelector('p');
+        expect(modal.textContent.match(/Send 0\.01 BTC on Bitcoin to/g)).toHaveLength(1);
+        expect(intentSummary).toHaveTextContent('Send 0.01 BTC on Bitcoin to bcrt1q…n9x7w2');
+        expect(intentSummary.querySelector('[title]')).toHaveAttribute('title', destination);
+    });
+
+    it('shows the hardware output caveat only for a hardware signer', () => {
+        const { rerender } = render(<ConfirmActionModal {...base()} />);
+        expect(screen.queryByText(/A hardware device verifies native outputs/i)).toBeNull();
+
+        rerender(<ConfirmActionModal {...base({ isHardwareSigner: true })} />);
+        expect(screen.getByText(/A hardware device verifies native outputs/i)).toBeTruthy();
+    });
+
     it('uses the bare approve fallback when no decoded action is available', () => {
         render(<ConfirmActionModal {...base({ decoded: null })} />);
 

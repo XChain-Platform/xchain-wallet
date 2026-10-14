@@ -188,6 +188,7 @@ function reviewActionLabel(decoded, fallback, chainLabel) {
  * @param {string} [props.sourceName] the address-record label, followed by the
  *   wallet name when more than one wallet exists
  * @param {{ id: string, name?: string } | null} [props.signingWallet] wallet that will approve the request
+ * @param {boolean} [props.isHardwareSigner] whether approval uses a hardware device
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  * @param {(amount: string) => string|null} [props.formatNativeFee]
@@ -202,7 +203,7 @@ export function ConfirmActionModal({
     screenVariant = 'small', feeText, totalText, error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
-    signingWallet = null,
+    signingWallet = null, isHardwareSigner = false,
     formatNativeFee, formatProtocolFee,
 }) {
     const formattedDecoded = formatReviewDecoded(decoded);
@@ -218,6 +219,9 @@ export function ConfirmActionModal({
     const resolvedApproveLabel = approveLabel || (variant === 'action'
         ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
         : headlineText);
+    const actionHeaderLabel = variant === 'action' && formattedDecoded
+        ? resolvedApproveLabel
+        : headlineText;
     const isContractCall = variant === 'action'
         && /^(?:contract call|call contract\b)/i.test(headlineText);
     const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
@@ -379,7 +383,7 @@ export function ConfirmActionModal({
                 aria-label={`Confirm ${headlineText || 'action'}`}
             >
                 <div className={styles.header}>
-                    <span className={styles.actionLabel}>{headlineText}</span>
+                    <span className={styles.actionLabel}>{actionHeaderLabel}</span>
                     <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
                 </div>
 
@@ -532,7 +536,7 @@ export function ConfirmActionModal({
                     {/* Transaction-signing caveat only. Message signing moves no
                         coins and has no outputs, so this note would be nonsense
                         on that variant. */}
-                    {variant === 'message' ? null : (
+                    {variant === 'message' || !isHardwareSigner ? null : (
                         <p className={styles.hwNote}>
                             A hardware device verifies native outputs and destinations only; the action
                             data is obfuscated on-chain, so this screen is where you verify the action intent.
