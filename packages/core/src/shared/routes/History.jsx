@@ -493,8 +493,17 @@ function historyAmountDirection(entry) {
     return source.toLowerCase() === address.toLowerCase() ? 'out' : 'in';
 }
 
+/**
+ * The amount a row prints in its amount column. A settled SEND prints its
+ * own figure. So does a blockless SEND that carries no pending metadata (a
+ * synthesized demo row or an older shell's row): it has no pending
+ * annotation to print instead, and without this its amount column said
+ * only "pending", beside a status chip that already says Pending, where
+ * Home's Activity tab prints the same row's amount.
+ */
 function settledAmountAnnotation(entry) {
-    if (!entry?.blockIndex || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry.blockIndex && entry.pending) return null;
     const raw = entry.raw || {};
     const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     const tick = raw.tick ?? raw.TICK ?? raw.token;

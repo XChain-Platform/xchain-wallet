@@ -212,4 +212,15 @@ describe('History annotates what a pending transaction moves', () => {
         await waitFor(() => expect(view.container.textContent).toContain('Confirmed'));
         expect(annotation(view)).toBeNull();
     });
+
+    it('prints the amount of a blockless row that carries no pending metadata', async () => {
+        // A synthesized demo row or an older shell's row: nothing to annotate,
+        // so the row prints its own figure, as Home's Activity tab does,
+        // instead of a "pending" word beside the Pending status chip.
+        const { view } = mountHistory({ history: [confirmedRow({ block_index: null })] });
+        await waitFor(() => expect(view.container.querySelector('[data-history-amount]')).toBeTruthy());
+        expect(view.container.querySelector('[data-history-amount]').textContent).toBe('+100 XCHAIN');
+        expect(view.container.querySelector('[data-pending-state]')).toBeNull();
+        expect(annotation(view)).toBeNull();
+    });
 });
