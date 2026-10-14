@@ -7,7 +7,10 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { describe, expect, it, vi } from 'vitest';
-import { fundBtcFromMiner } from '../../../packages/core/src/flows/regtestFaucet.js';
+import {
+    fundActiveWalletFromMiner,
+    fundBtcFromMiner,
+} from '../../../packages/core/src/flows/regtestFaucet.js';
 
 const validRequest = (overrides = {}) => ({
     minerUrl: 'http://localhost:3005',
@@ -119,5 +122,51 @@ describe('fundBtcFromMiner', () => {
         const result = await fundBtcFromMiner(validRequest({ fetch }));
 
         expect(result).toEqual({ ok: false, error: 'Miner did not return a transaction id' });
+    });
+});
+
+describe('fundActiveWalletFromMiner', () => {
+    it('funds the newest address for the active wallet and account', async () => {
+        const messaging = {
+            getNewestAddress: vi.fn(async () => ({ address: 'bcrt1qactive' })),
+        };
+        const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ result: 'txid-active' }) }));
+
+        const result = await fundActiveWalletFromMiner({
+            messaging,
+            walletId: 'wallet-2',
+            accountId: 'account-7',
+            chainId: 'bitcoin-regtest',
+            chainDisplayName: 'Bitcoin Regtest',
+            minerUrl: 'http://localhost:3005',
+            amount: 10,
+            fetch,
+        });
+
+        expect(messaging.getNewestAddress).toHaveBeenCalledWith(
+            'wallet-2',
+            'bitcoin-regtest',
+            'account-7',
+        );
+        expect(result).toEqual({ ok: true, txid: 'txid-active', address: 'bcrt1qactive' });
+        expect(JSON.parse(fetch.mock.calls[0][1].body).params.address).toBe('bcrt1qactive');
+    });
+
+    it.each([
+        [{ walletId: undefined, accountId: 'account-7' }, 'No active wallet found.'],
+        [{ walletId: 'wallet-2', accountId: undefined }, 'No active account found.'],
+    ])('does not fall back to the first wallet or account %#', async (selection, error) => {
+        const messaging = { getNewestAddress: vi.fn() };
+        const result = await fundActiveWalletFromMiner({
+            messaging,
+            ...selection,
+            chainId: 'bitcoin-regtest',
+            chainDisplayName: 'Bitcoin Regtest',
+            minerUrl: 'http://localhost:3005',
+            amount: 10,
+        });
+
+        expect(result).toEqual({ ok: false, error });
+        expect(messaging.getNewestAddress).not.toHaveBeenCalled();
     });
 });
