@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { decimalFromBaseUnits } from '../shared/utils/amountFormat.js';
+
 // §25.2 / Cluster J FOLLOWUP 1: synthesized fixture data for demo
 // wallets so Home / History / TokenDetail surfaces feel populated
 // without requiring the user to fund the wallet.
@@ -149,7 +151,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
         ],
     },
     'dogecoin-regtest': {
-        native: { tick: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.15 }, // 10000 rDOGE @ $0.15
+        native: { tick: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.08 }, // 10000 rDOGE @ $0.08
         tokens: [
             // Divisible DRC-20-style tokens
             { tick: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '500000000000', fiatRate: 0.01 },
@@ -268,6 +270,10 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     const fixture = PER_CHAIN_DEFAULTS[chainId];
     if (!fixture || !fixture.native) return [];
     const tick = fixture.native.tick;
+    const nativeAmount = decimalFromBaseUnits(
+        fixture.native.quantity,
+        fixture.native.divisibility,
+    );
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
     // Pick a representative divisible token and a representative
@@ -301,13 +307,13 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
         source: 'demo-faucet-1xchainpubdemoxchain',
         destination: address,
         tick,
-        amount: fixture.native.quantity,
-        quantity: fixture.native.quantity,
+        amount: nativeAmount,
+        quantity: nativeAmount,
         memo: 'Welcome to the demo wallet',
         params: {
             source: 'demo-faucet-1xchainpubdemoxchain',
             destination: address,
-                amount: fixture.native.quantity,
+            amount: nativeAmount,
             memo: 'Welcome to the demo wallet',
         },
     });
