@@ -183,10 +183,12 @@
 
 /* In the four-column grid the icon sits above its label, so a label gets the
    whole tile width and never runs into the next tile; a long label wraps
-   between whole words. */
+   between whole words. Tiles start at the top so a two-line label leaves
+   every icon in the row on one line. */
 @media not all and (min-width: 1024px) {
     .actionsFull > button {
         flex-direction: column;
+        justify-content: flex-start;
         gap: var(--xc-space-1);
         padding-block: var(--xc-space-2);
         white-space: normal;

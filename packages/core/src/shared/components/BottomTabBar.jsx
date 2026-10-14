@@ -156,6 +156,7 @@ export function BottomTabBar({
     // dot on the More tab itself or the user would never see it while collapsed.
     const sheetHasUnread = sheetRows.some((row) => badges[row.id] > 0);
     const activeTab = bottomTabOwner(currentView, primaryTabs);
+    const settingsActive = isNavItemActive('settings', currentView);
     const primaryIds = primaryTabs.map((tab) => tab.id);
     const tabStop = (rovingTab && [...primaryIds, 'more'].includes(rovingTab))
         ? rovingTab
@@ -331,10 +332,13 @@ export function BottomTabBar({
                                 ) : null}
                                 {onOpenSettings ? (
                                     <li>
+                                        {/* Settings is a rail row on desktop, so it marks
+                                            the current page here the same way. */}
                                         <button
                                             type="button"
-                                            className={styles.sheetItem}
+                                            className={`${styles.sheetItem} ${settingsActive ? styles.sheetItemActive : ''}`}
                                             data-xc-menu-item
+                                            aria-current={settingsActive ? 'page' : undefined}
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onOpenSettings();

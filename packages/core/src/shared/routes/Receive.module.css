@@ -33,6 +33,14 @@
     margin-bottom: var(--xc-space-3);
 }
 
+/* The address field and QR actions span the form like every other field, so
+   they share its left edge in the wide card; the shared frame still caps the
+   QR itself at --xc-qr-frame-size. The doubled class outranks QrDisplay's
+   .stack cap whichever stylesheet the bundle emits last. */
+.receiveQrDisplay.receiveQrDisplay {
+    max-width: none;
+}
+
 .receiveQrDisplay > * {
     width: 100%;
     min-width: 0;
@@ -68,7 +76,7 @@
 /* Keep the QR content column inside the route scroller's visible height while
    its card, address field, and actions continue to share the same edges. */
 @media (orientation: landscape) and (max-height: 480px) {
-    .receiveQrDisplay {
+    .receiveQrDisplay.receiveQrDisplay {
         max-width: min(100%, calc(var(--xc-viewport-h, 100vh) - 9rem));
         margin-inline: auto;
     }

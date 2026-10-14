@@ -209,6 +209,20 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
     });
 
+    it('marks the More sheet Settings row on Settings routes, as the desktop rail does', () => {
+        const { rerender } = render(
+            <BottomTabBar currentView="connected-sites" onSelect={() => {}} onOpenSettings={() => {}} />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+
+        rerender(<BottomTabBar currentView="home" onSelect={() => {}} onOpenSettings={() => {}} />);
+        if (!screen.queryByRole('button', { name: 'Settings' })) {
+            fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        }
+        expect(screen.getByRole('button', { name: 'Settings' })).not.toHaveAttribute('aria-current');
+    });
+
     it('does not attribute account management to a different nav item', () => {
         render(<BottomTabBar currentView="account-picker" onSelect={() => {}} />);
         expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');

@@ -376,10 +376,15 @@ function DocLink({ path, label }) {
     const href = isUrl
         ? path
         : `https://github.com/XChain-Platform/xchain-wallet/blob/main/${path}`;
+    // A row's only value, not a link inside a sentence, so it takes the
+    // shared 24px pointer-target floor.
     const style = {
         color: 'var(--xc-text)',
         fontFamily: 'var(--xc-font-mono, monospace)',
         fontSize: 'var(--xc-text-xs)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        minHeight: 'var(--xc-tap-min)',
     };
     return (
         <a

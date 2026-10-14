@@ -59,6 +59,11 @@ describe('device pass layout guards', () => {
         expect(css).toMatch(/@media not all and \(min-width: 1024px\)\s*\{\s*\.actionsFull > button\s*\{[^}]*flex-direction:\s*column/s);
     });
 
+    it('keeps stacked Home action icons on one line when a label wraps', () => {
+        const css = read('packages/core/src/shared/routes/Home.module.css');
+        expect(css).toMatch(/@media not all and \(min-width: 1024px\)\s*\{\s*\.actionsFull > button\s*\{[^}]*justify-content:\s*flex-start/s);
+    });
+
     it('hides a search-only header menu when the rail shows Search', () => {
         const css = read('packages/core/src/shared/components/LeftNav.module.css');
         expect(css).toMatch(/\.layout\[data-xc-rail='shown'\] :global\(\[data-header-menu='search-only'\]\)\s*\{\s*display:\s*none;/);
