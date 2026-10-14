@@ -21,7 +21,23 @@ const receive = readFileSync(
 );
 
 describe('Receive action layout', () => {
-    it.each([360, 1280])('wraps whole one-line kit actions at %ipx', (viewportWidth) => {
+    it.each([360, 1280])('shares one left-aligned content width at %ipx', (viewportWidth) => {
+        expect(viewportWidth).toBeGreaterThanOrEqual(360);
+        expect(css).toMatch(
+            /\.receiveQrDisplay > \*\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;/,
+        );
+        expect(css).toMatch(
+            /\.receiveQrDisplay > \.qrActions\s*\{[^}]*justify-content:\s*flex-start;/,
+        );
+        expect(receive).toMatch(
+            /qrStyles\.frame[\s\S]*?<AddressField[\s\S]*?\{qrActionsContent\}/,
+        );
+    });
+
+    it.each([360, 1280])('wraps whole one-line kit secondary actions at %ipx', (viewportWidth) => {
+        const actionSource = receive.match(
+            /const generateAddressButton[\s\S]*?const body/,
+        )?.[0] || '';
         expect(viewportWidth).toBeGreaterThanOrEqual(360);
         expect(qrCss).toMatch(/\.actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/);
         expect(css).toMatch(
@@ -33,6 +49,10 @@ describe('Receive action layout', () => {
         expect(receive).toMatch(/>\s*Share QR\s*</);
         expect(receive).toMatch(/>\s*Explorer\s*<span[^>]*>↗<\/span>/);
         expect(receive).toMatch(/aria-label="Generate new address"[\s\S]*?>\s*New address\s*</);
+        expect(actionSource.match(/variant="secondary"/g)).toHaveLength(3);
+        expect(css).toMatch(
+            /\.explorerLink\s*\{[^}]*composes:\s*btn secondary md from '\.\.\/\.\.\/ui\/Button\.module\.css';/,
+        );
     });
 
     it('keeps field actions attached at the medium kit size', () => {
@@ -45,9 +65,9 @@ describe('Receive action layout', () => {
         );
     });
 
-    it('caps the complete QR box to the visible height on landscape phones', () => {
+    it('caps the complete QR column to the visible height on landscape phones', () => {
         expect(css).toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.qrBox\s*\{[\s\S]*?max-width: min\(100%, calc\(var\(--xc-viewport-h, 100vh\) - 9rem\)\);[\s\S]*?margin-inline: auto;/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.receiveQrDisplay\s*\{[\s\S]*?max-width: min\(100%, calc\(var\(--xc-viewport-h, 100vh\) - 9rem\)\);[\s\S]*?margin-inline: auto;/,
         );
         // The receive QR box is also the shared QrDisplay frame, which owns its box model.
         const qrDisplayCss = readFileSync('packages/core/src/ui/QrDisplay.module.css', 'utf8');
