@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -829,8 +829,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     />
                 ) : null}
 
-                <Button type="button" variant="link" icon={null} onClick={() => setShowAdvanced((v) => !v)}>
+                <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    icon={null}
+                    className={styles.advancedToggle}
+                    aria-expanded={showAdvanced}
+                    onClick={() => setShowAdvanced((v) => !v)}
+                >
                     {showAdvanced ? 'Hide advanced options' : 'Advanced options (lists, memo)'}
+                    <Icon.ChevronDownIcon
+                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                    />
                 </Button>
                 {showAdvanced ? (
                     <>

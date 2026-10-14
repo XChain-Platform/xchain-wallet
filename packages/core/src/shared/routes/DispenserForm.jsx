@@ -1763,12 +1763,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             {payWith === 'coin' ? (
                 <Button
-                    variant="ghost"
+                    variant="link"
                     size="sm"
                     icon={null}
+                    className={styles.advancedToggle}
+                    aria-expanded={showAdvanced}
                     onClick={() => setShowAdvanced((v) => !v)}
                 >
-                    {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
+                    {showAdvanced ? 'Advanced options' : 'Advanced options (fiat pricing, oracle)'}
+                    <Icon.ChevronDownIcon
+                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                    />
                 </Button>
             ) : null}
 
