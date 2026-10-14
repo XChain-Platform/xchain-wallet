@@ -108,7 +108,7 @@ async function expectNoHorizontalOverflow(page, label) {
     ).toBeLessThanOrEqual(mainOverflow.clientWidth + 1);
 }
 
-async function expectSharedLineHeights(controls, label) {
+async function expectSharedLineHeights(controls, label, { requireSharedLine = true } = {}) {
     const boxes = await controls.evaluateAll((nodes) => nodes
         .filter((node) => {
             const style = getComputedStyle(node);
@@ -129,7 +129,9 @@ async function expectSharedLineHeights(controls, label) {
         if (line) line.push(box); else lines.push([box]);
     }
     const sharedLines = lines.filter((line) => line.length > 1);
-    expect(sharedLines.length, `${label}: no controls shared a rendered line`).toBeGreaterThan(0);
+    if (requireSharedLine) {
+        expect(sharedLines.length, `${label}: no controls shared a rendered line`).toBeGreaterThan(0);
+    }
 
     for (const line of sharedLines) {
         const heights = line.map((box) => box.height);
@@ -200,7 +202,11 @@ test.describe('connected sites flow', () => {
                     .toEqual(reviewScrollTops.map(() => 0));
 
                 await expectNoHorizontalOverflow(page, `${viewport.name} revoke review`);
-                await expectSharedLineHeights(review.getByRole('button'), `${viewport.name} revoke review actions`);
+                // The confirm dialog stacks its two actions full width on a phone, so
+                // a shared line is only required where they sit side by side.
+                await expectSharedLineHeights(review.getByRole('button'), `${viewport.name} revoke review actions`, {
+                    requireSharedLine: viewport.name !== 'phone',
+                });
                 await review.getByRole('button', { name: 'Disconnect site' }).click();
 
                 await expect(main.getByRole('region', { name: SITE.appName })).toHaveCount(0);
