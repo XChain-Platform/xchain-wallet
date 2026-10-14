@@ -307,6 +307,28 @@ function clientVerdict(pointerText, manifests, artifacts) {
         'files the re-signed release does not cover are still reported against it');
 }
 
+{
+    // A live pointer whose own manifest the desktop client refuses for its gate.
+    const regate = (from, to) => {
+        const path = join(root, 'RELEASE_HASHES', 'v0.333.1.txt');
+        const text = readFileSync(path, 'utf8');
+        assert.ok(text.includes(`${from}\n`), 'the fixture gate line is where the edit expects it');
+        writeFileSync(path, text.replace(`${from}\n`, to ? `${to}\n` : ''));
+    };
+    const live = () => buildFeed(root, { artifacts: V1, manifests: { 'v0.333.1': Object.keys(V1) },
+        pointers: { 'stable-linux.yml': updateInfo('0.333.1', Object.entries(V1)) } });
+
+    live();
+    regate('# dev-mock-gate: enforced', '# dev-mock-gate: SKIPPED');
+    const skipped = sweep(root);
+    assert.deepEqual(codes(skipped), ['POINTER-UNGATED'], 'a SKIPPED gate behind a live pointer is reported');
+    assert.match(skipped.findings[0].detail, /'SKIPPED', not 'enforced'/, 'the finding names the recorded gate');
+
+    live();
+    regate('# dev-mock-gate: enforced', '');
+    assert.deepEqual(codes(sweep(root)), ['POINTER-UNGATED'], 'a manifest with no gate line is reported as unrecorded');
+}
+
 // ------------------------------------------------- the ordinary breakage
 
 {

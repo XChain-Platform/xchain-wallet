@@ -588,6 +588,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     const header = (
         <PageHeader
+            nested={mode !== 'list'}
             onBack={() => {
                 if (mode !== 'list') {
                     if (mode === 'edit') leaveGuard.guardedOnBack();
@@ -669,6 +670,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     if (mode === 'scan') {
         return (
             <ScanRoute
+                nested
                 onBack={() => { setScanFromEdit(false); setMode(scanFromEdit ? 'edit' : 'list'); }}
                 onClassified={handleScanned}
                 chainRegistry={chainRegistry}

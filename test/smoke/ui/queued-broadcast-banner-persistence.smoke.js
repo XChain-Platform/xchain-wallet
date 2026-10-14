@@ -60,6 +60,9 @@ assert.ok(
     /<div className=\{styles\.mainBody\}>[\s\S]*?<ShellNoticesContext\.Provider value=\{shellNotices\}>\s*\{children\}/.test(navJsx),
     'route body wrapped in .mainBody and handed the notices host for its Screen',
 );
+// The route body also carries the nav-surface context PageHeader reads.
+assert.ok(/<NavSurfaceContext\.Provider value=\{navSurface\}>/.test(navJsx),
+    'route body carries the visible nav surface for PageHeader');
 
 // --- 2. CSS supports the new flex column --------------------------------
 

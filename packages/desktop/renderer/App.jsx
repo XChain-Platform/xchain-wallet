@@ -33,6 +33,11 @@
 import { Fragment, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
+import {
+    applySendAssetPick,
+    beginSendAssetSwitch,
+    cancelSendAssetSwitch,
+} from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
@@ -334,8 +339,8 @@ function AppInner() {
     // `sendPrefill` above, which is what the send outcome has always done.
     const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
     // Which view Send should return to when the user hits Back. Defaults
-    // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
-    // out lands on the token list the user was just browsing.
+    // to 'home'. The asset picker is a step of Send and leaves it alone, so
+    // Send's Back still returns to whatever opened Send.
     const [sendBackTo, setSendBackTo] = useState(
         /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
     );
@@ -351,6 +356,8 @@ function AppInner() {
     // for LeftNav / BottomTabBar wallet-switcher labelling and so the
     // 'settings' top-level view can pass `activeWallet` into Settings.
     const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
+    // Bumped when a sibling window moves the active network, so chain-scoped routes remount.
+    const [networkRevision, setNetworkRevision] = useState(0);
     const statusStateRef = useRef(status.state);
     const walletListRef = useRef(walletList);
     const pendingActiveWalletId = useRef(/** @type {string | null} */ (null));
@@ -620,6 +627,14 @@ function AppInner() {
         return bridge.onStateChange((change) => {
             if (change?.kind === 'session') {
                 refresh();
+                return;
+            }
+            // A sibling's settings write reaches this window's useSettings the way its own does.
+            if (change?.kind === 'settings' || change?.kind === 'network') {
+                const settings = change.settings;
+                if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return;
+                window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: settings }));
+                if (change.kind === 'network') setNetworkRevision((value) => value + 1);
                 return;
             }
             if (change?.kind !== 'active-wallet' || statusStateRef.current !== 'unlocked') return;
@@ -926,7 +941,7 @@ function AppInner() {
                             setUnlockedView('home');
                         }}
                         onChangeAsset={(carry) => {
-                            setSendPrefill({ assetSwitchDraft: carry });
+                            setSendPrefill((prev) => beginSendAssetSwitch(prev, carry));
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -937,35 +952,12 @@ function AppInner() {
                     <SendPicker
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
+                        onBack={() => {
+                            setSendPrefill(cancelSendAssetSwitch);
+                            setUnlockedView('send');
+                        }}
                         onSelect={(sel) => {
-                            setSendPrefill((prev) => ({
-                                chainId: sel.chainId,
-                                tick: sel.tick,
-                                kind: sel.kind,
-                                displayName: sel.displayName,
-                                imageUrl: sel.imageUrl,
-                                address: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? (prev.assetSwitchDraft.address || undefined)
-                                    : undefined,
-                                amount: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    && prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                        === String(sel.tick || '').trim().toUpperCase()
-                                    ? (prev.assetSwitchDraft.amount || undefined)
-                                    : undefined,
-                                feeSelection: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? prev.assetSwitchDraft.feeSelection
-                                    : undefined,
-                                assetSwitchNotice: prev?.assetSwitchDraft
-                                    ? (prev.assetSwitchDraft.chainId !== sel.chainId
-                                        ? 'Chain changed. Recipient, amount, and fee rate were reset.'
-                                        : prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                            !== String(sel.tick || '').trim().toUpperCase()
-                                            ? 'Token changed. Amount was reset for the new token precision.'
-                                            : undefined)
-                                    : undefined,
-                            }));
-                            setSendBackTo('send-picker');
+                            setSendPrefill((prev) => applySendAssetPick(prev, sel));
                             setUnlockedView('send');
                         }}
                     />
@@ -977,7 +969,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         hideOwnFilter
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('receive')}
                         onSelect={(sel) => {
                             setReceivePrefill({
                                 chainId: sel.chainId,
@@ -2860,7 +2852,7 @@ function AppInner() {
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                     >
-                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                        <Fragment key={`${palette.navigationKey}:${networkRevision}`}>{routeNode}</Fragment>
                     </ShellRouteOutlet>
                     {messageSentNotice ? (
                         <NoticeModal

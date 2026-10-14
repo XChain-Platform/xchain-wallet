@@ -150,11 +150,34 @@ describe('ThisWalletSection extended public key export', () => {
             accountIndex: ACTIVE_ACCOUNT.index,
             publicExport: true,
         });
-        expect(await screen.findByAltText('QR code for bitcoin-mainnet extended public key')).toBeInTheDocument();
+        expect(await screen.findByAltText('QR code for Bitcoin extended public key')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Bitcoin (SegWit)' })).toBeInTheDocument();
+        expect(screen.queryByText(/p2wpkh|bitcoin-mainnet/)).not.toBeInTheDocument();
         expect(qrToDataURL).toHaveBeenCalledWith(XPUB, expect.any(Object));
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy extended public key' }));
         await waitFor(() => expect(globalThis.navigator.clipboard.writeText).toHaveBeenCalledWith(XPUB));
+    });
+
+    it('names a test network key by its network and falls back to the raw id for an unknown chain', async () => {
+        const messaging = {
+            pairingPayloadRequest: vi.fn(async () => ({
+                payload: {
+                    keys: [
+                        { chainId: 'bitcoin-testnet', addressType: 'p2tr', path: "m/86'/1'/2'", xpub: `tpub${'B'.repeat(107)}` },
+                        { chainId: 'mystery-chain', path: "m/84'/9'/2'", xpub: `xpub${'C'.repeat(107)}` },
+                    ],
+                },
+            })),
+        };
+        mount(messaging);
+
+        await submitPassword();
+
+        expect(await screen.findByRole('heading', { name: 'Bitcoin testnet (Taproot)' })).toBeInTheDocument();
+        expect(screen.getByAltText('QR code for Bitcoin testnet extended public key')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'mystery-chain' })).toBeInTheDocument();
+        expect(screen.getByText("Account path: m/86'/1'/2'")).toBeInTheDocument();
     });
 
     it('reports an incorrect password without retaining it', async () => {

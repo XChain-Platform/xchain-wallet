@@ -35,10 +35,10 @@
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
-//     error, recovery, feeText, emptyActionLabel, warningNoun (the
-//     USER_FACING_ATTRS set below is the authority; keep this list in step
-//     with it). The last thirty are component props rather
-//     than DOM attributes: shipping components render copy through them,
+//     error, recovery, feeText, emptyActionLabel, warningNoun, message,
+//     description (the USER_FACING_ATTRS set below is the authority; keep
+//     this list in step with it). The last thirty-two are component props
+//     rather than DOM attributes: shipping components render copy through them,
 //     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
 //     when the property KEY is one of those same names and the default
@@ -87,8 +87,13 @@
 //     descriptor array that is filtered and mapped before it renders, or
 //     a function-local `const retry = { label: 'Try again' }` passed as
 //     recovery={retry}).
-//   - Descriptor keys outside USER_FACING_ATTRS, such as `description`,
-//     wherever the copy is written.
+//   - Copy props and descriptor keys outside USER_FACING_ATTRS, wherever
+//     the copy is written; a component that renders copy through a new
+//     prop name needs that name added to the set.
+//   - A prop default bound to a module-scope STRING const, e.g.
+//     DemoExitConfirm's `message = DEMO_EXIT_MESSAGE` forwarded as
+//     message={message}. The default is an identifier, not a literal,
+//     and the constant-table branch resolves only `{ … }` / `[ … ]` consts.
 //   - Copy passed through a `value` prop, e.g. a row component that
 //     renders <DetailRow label="x" value="Default window" /> as text.
 //     `value` stays unchecked because CopyButton and form controls carry
@@ -265,6 +270,21 @@ const USER_FACING_ATTRS = new Set([
     // SignApproval interpolates `warningNoun` into the sentence under the
     // signed text, the same shape as `noun` and `what`.
     'warningNoun',
+    // ConfirmModal and NoticeModal render `message` verbatim as the dialog
+    // body, and NotificationsSection's NotificationSaveError renders it in a
+    // role="alert" span (Locked's delete-all confirm, the save-error lines).
+    // Checked across packages/*/src: every other JSX `message=` is a runtime
+    // value (`message={deepLinkNotice}` in the three App.jsx shells,
+    // `message={request?.message || ''}` in SignMessageForm), which no gate
+    // reports, and no ObjectPattern gives `message` a non-empty string default.
+    'message',
+    // SectionHeader renders `description` verbatim as the muted line under its
+    // title, and FormSection plus the settings and route screens pass whole
+    // sentences through it. Checked across packages/*/src: every JSX
+    // `description=` carries copy or a runtime value (`description={hint}`),
+    // no ObjectPattern gives it a string default, and the same-named
+    // identifiers are locals, state or `styles.description`, which no gate reaches.
+    'description',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

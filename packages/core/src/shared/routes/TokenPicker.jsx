@@ -500,6 +500,7 @@ export function TokenPicker({
 
     const header = (
         <PageHeader
+            nested
             onBack={onBack}
             backLabel={headerBackLabel}
             title={headerTitle}

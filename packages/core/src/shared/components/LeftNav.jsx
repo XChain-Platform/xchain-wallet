@@ -13,7 +13,13 @@ import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
-import { ROUTE_NAV_GROUPS, ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
+import {
+    ROUTE_NAV_GROUPS,
+    ROUTE_NAV_SECTIONS,
+    SIDEBAR_PRIMARY_DESTINATIONS,
+    SIDEBAR_SECONDARY_DESTINATIONS,
+} from '../routeRegistry.js';
+import { NavSurfaceContext } from './navSurface.js';
 import {
     NoticesRouteContext,
     ReachabilityNoticeHiddenContext,
@@ -47,6 +53,30 @@ import screenStyles from '../../ui/Screen.module.css';
  */
 
 export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
+
+// Labels and icons for the nav rows, shared with BottomTabBar's thumb row.
+// Which rows exist, and in what order, comes from the destination lists in
+// routeRegistry.js, which PageHeader also reads to decide where Back is
+// redundant.
+const LEFT_NAV_ITEMS = [
+    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
+    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
+    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
+    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
+    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon, requiresDex: true },
+    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
+    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
+    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
+    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+    // PC-15: COINPAY obligations queue; badge = payable pending count.
+    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
+];
+
+/** The label and icon row for a nav destination id. */
+export const navItem = (id) => LEFT_NAV_ITEMS.find((row) => row.id === id);
 
 export function activeLeftNavItem(currentView) {
     return ROUTE_NAV_SECTIONS[currentView] || 'home';
@@ -87,44 +117,27 @@ export function LeftNav({
     badges = {},
 }) {
     const activeItem = activeLeftNavItem(currentView);
-    const primary = [
-        { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-        { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-        // Signer mode's own hint promises "Send / receive screens
-        // are hidden; this wallet does not broadcast". Absent, not disabled,
-        // for the reason the DEX row below is absent: a greyed Send row still
-        // reads as a capability the device has, and the whole value of the
-        // mode is that an air-gapped user can believe the removal.
-        ...(isSignerMode ? [] : [
-            { id: 'send', label: 'Send', Icon: Icon.SendIcon },
-            { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon },
-        ]),
-        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-        // Absent, not greyed, when the build has no DEX surface: the store
-        // build compiles those routes out, so the destination does
-        // not exist, and a visibly disabled exchange tab asks an app reviewer
-        // the same question a working one does.
-        ...(hasDexSurface
-            ? [
-                { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon },
-                { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon },
-            ]
-            : []),
-        { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-        // Gate Contracts on a VM address, matching Home and the command
-        // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
-        ...(hasVmAddress
-            ? [{ id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon }]
-            : []),
-        { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
-    ];
-
-    const secondary = [
-        { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-        { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
-        // PC-15: COINPAY obligations queue; badge = payable pending count.
-        { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
-    ];
+    // Signer mode's own hint promises "Send / receive screens
+    // are hidden; this wallet does not broadcast". Absent, not disabled,
+    // for the reason the DEX rows are absent: a greyed Send row still
+    // reads as a capability the device has, and the whole value of the
+    // mode is that an air-gapped user can believe the removal.
+    // DEX rows are absent, not greyed, when the build has no DEX surface: the
+    // store build compiles those routes out, so the destination does not
+    // exist, and a visibly disabled exchange tab asks an app reviewer the
+    // same question a working one does.
+    // Contracts is gated on a VM address, matching Home and the command
+    // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
+    const shown = (id) => {
+        const item = navItem(id);
+        if (item.spendable && isSignerMode) return false;
+        if (item.requiresDex && !hasDexSurface) return false;
+        if (item.requiresVm && !hasVmAddress) return false;
+        return true;
+    };
+    const toRows = (ids) => ids.filter(shown).map(navItem);
+    const primary = toRows(SIDEBAR_PRIMARY_DESTINATIONS);
+    const secondary = toRows(SIDEBAR_SECONDARY_DESTINATIONS);
 
     const handleKeyDown = (event) => {
         const direction = {
@@ -320,6 +333,9 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     const previousRouteKeyRef = useRef(routeKey);
     const sidebar = showsSidebar(tier) ? nav : null;
     const bar = showsBottomBar(tier) ? bottomBar : null;
+    // PageHeader reads which surface is on screen to drop a Back control
+    // that would duplicate a visible nav row.
+    const navSurface = sidebar ? 'sidebar' : (bar ? 'tabBar' : null);
 
     const [noticesHost] = useState(() => {
         const host = document.createElement('div');
@@ -395,9 +411,11 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
                 ) : null}
                 <div className={styles.mainBody}>
                     {hasNotices ? <div ref={noticesFallbackRef} className={screenStyles.noticesFallback} /> : null}
-                    <ShellNoticesContext.Provider value={shellNotices}>
-                        {children}
-                    </ShellNoticesContext.Provider>
+                    <NavSurfaceContext.Provider value={navSurface}>
+                        <ShellNoticesContext.Provider value={shellNotices}>
+                            {children}
+                        </ShellNoticesContext.Provider>
+                    </NavSurfaceContext.Provider>
                 </div>
             </div>
             {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}

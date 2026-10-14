@@ -19,9 +19,11 @@ import {
     FormSection,
     Input,
 } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { KeyQR } from '../KeyQR.jsx';
 import { useToast } from '../ToastHost.jsx';
+import { addressTypeLabel } from '../../utils/addressTypeLabel.js';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
@@ -30,6 +32,23 @@ import { SettingsActionRow, Status } from './_settingsPrimitives.jsx';
 import styles from './ThisWalletSection.module.css';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
+
+const chainRegistry = registryLib.defaultRegistry();
+
+// Name a chain as the network pickers do: display name, plus the network kind off mainnet.
+function chainDisplayName(chainId) {
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor?.displayName) return chainId;
+    return descriptor.networkKind && descriptor.networkKind !== 'mainnet'
+        ? `${descriptor.displayName} ${descriptor.networkKind}`
+        : descriptor.displayName;
+}
+
+// Head an exported key with plain names; the account path line keeps the technical detail.
+function publicKeyTitle(entry) {
+    const chain = chainDisplayName(entry.chainId);
+    return entry.addressType ? `${chain} (${addressTypeLabel(entry.addressType)})` : chain;
+}
 
 function isWrongPasswordError(err) {
     return err?.name === 'AeadAuthError' || err?.name === 'InvalidPasswordError';
@@ -450,7 +469,7 @@ function PublicKeyExport({
                     {entries.map((entry) => (
                         <FormSection
                             key={`${entry.chainId}:${entry.path}`}
-                            title={`${entry.chainId}${entry.addressType ? ` (${entry.addressType})` : ''}`}
+                            title={publicKeyTitle(entry)}
                             description={entry.path ? `Account path: ${entry.path}` : undefined}
                             headingLevel="h3"
                             className={styles.keyPanel}
@@ -460,7 +479,7 @@ function PublicKeyExport({
                                 <KeyQR
                                     value={entry.xpub}
                                     size={180}
-                                    alt={`QR code for ${entry.chainId} extended public key`}
+                                    alt={`QR code for ${chainDisplayName(entry.chainId)} extended public key`}
                                 />
                                 <CopyButton
                                     value={entry.xpub}
