@@ -46,6 +46,9 @@
 }
 
 .amountUnitSwap {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     --xc-icon-size: var(--xc-icon-xs);
     position: relative;
     display: inline-flex;

@@ -21,6 +21,9 @@
 }
 
 .control {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     display: flex;
     box-sizing: border-box;
     align-items: center;

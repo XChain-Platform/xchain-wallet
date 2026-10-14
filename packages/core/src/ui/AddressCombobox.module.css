@@ -28,6 +28,9 @@
 }
 
 .iconButton {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
     inset-inline-end: 4px;
