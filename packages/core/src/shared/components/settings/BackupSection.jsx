@@ -651,6 +651,7 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
         <FormSection title={label} description={hint} className={styles.formSection}>
             <Input
                 type="password"
+                revealable
                 placeholder="Wallet password"
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
@@ -865,6 +866,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
             {format === 'bip39' ? (
                 <Input
                     type="password"
+                    revealable
                     placeholder="BIP39 passphrase (optional)"
                     value={passphrase}
                     onChange={(e) => setPassphrase(e.target.value)}
@@ -1010,6 +1012,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
             <Input
                 label={label}
                 type="password"
+                revealable
                 placeholder="Backup password"
                 value={pw1}
                 onChange={(e) => setPw1(e.target.value)}
@@ -1020,6 +1023,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
             />
             <Input
                 type="password"
+                revealable
                 placeholder="Confirm password"
                 value={pw2}
                 onChange={(e) => setPw2(e.target.value)}
@@ -1231,6 +1235,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             )}
             <Input
                 type="password"
+                revealable
                 placeholder="Wallet password"
                 value={password}
                 onChange={(e) => onPasswordChange(e.target.value)}
@@ -1368,6 +1373,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             )}
             <Input
                 type="password"
+                revealable
                 placeholder="Wallet password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

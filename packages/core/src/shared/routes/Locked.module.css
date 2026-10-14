@@ -68,47 +68,6 @@
     font-weight: 600;
 }
 
-.passwordField {
-    position: relative;
-}
-
-.passwordField > div {
-    margin-bottom: 0;
-}
-
-.passwordInput {
-    padding-inline-end: calc(var(--xc-space-8) + var(--xc-space-3));
-}
-
-.passwordToggle {
-    --xc-icon-size: var(--xc-icon-md);
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    /* This half-grid inset keeps the toggle centered inside the input border. */
-    inset-inline-end: 2px;
-    top: calc(var(--xc-text-sm) + var(--xc-space-2));
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(var(--xc-control-h-md) - var(--xc-space-1));
-    min-height: var(--xc-control-h-sm);
-    padding: 0;
-    color: var(--xc-text-muted);
-    background: transparent;
-    border: 0;
-    border-radius: var(--xc-radius-sm);
-    cursor: pointer;
-}
-
-.passwordToggle:hover {
-    color: var(--xc-text);
-}
-
-.passwordToggle:focus-visible {
-    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
-    outline-offset: 0;
-}
-
 .unlockActions {
     display: flex;
     flex-direction: column;

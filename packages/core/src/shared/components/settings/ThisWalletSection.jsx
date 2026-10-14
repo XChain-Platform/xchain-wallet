@@ -381,6 +381,7 @@ function ChangePasswordRow({ walletId, disabled }) {
             >
                 <Input
                     type="password"
+                    revealable
                     label="Current wallet password"
                     value={currentPassword}
                     onChange={update(setCurrentPassword)}
@@ -391,6 +392,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                 />
                 <Input
                     type="password"
+                    revealable
                     label="New wallet password"
                     value={newPassword}
                     onChange={update(setNewPassword)}
@@ -400,6 +402,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                 />
                 <Input
                     type="password"
+                    revealable
                     label="Confirm new wallet password"
                     value={confirmation}
                     onChange={update(setConfirmation)}
@@ -446,6 +449,7 @@ function PublicKeyExport({
                 <form onSubmit={onSubmit} className={styles.form}>
                     <Input
                         type="password"
+                        revealable
                         label="Confirm wallet password"
                         value={password}
                         onChange={(event) => onPasswordChange(event.target.value)}
