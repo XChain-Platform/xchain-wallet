@@ -796,9 +796,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         <p className={styles.warning}>At least one side must be a token. Coin-for-coin is a regular payment, not an order.</p>
                     </div>
                 ) : null}
-            </FormSection>
 
-            <FormSection title="Expiration">
                 <AddressField
                     label="Receive at (optional)"
                     hint="Address where you receive the get side. Defaults to your source address."
@@ -808,7 +806,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     autoCorrect="off"
                     spellCheck={false}
                 />
+            </FormSection>
 
+            <FormSection title="Timing and fees">
                 <RadioGroup
                     legend="Expiration"
                     name="order-exp"
