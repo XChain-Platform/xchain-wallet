@@ -44,9 +44,12 @@
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
     align-items: center;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .dismissBtn {

@@ -1520,7 +1520,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         </Button>
                     ) : null}
                     <Button
-                        variant="ghost"
+                        variant="secondary"
                         block={!isFull}
                         onClick={onActions}
                         disabled={!onActions}

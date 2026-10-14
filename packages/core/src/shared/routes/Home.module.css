@@ -156,13 +156,23 @@
     color: var(--xc-accent-text);
 }
 
-/* Supplementary actions wrap because the width-capped container cannot fit
-   every available action on one line. */
+/* Keep the complete action set even on phone layouts, then use one row once
+   every label has enough room at the shared page width. */
 .actionsFull {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
+}
+
+.actionsFull > button {
+    width: 100%;
+}
+
+@media (min-width: 64rem) {
+    .actionsFull {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
 }
 
 .pendingAirdropCard {
