@@ -52,4 +52,33 @@ describe('PublishFileForm rendering', () => {
         expect(await screen.findByRole('listitem')).toHaveTextContent('GATE');
         expect(gatedMode).toBeChecked();
     });
+
+    it('returns from review without submitting the compose form again', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PublishFileForm walletId="wallet-1" onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        const fileInput = await screen.findByLabelText('Choose file to publish');
+        fireEvent.change(fileInput, {
+            target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
+        });
+        await waitFor(() => expect(document.body.textContent).toContain('note.txt'));
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        expect(await screen.findByRole('form', { name: 'Review publish' })).toBeTruthy();
+
+        const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+        expect(clickAllowed).toBe(false);
+        expect(screen.getByRole('form', { name: 'Publish file' })).toBeTruthy();
+        expect(screen.queryByRole('form', { name: 'Review publish' })).toBeNull();
+    });
 });

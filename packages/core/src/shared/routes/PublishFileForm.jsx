@@ -636,7 +636,8 @@ export function PublishFileForm({ walletId, onBack }) {
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="secondary" type="button" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
+                        <Button variant="secondary" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={stage === 'submitting'}>
                             Back
                         </Button>
                         <Button

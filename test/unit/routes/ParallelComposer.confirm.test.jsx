@@ -87,6 +87,19 @@ describe('ParallelComposer confirmation', () => {
         expect(signAll.disabled).toBe(false);
     });
 
+    it('returns from review without submitting the compose form again', async () => {
+        mount();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        expect(screen.getByRole('form', { name: 'Review parallel actions' })).toBeTruthy();
+
+        const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back to composer' }));
+
+        expect(clickAllowed).toBe(false);
+        expect(screen.getByRole('form', { name: 'Compose parallel actions' })).toBeTruthy();
+        expect(screen.queryByRole('form', { name: 'Review parallel actions' })).toBeNull();
+    });
+
     it('dry-runs and confirms each row before signing the composed PSBT', async () => {
         const messaging = mount();
 

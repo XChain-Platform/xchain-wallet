@@ -466,10 +466,11 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 label="Review parallel actions"
                 actions={(
                     <>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
                         <Button
                             type="button"
                             variant="ghost"
-                            onClick={() => setStage('compose')}
+                            onClick={(event) => { event.preventDefault(); setStage('compose'); }}
                         >
                             Back to composer
                         </Button>

@@ -599,7 +599,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
+                        <Button variant="ghost" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={submitting}>
                             Back
                         </Button>
                         <Button

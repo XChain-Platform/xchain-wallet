@@ -266,6 +266,25 @@ describe('MultisigCreate key validation', () => {
 });
 
 describe('MultisigCreate review', () => {
+    it('returns from review without submitting the compose form again', async () => {
+        const messaging = mkMessaging();
+        await fillValidDraft(messaging);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        });
+        expect(screen.getByRole('form', { name: 'Review multisig' })).toBeTruthy();
+
+        let clickAllowed;
+        await act(async () => {
+            clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        });
+
+        expect(clickAllowed).toBe(false);
+        expect(screen.getByRole('form', { name: 'Create multisig' })).toBeTruthy();
+        expect(screen.queryByRole('form', { name: 'Review multisig' })).toBeNull();
+        expect(messaging.createMultisigConfig).not.toHaveBeenCalled();
+    });
+
     it('reviews the complete policy before creating it and wraps long keys', async () => {
         const messaging = mkMessaging({
             createMultisigConfig: vi.fn(async (request) => ({
