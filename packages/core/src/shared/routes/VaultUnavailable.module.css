@@ -35,12 +35,10 @@
 }
 
 /* Not styled as an error. It is the reassuring half of this screen, and
-   painting it red would say the opposite of what it says. */
+   painting it red would say the opposite of what it says. Plain body text,
+   not a filled box inside the form card. */
 .reassure {
     margin: 0;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface);
-    border-radius: var(--xc-radius-md);
     font-size: var(--xc-text-sm);
     line-height: 1.5;
     color: var(--xc-text);
