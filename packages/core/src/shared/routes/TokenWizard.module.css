@@ -71,6 +71,13 @@
     background: var(--xc-surface);
 }
 
+/* Cards in a two-column row stretch to the taller one; their text starts
+   at the top so a one-line tagline does not float to the middle beside a
+   two-line one. */
+.templateGrid .templateCard {
+    align-items: flex-start;
+}
+
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
