@@ -23,6 +23,20 @@ const screen = read('packages/core/src/ui/Screen.module.css');
 const modal = read('packages/core/src/shared/components/NoticeModal.module.css');
 const onboarding = read('packages/core/src/shared/routes/Onboarding.module.css');
 const carousel = read('packages/core/src/shared/routes/OnboardingCarousel.module.css');
+const LARGE_PHONE_LANDSCAPE = Object.freeze({ width: 844, height: 390 });
+
+function mediaBody(css, query) {
+    const start = css.indexOf(query);
+    const open = css.indexOf('{', start);
+    let depth = 1;
+    let cursor = open + 1;
+    while (depth > 0 && cursor < css.length) {
+        if (css[cursor] === '{') depth += 1;
+        if (css[cursor] === '}') depth -= 1;
+        cursor += 1;
+    }
+    return css.slice(open + 1, cursor - 1);
+}
 
 describe('phone landscape layout', () => {
     it('reduces persistent shell chrome without removing navigation targets', () => {
@@ -34,7 +48,17 @@ describe('phone landscape layout', () => {
         expect(bottomBar).toMatch(/\.bar\s*\{\s*min-height: 2\.75rem;/);
         expect(bottomBar).toMatch(/\.tab\s*\{[\s\S]*?min-height: var\(--xc-tap-min\);/);
         expect(leftNav).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?padding-bottom: calc\(44px/);
-        expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.header,[\s\S]*?padding: var\(--xc-space-1\) var\(--xc-space-3\);/);
+        expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.header\s*\{[^}]*padding-block:\s*0;/);
+    });
+
+    it('gives an 844 by 390 phone at least 220px of scrollable route content', () => {
+        expect(LARGE_PHONE_LANDSCAPE.width).toBeGreaterThan(LARGE_PHONE_LANDSCAPE.height);
+        expect(LARGE_PHONE_LANDSCAPE.height).toBeLessThanOrEqual(480);
+
+        const landscape = mediaBody(screen, landscapeQuery);
+        expect(landscape).toMatch(/\.screen\s*\{[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/);
+        expect(landscape).toMatch(/\.header\s*\{[^}]*flex:\s*0 0 auto;[^}]*padding-block:\s*0;/);
+        expect(landscape).toMatch(/\.body\s*\{[^}]*flex:\s*1 0 220px;[^}]*min-height:\s*220px;/);
     });
 
     it('keeps core chrome on its own inset and the popup recovery panel on the page gutter', () => {
