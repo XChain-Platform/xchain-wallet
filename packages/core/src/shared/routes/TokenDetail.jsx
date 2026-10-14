@@ -50,6 +50,8 @@ import { extractHolderRows } from '../utils/holderRows.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { safeHttpUrl } from '../utils/externalUrl.js';
+import { readActiveAccount } from '../utils/activeAccountMemory.js';
+import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -112,7 +114,7 @@ function TokenDetailContent({
     divisibility = null,
     fiatRate = null,
     fiatRateSource = null,
-    quantity = null,
+    quantity: suppliedQuantity,
     imageUrl: rowImageUrl = null,
     onBack,
     onSend,
@@ -131,6 +133,27 @@ function TokenDetailContent({
     const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
     const variant = screenVariantFor(shell);
     const tabsId = useId();
+    const [resolvedQuantity, setResolvedQuantity] = useState(
+        typeof suppliedQuantity === 'string' ? suppliedQuantity : null,
+    );
+    useEffect(() => {
+        if (typeof suppliedQuantity === 'string') {
+            setResolvedQuantity(suppliedQuantity);
+            return undefined;
+        }
+        setResolvedQuantity(null);
+        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
+            .then((byChain) => {
+                if (!cancelled) setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
+            })
+            .catch(() => {
+                if (!cancelled) setResolvedQuantity('0');
+            });
+        return () => { cancelled = true; };
+    }, [messaging, walletId, chainId, tick, suppliedQuantity]);
+    const quantity = resolvedQuantity ?? '0';
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
