@@ -1,8 +1,9 @@
 .wrap {
     --address-control-height: var(--xc-control-h-md);
-    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-6));
+    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-8));
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     position: relative;
+    min-width: 0;
 }
 
 .sm {
@@ -59,14 +60,29 @@
     z-index: calc(var(--xc-z-base) + 1);
     inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
-    width: var(--address-paste-width);
+    flex: none;
+    width: auto;
+    min-width: max-content;
+    max-width: none;
     height: var(--address-control-height);
     min-height: var(--address-control-height);
+    gap: var(--xc-space-1);
+    padding-inline: calc(var(--xc-space-1) / 2);
+    white-space: nowrap;
+}
+
+.pasteAction button > span {
+    min-width: max-content;
+    white-space: nowrap;
 }
 
 .pasteAction [role='alert'] {
     display: block;
     margin-block-start: var(--xc-help-gap);
+}
+
+.wrap input {
+    min-width: 0;
 }
 
 .noLabel .iconButton {

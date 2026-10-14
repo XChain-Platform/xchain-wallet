@@ -17,6 +17,14 @@ const tokens = readFileSync(
     join(process.cwd(), 'packages/core/src/ui/tokens.css'),
     'utf8',
 );
+const amountFieldStyles = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/components/AmountField.module.css'),
+    'utf8',
+);
+const addressComboboxStyles = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/AddressCombobox.module.css'),
+    'utf8',
+);
 
 describe('RTL-safe machine-readable fields', () => {
     it('keeps numeric inputs LTR while preserving direction for prose inputs', () => {
@@ -51,7 +59,7 @@ describe('RTL-safe machine-readable fields', () => {
         expect(screen.getByLabelText(address)).toHaveAttribute('dir', 'ltr');
     });
 
-    it('places the trailing Max control with logical properties inside the input end', () => {
+    it('places intrinsic-width trailing controls at the logical input end', () => {
         render(
             <AmountField
                 amount="1"
@@ -72,6 +80,12 @@ describe('RTL-safe machine-readable fields', () => {
         expect(max.style.left).toBe('');
         expect(max.style.right).toBe('');
         expect(input).toHaveAttribute('dir', 'ltr');
+        expect(amountFieldStyles).toMatch(
+            /\.pasteAction button,\s*\.maxAction\s*\{[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+        );
+        expect(addressComboboxStyles).toMatch(
+            /\.pasteAction button\s*\{[^}]*inset-inline-end:\s*0[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+        );
     });
 });
 
