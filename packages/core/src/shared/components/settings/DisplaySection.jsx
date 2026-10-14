@@ -39,6 +39,7 @@ import { useMessaging } from '../../useMessaging.js';
 import { tickerReferenceError } from '../../utils/tickerGrammar.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
+import layoutStyles from './DisplaySection.module.css';
 import {
     NUMBER_FORMAT_DEFAULT,
     SMALL_BALANCE_THRESHOLD_DEFAULT,
@@ -361,6 +362,7 @@ export function DisplaySection() {
 
             <SectionHeader
                 as="h3"
+                className={layoutStyles.sectionHeader}
                 title="Row affordances"
                 description="Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active."
             />
@@ -381,6 +383,7 @@ export function DisplaySection() {
 
             <SectionHeader
                 as="h3"
+                className={layoutStyles.sectionHeader}
                 title={`Watched tokens (${watched.length})`}
                 description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
             />
@@ -460,6 +463,7 @@ export function DisplaySection() {
             <div ref={tokenListsRef} style={{ display: 'contents' }}>
                 <SectionHeader
                     as="h3"
+                    className={layoutStyles.sectionHeader}
                     title={`Pinned tokens (${pinned.length})`}
                     description="Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin."
                 />
@@ -520,6 +524,7 @@ export function DisplaySection() {
 
                 <SectionHeader
                     as="h3"
+                    className={layoutStyles.sectionHeader}
                     title={`Hidden tokens (${hidden.length})`}
                     description={'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.'}
                 />
@@ -566,6 +571,7 @@ export function DisplaySection() {
 
             <SectionHeader
                 as="h3"
+                className={layoutStyles.sectionHeader}
                 title="List preferences"
                 description={'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."'}
             />
@@ -581,7 +587,7 @@ export function DisplaySection() {
                 </Button>
             </div>
 
-            <SectionHeader as="h3" title="Defaults" />
+            <SectionHeader as="h3" className={layoutStyles.sectionHeader} title="Defaults" />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>

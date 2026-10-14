@@ -118,6 +118,8 @@
 
 .rowName {
     min-width: 0;
+    padding-block: var(--xc-space-1);
+    margin-block: calc(0px - var(--xc-space-1));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
