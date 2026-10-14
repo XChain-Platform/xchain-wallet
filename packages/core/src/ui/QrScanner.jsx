@@ -270,13 +270,16 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
 }
 
 export function QrScanner({
-    onFrame,
+    onFrame: onFrameHandler,
     autoStart = true,
     width = 320,
     alt = 'QR scanner',
     previewState,
 }) {
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
+    const onFrameRef = useRef(onFrameHandler);
+    onFrameRef.current = onFrameHandler;
+    const onFrame = useRef((value) => onFrameRef.current(value)).current;
     const [running, setRunning] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [cameraRationaleAccepted, setCameraRationaleAccepted] = useState(
@@ -324,6 +327,24 @@ export function QrScanner({
             }
 
             try {
+                let cameraPermission = null;
+                const queryPermission = navigator.permissions?.query;
+                if (typeof queryPermission === 'function') {
+                    try {
+                        cameraPermission = await queryPermission.call(
+                            navigator.permissions,
+                            { name: 'camera' },
+                        );
+                    } catch {
+                        // Some WebViews expose Permissions.query but do not accept
+                        // the camera descriptor. getUserMedia remains the source
+                        // of truth in that case.
+                    }
+                }
+                if (cameraPermission?.state === 'denied') {
+                    if (!cancelled) setError(cameraErrorText({ name: 'NotAllowedError' }));
+                    return;
+                }
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment' },
                 });
@@ -390,7 +411,7 @@ export function QrScanner({
             if (video) video.srcObject = null;
             setRunning(false);
         };
-    }, [supported, autoStart, onFrame, previewState, cameraRationaleAccepted]);
+    }, [supported, autoStart, previewState, cameraRationaleAccepted]);
 
     // The iPhone app: no BarcodeDetector in its WebView, but a native
     // scanner registered by the shell. Android's WebView has BarcodeDetector
