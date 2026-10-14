@@ -67,7 +67,11 @@ async function installOracleReads(page) {
     return sendToHost(type, request);`;
         const replacement = `    const fixture = globalThis.__xchainOracleE2E;
     if (fixture) {
-        if (type === 'bet.feeds') return { data: [fixture.market] };
+        // One market on one chain: the console asks every chain's addresses and
+        // lists each chain's answer, so answering all of them would triple it.
+        if (type === 'bet.feeds') {
+            return { data: String(request?.chainId || '').startsWith('bitcoin') ? [fixture.market] : [] };
+        }
         if (type === 'bet.feed') return { data: [fixture.market] };
         if (type === 'bet.oracle') return { data: [fixture.record] };
     }
@@ -115,9 +119,10 @@ async function useWatcherMode(page) {
 
 async function sharedControlRows(page) {
     return page.getByRole('main').evaluate((main) => {
-        const controls = [...main.querySelectorAll(
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        const controls = [...Array.from(main.querySelectorAll(
             'button, input:not([type="hidden"]), select, textarea, [role="button"]',
-        )]
+        )).filter((el) => !el.closest('[aria-hidden="true"]'))]
             .filter((element) => {
                 const style = getComputedStyle(element);
                 const box = element.getBoundingClientRect();
@@ -128,12 +133,20 @@ async function sharedControlRows(page) {
                 const box = element.getBoundingClientRect();
                 return {
                     top: box.top,
+                    left: box.left,
+                    right: box.right,
+                    bottom: box.bottom,
                     center: box.top + box.height / 2,
                     height: box.height,
                     label: (element.getAttribute('aria-label') || element.textContent || element.tagName)
                         .trim().replace(/\s+/g, ' ').slice(0, 60),
                 };
             })
+            // A button drawn inside a field box (the address QR picker) is part of
+            // that field, not a second control on its line.
+            .filter((control, _, all) => !all.some((field) => field !== control
+                && field.left <= control.left && field.right >= control.right
+                && field.top <= control.top && field.bottom >= control.bottom))
             .sort((a, b) => a.top - b.top);
 
         const rows = [];
