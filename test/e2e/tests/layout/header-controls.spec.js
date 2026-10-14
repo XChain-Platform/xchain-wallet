@@ -107,21 +107,42 @@ async function expectKeyboardReachable(page, controls, viewportName) {
     ).toEqual(markers);
 }
 
+// Header menu destinations are menu items; navigation destinations are buttons.
 async function hasVisibleButton(scope, name) {
-    const matches = await scope.getByRole('button', { name }).all();
+    const matches = [
+        ...await scope.getByRole('button', { name }).all(),
+        ...await scope.getByRole('menuitem', { name }).all(),
+    ];
     const visibility = await Promise.all(matches.map((match) => match.isVisible()));
     return visibility.some(Boolean);
 }
 
 async function expectHeaderOrNavDestinations(page, header, viewportName) {
+    const destinations = [
+        { label: 'Settings', name: /^Settings\b/ },
+        { label: 'Search', name: /^(Search|Open command palette)\b/ },
+        { label: 'Scan', name: /^(Scan|Scan and addresses)\b/ },
+    ];
+    const reachable = new Set();
+    const record = async (surfaces) => {
+        for (const destination of destinations) {
+            const available = await Promise.all(
+                surfaces.map((surface) => hasVisibleButton(surface, destination.name)),
+            );
+            if (available.some(Boolean)) reachable.add(destination.label);
+        }
+    };
+
+    // The condensed header keeps its secondary actions in one action menu.
     const openMenu = header.getByRole('button', { name: 'Open menu' });
     await openMenu.focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('heading', { name: 'Menu', exact: true })).toBeVisible();
-
+    const headerMenu = page.getByRole('menu', { name: 'Header actions' });
+    await expect(headerMenu).toBeVisible();
     const navigation = nav(page);
-    const main = page.getByRole('main');
-    const surfaces = [header, navigation, main];
+    await record([header, headerMenu, navigation, page.getByRole('main')]);
+    await page.keyboard.press('Escape');
+    await expect(headerMenu).toBeHidden();
 
     const more = navigation.getByRole('button', { name: 'More', exact: true });
     if (await more.isVisible().catch(() => false)) {
@@ -129,26 +150,17 @@ async function expectHeaderOrNavDestinations(page, header, viewportName) {
         await page.keyboard.press('Enter');
         const moreDialog = page.getByRole('dialog', { name: 'More', exact: true });
         await expect(moreDialog).toBeVisible();
-        surfaces.push(moreDialog);
+        await record([moreDialog]);
+        await page.keyboard.press('Escape');
     }
 
-    const destinations = [
-        { label: 'Settings', name: 'Settings' },
-        { label: 'Search', name: /^(Search|Open command palette)$/ },
-        { label: 'Scan', name: /^(Scan|Scan and addresses)$/ },
-    ];
     for (const destination of destinations) {
-        const available = await Promise.all(
-            surfaces.map((surface) => hasVisibleButton(surface, destination.name)),
-        );
         expect(
-            available.some(Boolean),
+            reachable.has(destination.label),
             `${viewportName}: ${destination.label} must remain reachable through the header menu or navigation`,
         ).toBe(true);
     }
 
-    const moreDialog = page.getByRole('dialog', { name: 'More', exact: true });
-    if (await moreDialog.isVisible().catch(() => false)) await page.keyboard.press('Escape');
     await gotoSection(page, 'Home');
     await expect(unlockedShell(page)).toBeVisible();
 }

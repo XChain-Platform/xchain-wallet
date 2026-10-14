@@ -210,7 +210,7 @@ test('a zero-balance wallet offers Receive instead of the Send form', async ({ p
     await createWallet(page, { password: PASSWORD });
     await gotoSection(page, 'Send');
 
-    await expect(page.getByRole('heading', { name: /wallet has no coins to send yet/i }))
+    await expect(page.getByRole('heading', { name: 'Nothing to send yet', exact: true }))
         .toBeVisible();
     await expect(page.getByRole('form', { name: 'Send' })).toHaveCount(0);
 
