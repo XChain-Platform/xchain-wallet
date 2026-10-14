@@ -54,6 +54,22 @@ class MainViewController: CAPBridgeViewController {
         edgeBack.edges = .left
         edgeBack.cancelsTouchesInView = false
         view.addGestureRecognizer(edgeBack)
+
+        let bootstrap = "window.__xchainNativeFontScale = \(nativeFontScale())"
+        webView?.configuration.userContentController.addUserScript(
+            WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(dynamicTypeDidChange),
+            name: UIContentSizeCategory.didChangeNotification,
+            object: nil
+        )
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        publishFontScale()
     }
 
     override func capacitorDidLoad() {
@@ -103,6 +119,24 @@ class MainViewController: CAPBridgeViewController {
     fileprivate func markShellReady() {
         launchCover?.removeFromSuperview()
         launchCover = nil
+    }
+
+    private func nativeFontScale() -> CGFloat {
+        UIFontMetrics.default.scaledValue(for: 16, compatibleWith: traitCollection) / 16
+    }
+
+    @objc private func dynamicTypeDidChange() {
+        publishFontScale()
+    }
+
+    private func publishFontScale() {
+        let scale = nativeFontScale()
+        webView?.evaluateJavaScript("""
+            window.__xchainNativeFontScale = \(scale);
+            window.dispatchEvent(new CustomEvent('xchain:native-font-scale', {
+              detail: { fontScale: \(scale) }
+            }));
+            """)
     }
 
     // MARK: - SSC-1, door 1: the plugin registry
