@@ -51,7 +51,7 @@ const ICONS = {
  * @property {string} [iconLabel]
  * @property {boolean} [wrapReadOnlyAddress]
  */
-export const AddressField = forwardRef(function AddressField(
+export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
     {
         icon,
         onIconClick,
