@@ -76,7 +76,7 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                     <summary>How agent accounts work</summary>
                     <p className={styles.hint}>
                         An automated agent shares a 2-of-2 address with this wallet. Requests that fit your policy
-                        are signed after your approval. Agent accounts support Bitcoin networks.
+                        are signed after your approval.
                     </p>
                 </details>
             ) : null}
