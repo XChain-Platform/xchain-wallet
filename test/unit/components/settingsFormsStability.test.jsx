@@ -183,13 +183,15 @@ describe('settings form validation', () => {
         });
     });
 
-    it('uses a wheel-safe decimal text field and rejects exponent test-send thresholds', () => {
+    it('uses a wheel-safe integer text field and rejects exponent test-send thresholds', () => {
         render(<SafetySection />);
         const input = screen.getByLabelText('Test-send warning threshold (sats)');
         const initialValue = input.value;
 
         expect(input.type).toBe('text');
-        expect(input.inputMode).toBe('decimal');
+        expect(input.inputMode).toBe('numeric');
+        expect(input).toHaveAttribute('enterkeyhint', 'done');
+        expect(input).toHaveAttribute('autocomplete', 'off');
         fireEvent.wheel(input, { deltaY: -100 });
         expect(input.value).toBe(initialValue);
 
