@@ -100,9 +100,12 @@ describe('regression/ui-button-defaults', () => {
         const base = css.match(/(?:^|\n)\.btn\s*\{[^}]*\}/);
         expect(base, 'base .btn rule').toBeTruthy();
         expect(base[0]).toMatch(/white-space:\s*normal/);
-        expect(base[0]).toMatch(/overflow-wrap:\s*anywhere/);
+        // break-word, not anywhere: a squeezed button stops at its longest word.
+        expect(base[0]).toMatch(/overflow-wrap:\s*break-word/);
         expect(base[0]).toMatch(/max-width:\s*100%/);
-        expect(base[0]).toMatch(/min-width:\s*0/);
+        expect(base[0]).toMatch(/min-width:\s*auto/);
+        // A plain-text label is a block, so one overlong word still breaks.
+        expect(css).toMatch(/\.textLabel\s*\{[^}]*display:\s*block/);
         expect(base[0]).not.toMatch(/text-overflow:\s*ellipsis/);
     });
 });

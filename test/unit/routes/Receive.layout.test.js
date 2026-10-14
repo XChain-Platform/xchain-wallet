@@ -29,7 +29,7 @@ describe('Receive action layout', () => {
         // The QR card spans the form; only the code inside it is capped.
         expect(css).toMatch(/\.qrBox\s*\{[^}]*max-width:\s*none;/);
         expect(css).toMatch(
-            /\.qrSurface\s*\{[^}]*max-width:\s*var\(--xc-qr-frame-size\);[^}]*margin-inline:\s*auto;/,
+            /\.qrSurface\s*\{[^}]*max-width:\s*min\(var\(--xc-qr-frame-size\), var\(--xc-qr-fit-size, var\(--xc-qr-frame-size\)\)\);[^}]*margin-inline:\s*auto;/,
         );
         expect(receive).toMatch(
             /qrStyles\.frame[\s\S]*?<AddressField[\s\S]*?\{qrActionsContent\}/,
@@ -73,7 +73,7 @@ describe('Receive action layout', () => {
 
     it('caps the complete QR column to the visible height on landscape phones', () => {
         expect(css).toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.qrSurface\s*\{[\s\S]*?max-width: min\(var\(--xc-qr-frame-size\), calc\(var\(--xc-viewport-h, 100vh\) - 11rem\)\);/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.qrSurface\s*\{[\s\S]*?max-width: min\(var\(--xc-qr-frame-size\), var\(--xc-qr-fit-size, var\(--xc-qr-frame-size\)\), calc\(var\(--xc-viewport-h, 100vh\) - 11rem\)\);/,
         );
         // The receive QR box is also the shared QrDisplay frame, which owns its box model.
         const qrDisplayCss = readFileSync('packages/core/src/ui/QrDisplay.module.css', 'utf8');

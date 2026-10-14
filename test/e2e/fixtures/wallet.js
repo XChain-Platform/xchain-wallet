@@ -526,7 +526,7 @@ export async function turnOffDonations(page) {
     await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
     await openSettings(page);
     await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Automatic Donation System', exact: true });
+    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
     await expect(toggle).toBeVisible();
     if (await toggle.isChecked()) {
         // Click, not check(): the input is controlled by PERSISTED settings,
