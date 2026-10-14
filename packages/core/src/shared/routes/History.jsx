@@ -630,7 +630,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setAddressesByChain(null);
         setEntries(cached?.entries || []);
         setHistoryFetchedAt(cached?.fetchedAt || null);
-        setHistoryLoaded(Boolean(cached));
+        setHistoryLoaded(Boolean(cached?.entries?.length));
         setShowingCachedHistory(!isNavigatorOnline() && Boolean(cached));
         setLoadingChains(new Set());
         setRefreshing(false);
@@ -658,6 +658,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                         .map(([cid]) => cid),
                 );
+                if (!cached?.entries?.length) setLoadingChains(all);
                 // When the caller asked us to scope to a specific coin
                 // family (e.g. arrived from the Bitcoin TokenDetail's
                 // History button), narrow enabledChains to only those
