@@ -68,19 +68,26 @@ describe('PageHeader', () => {
         expect(onBack).not.toHaveBeenCalled();
     });
 
-    it('wraps a long title in a shrinkable lane between fixed actions at 320px', () => {
+    it('wraps a long title between matching medium icon-button lanes at 320px', () => {
         const header = rule(pageHeaderCss, '.header');
+        const back = rule(pageHeaderCss, '.back');
         const title = rule(pageHeaderCss, '.title');
         const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
 
-        expect(header).toMatch(/--xc-page-header-side:\s*38px/);
+        expect(header).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
         expect(header).toMatch(
             /grid-template-columns:\s*var\(--xc-page-header-side\)\s+minmax\(0,\s*1fr\)\s+var\(--xc-page-header-side\)/,
         );
+        expect(back).toMatch(/width:\s*var\(--xc-page-header-side\)/);
+        expect(back).toMatch(/height:\s*var\(--xc-page-header-side\)/);
+        expect(back).toMatch(/padding:\s*0/);
+        expect(back).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
         expect(title).toMatch(/overflow-wrap:\s*anywhere/);
         expect(title).toMatch(/white-space:\s*normal/);
         expect(title).not.toMatch(/text-overflow:\s*ellipsis/);
         expect(trailingButton).toMatch(/width:\s*var\(--xc-page-header-side\)/);
+        expect(trailingButton).toMatch(/height:\s*var\(--xc-page-header-side\)/);
+        expect(trailingButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
     });
 });
 

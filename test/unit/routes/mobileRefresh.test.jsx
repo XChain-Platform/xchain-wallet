@@ -10,6 +10,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
@@ -181,7 +182,11 @@ describe('mobile refresh', () => {
         ));
 
         await waitFor(() => expect(document.querySelector('[data-history-key]')).not.toBeNull());
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }));
+        const refresh = screen.getByRole('button', { name: 'Refresh history' });
+        expect(refresh).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
+        expect(refresh).not.toHaveClass(buttonStyles.sm);
+        expect(refresh.textContent).toBe('');
+        fireEvent.click(refresh);
 
         const refreshing = screen.getByRole('button', { name: 'Refreshing history' });
         expect(refreshing).toBeDisabled();

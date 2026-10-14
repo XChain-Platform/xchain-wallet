@@ -129,9 +129,9 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `title` | centered title text |
 | `titleIcon` | optional inline icon to the left of the title (accent-colored) |
 | `backDisabled` | disables the back button while a submit is in flight; the chevron stays visible but inert |
-| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as circular 38px controls |
+| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as medium icon controls |
 
-**Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. The back chevron glyph also sits about 10px inside its own 28px SVG (the `BackIcon` vertex is at 9/24 of the viewBox), so a box-aligned button still reads indented. `<PageHeader />` owns the optical correction through `--xc-page-header-chevron-nudge`. Its trailing slot mirrors the chrome alignment on the right, and its buttons render as circular 38px controls so their right edges line up with the AppHeader buttons.
+**Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. `<PageHeader />` uses mirrored medium control lanes, aligns their boxes to the content edges, and centres each icon inside its control. This keeps the title centred without shifting the chevron inside its button.
 
 ## Buttons
 
