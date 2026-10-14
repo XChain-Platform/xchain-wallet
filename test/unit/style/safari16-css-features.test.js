@@ -118,7 +118,9 @@ function scanCss(source, from = 'fixture.css') {
 
 // Build output (vite dist, the mobile www copy) and installed packages are not
 // source; a local build must not change what the guard counts.
-const GENERATED_DIR = /(?:^|\/)(?:node_modules|dist|www)\//;
+// Capacitor's `cap sync` copies www into the native projects; those gitignored
+// copies are build output like www itself.
+const GENERATED_DIR = /(?:^|\/)(?:node_modules|dist|www|ios\/App\/App\/public|android\/app\/src\/main\/assets\/public)\//;
 
 function scanPackages() {
     return cachedSourceFiles(packagesRoot, '**/*.css')

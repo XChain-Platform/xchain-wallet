@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -202,7 +200,8 @@ for (const viewport of VIEWPORTS) {
     test(`oracle flow renders at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await installOracleReads(page);
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
+        await createWallet(page);
         await useWatcherMode(page);
 
         await test.step('oracle console', async () => {

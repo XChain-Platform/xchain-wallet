@@ -4,15 +4,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
+    createWallet,
     dismissIntroCarousel,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -22,7 +21,8 @@ const VIEWPORTS = [
 ];
 const TEST_WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
 // The demo wallet runs on Bitcoin regtest, so the destination is a regtest address.
-const DESTINATION = 'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080';
+// The dev wallet sweeps on Bitcoin, so the destination is a mainnet address.
+const DESTINATION = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 
 async function settle(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -151,7 +151,8 @@ for (const viewport of VIEWPORTS) {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await checkPrivateKeyScrubbing(page, viewport.name);
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
+        await createWallet(page);
         await setWatcherMode(page, viewport.name);
 
         await gotoPalette(page, 'Sweep address');

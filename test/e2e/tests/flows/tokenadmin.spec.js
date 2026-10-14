@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
@@ -22,9 +20,10 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 
+// The dev wallet holds its tokens on Bitcoin.
 const CHAIN = {
-    chainId: 'bitcoin-regtest',
-    chainLabel: 'Bitcoin · regtest',
+    chainId: 'bitcoin-mainnet',
+    chainLabel: 'Bitcoin',
 };
 
 async function settle(page) {
@@ -200,7 +199,8 @@ async function openManagedToken(page) {
 for (const viewport of VIEWPORTS) {
     test(`token administration reaches every review at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
+        await createWallet(page);
         await useWatcherReviews(page);
 
         const run = `${viewport.width}${viewport.height}`;

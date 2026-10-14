@@ -157,6 +157,9 @@ export function undersizedTargets(page, min = TAP_MIN_PX) {
 
             let box = el.getBoundingClientRect();
             if (box.width === 0 || box.height === 0) continue;
+            // A 1px clipped box is the visually hidden pattern (the skip
+            // link): it becomes a target only once it takes focus.
+            if (box.width <= 1 && box.height <= 1) continue;
 
             // A wrapping <label> activates the control, so it IS the target.
             const label = el.closest('label');

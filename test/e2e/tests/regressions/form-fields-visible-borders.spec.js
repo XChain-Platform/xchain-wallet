@@ -4,14 +4,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     gotoSection,
     openSettings,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const THEMES = ['light', 'dark'];
 const VIEWPORTS = [
@@ -197,7 +195,8 @@ for (const theme of THEMES) {
 
         test('form fields and inline actions retain visible outlines', async ({ page }) => {
             test.slow();
-            await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+            // Demo wallets hide the Swap command, so this walk uses a real dev wallet.
+            await createWallet(page);
             expect(await page.evaluate(() => (
                 document.documentElement.getAttribute('data-xc-theme')
                 || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')

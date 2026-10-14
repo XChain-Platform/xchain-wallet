@@ -179,21 +179,26 @@ async function onScreen(locator) {
         && box.x < viewport.width && box.y < viewport.height;
 }
 
-// The landscape icon rail scrolls inside a short viewport, so a rail item
-// can be scrolled out of view; bring it back before the on-screen check.
-async function revealInRail(locator) {
+// The landscape icon rail and the open More sheet both scroll inside a short
+// viewport (or under enlarged text spacing), so a row can be scrolled out of
+// view; bring it back before the on-screen check. The closed phone bar's
+// off-screen sheet rows are neither, so they still fall through to More.
+async function revealInScroller(locator) {
     if (await locator.count() === 0) return;
-    const inRail = await locator.first().evaluate((el) => {
+    const scrolls = await locator.first().evaluate((el) => {
         const navEl = el.closest('nav');
-        return Boolean(navEl && navEl.getAttribute('aria-label') === 'Primary navigation');
+        if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
+        const sheet = el.closest('[role="dialog"]');
+        return Boolean(sheet && sheet.getAttribute('aria-labelledby')
+            && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
     });
-    if (inRail && await locator.first().isVisible()) await locator.first().scrollIntoViewIfNeeded();
+    if (scrolls && await locator.first().isVisible()) await locator.first().scrollIntoViewIfNeeded();
 }
 
 async function clickDestination(scope, name) {
     const { exact, prefixed } = navDestination(scope, name);
-    await revealInRail(exact);
-    await revealInRail(prefixed);
+    await revealInScroller(exact);
+    await revealInScroller(prefixed);
     if (await exact.count() > 0 && await onScreen(exact.first())) {
         await exact.first().click();
         return true;
@@ -216,21 +221,35 @@ export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
         // Landscape phones can show the rail and the bottom bar together, so
-        // try every nav on screen before opening the More sheet.
+        // try every nav on screen before opening the More sheet. Right after
+        // a resize the shell can still be swapping the bottom bar for the
+        // rail, so a More button that vanishes means "look again", not
+        // "wait for it forever".
         const navs = [
             page.getByRole('navigation', { name: 'Primary navigation' }),
             page.getByRole('navigation', { name: 'Bottom navigation' }),
         ];
-        for (const candidate of navs) {
-            if (await candidate.count() === 0) continue;
-            if (await clickDestination(candidate.first(), name)) return;
-        }
-
         const more = page.getByRole('button', { name: 'More', exact: true });
-        await more.first().click();
-        const sheet = page.getByRole('dialog', { name: 'More', exact: true });
-        await sheet.waitFor({ state: 'visible', timeout: 15_000 });
-        if (await clickDestination(sheet, name)) return;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            for (const candidate of navs) {
+                if (await candidate.count() === 0) continue;
+                if (await clickDestination(candidate.first(), name)) return;
+            }
+            if (await more.count() === 0) {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            try {
+                await more.first().click({ timeout: 10_000 });
+            } catch {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
+            await sheet.waitFor({ state: 'visible', timeout: 15_000 });
+            if (await clickDestination(sheet, name)) return;
+            break;
+        }
         throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);
     }
 

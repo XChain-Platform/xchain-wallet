@@ -9,12 +9,10 @@
 // contact legal@dankest.llc.
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
     { width: 360, height: 800 },
@@ -115,10 +113,11 @@ function rowsFor(metrics) {
     return rows;
 }
 
-test('Create token template cards retain their visual hierarchy in demo mode', async ({ page }) => {
+test('Create token template cards retain their visual hierarchy', async ({ page }) => {
     test.slow();
     await page.setViewportSize(VIEWPORTS[0]);
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    // Demo wallets hide the create commands, so this walk uses a real dev wallet.
+    await createWallet(page);
     await openCreateToken(page);
 
     for (const viewport of VIEWPORTS) {

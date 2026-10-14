@@ -274,6 +274,11 @@ test('contract browse, detail, execute, and deploy reviews fit phone and desktop
     for (const viewport of VIEWPORTS) {
         await test.step(viewport.name, async () => {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
+            // The shell swaps the bottom bar for the rail after a resize; wait
+            // for the new nav before navigating so the walk uses the right one.
+            await expect(page.getByRole('navigation', {
+                name: viewport.width < 640 ? 'Bottom navigation' : 'Primary navigation',
+            })).toBeVisible();
             await openContract(page);
 
             await page.getByRole('button', { name: 'Back to contracts list' }).click();

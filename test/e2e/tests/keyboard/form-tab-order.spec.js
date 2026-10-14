@@ -9,14 +9,12 @@
 // contact legal@dankest.llc.
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     gotoSection,
     openSettings,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORT = { width: 1280, height: 800 };
 const INTERACTIVE_SELECTOR = [
@@ -211,9 +209,21 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
     test('Send, Receive request amount, Create token, and password security follow one contract', async ({ page }) => {
         test.slow();
         await page.setViewportSize(VIEWPORT);
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets cannot submit Send, so this walk uses a real dev wallet.
+        await createWallet(page);
 
         await test.step('Send', async () => {
+            // A new wallet has no contacts; save one so the recipient field
+            // has a suggestion to offer.
+            await gotoSection(page, 'Contacts');
+            await page.getByRole('button', { name: 'Add contact' }).click();
+            await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Erin');
+            await page.getByRole('textbox', { name: 'Address', exact: true })
+                .fill('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
+            await page.getByRole('button', { name: 'Save', exact: true }).click();
+            await expect(page.getByRole('list', { name: 'Contacts' })
+                .getByText('Erin', { exact: true })).toBeVisible();
+
             await gotoSection(page, 'Send');
             const form = page.getByRole('form', { name: 'Send' });
             await expect(form).toBeVisible();
