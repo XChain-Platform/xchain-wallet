@@ -25,6 +25,8 @@ const expectedLocalDeclarations = new Map(Object.entries({
     'shared/routes/ManageToken.module.css': ['20'],
     'shared/routes/StakeDetail.module.css': ['20'],
     'shared/routes/WalletPicker.module.css': ['1'],
+    // The kit Checkbox stacks its transparent native input over the painted box.
+    'ui/Checkbox.module.css': ['1'],
 }));
 
 const cssFiles = [];

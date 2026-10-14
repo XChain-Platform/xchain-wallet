@@ -47,8 +47,10 @@ const expectedIcons = Object.fromEntries(
 );
 assert.deepEqual(manifest.icons, expectedIcons);
 assert.deepEqual(manifest.action.default_icon, expectedIcons);
-assert.match(popupCss, /width:\s*min\(360px,\s*100vw\)/);
-assert.match(popupCss, /height:\s*min\(600px,\s*100vh\)/);
+// The toolbar popup sizes itself from its content, so develop pins it to
+// fixed lengths; viewport-relative sizes collapse it to Chrome's 25px minimum.
+assert.match(popupCss, /html\.xchain-toolbar-popup\s*\{[^}]*width:\s*360px;[^}]*height:\s*600px;/);
+assert.doesNotMatch(popupCss, /html\.xchain-toolbar-popup\s*\{[^}]*(?:100vw|100vh)/);
 assert.match(popupCss, /@media \(min-width:\s*601px\)[^]*width:\s*100%/);
 
 console.log(
