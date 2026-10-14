@@ -117,6 +117,8 @@ Env:
   XCHAIN_GATE_WAIT_SECONDS   optional, default for --wait-timeout
 
 Required commit statuses: ${REQUIRED_STATUSES.join(', ')}
+  A status absent from the commit itself is taken from the head of the merged
+  pull request whose merge commit this is (the CLA bot marks PR heads only).
 
 Exit codes: 0 every required workflow and commit status is green; 1 refused
 (including "cannot tell" and "ran out of time"). A refusal is not a tool fault.`);
@@ -257,6 +259,24 @@ async function tryApi(path) {
     }
 }
 
+// The CLA bot (cla-assistant) marks only pull-request HEAD commits, never the
+// merge commit a release tags on master, so a required status that is absent
+// from the commit itself is looked up on the head of the PR that produced it.
+// Only a PR that MERGED and whose merge_commit_sha is exactly this commit
+// counts: a PR that merely contains the commit proves nothing about it.
+// Unreachable API or no matching PR returns null and the caller refuses.
+async function carriedStatuses() {
+    const prs = await tryApi(`/repos/${repo}/commits/${sha}/pulls?per_page=100`);
+    const merged = (Array.isArray(prs) ? prs : [])
+        .filter((pr) => pr.merged_at && pr.merge_commit_sha === sha && pr.head?.sha);
+    const carried = [];
+    for (const pr of merged) {
+        const head = await tryApi(`/repos/${repo}/commits/${pr.head.sha}/status?per_page=100`);
+        for (const status of head?.statuses || []) carried.push({ ...status, pr });
+    }
+    return carried;
+}
+
 async function diagnose(runId) {
     const jobs = (await tryApi(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`))?.jobs;
     if (!Array.isArray(jobs) || jobs.length === 0) return null;
@@ -336,8 +356,15 @@ async function evaluate() {
         }
     }
 
+    let prStatuses;
     for (const wanted of REQUIRED_STATUSES) {
-        const matching = statuses.filter((status) => status.context === wanted);
+        let matching = statuses.filter((status) => status.context === wanted);
+        // A status on the commit itself always wins; the PR head is consulted
+        // only when the commit has none, and fetched at most once per pass.
+        if (matching.length === 0) {
+            prStatuses ??= await carriedStatuses();
+            matching = prStatuses.filter((status) => status.context === wanted);
+        }
         matching.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
         const newest = matching[0];
 
@@ -347,7 +374,10 @@ async function evaluate() {
             continue;
         }
 
-        evidence.push(`${wanted}: state=${newest.state}`
+        const via = newest.pr
+            ? ` carried from PR #${newest.pr.number} head ${newest.pr.head.sha.slice(0, 7)}`
+            : '';
+        evidence.push(`${wanted}: state=${newest.state}${via}`
             + (newest.target_url ? ` (${newest.target_url})` : ''));
         if (newest.state === 'pending') {
             problems.push(`required status \`${wanted}\` is still \`pending\``);
