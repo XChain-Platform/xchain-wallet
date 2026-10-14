@@ -89,8 +89,9 @@ public class MainActivity extends BridgeActivity {
      *
      * The narrow App plugin exposes only the back event and minimization. The
      * SPA handler stack closes overlays before routes and preserves in-route
-     * stages that do not create browser history entries. With no listener,
-     * the task moves to the background instead of destroying the flow.
+     * stages that do not create browser history entries. The SPA also owns the
+     * Home-root decision, so a missing listener swallows Back instead of
+     * guessing that an unfinished flow is safe to leave.
      */
     private void routeBackKeyToTheSpa() {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -103,8 +104,7 @@ public class MainActivity extends BridgeActivity {
                     app = (XChainAppPlugin) bridge.getPlugin("App").getInstance();
                 }
                 boolean canGoBack = webView != null && webView.canGoBack();
-                if (app != null && app.dispatchBackButton(canGoBack)) return;
-                moveTaskToBack(true);
+                if (app != null) app.dispatchBackButton(canGoBack);
             }
         });
     }

@@ -19,6 +19,7 @@ import {
     registerBackHandler,
     resetBackStackForTests,
     setRouteHistoryManaged,
+    useNativeBackRoot,
 } from '../../../packages/core/src/ui/backStack.js';
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
@@ -33,6 +34,11 @@ async function pressBack() {
 
 function swipeBackFromIOS() {
     window.dispatchEvent(new Event('xchain:native-edge-back'));
+}
+
+function NativeBackRoot() {
+    useNativeBackRoot();
+    return null;
 }
 
 beforeEach(() => {
@@ -80,13 +86,22 @@ function ConfirmStep() {
 
 describe('back stack', () => {
     it('minimizes through the Capacitor App plugin on a root screen', async () => {
-        render(<PageHeader title="Home" />);
+        render(<><NativeBackRoot /><PageHeader title="Home" /></>);
         await settle();
         expect(capacitorApp.addListener).toHaveBeenCalledTimes(1);
 
         nativeBack({ canGoBack: false });
 
         expect(capacitorApp.minimizeApp).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not minimize when an empty handler stack is not the Home root', async () => {
+        render(<PageHeader title="Unlock" />);
+        await settle();
+
+        nativeBack({ canGoBack: false });
+
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
     it('preserves a confirm step draft when native Back returns to its form', async () => {
