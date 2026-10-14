@@ -72,7 +72,8 @@ function renderedLabel(element) {
 
 function changeFigure(container) {
     return [...container.querySelectorAll('[aria-label]')]
-        .find((element) => /^(Increase|Decrease|No change):/.test(
+        // Labels may lead with their period, e.g. "24-hour change. Increase: ...".
+        .find((element) => /(?:^|\. )(Increase|Decrease|No change):/.test(
             element.getAttribute('aria-label') || '',
         ));
 }
