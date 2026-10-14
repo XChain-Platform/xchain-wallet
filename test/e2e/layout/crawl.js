@@ -28,7 +28,18 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { dismissIntroCarousel, gotoSection, nav, openSettings, unlockedShell } from '../fixtures/wallet.js';
-import { measureInPage } from './sweep.js';
+import { measureControlRows, measureInPage } from './sweep.js';
+
+/**
+ * The rows of two or more controls that spill out of their container or the
+ * window right now, one string per row. A press that opens a dialog or a
+ * new step is measured too, so dialog footers are covered.
+ */
+async function spillingRows(page) {
+    const rows = await page.evaluate(measureControlRows).catch(() => []);
+    return rows.filter((row) => row.problems.includes('overflow'))
+        .map((row) => row.controls.map((control) => control.el).join(' | '));
+}
 
 /**
  * Never pressed. These lock, delete or reset the wallet, leave demo mode, or
@@ -447,17 +458,20 @@ export function createCrawl(page, {
         if (await menu.isVisible().catch(() => false)) {
             await menu.click();
             await page.waitForTimeout(300);
-            const rows = await page.locator('main button:visible:not([disabled])').evaluateAll((els) => els
+            // The header menu is a role=menu popover in the header, not part
+            // of <main>; its rows are the buttons (links leave the app).
+            const rows = await page.getByRole('menu').getByRole('menuitem').evaluateAll((els) => els
+                .filter((e) => e.tagName === 'BUTTON' && !e.disabled)
                 .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
             await home();
             for (const row of [...new Set(rows)]) {
-                if (!row || /^Back/.test(row) || DESTRUCTIVE.test(row)) continue;
+                if (!row || /^Back/.test(row) || DESTRUCTIVE.test(row) || /new window/i.test(row)) continue;
                 screens.push({
                     label: `menu: ${row}`,
                     open: async () => {
                         await page.getByRole('button', { name: 'Open menu' }).first().click();
                         await page.waitForTimeout(300);
-                        await page.locator('main button:visible').filter({ hasText: row }).first().click({ timeout: 5_000 });
+                        await page.getByRole('menu').getByRole('menuitem').filter({ hasText: row }).first().click({ timeout: 5_000 });
                     },
                 });
             }
@@ -506,6 +520,8 @@ export function createCrawl(page, {
         await reach(screen);
         const signature = await page.evaluate(screenSignature);
         const baseline = await page.evaluate(measureInPage).catch(() => null);
+        const spilledBefore = new Set(await spillingRows(page));
+        for (const row of spilledBefore) finding(label, '(open)', 'control row overflows', { row });
         const controls = await page.evaluate(listControlsInPage, [CONTROL_SELECTOR, Boolean(screen.chrome)]);
         // A control is addressed by its label and which occurrence of that
         // label it is, so a press that hides or adds something above it
@@ -582,6 +598,9 @@ export function createCrawl(page, {
                         const before = new Set((baseline.offscreen || []).map((o) => o.el));
                         const fresh = (after.offscreen || []).filter((o) => !before.has(o.el));
                         if (fresh.length > 0) finding(label, name, 'content off screen after the press', { items: fresh.slice(0, 4) });
+                    }
+                    for (const row of await spillingRows(page)) {
+                        if (!spilledBefore.has(row)) finding(label, name, 'control row overflows', { row });
                     }
                 }
                 covered.push({ screen: label, control: name, result: changed ? 'changed' : 'no change' });

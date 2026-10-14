@@ -4,7 +4,9 @@
     --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
     --xc-icon-size: var(--xc-control-icon-md, 20px);
     display: inline-flex;
-    flex-shrink: 0;
+    /* A row that runs out of room shares the squeeze between its buttons
+       instead of pushing the last one past the edge; see min-width below. */
+    flex-shrink: 1;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-2);
@@ -26,13 +28,14 @@
     user-select: none;
     text-decoration: none;
     max-width: 100%;
-    min-width: 0;
+    /* auto, not 0: a shrinking button stops at its longest word, so labels wrap
+       between words and a short one like "Cancel" never splits. max-width
+       caps that floor at the column, where a label wider than the whole
+       column breaks inside the word rather than spilling out. */
+    min-width: auto;
     text-align: center;
-    /* flex-shrink: 0 keeps a row from squeezing a short label onto two lines;
-       a label wider than its whole column still wraps instead of spilling
-       out of the button. */
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 /* The display above outranks the browser's own [hidden] rule, so a button
@@ -54,6 +57,14 @@
     justify-content: center;
     min-width: 0;
     white-space: normal;
+}
+
+/* A plain-text label is one block of text, so a single word wider than the
+   whole column can still break inside the label; as a flex container its
+   text would keep the word whole and spill out. Labels holding elements
+   (an icon span beside text) stay flex rows. */
+.textLabel {
+    display: block;
 }
 
 .btn:focus-visible {
