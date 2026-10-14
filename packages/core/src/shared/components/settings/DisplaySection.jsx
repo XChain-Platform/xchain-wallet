@@ -318,7 +318,7 @@ export function DisplaySection() {
     };
 
     return (
-        <FormPage as="div" sectioned label="Display settings">
+        <FormPage as="div" sectioned fullWidth label="Display settings">
             <FormSection title="Display options">
             <SectionHeader as="h3" title="Balance display" />
             <div style={EMBEDDED_ROW}>
@@ -330,7 +330,7 @@ export function DisplaySection() {
                 />
             </div>
             <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
-            <div style={EMBEDDED_ROW}>
+            <div className={layoutStyles.fieldRow}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
                     <span style={ROW_HINT}>Use each network&apos;s relay limit for dust and 0.0001 units for divisible tokens, while applying other choices in whole asset units.</span>
@@ -346,9 +346,9 @@ export function DisplaySection() {
                     <option value="0.01">Less than 0.01</option>
                     <option value="1">Less than 1</option>
                 </Select>
-                <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
             </div>
-            <div style={EMBEDDED_ROW}>
+            <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
+            <div className={layoutStyles.fieldRow}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
                     <span style={ROW_HINT}>Change displayed formatting without changing stored or submitted values.</span>
@@ -363,8 +363,8 @@ export function DisplaySection() {
                     <option value="trim">1,234.5</option>
                     <option value="plain">1234.50000000</option>
                 </Select>
-                <DisplaySaveError error={saveError} controlKey="numberFormat" />
             </div>
+            <DisplaySaveError error={saveError} controlKey="numberFormat" />
 
             <SectionHeader
                 as="h3"
@@ -397,39 +397,43 @@ export function DisplaySection() {
                 title={`Watched tokens (${watched.length})`}
                 description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
             />
-            <form style={EMBEDDED_ROW} onSubmit={addWatchedToken}>
-                <Select
-                    aria-label="Token chain"
-                    value={watchChainId}
-                    onChange={(event) => {
-                        watchRequestRef.current += 1;
-                        setWatching(false);
-                        setWatchChainId(event.target.value);
-                    }}
-                >
-                    {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    {chains.map((chain) => (
-                        <option key={chain.id} value={chain.id}>
-                            {chain.displayName} ({chain.networkKind})
-                        </option>
-                    ))}
-                </Select>
-                <Input
-                    size="md"
-                    aria-label="Token ticker"
-                    value={watchTicker}
-                    onChange={(event) => {
-                        watchRequestRef.current += 1;
-                        setWatching(false);
-                        setWatchTicker(event.target.value);
-                    }}
-                    placeholder="Ticker"
-                    autoComplete="off"
-                    style={{ minWidth: 120 }}
-                />
-                <Button type="submit" size="md" variant="secondary" icon={null} disabled={watching}>
-                    {watching ? 'Checking…' : 'Watch token'}
-                </Button>
+            <form className={layoutStyles.fieldRow} onSubmit={addWatchedToken}>
+                <div style={ROW_COPY}>
+                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Token to watch</span>
+                </div>
+                <div className={layoutStyles.watchControls}>
+                    <Select
+                        aria-label="Token chain"
+                        value={watchChainId}
+                        onChange={(event) => {
+                            watchRequestRef.current += 1;
+                            setWatching(false);
+                            setWatchChainId(event.target.value);
+                        }}
+                    >
+                        {/* Native options remain because Select owns the listbox control, not its choices. */}
+                        {chains.map((chain) => (
+                            <option key={chain.id} value={chain.id}>
+                                {chain.displayName} ({chain.networkKind})
+                            </option>
+                        ))}
+                    </Select>
+                    <Input
+                        size="md"
+                        aria-label="Token ticker"
+                        value={watchTicker}
+                        onChange={(event) => {
+                            watchRequestRef.current += 1;
+                            setWatching(false);
+                            setWatchTicker(event.target.value);
+                        }}
+                        placeholder="Ticker"
+                        autoComplete="off"
+                    />
+                    <Button type="submit" size="md" variant="secondary" icon={null} disabled={watching}>
+                        {watching ? 'Checking…' : 'Watch token'}
+                    </Button>
+                </div>
             </form>
             {watchMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{watchMessage}</span> : null}
             {watched.map((key) => (

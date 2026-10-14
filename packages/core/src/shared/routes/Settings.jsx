@@ -411,12 +411,12 @@ export function Settings({
                     scrollKey={section.id}
                     restoreScroll={false}
                 >
-                    <ListPage className={settingsStyles.page} data-settings-layout="responsive">
+                    <SettingsPageTemplate view="subpage">
                         <SectionComponent
                             key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
                             {...(section.props || {})}
                         />
-                    </ListPage>
+                    </SettingsPageTemplate>
                 </Screen>
             );
         }
@@ -430,9 +430,8 @@ export function Settings({
 
     return (
         <Screen variant={variant} header={header} scrollKey="list">
-            <ListPage
-                className={settingsStyles.page}
-                data-settings-layout="responsive"
+            <SettingsPageTemplate
+                view="list"
                 toolbar={(
                     <div className={settingsStyles.searchField}>
                         <Input
@@ -501,8 +500,21 @@ export function Settings({
                         </PanelBlock>
                     );
                 })}
-            </ListPage>
+            </SettingsPageTemplate>
         </Screen>
+    );
+}
+
+function SettingsPageTemplate({ view, children, ...props }) {
+    return (
+        <ListPage
+            className={settingsStyles.page}
+            data-settings-layout="responsive"
+            data-settings-page-template={view}
+            {...props}
+        >
+            {children}
+        </ListPage>
     );
 }
 
