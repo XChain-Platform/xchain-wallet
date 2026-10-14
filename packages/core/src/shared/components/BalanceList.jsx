@@ -264,19 +264,11 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     // re-targets the calling form's network. So callers that show a
     // cross-chain list opt into naming the chain.
     //
-    // D-60: that reasoning holds only on MAINNET. Off it, the user may not
-    // have chosen the network at all - demo mode is started with
-    // `activeNetwork: 'regtest'` by `Onboarding.jsx` and never says so - and
-    // the row then reads "Bitcoin / BTC" priced at $7,000,000 for coins that
-    // are worth nothing. The first time the word regtest reached the user was
-    // an error message from the Send form. So a non-mainnet row names its
-    // network, always: this is the one case where repeating it is not noise.
-    const networkSuffix = row.networkKind && row.networkKind !== 'mainnet'
-        ? ` · ${row.networkKind}`
-        : '';
-    const subtitle = (showChain && row.chainDisplayName
+    // The active network is never repeated on a row: the wallet runs on one
+    // network at a time and Settings is where it is chosen.
+    const subtitle = showChain && row.chainDisplayName
         ? `${row.tick} · ${row.chainDisplayName}`
-        : row.tick) + networkSuffix;
+        : row.tick;
     const fiat = useMemo(
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],

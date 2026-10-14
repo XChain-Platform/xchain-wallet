@@ -19,10 +19,7 @@ const chainRegistry = registryLib.defaultRegistry();
 
 function chainLabel(chainId) {
     const descriptor = chainRegistry.get(chainId);
-    if (!descriptor?.displayName) return chainId;
-    return descriptor.networkKind && descriptor.networkKind !== 'mainnet'
-        ? `${descriptor.displayName} ${descriptor.networkKind}`
-        : descriptor.displayName;
+    return descriptor?.displayName || chainId;
 }
 
 function affectedChains(overall, perChain) {
