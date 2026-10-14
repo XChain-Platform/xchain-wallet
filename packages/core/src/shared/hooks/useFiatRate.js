@@ -27,6 +27,7 @@ import {
     refreshTokenFiatRate,
     subscribeFiatRates,
 } from '../../flows/priceLookup.js';
+import { defaultRegistry } from '../../registry/index.js';
 
 /**
  * @param {object} opts
@@ -339,6 +340,7 @@ export function priceNativeRows(rows, ratesByCoin) {
         if (!row || row.kind !== 'native') return row;
         if (typeof row.fiatRate === 'number') return row;
         if (row.unavailable === 'all') return row;
+        if (defaultRegistry().get(row.chainId)?.networkKind !== 'mainnet') return row;
         const id = String(row.chainId || '');
         const dash = id.indexOf('-');
         const coin = dash > 0 ? id.slice(0, dash) : id;
@@ -376,6 +378,7 @@ export function priceTokenRows(rows, ratesByToken) {
     const out = rows.map((row) => {
         if (!row || row.kind === 'native') return row;
         if (typeof row.fiatRate === 'number') return row;
+        if (defaultRegistry().get(row.chainId)?.networkKind !== 'mainnet') return row;
         const id = String(row.chainId || '');
         const dash = id.indexOf('-');
         const coin = dash > 0 ? id.slice(0, dash) : id;
