@@ -31,8 +31,8 @@ import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MEMO_HINT } from '../utils/memoLimit.js';
-import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -416,6 +416,10 @@ export function PublishFileForm({ walletId, onBack }) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
+        const memoError = memoLengthError(memo);
+        if (memoError) { setFormError(memoError); return; }
+        const feeError = publishFeeValidationError(feePick, feeCustomEstimate);
+        if (feeError) { setFormError(feeError); return; }
         // Re-check with the FINAL metadata: a title/memo typed after the
         // pick shrinks the byte budget.
         const cap = publicCapFor(fileMeta.name, fileMeta.type);
@@ -632,7 +636,7 @@ export function PublishFileForm({ walletId, onBack }) {
                 onSubmit={handleSubmit}
                 intro={(
                     <>
-                        Publish <strong>{fileMeta?.name}</strong> on-chain, readable by anyone.
+                        Publish <strong>{fileMeta?.name.trim()}</strong> on-chain, readable by anyone.
                     </>
                 )}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -679,12 +683,18 @@ export function PublishFileForm({ walletId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>File</dt>
                     <dd className={styles.detailsValue}>
-                        {fileMeta?.name} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
+                        {fileMeta?.name.trim()} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
                     </dd>
                     {title.trim() ? (
                         <>
                             <dt className={styles.detailsLabel}>Title</dt>
                             <dd className={styles.detailsValue}>{title.trim()}</dd>
+                        </>
+                    ) : null}
+                    {memo ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}>{memo}</dd>
                         </>
                     ) : null}
                     <dt className={styles.detailsLabel}>Publishing from</dt>
