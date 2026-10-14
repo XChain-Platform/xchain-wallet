@@ -108,9 +108,9 @@ describe('balancesFromSdk', () => {
     });
 
     describe('scaleDown edge cases', () => {
-        it('1 satoshi = 0.00000001 BTC', () => {
-            const out = balancesFromSdk({ native: { tick: 'BTC', divisibility: 8, quantity: '1' } });
-            expect(out[0].amount).toBe('0.00000001');
+        it.each(['BTC', 'LTC', 'DOGE'])('1 base unit = 0.00000001 %s', (tick) => {
+            const out = balancesFromSdk({ native: { tick, divisibility: 8, quantity: '1' } });
+            expect(out[0]).toMatchObject({ tick, amount: '0.00000001', isCoin: true });
         });
 
         it('100 units at divisibility 2 = 1', () => {
@@ -136,6 +136,12 @@ describe('balancesFromSdk', () => {
         it('divisibility given as a string is coerced', () => {
             const out = balancesFromSdk({ tokens: [{ tick: 'T', divisibility: '8', quantity: '100000000' }] });
             expect(out[0].amount).toBe('1');
+        });
+
+        it('keeps a very large 18-decimal token supply exact', () => {
+            const quantity = '123456789012345678901234567890123456789012345678';
+            const out = balancesFromSdk({ tokens: [{ tick: 'T', divisibility: 18, quantity }] });
+            expect(out[0].amount).toBe('123456789012345678901234567890.123456789012345678');
         });
     });
 });
