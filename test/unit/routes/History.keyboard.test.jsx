@@ -68,8 +68,11 @@ async function rowButtons(view) {
 }
 
 beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    globalThis.localStorage?.clear();
+    globalThis.sessionStorage?.clear();
     resetBackStackForTests();
-    globalThis.localStorage?.removeItem('xc:historyGroupingMode:keyboard-wallet');
 });
 
 afterEach(() => {
