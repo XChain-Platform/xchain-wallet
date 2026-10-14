@@ -9,13 +9,12 @@
 // contact legal@dankest.llc.
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     gotoSection,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
-import { documentOverflow, enterDemoWallet } from '../../fixtures/responsive.js';
+import { documentOverflow } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
@@ -142,7 +141,8 @@ async function expectTermsUseContentWidth(terms, label) {
 
 test('desktop forms use the available width and keep shared geometry', async ({ page }) => {
     test.slow();
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    // Demo wallets hide the create commands, so this walk uses a real dev wallet.
+    await createWallet(page);
 
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });

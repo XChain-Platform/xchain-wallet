@@ -25,7 +25,10 @@ const K51 = {
     isMobile: true,
 };
 
-const MIN_CONTROL_HEIGHT = 44;
+// The wallet's pointer-target floor is 24px at every width (--xc-tap-min in
+// packages/core/src/ui/tokens.css, WCAG 2.2 2.5.8); kit controls add their own
+// 44px touch hit area on coarse pointers, which hitHeight below reads.
+const MIN_CONTROL_HEIGHT = 24;
 const LAYOUT_SLACK = 1;
 
 const INTERACTIVE_SELECTOR = [
@@ -67,16 +70,16 @@ const TOP_LEVEL_ROUTES = [
     'Settings',
 ];
 
+// Phone layouts leave Keyboard out of Settings (shortcut bindings need a
+// hardware keyboard), and Network & endpoints shows only in Developer Mode.
 const SETTINGS_SUBPAGES = [
     'This wallet',
     'Display',
-    'Keyboard',
     'Privacy',
     'Safety',
     'Wallet mode',
     'Backup',
     'Fees',
-    'Network & endpoints',
     'Connected sites',
     'Automatic donation system',
     'Developer mode',
@@ -151,7 +154,10 @@ async function layoutAudit(page) {
                 && style.visibility !== 'hidden'
                 && element.getAttribute('aria-hidden') !== 'true'
                 && rect.width > 0
-                && rect.height > 0;
+                && rect.height > 0
+                // A 1px clipped box is the visually hidden pattern (the skip
+                // link): it becomes a target only once it takes focus.
+                && !(rect.width <= 1 && rect.height <= 1);
         };
 
         const targetRect = (element) => {
@@ -161,6 +167,17 @@ async function layoutAudit(page) {
             const labelRect = label.getBoundingClientRect();
             if (labelRect.width < rect.width || labelRect.height < rect.height) return rect;
             return labelRect;
+        };
+
+        // Kit sm buttons extend their touch target with an absolutely
+        // positioned ::before (Button.module.css); that box is the hit area.
+        const hitHeight = (element, rect) => {
+            const before = getComputedStyle(element, '::before');
+            if (before.content !== 'none' && before.position === 'absolute') {
+                const height = Number.parseFloat(before.height);
+                if (height > rect.height) return height;
+            }
+            return rect.height;
         };
 
         const identify = (element, rect) => ({
@@ -178,16 +195,31 @@ async function layoutAudit(page) {
             height: Math.round(rect.height),
         });
 
+        // A control scrolled partly out of the route scroller is clipped at
+        // its edge (above the bottom bar, for example); overlaps count only
+        // the part that is on screen.
+        const scroller = document.querySelector('main');
+        const visibleRect = (element, rect) => {
+            if (!scroller || !scroller.contains(element)) return rect;
+            const box = scroller.getBoundingClientRect();
+            const top = Math.max(rect.top, box.top);
+            const bottom = Math.min(rect.bottom, box.bottom);
+            return { left: rect.left, right: rect.right, top, bottom: Math.max(top, bottom) };
+        };
+
         const controls = [...new Set(document.querySelectorAll(interactiveSelector))]
             .filter(isRendered)
-            .map((element) => ({ element, rect: targetRect(element) }));
+            .map((element) => {
+                const rect = targetRect(element);
+                return { element, rect, visible: visibleRect(element, rect) };
+            });
 
         const outside = controls
             .filter(({ rect }) => rect.left < -slack || rect.right > viewportWidth + slack)
             .map(({ element, rect }) => identify(element, rect));
 
         const short = controls
-            .filter(({ rect }) => rect.height + slack < minHeight)
+            .filter(({ element, rect }) => hitHeight(element, rect) + slack < minHeight)
             .map(({ element, rect }) => identify(element, rect));
 
         const overlaps = [];
@@ -196,10 +228,20 @@ async function layoutAudit(page) {
             for (let j = i + 1; j < controls.length; j += 1) {
                 const second = controls[j];
                 if (first.element.contains(second.element) || second.element.contains(first.element)) continue;
-                const overlapWidth = Math.min(first.rect.right, second.rect.right)
-                    - Math.max(first.rect.left, second.rect.left);
-                const overlapHeight = Math.min(first.rect.bottom, second.rect.bottom)
-                    - Math.max(first.rect.top, second.rect.top);
+                // Field actions (Paste, Max, pickers) sit inset inside their
+                // input's border by design; one wholly inside a text field is
+                // part of that field, not a collision.
+                const isField = (el) => el.matches('input, textarea');
+                const inside = (inner, outer) => inner.left >= outer.left - slack
+                    && inner.right <= outer.right + slack
+                    && inner.top >= outer.top - slack
+                    && inner.bottom <= outer.bottom + slack;
+                if ((isField(first.element) && inside(second.rect, first.rect))
+                    || (isField(second.element) && inside(first.rect, second.rect))) continue;
+                const overlapWidth = Math.min(first.visible.right, second.visible.right)
+                    - Math.max(first.visible.left, second.visible.left);
+                const overlapHeight = Math.min(first.visible.bottom, second.visible.bottom)
+                    - Math.max(first.visible.top, second.visible.top);
                 if (overlapWidth <= slack || overlapHeight <= slack) continue;
                 overlaps.push({
                     first: identify(first.element, first.rect),
@@ -265,8 +307,11 @@ async function bottomClearance(page) {
             controlBottom: Math.round(controlRect.bottom),
             visibleTop: Math.round(mainRect.top),
             navTop: Math.round(navRect.top),
-            clear: controlRect.top >= mainRect.top - slack
-                && controlRect.bottom <= navRect.top + slack,
+            // A last control already scrolled above the area means the route
+            // ends in plain rows (Marketplace activity), which clear the bar.
+            clear: controlRect.bottom <= mainRect.top + slack
+                || (controlRect.top >= mainRect.top - slack
+                    && controlRect.bottom <= navRect.top + slack),
         };
     }, { interactiveSelector: INTERACTIVE_SELECTOR, slack: LAYOUT_SLACK });
 }
@@ -330,7 +375,7 @@ test.describe('LG K51 responsive route sweep', () => {
                 });
                 await expect(row, `Settings has no ${JSON.stringify(subpage)} row`).toBeVisible();
                 await row.click();
-                await expect(page.getByRole('heading', { name: subpage, exact: true })).toBeVisible();
+                await expect(page.getByRole('heading', { level: 1, name: subpage, exact: true })).toBeVisible();
 
                 await expectK51Layout(page, `Settings / ${subpage}`);
 

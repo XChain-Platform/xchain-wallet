@@ -4,13 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     gotoSection,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
     { name: 'bottom nav', width: 360, height: 800 },
@@ -26,6 +24,8 @@ async function openPaletteRoute(page, title) {
     await expect(palette).toBeHidden();
 }
 
+// A null section is a utility page with no nav row: the nav stays
+// unselected rather than attributing the page to Home.
 const ROUTES = [
     { name: 'Home', section: 'Home', visit: (page) => gotoSection(page, 'Home') },
     { name: 'History', section: 'History', visit: (page) => gotoSection(page, 'History') },
@@ -33,13 +33,13 @@ const ROUTES = [
     { name: 'Receive', section: 'Receive', visit: (page) => gotoSection(page, 'Receive') },
     { name: 'Swap', section: 'DEX', visit: (page) => openPaletteRoute(page, 'Swap') },
     { name: 'Contacts', section: 'Contacts', visit: (page) => gotoSection(page, 'Contacts') },
-    { name: 'Addresses', section: 'Addresses', visit: (page) => openPaletteRoute(page, 'Addresses') },
-    { name: 'Create token', section: 'Create token', visit: (page) => openPaletteRoute(page, 'Create a token') },
+    { name: 'Addresses', section: null, visit: (page) => openPaletteRoute(page, 'Addresses') },
+    { name: 'Create token', section: null, visit: (page) => openPaletteRoute(page, 'Create a token') },
     { name: 'Markets', section: 'DEX', visit: (page) => openPaletteRoute(page, 'Open DEX') },
     { name: 'Settings', section: 'Settings', visit: (page) => gotoSection(page, 'Settings') },
     {
         name: 'Settings Accounts',
-        section: 'Accounts',
+        section: null,
         visit: async (page) => {
             await gotoSection(page, 'Settings');
             await page.getByRole('main')
@@ -57,8 +57,12 @@ async function expectCurrentSection(page, section) {
     }
 
     const current = page.locator('[aria-current="page"]');
-    await expect(current).toHaveCount(1);
-    await expect(current).toHaveAccessibleName(section);
+    if (section === null) {
+        await expect(current).toHaveCount(0);
+    } else {
+        await expect(current).toHaveCount(1);
+        await expect(current).toHaveAccessibleName(section);
+    }
 
     if (await bottomNav.count() > 0) {
         await page.keyboard.press('Escape');
@@ -69,7 +73,9 @@ async function expectCurrentSection(page, section) {
 test('every route highlights exactly its mapped navigation section', async ({ page }) => {
     test.slow();
     await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    // Demo wallets hide the Swap and Create token commands, so this walk
+    // uses a real dev wallet.
+    await createWallet(page);
 
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });

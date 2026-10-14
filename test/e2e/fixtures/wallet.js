@@ -179,8 +179,21 @@ async function onScreen(locator) {
         && box.x < viewport.width && box.y < viewport.height;
 }
 
+// The landscape icon rail scrolls inside a short viewport, so a rail item
+// can be scrolled out of view; bring it back before the on-screen check.
+async function revealInRail(locator) {
+    if (await locator.count() === 0) return;
+    const inRail = await locator.first().evaluate((el) => {
+        const navEl = el.closest('nav');
+        return Boolean(navEl && navEl.getAttribute('aria-label') === 'Primary navigation');
+    });
+    if (inRail && await locator.first().isVisible()) await locator.first().scrollIntoViewIfNeeded();
+}
+
 async function clickDestination(scope, name) {
     const { exact, prefixed } = navDestination(scope, name);
+    await revealInRail(exact);
+    await revealInRail(prefixed);
     if (await exact.count() > 0 && await onScreen(exact.first())) {
         await exact.first().click();
         return true;

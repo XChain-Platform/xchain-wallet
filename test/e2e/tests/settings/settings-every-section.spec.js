@@ -72,6 +72,16 @@ async function flipSwitch(control) {
 test.describe('Settings: every section', () => {
     test('every sub-page fits a phone and Display and Notifications persist through lock', async ({ page }) => {
         test.slow();
+        // Notification toggles stay disabled until the browser grants the
+        // permission, as a user does from the permission row. Headless
+        // Chromium reports "denied" even after a grant, so model a browser
+        // that has granted it.
+        await page.context().grantPermissions(['notifications']);
+        await page.addInitScript(() => {
+            if (typeof Notification !== 'undefined') {
+                Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+            }
+        });
         await page.setViewportSize(VIEWPORT);
         await createWallet(page, { password: PASSWORD, name: 'Settings Sections Wallet' });
         await openSettings(page);

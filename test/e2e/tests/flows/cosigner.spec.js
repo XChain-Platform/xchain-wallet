@@ -179,8 +179,8 @@ async function walkCoSignerScreens(page, viewport) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await installCoSignerDerivationStub(page);
     // Demo wallets hide create and multisig commands, so this walk
-        // uses a real dev wallet.
-        await createWallet(page);
+    // uses a real dev wallet.
+    await createWallet(page);
 
     await openAgentAccounts(page);
     await expectScreen(page, 'Agent accounts', `${viewport.name} account list`);
@@ -190,6 +190,11 @@ async function walkCoSignerScreens(page, viewport) {
     await expectScreen(page, 'New agent account', `${viewport.name} provisioning`);
     await configurePolicy(page);
     await expectScreen(page, 'New agent account', `${viewport.name} expanded policy editor`);
+
+    // The form opens a review of every value before anything is created.
+    await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
+    await expectScreen(page, 'Review agent account', `${viewport.name} provisioning check`);
+    await expect(definitionValue(page, 'Account name')).toHaveText(ACCOUNT_NAME);
 
     const create = page.getByRole('button', { name: 'Create agent account', exact: true });
     await expect(create).toBeEnabled();

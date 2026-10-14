@@ -18,10 +18,16 @@ const VIEWPORTS = [
     { width: 412, height: 869 },
     { width: 1280, height: 800 },
 ];
+// The dev wallet airdrops on Bitcoin, so the recipients are mainnet
+// addresses; the batch step below still names its own regtest chain.
 const RECIPIENTS = [
+    'bc1qqypqxpq9qcrsszg2pvxq6rs0zqg3yyc5fcj4z3',
+    'bc1qlx2eanawq23ujwhdg7txxdfpffzdvmgtw8mmtd',
+    'bc1qmr46t4ca5wh35k6mczdzrkepqw2d8ne9u4tttn',
+];
+const BATCH_RECIPIENTS = [
     'bcrt1qqypqxpq9qcrsszg2pvxq6rs0zqg3yyc5phstwt',
     'bcrt1qlx2eanawq23ujwhdg7txxdfpffzdvmgtxge98h',
-    'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f',
 ];
 
 async function settle(page) {
@@ -126,16 +132,16 @@ async function fillAirdrop(page) {
     await expect(main.getByRole('form', { name: 'Token airdrop' })).toBeVisible({ timeout: 30_000 });
 
     await main.getByRole('button', { name: /^Token to drop:/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('XCHAIN');
+    await page.getByLabel('Search coins or tokens').fill('XCHAINGOV');
     // Picker rows are named "Select <token name> on <chain>, <balance>, <value>".
-    const token = page.getByRole('button', { name: /^Select XChain on / }).first();
-    await expect(token, 'the demo wallet did not expose its XCHAIN balance').toBeVisible({ timeout: 30_000 });
+    const token = page.getByRole('button', { name: /^Select XChain Governance on Bitcoin\b/ }).first();
+    await expect(token, 'the dev wallet did not expose its XCHAINGOV balance').toBeVisible({ timeout: 30_000 });
     await token.click();
 
     await main.getByRole('textbox', { name: /^Per-recipient amount/ }).fill('7');
     await main.getByLabel('Recipients').fill(RECIPIENTS.join('\n'));
     await expect(main).toContainText('3 valid addresses');
-    await expect(main).toContainText('total ~21 XCHAIN');
+    await expect(main).toContainText('total ~21 XCHAINGOV');
     return main;
 }
 
@@ -157,7 +163,7 @@ async function fillBatch(page) {
     const first = step(1);
     await picker(first, 'Action').selectOption('SEND');
     await params(first).fill(JSON.stringify({
-        VERSION: '0', TICK: 'XCHAIN', AMOUNT: '2', DESTINATION: RECIPIENTS[0],
+        VERSION: '0', TICK: 'XCHAIN', AMOUNT: '2', DESTINATION: BATCH_RECIPIENTS[0],
     }));
 
     await main.getByRole('button', { name: '+ Add action', exact: true }).click();
@@ -165,7 +171,7 @@ async function fillBatch(page) {
     await expect(second).toBeVisible();
     await picker(second, 'Action').selectOption('SEND');
     await params(second).fill(JSON.stringify({
-        VERSION: '0', TICK: 'XCHAIN', AMOUNT: '3', DESTINATION: RECIPIENTS[1],
+        VERSION: '0', TICK: 'XCHAIN', AMOUNT: '3', DESTINATION: BATCH_RECIPIENTS[1],
     }));
     return main;
 }
@@ -189,7 +195,7 @@ for (const viewport of VIEWPORTS) {
                 .toBeVisible({ timeout: 30_000 });
             await expectReviewAtTop(page, 'airdrop review');
             await expect(main).toContainText(/recipients\s*3\b/i, { useInnerText: true });
-            await expect(main.getByText('~21 XCHAIN', { exact: true })).toBeVisible();
+            await expect(main.getByText('~21 XCHAINGOV', { exact: true })).toBeVisible();
             await expectScreenLayout(
                 page,
                 'Review address list',

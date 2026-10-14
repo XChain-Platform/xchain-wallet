@@ -4,14 +4,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     gotoSection,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
     { width: 320, height: 640 },
@@ -48,12 +46,18 @@ async function fieldMetrics(input, actionNames) {
             actions: names.map((name) => {
                 const button = findAction(field, name);
                 const box = button.getBoundingClientRect();
-                const range = document.createRange();
-                range.selectNodeContents(button);
-                const lineTops = new Set([...range.getClientRects()]
-                    .filter((rect) => rect.width > 0 && rect.height > 0)
-                    // An icon and its label can sit a sub-pixel apart on one line.
-                    .map((rect) => Math.round(rect.top)));
+                // Count the label's text lines only: the icon box sits on the
+                // same line, but its top can differ from the text's by a pixel.
+                const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+                const lineTops = new Set();
+                for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                    if (!node.textContent.trim()) continue;
+                    const range = document.createRange();
+                    range.selectNodeContents(node);
+                    for (const rect of range.getClientRects()) {
+                        if (rect.width > 0 && rect.height > 0) lineTops.add(Math.round(rect.top));
+                    }
+                }
                 return {
                     name,
                     text: (button.textContent || '').trim(),
@@ -150,7 +154,8 @@ async function checkViewports(page, surface, fields) {
 
 test('Paste and Max stay inside their fields without squeezing input text', async ({ page }) => {
     test.slow();
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    // Demo wallets hide the Swap command, so this walk uses a real dev wallet.
+    await createWallet(page);
 
     await gotoSection(page, 'Send');
     let main = page.getByRole('main');
