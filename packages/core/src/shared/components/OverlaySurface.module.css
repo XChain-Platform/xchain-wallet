@@ -7,6 +7,22 @@
     background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
 }
 
+/* OverlaySurface selects these by variant name (`${variant}Overlay`). */
+.dialogOverlay {
+    align-items: center;
+    justify-content: center;
+    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-right, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
+}
+
+.sheetOverlay {
+    align-items: flex-end;
+    justify-content: center;
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+}
+
 .surface {
     box-sizing: border-box;
     min-width: 0;
@@ -144,6 +160,10 @@
 }
 
 @media (orientation: landscape) and (max-height: 480px) {
+    .dialogOverlay {
+        padding: var(--xc-space-2);
+    }
+
     .surface {
         padding: var(--xc-space-3);
     }

@@ -22,6 +22,7 @@ const DYNAMIC_CLASS_PREFIXES = new Map([
     ['shared/routes/DispensersList.module.css', ['status_']],
     ['shared/routes/StakingList.module.css', ['status_']],
     ['ui/Button.module.css', ['spinner_']],
+    ['shared/components/OverlaySurface.module.css', ['dialogOverlay', 'sheetOverlay']],
 ]);
 
 function findCoreSource() {
