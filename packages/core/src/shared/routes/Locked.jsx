@@ -770,7 +770,7 @@ export function Locked({ onUnlocked }) {
 
     return (
         <Screen variant={variant}>
-            {body}
+            <div className={styles.centre}>{body}</div>
         </Screen>
     );
 }
