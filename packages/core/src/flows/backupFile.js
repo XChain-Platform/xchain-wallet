@@ -677,13 +677,17 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         );
     }
 
-    const oldKey = await deriveMasterKeyAsync(walletPassword, wallet.kdfParams);
+    /** @type {Uint8Array | null} */
+    let oldKey = null;
     let seed = null;
     /** @type {Uint8Array[]} */
     let wifs = [];
     /** @type {Uint8Array | null} */
     let passphrase = null;
+    /** @type {Uint8Array | null} */
+    let newKey = null;
     try {
+        oldKey = await deriveMasterKeyAsync(walletPassword, wallet.kdfParams);
         if (hasSeed) {
             try {
                 seed = await decrypt(oldKey, base64ToBytes(wallet.encryptedSeed));
@@ -712,18 +716,14 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
                 throw new BackupSeedPasswordError('passphrase');
             }
         }
-    } finally {
-        oldKey.fill(0);
-    }
 
-    // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
-    const nextParams = kdfParams ?? makeFreshKdfParams({
-        iterations: wallet.kdfParams.iterations,
-        memory: wallet.kdfParams.memory,
-        parallelism: wallet.kdfParams.parallelism,
-    });
-    const newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
-    try {
+        // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
+        const nextParams = kdfParams ?? makeFreshKdfParams({
+            iterations: wallet.kdfParams.iterations,
+            memory: wallet.kdfParams.memory,
+            parallelism: wallet.kdfParams.parallelism,
+        });
+        newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
         try {
             if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
             for (let i = 0; i < sealedKeys.length; i += 1) {
@@ -737,7 +737,7 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
             wallet.kdfParams = nextParams;
         } finally {
             if (seed) seed.fill(0);
-            for (const w of wifs) w.fill(0);
+            for (const wif of wifs) wif.fill(0);
             if (passphrase) passphrase.fill(0);
             seed = null;
             wifs = [];
@@ -747,10 +747,19 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         // derive it again from the same password and params. The plaintext
         // secrets are already zeroed; this buffer is zeroed right after.
         if (onDeviceKey) await onDeviceKey(newKey, { ...nextParams });
+        return true;
     } finally {
-        newKey.fill(0);
+        if (oldKey) oldKey.fill(0);
+        if (newKey) newKey.fill(0);
+        if (seed) seed.fill(0);
+        for (const wif of wifs) wif.fill(0);
+        if (passphrase) passphrase.fill(0);
+        oldKey = null;
+        newKey = null;
+        seed = null;
+        wifs = [];
+        passphrase = null;
     }
-    return true;
 }
 
 async function applyCollection(collection, records, onConflict, writes, skipped, name, migrateRecord) {
