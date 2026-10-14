@@ -855,7 +855,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         result={previewResult}
                         loading={previewBalances.loading}
                         error={previewBalances.error}
-                        chainCoin={descriptor?.coin}
+                        chainCoin={descriptor?.networkKind === 'mainnet' ? descriptor.coin : null}
                         fiatCurrency={settings?.fiatCurrency || 'USD'}
                         allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                     />

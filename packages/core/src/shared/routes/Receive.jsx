@@ -536,6 +536,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             : null,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(activeChainId || '')?.networkKind === 'mainnet',
     });
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {

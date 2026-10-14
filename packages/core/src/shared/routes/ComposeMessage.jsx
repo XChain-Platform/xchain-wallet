@@ -411,6 +411,7 @@ function ComposeMessageForm({
         chainCoin: chainRegistry.get(chainId)?.coin,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(chainId)?.networkKind === 'mainnet',
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
         const value = coinToFiatExact(coinAmount, fiatRate);
