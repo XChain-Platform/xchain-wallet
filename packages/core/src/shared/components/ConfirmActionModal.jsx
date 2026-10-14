@@ -371,8 +371,10 @@ export function ConfirmActionModal({
         />
     );
 
+    // The confirm page always opens at its top; it must not inherit how far
+    // the form behind it was scrolled.
     return (
-        <Screen rootRef={pageRef} variant={screenVariant} header={header}>
+        <Screen rootRef={pageRef} variant={screenVariant} header={header} restoreScroll={false}>
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
