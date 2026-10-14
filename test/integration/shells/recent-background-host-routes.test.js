@@ -14,7 +14,11 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
 }));
 
 import { encryptWalletSeed, decryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
-import { makeFreshKdfParams } from '../../../packages/core/src/crypto/kdf.js';
+import { makeFreshKdfParams, deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
+import { Vault } from '../../../packages/core/src/storage/Vault.js';
+import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
+import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
+import { createVaultKeyring } from '../../../packages/extension/src/background/vaultKeyring.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { startLabelSyncRestoreTask } from '../../../packages/extension/src/background/labelSyncRestoreTasks.js';
 import { createSendHold } from '../../../packages/extension/src/background/sendHold.js';
@@ -254,36 +258,56 @@ describe('recent background host routes across extension, web, and desktop shell
         expect((await call(host, 'wallet.setActive', { walletId: 'missing' })).ok).toBe(false);
     });
 
-    it('wallet.changePassword rekeys a wallet and refuses the previous password afterward', async () => {
+    it('wallet.changePassword re-seals the vault and the wallet, and refuses the previous password afterward', async () => {
         const mnemonic = new TextEncoder().encode(
             'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         );
-        const sealed = await encryptWalletSeed({
-            password: 'old-password',
-            seed: mnemonic,
-            kdfParams: makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 }),
-        });
-        const wallets = collection([{
+        // The vault and its onboarding wallet share one set of params, as
+        // onboarding leaves them.
+        const kdfParams = makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 });
+        const sealed = await encryptWalletSeed({ password: 'old-password', seed: mnemonic, kdfParams });
+        const backend = new InMemoryBackend();
+        const oldKey = deriveMasterKey('old-password', kdfParams);
+        const vault = new Vault({ backend, masterKey: oldKey });
+        await vault.open();
+        await vault.wallets.put({
+            ...createWallet({
+                name: 'Main',
+                origin: 'created',
+                format: 'bip39',
+                passphraseEnabled: false,
+                encryptedSeed: sealed.encryptedSeed,
+                kdfParams: sealed.kdfParams,
+            }),
             id: 'wallet-1',
-            name: 'Main',
-            format: 'bip39',
-            passphraseEnabled: false,
-            importedKeys: [],
-            ...sealed,
-        }]);
-        const evict = vi.fn();
+        });
+        const sessionSaves = [];
+        const unlockOne = vi.fn(async () => {});
         const host = makeHost({
-            vault: makeVault({ wallets }),
-            signerPool: { get: () => null, has: () => false, evict },
+            vault,
+            signerPool: { get: () => null, has: () => false, evict: vi.fn(), unlockOne },
+            vaultKeyring: createVaultKeyring({
+                metaBackend: { load: async () => ({ kdfParams }) },
+                sessionBackend: { save: async (key) => { sessionSaves.push(new Uint8Array(key)); } },
+            }),
         });
 
         expect(await call(host, 'wallet.changePassword', {
             walletId: 'wallet-1',
             currentPassword: 'old-password',
             newPassword: 'new-password',
-        })).toEqual({ ok: true, result: { changed: true } });
-        expect(evict).toHaveBeenCalledWith('wallet-1');
-        const changed = await wallets.get('wallet-1');
+        })).toEqual({ ok: true, result: { changed: true, vaultRekeyed: true, walletIds: ['wallet-1'] } });
+        expect(unlockOne).toHaveBeenCalledWith(expect.objectContaining({ password: 'new-password' }));
+
+        // The stored blob opens under the new password only, and the cached
+        // session key is the one that opens it.
+        const newKey = deriveMasterKey('new-password', kdfParams);
+        const reopened = new Vault({ backend, masterKey: newKey });
+        await reopened.open();
+        expect([...sessionSaves[0]]).toEqual([...newKey]);
+        await expect(new Vault({ backend, masterKey: oldKey }).open()).rejects.toMatchObject({ name: 'AeadAuthError' });
+        const changed = await reopened.wallets.get('wallet-1');
+        expect(changed.kdfParams).toEqual(kdfParams);
         const decrypted = await decryptWalletSeed({
             password: 'new-password',
             encryptedSeed: changed.encryptedSeed,

@@ -6,7 +6,7 @@
 // A password change retires the biometric enrolment, because the enrolment
 // wraps the unlock password as it was on the day of enrolment. Left in place
 // it unlocks nothing ("Incorrect password") and keeps the old password wrapped
-// on the device. The disable button used to be the only caller of the clear.
+// on the device, so the change clears it as the disable button does.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';

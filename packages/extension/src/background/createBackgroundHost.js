@@ -5393,7 +5393,7 @@ export function createBackgroundHost(deps) {
 /**
  * A host whose shell supplied no vault keyring cannot tell whether the vault
  * itself is sealed under the password being changed, and changing only the
- * wallet record in that case is what used to lock people out.
+ * wallet record in that case locks the person out of their own wallet.
  */
 export class PasswordChangeUnavailableError extends Error {
     constructor() {
