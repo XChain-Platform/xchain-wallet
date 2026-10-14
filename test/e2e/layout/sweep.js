@@ -855,8 +855,9 @@ export function createSweep(page, {
             await home();
             await menu.click();
             await measure('menu: list');
+            // Reopened fresh for every row: the Settings row opens a flyout
+            // over the menu that would take the next row's click.
             await crawlRows('menu', async () => {
-                if (await menuPanel.isVisible().catch(() => false)) return;
                 await home();
                 await menu.click();
                 await menuPanel.waitFor({ state: 'visible', timeout: 5_000 });
