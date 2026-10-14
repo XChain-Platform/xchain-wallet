@@ -250,6 +250,12 @@
     user-select: text;
 }
 
+.addrAmount,
+.addrFiat {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .addrAmount {
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);

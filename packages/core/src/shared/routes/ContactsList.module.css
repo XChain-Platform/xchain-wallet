@@ -316,6 +316,8 @@
 .addressText {
     flex: 1 1 auto;
     min-width: 0;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

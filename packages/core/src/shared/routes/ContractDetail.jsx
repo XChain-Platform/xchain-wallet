@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
@@ -516,7 +516,7 @@ function Pagination({ page, total, pageSize, onChange }) {
                 onClick={() => onChange(page - 1)}
                 disabled={!hasPrev}
             >
-                ← Prev
+                <Icon.BackIcon /> Prev
             </Button>
             <span className={styles.entryDescription}>Page {page}{total !== null ? ` of ${Math.ceil(total / pageSize)}` : ''}</span>
             <Button
@@ -524,7 +524,7 @@ function Pagination({ page, total, pageSize, onChange }) {
                 onClick={() => onChange(page + 1)}
                 disabled={!hasNext}
             >
-                Next →
+                Next <Icon.ForwardIcon />
             </Button>
         </div>
     );

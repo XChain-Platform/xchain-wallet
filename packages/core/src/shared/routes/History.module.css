@@ -285,8 +285,13 @@
 }
 
 .dateSep {
+    display: inline-block;
     color: var(--xc-text-muted);
     line-height: 36px;
+}
+
+:global([dir='rtl']) .dateSep {
+    transform: scaleX(-1);
 }
 
 .dateTools,
@@ -1231,6 +1236,17 @@
     white-space: nowrap;
     -webkit-user-select: text;
     user-select: text;
+}
+
+.dateRow input,
+.paginationCount,
+.rowSourceAddress,
+.confirmationsPill,
+.copyableText,
+.pendingSegments,
+.pendingAmount {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Phone layouts keep the full filter form behind one compact disclosure.

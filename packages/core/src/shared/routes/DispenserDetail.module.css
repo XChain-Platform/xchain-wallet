@@ -155,6 +155,14 @@
     color: var(--xc-text-muted);
 }
 
+.dispenseAmount,
+.dispensePaid,
+.remainingPill,
+.buyerAddressSelect {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .dispenseWhen {
     flex: 0 0 auto;
     white-space: nowrap;
