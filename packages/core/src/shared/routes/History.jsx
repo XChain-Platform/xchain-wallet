@@ -1881,11 +1881,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 ) : null}
 
                 <div className={styles.filterFooter}>
-                    <Button
-                        variant={moreFiltersOpen ? 'primary' : 'ghost'}
-                        size="sm"
-                        icon={null}
-                        onClick={() => setMoreFiltersOpen((v) => !v)}
+                    <Chip
+                        className={styles.toolbarControl}
+                        pressed={moreFiltersOpen}
+                        onPressedChange={() => setMoreFiltersOpen((v) => !v)}
                         aria-expanded={moreFiltersOpen}
                         aria-controls="history-more-filters"
                     >
@@ -1893,13 +1892,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         {moreFiltersOpen
                             ? <DoubleChevron direction="up" />
                             : <DoubleChevron direction="down" />}
-                    </Button>
-                    <Button
-                        variant={showFiatInHistory ? 'primary' : 'ghost'}
-                        size="sm"
-                        icon={null}
-                        aria-pressed={showFiatInHistory}
-                        onClick={toggleShowFiatInHistory}
+                    </Chip>
+                    <Chip
+                        className={styles.toolbarControl}
+                        pressed={showFiatInHistory}
+                        onPressedChange={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
                         aria-busy={fiatToggleBusy}
                         aria-label={showFiatInHistory
@@ -1910,8 +1907,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         {showFiatInHistory
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
                             : t('history.filters.fiatOff')}
-                    </Button>
+                    </Chip>
                     <SegmentedControl
+                        className={styles.toolbarControl}
                         aria-label={t('history.filters.groupingMode')}
                         value={groupingMode}
                         onChange={setGroupingMode}
@@ -1920,6 +1918,26 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             { id: 'flat', label: t('history.filters.flat') },
                         ]}
                     />
+                    <Button
+                        className={styles.toolbarControl}
+                        variant="secondary"
+                        icon={null}
+                        aria-haspopup="dialog"
+                        aria-expanded={exportModalOpen}
+                        aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                        onClick={() => setExportModalOpen(true)}
+                        disabled={visibleEntries.length === 0}
+                    >
+                        {t('history.export.open')}
+                    </Button>
+                    {visibleEntries.length === 0 ? (
+                        <span
+                            id="history-export-disabled-reason"
+                            className={styles.visuallyHidden}
+                        >
+                            {t('history.export.noMatchingRows')}
+                        </span>
+                    ) : null}
                 </div>
 
                 {moreFiltersOpen ? (
@@ -2057,33 +2075,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
             {historyFetchedAt && entries.length > 0 ? (
                 <div className={styles.resultsHeader}>
-                    {historyFetchedAt && loadingChains.size === 0 ? (
+                    {loadingChains.size === 0 ? (
                         <StalenessLabel lastSyncedAt={historyFetchedAt} />
                     ) : <span />}
-                    {entries.length > 0 ? (
-                        <div className={styles.exportControls}>
-                            {visibleEntries.length === 0 ? (
-                                <span
-                                    id="history-export-disabled-reason"
-                                    className={styles.exportDisabledReason}
-                                >
-                                    {t('history.export.noMatchingRows')}
-                                </span>
-                            ) : null}
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                icon={null}
-                                aria-haspopup="dialog"
-                                aria-expanded={exportModalOpen}
-                                aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
-                                onClick={() => setExportModalOpen(true)}
-                                disabled={visibleEntries.length === 0}
-                            >
-                                {t('history.export.open')}
-                            </Button>
-                        </div>
-                    ) : null}
                 </div>
             ) : null}
 
