@@ -277,7 +277,6 @@ export function PairSignerForm({
                 ) : notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
             >
                 <StepIndicator current={1} />
-                <p className={styles.stageHint}>Which kind of device are you pairing?</p>
                 {pairedSigners.length > 0 ? (
                     <PairedDeviceList
                         records={pairedSigners}
@@ -417,9 +416,6 @@ export function PairSignerForm({
             )}
         >
             <StepIndicator current={3} />
-            <p className={styles.stageHint}>
-                Confirm the device you just paired.
-            </p>
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Vendor</dt>
                 <dd className={styles.detailsValue}>{labelFor(pairingInfo?.vendor)}</dd>

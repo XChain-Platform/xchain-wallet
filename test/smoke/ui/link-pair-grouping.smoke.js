@@ -74,7 +74,7 @@ assert.equal(single.length, 1);
 assert.equal(single[0].kind, 'entry',
     'unpaired LINK row stays a plain entry, retains its 🔗 badge surface');
 
-// --- 2. History.jsx GroupCard surfaces both badges + suppresses connector
+// --- 2. History.jsx GroupCard uses the shared row + suppresses connector
 
 const histPath = join(routes, 'History.jsx');
 const hist = readFileSync(histPath, 'utf8');
@@ -86,22 +86,18 @@ const hist = readFileSync(histPath, 'utf8');
 assert.ok(/subkind === 'link-pair'\) return actionDisplayLabel\('LINK'\)/.test(hist),
     'groupBadgeLabel labels link-pair via actionDisplayLabel(LINK)');
 
-// Dual-chain badge in GroupCard.
+// Link-pair context stays explicit without adding chain or network chips.
 assert.ok(/isLinkPair\b/.test(hist),
     'GroupCard derives an isLinkPair branch');
-assert.ok(/peerDescriptor\b/.test(hist),
-    'GroupCard resolves the peer chainDescriptor');
-assert.ok(/linkPairConnector\b/.test(hist),
-    'GroupCard renders the .linkPairConnector glyph for link-pair');
+assert.ok(/function GroupCard[\s\S]*?<ActivityRow/.test(hist),
+    'GroupCard renders the shared activity row');
+assert.ok(/context=\{isLinkPair \? 'Linked'/.test(hist),
+    'GroupCard labels the linked relationship without a chain chip');
+assert.ok(!/ChainBadge/.test(hist),
+    'History does not render textual chain badges');
 
 // Connector suppression in grouped mode.
 assert.ok(/item\.subkind === 'link-pair'\s*\?\s*false/.test(hist),
     'grouped link-pair members render with showConnector=false');
-
-// --- 3. CSS hook -----------------------------------------------------------
-
-const histCss = readFileSync(join(routes, 'History.module.css'), 'utf8');
-assert.ok(/\.linkPairConnector\b/.test(histCss),
-    'History.module.css carries the .linkPairConnector rule');
 
 console.log('link-pair-grouping smoke OK');

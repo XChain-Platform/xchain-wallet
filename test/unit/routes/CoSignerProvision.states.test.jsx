@@ -81,6 +81,9 @@ describe('CoSignerProvision states', () => {
         }));
 
         expect(await screen.findByLabelText("This wallet's key")).toBeInTheDocument();
+        const disclosure = screen.getByText('How agent accounts work').closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent('refuses requests outside it');
         expect(screen.getByRole('button', { name: 'Create agent account' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Network: Bitcoin' })).toBeInTheDocument();
     });

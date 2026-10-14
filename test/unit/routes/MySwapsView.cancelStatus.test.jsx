@@ -92,6 +92,7 @@ describe('MySwapsView: cancel row status', () => {
         const row = within(list).getByText('#700', { exact: false }).closest('li');
         expect(within(row).getByText('Open')).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+        expect(row).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('a valid cancel row files the swap under Closed as Cancelled', async () => {

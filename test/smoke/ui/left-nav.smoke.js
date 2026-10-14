@@ -89,8 +89,8 @@ assert.ok(/aria-current=\{active \? 'page' : undefined\}/.test(navSrc),
 // Footer rows.
 assert.ok(/onLock\s*\?[\s\S]*?Lock/.test(navSrc),
     'LeftNav footer renders Lock when onLock is provided');
-assert.ok(/onOpenWalletPicker[\s\S]*?walletSwitcher/.test(navSrc),
-    'LeftNav footer renders the wallet switcher when onOpenWalletPicker is provided');
+assert.ok(!/walletSwitcher|walletName/.test(navSrc),
+    'LeftNav leaves the wallet name to the app header');
 
 // --- 4. CSS module: sidebar width + breakpoint ---------------------------
 

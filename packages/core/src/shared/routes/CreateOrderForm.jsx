@@ -558,15 +558,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         >
                             {isWatcherMode ? 'Create unsigned transaction'
                                 : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : (descriptor ? `Place order on ${descriptor.displayName}` : 'Place order')}
+                                    : 'Place order'}
                         </Button>
                     </>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <DetailRow
@@ -649,7 +653,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     chainRegistry={chainRegistry}
                 />
                 <p className={styles.hint}>
-                    Both sides of this order settle on {descriptor?.displayName || 'this chain'}. To get a token on another chain, use Cross-chain order.
+                    Both sides of this order settle on the same chain. To get a token on another chain, use Cross-chain order.
                 </p>
 
                 {fromAddress ? (

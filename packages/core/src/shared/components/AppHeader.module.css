@@ -4,6 +4,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: nowrap;
     gap: var(--xc-space-3);
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-surface);
@@ -15,6 +16,7 @@
 .left {
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
     gap: var(--xc-space-2);
     min-width: 0;
     overflow: hidden;
@@ -24,13 +26,8 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
-    flex-shrink: 0;
-    flex-wrap: nowrap;
-}
-
-.actionSlot {
-    display: inline-flex;
     flex: 0 0 auto;
+    flex-wrap: nowrap;
 }
 
 .right > button,
@@ -138,21 +135,6 @@
     flex: 0 0 auto;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
-}
-
-/* The header is one row at every width: the logo holds the start edge, the
-   controls hold the end edge, and the wallet name gives way first. */
-:global([data-xc-tier='compact']) .bar {
-    flex-wrap: nowrap;
-}
-
-:global([data-xc-tier='compact']) .left {
-    flex: 1 1 auto;
-}
-
-:global([data-xc-tier='compact']) .right {
-    flex: 0 0 auto;
-    flex-wrap: nowrap;
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect

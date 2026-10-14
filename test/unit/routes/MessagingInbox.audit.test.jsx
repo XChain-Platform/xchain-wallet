@@ -123,6 +123,8 @@ describe('MessagingInbox audit states', () => {
 
         const password = await screen.findByLabelText('Password');
         const unlock = screen.getByRole('button', { name: 'Unlock inbox' });
+        expect(password).toHaveAccessibleDescription("Decrypts this account's messages.");
+        expect(screen.queryByText("Enter your wallet password to decrypt this account's messages.")).toBeNull();
         expect(unlock.disabled).toBe(true);
 
         fireEvent.change(password, { target: { value: 'secret' } });

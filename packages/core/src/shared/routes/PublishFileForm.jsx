@@ -626,11 +626,6 @@ export function PublishFileForm({ walletId, onBack }) {
             <FormPage
                 label="Review publish"
                 onSubmit={handleSubmit}
-                intro={(
-                    <>
-                        Publish <strong>{fileMeta?.name}</strong> on-chain, readable by anyone.
-                    </>
-                )}
                 status={(isWatcherMode || hw) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
@@ -668,10 +663,12 @@ export function PublishFileForm({ walletId, onBack }) {
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>File</dt>
                     <dd className={styles.detailsValue}>
                         {fileMeta?.name} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
@@ -725,12 +722,6 @@ export function PublishFileForm({ walletId, onBack }) {
         <FormPage
             label="Publish file"
             onSubmit={handleReview}
-            intro={(
-                <>
-                    Store a file on the chain itself: publicly readable, or
-                    encrypted so only holders of your token can open it.
-                </>
-            )}
             status={mode === 'public' && formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -816,7 +807,7 @@ export function PublishFileForm({ walletId, onBack }) {
                                         >
                                             <TickerIcon tick={t.tick} chainId={t.chainId} size={20} />
                                             <code>{t.tick}</code>
-                                            {d ? <ChainBadge descriptor={d} size="sm" /> : t.chainId}
+                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
                                         </Button>
                                     );
                                 })}
@@ -832,6 +823,7 @@ export function PublishFileForm({ walletId, onBack }) {
                         onChange={setChainId}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
+                        hideNetworkKind
                     />
 
                     <div style={{ margin: 'var(--xc-space-3) 0' }}>

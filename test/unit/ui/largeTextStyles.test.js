@@ -103,7 +103,7 @@ describe('large text layout styles', () => {
         expect(receive).not.toMatch(/@media \(max-width: 480px\)/);
 
         const historyPhone = block(history, '@media not all and (min-width: 480px)');
-        expect(historyPhone).toMatch(/\.rowHeader,[\s\S]*?\.rowMeta\s*\{[^}]*flex-wrap:\s*wrap/);
+        expect(historyPhone).toMatch(/\.rowMeta\s*\{[^}]*flex-wrap:\s*wrap/);
         expect(historyPhone).toMatch(/\.detailsTable tbody\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
         expect(rule(history, '.resultsHeader')).toMatch(/flex-wrap:\s*wrap/);
         expect(rule(history, '.resultsHeader > div')).toMatch(/flex-wrap:\s*wrap/);

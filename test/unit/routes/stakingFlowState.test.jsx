@@ -89,6 +89,26 @@ function withMessaging(child, methods = messaging()) {
 afterEach(() => cleanup());
 
 describe('staking chooser and list read states', () => {
+    it('does not repeat a staking row network kind beside its chain overlay', async () => {
+        const chainId = 'bitcoin-regtest';
+        withMessaging(
+            <StakingList walletId="w" onOpenStake={() => {}} onNewStake={() => {}} onBack={() => {}} />,
+            messaging({
+                getAddressesByChain: vi.fn().mockResolvedValue({ [chainId]: [ADDRESS_ROW] }),
+                getStakesForAddress: vi.fn().mockResolvedValue([{
+                    action_index: 1,
+                    amount: '10',
+                    status: 'valid',
+                    _ownerAddress: ADDRESS,
+                }]),
+            }),
+        );
+
+        await screen.findByRole('listitem');
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+        expect(screen.queryByRole('button', { name: 'Filter by network' })).toBeNull();
+    });
+
     it('surfaces an address read failure instead of presenting an empty chooser', async () => {
         withMessaging(
             <StakeNew walletId="w" onPickValidator={() => {}} onPickContract={() => {}} onBack={() => {}} />,

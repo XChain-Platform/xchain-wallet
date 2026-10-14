@@ -3,13 +3,8 @@
     box-sizing: border-box;
     flex-shrink: 0;
     align-items: center;
-    gap: var(--xc-badge-gap);
-    height: var(--xc-badge-height-sm);
-    padding: 0 var(--xc-badge-padding-inline-sm);
-    border-radius: var(--xc-badge-radius);
-    background: color-mix(in srgb, var(--chain-color) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--chain-color) 25%, transparent);
-    font-size: var(--xc-badge-font-size-sm);
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
     color: var(--xc-text);
     font-weight: var(--xc-badge-font-weight);
     line-height: 1;
@@ -18,9 +13,7 @@
 }
 
 .md {
-    height: var(--xc-badge-height-md);
-    padding-inline: var(--xc-badge-padding-inline-md);
-    font-size: var(--xc-badge-font-size-md);
+    font-size: var(--xc-text-md);
 }
 
 .icon {
@@ -52,9 +45,4 @@
 .md .icon {
     width: var(--xc-badge-icon-size-md);
     height: var(--xc-badge-icon-size-md);
-}
-
-.network {
-    color: var(--xc-text-muted);
-    font-weight: 400;
 }

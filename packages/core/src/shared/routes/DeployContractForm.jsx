@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -915,7 +915,7 @@ export function DeployContractForm({ walletId, onBack }) {
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review publish'
-                    : `Publish contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
+                    : 'Publish contract'}
         />
     );
     const wrap = (children) => (
@@ -999,19 +999,20 @@ export function DeployContractForm({ walletId, onBack }) {
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Publish on ${descriptor.displayName}` : 'Publish')}
+                                : 'Publish'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>
-                    Publish contract {metaName ? `"${metaName}"` : ''} to{' '}
-                    {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
+                    Publish contract {metaName ? `"${metaName}"` : ''} with gas limit {actionParams.GAS_LIMIT}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -1135,7 +1136,7 @@ export function DeployContractForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1185,12 +1186,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 </Button>
             )}
         >
-            <NetworkField
-                value={chainId}
-                onChange={setChainId}
-                chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])}
-                chainRegistry={chainRegistry}
-            />
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField

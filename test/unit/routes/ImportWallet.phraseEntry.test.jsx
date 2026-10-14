@@ -60,7 +60,9 @@ describe('ImportWallet recovery phrase entry', () => {
     it('names the next missing field beside the disabled import action', () => {
         renderImport();
         const action = screen.getByRole('button', { name: 'Import' });
+        const phrase = screen.getByLabelText('Recovery phrase');
 
+        expect(phrase).toHaveAccessibleDescription(/Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words/);
         expect(action).toBeDisabled();
         expect(action).toHaveAttribute('aria-describedby', 'import-wallet-disabled-reason');
         expect(screen.getByRole('status')).toHaveTextContent('Enter a recovery phrase to continue.');

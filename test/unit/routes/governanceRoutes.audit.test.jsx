@@ -252,7 +252,7 @@ describe('governance route audit', () => {
             }),
         });
         mount(PollDetail, {
-            walletId: 'wallet-1', chainId: CHAIN, pollIndex: 7, onBack() {},
+            walletId: 'wallet-1', chainId: 'bitcoin-regtest', pollIndex: 7, onBack() {},
         }, messaging);
 
         expect(await screen.findByText('Ship it?')).toBeTruthy();
@@ -260,6 +260,7 @@ describe('governance route audit', () => {
         expect(screen.getAllByText('0: Yes')).toHaveLength(2);
         expect(screen.getByText('42 weight')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('shows the current ballot, delegation rules, change action, and block countdown', async () => {

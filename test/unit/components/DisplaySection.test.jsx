@@ -156,11 +156,14 @@ describe('DisplaySection', () => {
         const messaging = setup({}, { getTokenInfo });
         await screen.findByRole('heading', { name: 'Watched tokens (0)' });
 
+        expect(screen.getAllByRole('option').map((option) => option.textContent))
+            .not.toContain('Dogecoin (testnet)');
+
         fireEvent.change(screen.getByRole('combobox', { name: 'Token chain' }), { target: { value: 'dogecoin-testnet' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'MISSING' } });
         fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
 
-        expect(await screen.findByText('Token "MISSING" was not found on Dogecoin (testnet).')).toBeTruthy();
+        expect(await screen.findByText('Token "MISSING" was not found on Dogecoin.')).toBeTruthy();
         expect(getTokenInfo).toHaveBeenLastCalledWith({
             chainId: 'dogecoin-testnet',
             tick: 'MISSING',
@@ -174,16 +177,16 @@ describe('DisplaySection', () => {
             watchedTokens: ['dogecoin-testnet:WOW'],
             hiddenTokens: [],
         }));
-        expect(await screen.findByText('dogecoin-testnet:WOW')).toBeTruthy();
+        expect(await screen.findByText('Dogecoin:WOW')).toBeTruthy();
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'WOW' } });
         fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
-        expect(await screen.findByText('WOW is already watched on Dogecoin (testnet).')).toBeTruthy();
+        expect(await screen.findByText('WOW is already watched on Dogecoin.')).toBeTruthy();
         expect(getTokenInfo).toHaveBeenCalledTimes(2);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Remove watched token dogecoin-testnet:WOW' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove watched token Dogecoin:WOW' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenLastCalledWith({ watchedTokens: [] }));
-        expect(screen.queryByText('dogecoin-testnet:WOW')).toBeNull();
+        expect(screen.queryByText('Dogecoin:WOW')).toBeNull();
     });
 
     it('does not apply a watched-token lookup after its ticker changes', async () => {
@@ -214,9 +217,9 @@ describe('DisplaySection', () => {
 
         const search = await screen.findByRole('searchbox', { name: 'Search pinned and hidden tokens' });
         fireEvent.change(search, { target: { value: 'liteCOIN' } });
-        expect(screen.getByText('bitcoin-mainnet:XCP')).toBeInTheDocument();
-        await waitFor(() => expect(screen.queryByText('bitcoin-mainnet:XCP')).toBeNull());
-        expect(screen.getByText('litecoin-mainnet:LTC')).toBeInTheDocument();
+        expect(screen.getByText('Bitcoin:XCP')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByText('Bitcoin:XCP')).toBeNull());
+        expect(screen.getByText('Litecoin:LTC')).toBeInTheDocument();
 
         fireEvent.change(search, { target: { value: 'missing' } });
         expect(await screen.findByText('No pinned tokens match "missing".')).toBeInTheDocument();
@@ -224,8 +227,8 @@ describe('DisplaySection', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear settings token search' }));
         expect(search).toHaveValue('');
-        expect(screen.getByText('bitcoin-mainnet:XCP')).toBeInTheDocument();
+        expect(screen.getByText('Bitcoin:XCP')).toBeInTheDocument();
         fireEvent.keyDown(search, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Unpin bitcoin-mainnet:XCP' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Unpin Bitcoin:XCP' }));
     });
 });

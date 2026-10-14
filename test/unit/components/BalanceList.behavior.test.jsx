@@ -130,7 +130,7 @@ describe('BalanceList ordering and visibility', () => {
         const image = document.querySelector(`img[src="${imageUrl}"]`);
         expect(image).toHaveAttribute('alt', '');
         expect(image).toHaveAttribute('aria-hidden', 'true');
-        expect(image).toHaveStyle({ position: 'absolute', inset: '0' });
+        expect(image.closest('[data-asset-mark]')).not.toBeNull();
         expect(screen.queryByText('A')).toBeNull();
 
         fireEvent.error(image);
@@ -168,7 +168,8 @@ describe('BalanceList ordering and visibility', () => {
         );
 
         expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
-        expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
+        expect(screen.getByText('XCHAIN · Litecoin')).toBeInTheDocument();
+        expect(screen.queryByText(/regtest/i)).toBeNull();
     });
 
     it('keeps identical tickers keyed and selectable by chain', () => {
@@ -196,7 +197,7 @@ describe('BalanceList ordering and visibility', () => {
         }));
     });
 
-    it('keeps testnet and regtest labels beside their displayed amounts', () => {
+    it('shows testnet and regtest rows by ticker alone beside their amounts', () => {
         render(
             <BalanceList rows={[
                 row('TBTC', {
@@ -210,10 +211,11 @@ describe('BalanceList ordering and visibility', () => {
             ]} />,
         );
 
-        expect(screen.getByText('TBTC · testnet').closest('[role="listitem"]'))
+        expect(screen.getByText('TBTC', { selector: '[title]' }).closest('[role="listitem"]'))
             .toHaveTextContent('1.00000000');
-        expect(screen.getByText('RBTC · regtest').closest('[role="listitem"]'))
+        expect(screen.getByText('RBTC', { selector: '[title]' }).closest('[role="listitem"]'))
             .toHaveTextContent('1.00000000');
+        expect(screen.queryByText(/testnet|regtest/i)).toBeNull();
     });
 
     it('labels confirmed and pending amounts separately', () => {

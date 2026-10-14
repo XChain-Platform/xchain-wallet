@@ -45,6 +45,7 @@ describe('ListDetail metadata', () => {
         });
 
         await screen.findByText('Treasury recipients');
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         const details = container.querySelector('dl');
         const rows = Array.from(details.children).map((element) => element.textContent);
         const listIndexPosition = rows.indexOf('List index');

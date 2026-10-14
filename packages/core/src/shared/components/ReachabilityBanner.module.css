@@ -1,105 +1,58 @@
-/* §49.1 / §49.2 - Offline / degraded reachability banner. Sits above
-   the unlocked route surface. Two variants: degraded (yellow) and
-   offline (red). Layout-light so it works in both popup and web shells.
-*/
-
-.notice {
-    margin: var(--xc-space-2);
-}
+/* §49.1 / §49.2 - Compact reachability notice below the app header. */
 
 .banner {
     display: flex;
     align-items: center;
+    flex-wrap: nowrap;
     gap: var(--xc-space-2);
-    padding: var(--xc-card-pad);
-    border-radius: var(--xc-card-radius);
-    border: 1px solid;
-    font-size: var(--xc-text-sm);
-    box-sizing: border-box;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    padding-inline: var(--xc-space-2);
+    border-block: 1px solid;
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    white-space: nowrap;
+    margin-inline: var(--xc-notice-inset, var(--xc-space-3));
 }
 
-.degraded .banner,
-.degraded .detailPanel {
+.degraded {
     background: var(--xc-warning-bg, rgba(255, 196, 0, 0.10));
     border-color: var(--xc-warning, #d4a017);
     color: var(--xc-warning-text, #6e520a);
 }
 
-.offline .banner,
-.offline .detailPanel {
+.offline {
     background: var(--xc-danger-bg, rgba(220, 53, 69, 0.10));
     border-color: var(--xc-danger, #c33);
     color: var(--xc-danger-text, #5c1216);
 }
 
-.icon {
-    font-size: var(--xc-icon-sm);
-    flex-shrink: 0;
-}
-
-.title {
-    flex: 1;
+.message {
+    flex: 1 1 auto;
     min-width: 0;
-    font-weight: 600;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+.retry,
 .detailsToggle {
     min-height: var(--xc-tap-min);
-    padding: 0;
+    padding: 0 var(--xc-space-1);
     border: 0;
     background: transparent;
     color: inherit;
     cursor: pointer;
     font: inherit;
-    font-size: var(--xc-text-xs);
     font-weight: 600;
     text-decoration: underline;
-    flex-shrink: 0;
-}
-
-.detailPanel {
-    margin-top: var(--xc-space-1);
-    padding: var(--xc-space-2) var(--xc-card-pad);
-    border: 1px solid;
-    border-radius: var(--xc-card-radius);
-}
-
-.detail {
-    color: inherit;
-    opacity: 0.9;
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
-}
-
-.staleness {
-    font-style: italic;
-    margin-inline-start: var(--xc-space-1);
-}
-
-.retry {
-    /* Ten pixels preserves the compact action width; the spacing scale has no equivalent. */
-    padding: var(--xc-space-1) 10px;
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid currentColor;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--xc-text-xs);
-    flex-shrink: 0;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
+    text-underline-offset: 2px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.retry:hover {
-    background: rgba(0, 0, 0, 0.05);
+.retry {
+    flex: 0 0 auto;
 }
 
 .retry:disabled {
@@ -107,23 +60,64 @@
     opacity: 0.7;
 }
 
-/* §53 / Cluster K FOLLOWUP 2 - explicit focus ring. */
-.detailsToggle:focus-visible,
-.retry:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    /* Two pixels separates the focus ring; the spacing scale starts at four. */
-    outline-offset: 2px;
+.details {
+    position: relative;
+    flex: 0 0 auto;
 }
 
-@media (max-width: 480px) {
-    .banner {
-        max-height: min(12.5vh, 6rem);
-        padding-block: var(--xc-space-2);
-    }
+.detailsToggle {
+    list-style: none;
+}
+
+.detailsToggle::-webkit-details-marker {
+    display: none;
+}
+
+.coinList {
+    position: absolute;
+    z-index: 20;
+    inset-block-start: calc(100% + var(--xc-space-1));
+    inset-inline-end: 0;
+    min-width: 9rem;
+    margin: 0;
+    padding: var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised, var(--xc-surface));
+    color: var(--xc-text);
+    box-shadow: var(--xc-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.18));
+    list-style: none;
+}
+
+.coin {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-height: 28px;
+}
+
+.coin img,
+.coinFallback {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    border-radius: 50%;
+}
+
+.coinFallback {
+    background: currentColor;
+    opacity: 0.3;
+}
+
+.retry:focus-visible,
+.detailsToggle:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .retry {
+    .retry,
+    .detailsToggle {
         transition: none;
     }
 }

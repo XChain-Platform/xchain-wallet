@@ -16,8 +16,8 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
-    NetworkField,
     Icon,
     StatusMessage,
     FeeSelector,
@@ -141,13 +141,13 @@ function outsideAddressError(address, descriptor) {
     if (!address || !descriptor?.coin || !descriptor?.networkKind) return null;
     if (isValidAddressForChain(address, descriptor.coin, descriptor.networkKind)) return null;
     const chainName = COIN_NAME[descriptor.coin] || descriptor.coin;
-    // Name the coin it does look like, which beats a bare "invalid".
+    // Name the coin it does look like, which beats a bare "invalid". The
+    // network kind stays out of the copy; Settings owns that choice.
     const detected = detectAddressCoin(address);
     if (detected && detected !== descriptor.coin) {
         return `This looks like a ${COIN_NAME[detected] || detected} address, not a ${chainName} address.`;
     }
-    const where = descriptor.networkKind === 'mainnet' ? chainName : `${chainName} ${descriptor.networkKind}`;
-    return `This is not a valid ${where} address. Check it for typos.`;
+    return `This is not a valid ${chainName} address. Check it for typos.`;
 }
 
 /**
@@ -1219,17 +1219,19 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             ? 'Create unsigned transaction'
                             : hw
                                 ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                : 'Sign'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <p className={styles.hint}>{summaryLine}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Source</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={sourceAddress.address} />
@@ -1388,7 +1390,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                         + (feeFiat ? ` (${feeFiat})` : '')
@@ -1503,9 +1505,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
             )}
 
             {fromAddress ? (
@@ -1517,7 +1517,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             label="Dispenser address"
                             icon="addresses"
                             value={outsideAddress}
-                            placeholder={descriptor?.displayName ? `Any ${descriptor.displayName} address` : 'Any address on this chain'}
+                            placeholder="Any address on the active chain"
                             onChange={(e) => setOutsideAddress(e.target.value)}
                             error={outsideFormatError || undefined}
                             onIconClick={() => setAddressPickerOpen(true)}

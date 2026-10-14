@@ -481,6 +481,7 @@ function ChainFilterBar({ chains, value, onChange }) {
             </Button>
             {chains.map((cid) => {
                 const d = chainRegistry.get(cid);
+                if (!d) return null;
                 return (
                     <Button
                         type="button"
@@ -492,7 +493,7 @@ function ChainFilterBar({ chains, value, onChange }) {
                         aria-label={d?.displayName || cid}
                         onClick={() => onChange(cid)}
                     >
-                        {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
+                        <ChainBadge descriptor={d} size="sm" />
                     </Button>
                 );
             })}
@@ -517,12 +518,12 @@ function ChainGroup({
     const noSearchMatches = searchActive && hasUnfilteredRows && state.rows.length === 0;
     return (
         <section>
-            <SectionHeader
-                as="h3"
-                title={descriptor
-                    ? <ChainBadge descriptor={descriptor} size="sm" />
-                    : <span>{chainId}</span>}
-            />
+            {descriptor ? (
+                <SectionHeader
+                    as="h3"
+                    title={<ChainBadge descriptor={descriptor} size="sm" />}
+                />
+            ) : null}
             {state.loading ? (
                 <div role="status" aria-label={`Loading contracts on ${descriptor?.displayName || chainId}`}>
                     <Skeleton.List rows={3} />
@@ -535,7 +536,7 @@ function ChainGroup({
                             className={styles.entryDescription}
                             recovery={{ label: 'Try again', onAction: onRetry }}
                         >
-                            Couldn't load contracts on {descriptor?.displayName || chainId}. Try again.
+                            Couldn't load contracts. Try again.
                         </StatusMessage>
                     ) : null}
                     {state.rows.length === 0 ? (

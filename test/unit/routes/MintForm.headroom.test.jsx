@@ -104,6 +104,7 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         expect(await screen.findByText(/0 S18PROBE available to mint/)).toBeInTheDocument();
         // The old, wrong number must be nowhere on the screen.
         expect(screen.queryByText(/5,000 S18PROBE available/)).not.toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('offers no Max at the cap, so it cannot fill a rejectable amount', async () => {

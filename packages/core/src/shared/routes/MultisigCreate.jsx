@@ -401,7 +401,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>Configuration</dt>
                     <dd className={styles.detailsValue}>
@@ -420,7 +420,6 @@ export function MultisigCreate({ walletId, onBack }) {
             label="Create multisig"
             onSubmit={handleReview}
             sectioned
-            intro={'Multisig is currently available only on Bitcoin networks. Pick the network this multisig configuration belongs to, then add at least 2 cosigners. The current wallet contributes the "local" cosigner; external cosigners come in via xpub paste or hardware-pairing. To join someone else\'s multisig, open "Share this wallet as a cosigner" below and send them the values.'}
             status={composeError || submitError ? (
                 <>
                     {composeError ? (
@@ -443,12 +442,22 @@ export function MultisigCreate({ walletId, onBack }) {
             )}
         >
             <FormSection title="Cosigners">
+                <details>
+                    <summary>How multisig setup works</summary>
+                    <p className={styles.hint}>
+                        Multisig is available only on Bitcoin networks. Add at least 2 cosigners.
+                        The current wallet contributes the local cosigner; add external cosigners
+                        by pasting an xpub or pairing hardware. To join another multisig, open
+                        Share this wallet as a cosigner and send them the values.
+                    </p>
+                </details>
                 <ChainPicker
                     label="Network"
                     value={chainId}
                     onChange={setChainId}
                     chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                     chainRegistry={chainRegistry}
+                    hideNetworkKind
                 />
                 {rows.map((row, i) => (
                     <CosignerRow
@@ -504,7 +513,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>Configuration</dt>
                     <dd className={styles.detailsValue}>

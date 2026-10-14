@@ -26,6 +26,27 @@ function deferred() {
 }
 
 describe('MarketsList narrow layout', () => {
+    it('shows only the native asset icon for a non-mainnet selection', async () => {
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-regtest', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        await screen.findByText('No markets for BTC');
+        const selector = screen.getByRole('button', { name: /Change asset/ });
+        expect(selector.textContent).not.toMatch(/Bitcoin|BTC|regtest|testnet|Not mainnet/i);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+    });
+
     it('reaches and activates market actions in their visual order', async () => {
         const user = userEvent.setup();
         const onBack = vi.fn();

@@ -102,13 +102,17 @@ describe('CoSignerAccountList states', () => {
         const { onOpen } = mount(vi.fn().mockResolvedValue([{
             id: 'account-1',
             name: 'Build agent',
-            chainId: 'bitcoin-mainnet',
+            chainId: 'bitcoin-regtest',
             aggregateAddress: 'bc1pagentaccount',
             enabled: true,
         }]));
 
         await screen.findByText('Build agent');
+        const disclosure = screen.getByText('How agent accounts work').closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent('shares a 2-of-2 address');
         expect(screen.getByText('Active')).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/Bitcoin|regtest|testnet|not mainnet/i);
         fireEvent.click(screen.getByRole('button', { name: /Build agent/ }));
         expect(onOpen).toHaveBeenCalledWith('account-1');
     });

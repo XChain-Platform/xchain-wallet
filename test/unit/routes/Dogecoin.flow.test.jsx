@@ -301,7 +301,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
         ));
 
         expect(await screen.findByLabelText('Sent 12.5 DOGE')).toHaveTextContent('-12.5 DOGE');
-        expect(screen.getByRole('button', { name: /Send.*Confirmed/i })).toHaveTextContent('Dogecoin');
+        expect(screen.getByRole('button', { name: /Send.*Confirmed/i })).not.toHaveTextContent(/Dogecoin|regtest|testnet/i);
         expect(view.container.querySelector('[data-history-key]'))
             .toHaveAttribute('data-history-key', `${CHAIN_ID}:42:${OUR_ADDRESS}`);
         expect(messaging.getAddressHistory).toHaveBeenCalledWith({

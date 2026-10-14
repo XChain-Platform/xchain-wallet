@@ -642,18 +642,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 )}
             >
                 <p className={styles.summary}>
-                    Swap {giveSide} for {getSide}
-                    {descriptor ? ` on ${descriptor.displayName}` : ''}.
+                    Swap {giveSide} for {getSide}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Give chain" value={
-                        descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId
-                    } />
+                    {descriptor ? (
+                        <DetailRow label="Give chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
+                    ) : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Give amount" value={giveSide} />
-                    <DetailRow label="Get chain" value={
-                        descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId
-                    } />
+                    {descriptor ? (
+                        <DetailRow label="Get chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
+                    ) : null}
                     <DetailRow label="Get amount" value={getSide} />
                     {!giveOwnership && !getOwnership ? (
                         <DetailRow label="Rate" value={rateText} />
@@ -858,6 +857,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onChange={setChainId}
                     chainIds={chainIds}
                     chainRegistry={chainRegistry}
+                    hideNetworkKind
                 />
 
                 {fromAddress ? (
@@ -873,7 +873,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 ) : null}
             </FormSection>
 
-            <FormSection title="You give" description={descriptor?.displayName || chainId}>
+            <FormSection title="You give">
                 <TokenField
                     label="Give token"
                     value={giveTick && chainId ? { chainId, tick: giveTick } : null}
@@ -921,7 +921,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 ) : null}
             </FormSection>
 
-            <FormSection title="You get" description={descriptor?.displayName || chainId}>
+            <FormSection title="You get">
                 <TokenField
                     label="Get token"
                     value={getTick && chainId ? { chainId, tick: getTick } : null}

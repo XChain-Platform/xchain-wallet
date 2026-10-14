@@ -106,7 +106,7 @@ assert.match(
 
 for (const [label, path] of [
     ['WalletDetails', ['packages', 'core', 'src', 'shared', 'routes', 'WalletDetails.jsx']],
-    ['DemoBanner', ['packages', 'core', 'src', 'shared', 'components', 'DemoBanner.jsx']],
+    ['useDemoAutoWipe', ['packages', 'core', 'src', 'shared', 'hooks', 'useDemoAutoWipe.js']],
     ['Onboarding', ['packages', 'core', 'src', 'shared', 'routes', 'Onboarding.jsx']],
 ]) {
     assert.match(

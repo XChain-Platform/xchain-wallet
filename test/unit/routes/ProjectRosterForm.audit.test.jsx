@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 
-const CHAIN = 'dogecoin-mainnet';
+const CHAIN = 'dogecoin-testnet';
 const ADDRESS = {
     id: 'address-1',
     address: 'DProjectOwnerAddress',
@@ -57,6 +57,7 @@ describe('ProjectRosterForm editing validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
 
         expect(await screen.findByText('Wow!, FLAM1N-H0T-CHEET0S')).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('rejects malformed references and an overlong memo before review', async () => {

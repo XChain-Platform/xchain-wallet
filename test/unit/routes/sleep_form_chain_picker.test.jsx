@@ -32,7 +32,7 @@ const address = (id, value, coinType) => ({
     signerId: 'signer-1',
 });
 
-function mountSleepForm(overrides = {}) {
+function mountSleepForm(overrides = {}, initialChainId = BITCOIN) {
     const addresses = {
         [BITCOIN]: [address('btc', BITCOIN_ADDRESS, 0)],
         [LITECOIN]: [address('ltc', LITECOIN_ADDRESS, 2)],
@@ -51,7 +51,7 @@ function mountSleepForm(overrides = {}) {
             <SleepForm
                 walletId="wallet-1"
                 mode="address"
-                initialChainId={BITCOIN}
+                initialChainId={initialChainId}
                 onBack={() => {}}
             />
         </MessagingProvider>,
@@ -62,6 +62,18 @@ function mountSleepForm(overrides = {}) {
 afterEach(cleanup);
 
 describe('SleepForm address lock chain selection', () => {
+    it('does not render the selected network kind', async () => {
+        const chainId = 'bitcoin-regtest';
+        mountSleepForm({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [chainId]: [address('btc-regtest', 'bcrt1qexample', 1)],
+            }),
+        }, chainId);
+
+        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
     it('retargets the locked address and address picker when the network changes', async () => {
         mountSleepForm();
 
@@ -90,7 +102,7 @@ describe('SleepForm address lock chain selection', () => {
         expect(screen.getByText('Automatically at block 10,012. The address cannot wake itself early.')).toBeInTheDocument();
         expect(screen.getByText('12 blocks')).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
-        fireEvent.click(screen.getByRole('button', { name: /Lock address on/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
 
         await waitFor(() => {
             expect(messaging.sleepAction).toHaveBeenCalledWith(expect.objectContaining({
@@ -124,6 +136,6 @@ describe('SleepForm address lock chain selection', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
-        expect(screen.getByRole('button', { name: /Lock address on/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Lock address' })).toBeDisabled();
     });
 });

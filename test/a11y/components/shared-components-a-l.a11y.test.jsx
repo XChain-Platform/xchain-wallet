@@ -24,7 +24,6 @@ import { ConfirmActionModal } from '../../../packages/core/src/shared/components
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { ContactsPickerScreen } from '../../../packages/core/src/shared/components/ContactsPickerScreen.jsx';
 import { ContractConsentPanel } from '../../../packages/core/src/shared/components/ContractConsentPanel.jsx';
-import { DemoBanner } from '../../../packages/core/src/shared/components/DemoBanner.jsx';
 import { DemoExitConfirm } from '../../../packages/core/src/shared/components/DemoExitConfirm.jsx';
 import { DerivationPathCrossCheck } from '../../../packages/core/src/shared/components/DerivationPathCrossCheck.jsx';
 import { DiagnosticDetails } from '../../../packages/core/src/shared/components/DiagnosticDetails.jsx';
@@ -205,7 +204,6 @@ const fixtures = [
             <ContractConsentPanel manifest={{ status: 'declared', permissions: ['SEND'], maxTakeBps: 100 }} />
         </dl>
     )],
-    ['DemoBanner', () => withMessaging(<DemoBanner activeWalletId="demo-wallet" />)],
     ['DemoExitConfirm', () => (
         <DemoExitConfirm busy={false} error={null} onConfirm={noop} onCancel={noop} />
     )],

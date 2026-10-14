@@ -313,6 +313,11 @@
     border-top: var(--xc-table-row-divider);
 }
 
+/* Confirmation headers omit the redundant chain-name pill. */
+:global([data-testid='confirm-chain-badge']:empty) {
+    display: none;
+}
+
 @media not all and (min-width: 400px) {
     .betActions,
     .betWagerChoices {

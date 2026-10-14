@@ -20,6 +20,7 @@ const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 const SHEETS = [
     'packages/core/src/shared/components/BalanceList.module.css',
+    'packages/core/src/ui/AssetMark.module.css',
     'packages/core/src/shared/routes/StakingList.module.css',
 ];
 

@@ -20,12 +20,10 @@ const viewPrivateKeyStylesPath = join(sharedRoot, 'routes/ViewPrivateKey.module.
 const cardModules = [
     'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
-    'DemoBanner.module.css',
     'HwFirmwareBanner.module.css',
     'OwnerWithdrawWarning.module.css',
     'QueuedBroadcastBanner.module.css',
     'QueuedResultPanel.module.css',
-    'ReachabilityBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
 const routeModules = [

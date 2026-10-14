@@ -67,18 +67,19 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
 
     return wrap(
         <ListPage
-            intro={(
-                <>
-                    Agent accounts let an automated agent share a 2-of-2 address with
-                    this wallet. This wallet signs each request automatically when it
-                    fits the policy you set, and asks you to approve it. Bitcoin-only
-                    at launch.
-                </>
-            )}
             toolbar={accounts.length > 0
                 ? <Button variant="primary" onClick={onProvision}>New agent account</Button>
                 : null}
         >
+            {accounts.length > 0 ? (
+                <details>
+                    <summary>How agent accounts work</summary>
+                    <p className={styles.hint}>
+                        An automated agent shares a 2-of-2 address with this wallet. Requests that fit your policy
+                        are signed after your approval.
+                    </p>
+                </details>
+            ) : null}
             {accounts.length === 0 ? (
                 <EmptyState
                     title="No agent accounts yet"
@@ -99,7 +100,7 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                                     subtitle={<AddressText address={a.aggregateAddress} truncate />}
                                     trailing={(
                                         <span style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexShrink: 0 }}>
-                                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
                                             <span style={{
                                                 fontSize: '0.8em',
                                                 color: a.enabled ? 'var(--xc-success, green)' : 'var(--xc-text-muted)',

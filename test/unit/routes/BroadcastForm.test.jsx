@@ -264,8 +264,7 @@ describe('BroadcastForm success screen', () => {
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeTruthy();
         expect(screen.getByText('deadbeef')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
-        expect(screen.getByText('Litecoin')).toBeTruthy();
-        expect(screen.getByText('regtest')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/Litecoin|regtest|testnet|not mainnet/i);
         expect(screen.getByRole('link', { name: 'View on explorer' })).toHaveAttribute(
             'href',
             'http://localhost:18080/RLTC/tx/deadbeef',
@@ -354,7 +353,8 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         mountForm(LTC_CHAIN, LTC_ADDRESSES);
         await openRawTransaction(SEGWIT_TX);
 
-        expect(await screen.findByText(/Taproot output, which Litecoin does not support/)).toBeTruthy();
+        expect(await screen.findByText(/Taproot output that the active network does not support/)).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
         expect(screen.getByRole('button', { name: 'Broadcast transaction' })).toBeDisabled();
         expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
     });

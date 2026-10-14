@@ -60,7 +60,9 @@ function mount(child, messaging) {
 function expectNoEmptyDetailCells(container) {
     expect(container.textContent).not.toMatch(/\b(?:undefined|null|NaN)\b/);
     for (const cell of container.querySelectorAll('dd, td')) {
-        expect(cell.textContent.trim()).not.toBe('');
+        // An icon-only chain badge fills its cell with a named image instead of text.
+        const named = cell.querySelector('[role="img"][aria-label]')?.getAttribute('aria-label') || '';
+        expect(cell.textContent.trim() || named).not.toBe('');
     }
 }
 
@@ -113,7 +115,7 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        await screen.findByRole('heading', { name: 'Dispenser details' });
+        await waitFor(() => expect(valueBeside('Dispensing')).toHaveTextContent('-'));
         expect(valueBeside('Dispensing')).toHaveTextContent('-');
         expect(valueBeside('Payment')).toHaveTextContent('-');
         expect(valueBeside('Status')).toHaveTextContent('-');
@@ -139,7 +141,7 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        await screen.findByRole('heading', { name: 'Position details' });
+        await waitFor(() => expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN'));
         expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN');
         expect(valueBeside('Delegated key')).toHaveTextContent('None');
         const rewards = screen.getByRole('list');

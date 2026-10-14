@@ -226,7 +226,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                                                 network: d.networkKind,
                                             })}
                                     >
-                                        <ChainBadge descriptor={d} size="sm" />
+                                        <ChainBadge descriptor={d} size="sm" showName />
                                     </ChoiceControl>
                                 </li>
                             );

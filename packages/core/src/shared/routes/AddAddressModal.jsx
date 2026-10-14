@@ -117,7 +117,6 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         .filter(Boolean)
         .map((d) => ({
             chainId: d.id,
-            displayName: d.displayName,
             addressTypes: d.addressTypes,
             defaultAddressType: flowsLib.defaultAddressTypeForFormat(d, walletFormat),
             coin: d.coin,
@@ -247,6 +246,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                             onChange={changeCoin}
                             chainIds={coinOptions.map((c) => c.chainId)}
                             chainRegistry={chainRegistry}
+                            hideNetworkKind
                             disabled={busy}
                         />
                         <label className={styles.field}>

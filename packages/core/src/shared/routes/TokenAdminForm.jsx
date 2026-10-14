@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -18,7 +18,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -73,13 +73,9 @@ const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Doge
 // carries. Derived from the same map above so a new chain lands in both at once.
 const PROTOCOL_COIN_TICKERS = Object.values(PROTOCOL_COIN_TICKER);
 
-// "Bitcoin" on mainnet, "Bitcoin regtest" elsewhere. The registry's
-// displayName is the same string on every network, which is exactly the
-// distinction a wrong-network address needs spelled out.
 function chainLabelFor(descriptor) {
     if (!descriptor?.coin) return null;
-    const name = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
-    return descriptor.networkKind === 'mainnet' ? name : `${name} ${descriptor.networkKind}`;
+    return COIN_DISPLAY[descriptor.coin] || descriptor.coin;
 }
 
 // D-81: validate the TRANSFER destination against the chain the
@@ -1055,16 +1051,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             ? `Create unsigned transaction: ${MODE_LABEL_LOWER[mode]}`
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${MODE_LABEL_LOWER[mode]}`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${MODE_LABEL_LOWER[mode]}`}
+                                : `Sign: ${MODE_LABEL_LOWER[mode]}`}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -1284,11 +1282,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             )}
         >
             {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
+                <TickerIcon chainId={chainId} tick={ticker} size={32} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
             )}
 
             {fromAddress ? (
@@ -1467,7 +1463,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                     {currentHeight != null ? (
                         <p className={styles.hint}>
-                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Current block: {currentHeight.toLocaleString('en-US')}.
                             Dates above are rough estimates; real block times vary.
                         </p>
                     ) : null}
@@ -1547,7 +1543,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                     {currentHeight != null ? (
                         <p className={styles.hint}>
-                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Current block: {currentHeight.toLocaleString('en-US')}.
                             Date above is a rough estimate; real block times vary.
                         </p>
                     ) : null}

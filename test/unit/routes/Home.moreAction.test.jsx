@@ -119,15 +119,24 @@ describe('Home quick-action policy', () => {
             .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
     });
 
-    it('hides fund-handling actions from demo wallets and explains why', async () => {
+    it('explains the send restriction only after a demo user presses Send', async () => {
         markDemoWallet(WALLET.id);
         mount(handlers);
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Exchange']);
-        const reason = screen.getByText(/Demo wallets are read-only/);
-        expect(row.getAttribute('aria-describedby')).toBe(reason.id);
+            .toEqual(['Send', 'Exchange']);
+        expect(screen.queryByText("Demo wallets can't send. Create a real wallet to send."))
+            .toBeNull();
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Send' }));
+
+        expect(handlers.onSend).not.toHaveBeenCalled();
+        expect(screen.getByText("Demo wallets can't send. Create a real wallet to send."))
+            .toBeVisible();
+        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
+        expect(screen.getByRole('dialog', { name: 'Exit demo and delete its data?' }))
+            .toBeTruthy();
     });
 
     it('keeps watcher-supported actions and explains their unsigned behavior', async () => {

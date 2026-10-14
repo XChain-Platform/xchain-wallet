@@ -47,7 +47,7 @@ const CLAIM_ROWS = [
     { id: 2, amount: '100', status: 'rejected' },
 ];
 
-function mountForm(extra = {}, mode = 'claim-rewards') {
+function mountForm(extra = {}, mode = 'claim-rewards', chainId = 'bitcoin-mainnet') {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getRewardsForAddress: vi.fn().mockResolvedValue(REWARD_ROWS),
@@ -60,7 +60,7 @@ function mountForm(extra = {}, mode = 'claim-rewards') {
             MessagingProvider,
             { shell: 'web', messaging },
             React.createElement(StakingActionForm, {
-                mode, walletId: 'w', chainId: 'bitcoin-mainnet', onBack() {},
+                mode, walletId: 'w', chainId, onBack() {},
             }),
         ),
     );
@@ -120,6 +120,18 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
 });
 
 describe('StakingActionForm network picker', () => {
+    it('does not render the selected network kind', async () => {
+        const chainId = 'bitcoin-regtest';
+        mountForm({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [chainId]: ADDRESSES['bitcoin-mainnet'],
+            }),
+        }, 'claim-rewards', chainId);
+
+        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
     it('offers only Bitcoin chains for UNSTAKE and COLLECT', async () => {
         const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
         for (const mode of ['unstake', 'claim-rewards']) {

@@ -23,11 +23,16 @@ const { AdsNotice } = await import(
     '../../../packages/core/src/shared/components/AdsNotice.jsx'
 );
 
-function bitcoinSettings({ enabled = true, accumulatedSats = 12_345 } = {}) {
+function bitcoinSettings({
+    enabled = true,
+    accumulatedSats = 12_345,
+    chainId = 'bitcoin-mainnet',
+} = {}) {
+    const networkKind = defaultRegistry().get(chainId)?.networkKind || 'mainnet';
     const seeded = seedSettingsForChains(
-        createDefaultSettings(),
+        { ...createDefaultSettings(), activeNetwork: networkKind },
         defaultRegistry(),
-        ['bitcoin-mainnet'],
+        [chainId],
     );
     return {
         ...seeded,
@@ -36,8 +41,8 @@ function bitcoinSettings({ enabled = true, accumulatedSats = 12_345 } = {}) {
             enabled,
             perChain: {
                 ...seeded.ads.perChain,
-                'bitcoin-mainnet': {
-                    ...seeded.ads.perChain['bitcoin-mainnet'],
+                [chainId]: {
+                    ...seeded.ads.perChain[chainId],
                     accumulatedSats,
                 },
             },
@@ -74,6 +79,14 @@ describe('Automatic Donation System settings', () => {
         expect(screen.getByText(/About 25 outgoing transactions to reach the threshold, then sent with the next one/)).toBeTruthy();
         expect(screen.getByText('Pending donation').nextElementSibling.textContent)
             .toBe(`${(12_345).toLocaleString()} sats`);
+    });
+
+    it('does not repeat the active network kind in its chain heading', () => {
+        settings = bitcoinSettings({ chainId: 'bitcoin-testnet' });
+        render(<AdsSection />);
+
+        expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(screen.queryByText(/testnet/i)).toBeNull();
     });
 
     it('writes the switch and both donation choices', () => {

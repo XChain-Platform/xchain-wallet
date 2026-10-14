@@ -206,7 +206,7 @@ import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
@@ -2774,7 +2774,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             {desc ? (
                                 <div className={styles.successRow}>
                                     <dt>{t('send.fields.chain')}</dt>
-                                    <dd><ChainBadge descriptor={desc} /></dd>
+                                    <dd><ChainBadge descriptor={desc} showName={false} /></dd>
                                 </div>
                             ) : null}
                         </dl>
@@ -2874,9 +2874,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const softwareSignLabel = descriptor?.displayName
-            ? t('send.review.signOn', { device: descriptor.displayName })
-            : t('send.review.sign');
+        const softwareSignLabel = t('send.review.sign');
         return wrap(
             <FormPage
                 id="send-review-form"
@@ -2950,10 +2948,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         {t('send.review.details', { count: 6 + (decoded?.details?.length || 0) })}
                     </summary>
                     <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                        <dd className={styles.detailsValue}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                        </dd>
+                        {descriptor ? (
+                            <>
+                                <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                                <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                            </>
+                        ) : null}
                         <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                         <dd className={styles.detailsValue}>
                             <AddressText address={fromAddress.address} highlight />
@@ -3139,7 +3139,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             </DraftDiscardButton>
         </StatusMessage>
     ) : null;
-    const hasTokenSelected = !!chainId && !!tick.trim();
     const sendFormErrors = [];
     if (formError) {
         let id;
@@ -3311,19 +3310,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     <p className={styles.warning}>{lookalikeWarning}</p>
                 </div>
             ) : null}
-            {onChangeAsset ? (
-                <TokenField
-                    label={t('send.fields.token')}
-                    value={hasTokenSelected ? { chainId, tick: tick.trim().toUpperCase() } : null}
-                    onOpenPicker={() => onChangeAsset({
-                        chainId,
-                        tick: tick.trim(),
-                        address: toAddress,
-                        amount,
-                        feeSelection: feePick,
-                    })}
-                />
-            ) : (
+            {!onChangeAsset ? (
                 <Input
                     id="send-token"
                     label={t('send.fields.token')}
@@ -3333,7 +3320,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     autoComplete="off"
                     autoCapitalize="characters"
                 />
-            )}
+            ) : null}
             <AmountField
                 size="md"
                 id="send-amount"
@@ -3410,13 +3397,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                         : undefined)}
                             />
                             {perRecipientToken ? (
-                                <TokenField
+                                <AssetIconPicker
                                     label={t('send.recipient.tokenLabel', { number: i + 2 })}
-                                    value={chainId && (leg.tick.trim() || tick.trim()) ? {
-                                        chainId,
-                                        tick: (leg.tick.trim() || tick.trim()).toUpperCase(),
-                                    } : null}
-                                    onOpenPicker={() => setTokenPickerRecipientId(leg.id)}
+                                    chainId={chainId}
+                                    tick={(leg.tick.trim() || tick.trim()).toUpperCase()}
+                                    onOpen={() => setTokenPickerRecipientId(leg.id)}
                                     error={recipientErrors[leg.id]?.tick}
                                 />
                             ) : null}
@@ -3738,7 +3723,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     description={rbfSupported
                         ? t('send.rbf.enabledHint')
                         : t('send.rbf.unsupported', {
-                            chain: descriptor?.displayName ?? t('send.rbf.thisChain'),
+                            chain: t('send.rbf.thisChain'),
                         })}
                     aria-label={t('send.rbf.label')}
                     checked={rbfForSend}
@@ -3757,6 +3742,24 @@ function DetailRow({ label, value }) {
             <dt className={styles.detailsLabel}>{label}</dt>
             <dd className={styles.detailsValue}>{value}</dd>
         </>
+    );
+}
+
+function AssetIconPicker({ chainId, tick, label, onOpen, error }) {
+    const accessibleName = tick ? `${label}: ${tick}. Change asset` : `${label}: Choose asset`;
+    return (
+        <div className={styles.assetPickerControl}>
+            <button
+                type="button"
+                className={styles.assetPickerButton}
+                onClick={onOpen}
+                aria-label={accessibleName}
+                aria-invalid={error ? 'true' : undefined}
+            >
+                {chainId && tick ? <TickerIcon chainId={chainId} tick={tick} size={40} /> : <Icon.TokenIcon />}
+            </button>
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+        </div>
     );
 }
 
@@ -3792,50 +3795,45 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset, 
             type: 'button',
             onClick: onChangeAsset,
             'aria-label': `Change asset (currently ${heroName})`,
-            className: `${styles.heroIconWrap} ${styles.heroIconWrapInteractive}`,
+            className: `${styles.heroIconWrap} ${styles.heroAsset} ${styles.heroIconWrapInteractive}`,
         }
-        : { className: styles.heroIconWrap, 'aria-hidden': 'true' };
+        : { className: `${styles.heroIconWrap} ${styles.heroAsset}`, 'aria-hidden': 'true' };
     return (
-        <div className={styles.heroWrap}>
-            <IconTag {...iconProps}>
-                <span
-                    className={styles.heroIconLetter}
-                    style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
+        <IconTag {...iconProps}>
+            <span
+                className={styles.heroIconLetter}
+                style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
+                aria-hidden="true"
+            >
+                {tickTrim.slice(0, 1).toUpperCase()}
+            </span>
+            {isNative && chainIconLarge ? (
+                <img
+                    src={chainIconLarge}
+                    alt=""
                     aria-hidden="true"
-                >
-                    {tickTrim.slice(0, 1).toUpperCase()}
-                </span>
-                {isNative && chainIconLarge ? (
-                    <img
-                        src={chainIconLarge}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.heroIconImg}
-                        style={{ position: 'absolute', inset: 0 }}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                ) : imageUrl ? (
-                    <img
-                        src={imageUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.heroIconImg}
-                        style={{ position: 'absolute', inset: 0 }}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                ) : null}
-                {!isNative && chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        className={styles.heroChainOverlay}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                ) : null}
-            </IconTag>
-            {heroName ? (
-                <div className={styles.heroName} title={heroName}>{heroName}</div>
+                    className={styles.heroIconImg}
+                    style={{ position: 'absolute', inset: 0 }}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+            ) : imageUrl ? (
+                <img
+                    src={imageUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.heroIconImg}
+                    style={{ position: 'absolute', inset: 0 }}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
             ) : null}
-        </div>
+            {!isNative && chainIconUrl ? (
+                <img
+                    src={chainIconUrl}
+                    alt=""
+                    className={styles.heroChainOverlay}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+            ) : null}
+        </IconTag>
     );
 }

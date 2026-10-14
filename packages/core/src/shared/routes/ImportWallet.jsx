@@ -14,9 +14,9 @@ import {
     Screen,
     Button,
     Checkbox,
+    ChainPicker,
     FormPage,
     Input,
-    Select,
     Textarea,
     Icon,
     ListPage,
@@ -232,6 +232,10 @@ export function ImportWallet({
     const wifChains = useSupportedChains().filter(
         (descriptor) => Number.isInteger(descriptor.wifVersionByte),
     );
+    // ChainPicker resolves ids through a registry; the supported list is the only one this lane needs.
+    const wifChainRegistry = {
+        get: (id) => wifChains.find((descriptor) => descriptor.id === id),
+    };
 
     useEffect(() => {
         headingRef.current?.focus();
@@ -719,6 +723,13 @@ export function ImportWallet({
         ? 0
         : normalizedMnemonic.split(' ').length;
     const detectedPhraseFormat = phraseFormat(normalizedMnemonic);
+    const phraseHint = isFreeWallet
+        ? (isFull
+            ? t('importWallet.freeWallet.fullSubtitle')
+            : t('importWallet.freeWallet.subtitle'))
+        : (isFull
+            ? t('importWallet.phrase.fullSubtitle')
+            : t('importWallet.phrase.subtitle'));
     const activeWord = wordRangeAt(mnemonic, mnemonicCursor);
     const wordSuggestions = activeWord.prefix.length < 2 || BIP39_WORDS.has(activeWord.prefix)
         ? []
@@ -884,23 +895,17 @@ export function ImportWallet({
                 : lane === 'wif'
                     ? handleWifSubmit
                     : handleSubmit}
-            description={isFreeWallet
+            /* The phrase and key lanes carry their guidance as field hints, so
+               only the backup lane keeps a page description. */
+            description={!isFreeWallet && lane === 'backup'
                 ? (isFull
-                    ? t('importWallet.freeWallet.fullSubtitle')
-                    : t('importWallet.freeWallet.subtitle'))
-                : lane === 'backup'
-                    ? (isFull
-                        ? (mode === 'add'
-                            ? t('importWallet.backup.addFullSubtitle')
-                            : t('importWallet.backup.replaceFullSubtitle'))
-                        : (mode === 'add'
-                            ? t('importWallet.backup.addSubtitle')
-                            : t('importWallet.backup.replaceSubtitle')))
-                    : lane === 'wif'
-                        ? t('importWallet.wif.subtitle')
-                        : (isFull
-                            ? t('importWallet.phrase.fullSubtitle')
-                            : t('importWallet.phrase.subtitle'))}
+                    ? (mode === 'add'
+                        ? t('importWallet.backup.addFullSubtitle')
+                        : t('importWallet.backup.replaceFullSubtitle'))
+                    : (mode === 'add'
+                        ? t('importWallet.backup.addSubtitle')
+                        : t('importWallet.backup.replaceSubtitle')))
+                : undefined}
             status={formStatus}
             actions={formActions}
         >
@@ -1105,6 +1110,7 @@ export function ImportWallet({
                 onDrop={handleFileDrop}
             >
                 <Textarea
+                    hint={phraseHint}
                     id="xc-mnemonic"
                     ref={textareaRef}
                     size={isFull ? 'lg' : 'md'}
@@ -1240,6 +1246,7 @@ export function ImportWallet({
                     <Input
                         type="password"
                         label={t('importWallet.wif.key')}
+                        hint={t('importWallet.wif.subtitle')}
                         value={wif}
                         onChange={(e) => {
                             setWif(e.target.value);
@@ -1249,21 +1256,17 @@ export function ImportWallet({
                         spellCheck={false}
                         disabled={busy}
                     />
-                    <Select
+                    <ChainPicker
                         label={t('importWallet.wif.chain')}
                         value={wifChainId}
-                        onChange={(e) => {
-                            setWifChainId(e.target.value);
+                        onChange={(chainId) => {
+                            setWifChainId(chainId);
                             if (error) setError(null);
                         }}
+                        chainIds={wifChains.map((descriptor) => descriptor.id)}
+                        chainRegistry={wifChainRegistry}
                         disabled={busy}
-                    >
-                        {wifChains.map((descriptor) => (
-                            <option key={descriptor.id} value={descriptor.id}>
-                                {descriptor.displayName} ({descriptor.networkKind})
-                            </option>
-                        ))}
-                    </Select>
+                    />
                     <Input
                         label={t('renameWallet.name')}
                         value={name}

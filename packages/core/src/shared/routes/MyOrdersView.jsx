@@ -423,8 +423,10 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         {chip}
                     </div>
                     <div className={L.rowMeta}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        {' · #'}{detailText(it.row.action_index)}
+                        {descriptor ? (
+                            <><ChainBadge descriptor={descriptor} size="sm" showName={false} /> {'· '}</>
+                        ) : null}
+                        {'#'}{detailText(it.row.action_index)}
                         {' · '}<AddressText address={it.owner.address} />
                     </div>
                     {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
@@ -612,7 +614,7 @@ function OrderActionPanel({
                 {...lane.confirmProps}
                 confirmAction={withFormattedExpiration(lane.confirmProps.confirmAction)}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 signerReady={signerReady}
                 hintClassName={F.hint}
             />
@@ -685,7 +687,7 @@ function OrderActionPanel({
             </p>
             <dl className={F.detailsList}>
                 <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
                 <dt className={F.detailsLabel}>Order</dt>
                 <dd className={F.detailsValue}>#{detailText(row.action_index)}</dd>
                 <dt className={F.detailsLabel}>From</dt>

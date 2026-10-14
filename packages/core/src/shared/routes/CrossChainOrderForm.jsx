@@ -218,10 +218,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             return `A cross-chain order cannot give native ${giveCoinTicker}. Pick a token to offer.`;
         }
         if (getTick && getTick.trim().toUpperCase() === getCoinTicker) {
-            return `A cross-chain order cannot get native ${getCoinTicker}; ask for a token on ${getDescriptor?.displayName || getChainId}.`;
+            return `A cross-chain order cannot get native ${getCoinTicker}; ask for a token on the get chain.`;
         }
         return null;
-    }, [giveCoinTicker, getCoinTicker, giveTick, getTick, getDescriptor, getChainId]);
+    }, [giveCoinTicker, getCoinTicker, giveTick, getTick]);
 
     function guardBeforeSign() {
         if (!giveChainId || !fromAddress) { setFormError('Pick a source address first.'); return false; }
@@ -232,7 +232,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
         if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         const ga = getAddress.trim();
-        if (!ga) { setFormError(`Receive address on ${getDescriptor?.displayName || 'the get chain'} is required.`); return false; }
+        if (!ga) { setFormError('Receive address on the get chain is required.'); return false; }
         if (ga.includes('|') || ga.includes(';')) { setFormError('Receive address is invalid.'); return false; }
         if (expMode === 'custom') {
             const raw = expInput.trim();
@@ -430,8 +430,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     </>
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
                 <p className={styles.hint}>
-                    Your {giveTick.trim().toUpperCase()} is escrowed on {giveDescriptor?.displayName}. The network
-                    matches this order automatically against offers on {getDescriptor?.displayName}; it may fill in
+                    Your {giveTick.trim().toUpperCase()} is escrowed on the give chain. The network
+                    matches this order automatically against offers on the get chain; it may fill in
                     parts, and each fill is released from escrow on both chains with no further transaction from you.
                 </p>
                 <div className={styles.actions}>
@@ -496,20 +496,19 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         >
                             {isWatcherMode ? 'Create unsigned transaction'
                                 : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : (giveDescriptor ? `Place order on ${giveDescriptor.displayName}` : 'Place order')}
+                                    : 'Place order'}
                         </Button>
                     </>
                 )}
             >
                 <p className={styles.summary}>
-                    Offer {giveOwnership ? `ownership of ${giveTick}` : `${giveAmount} ${giveTick}`} on {giveDescriptor?.displayName || giveChainId} for
-                    {' '}{getOwnership ? `ownership of ${getTick}` : `${getAmount} ${getTick}`} on {getDescriptor?.displayName || getChainId}.
+                    Review the offered and requested assets before signing.
                 </p>
                 {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Give chain" value={giveDescriptor ? <ChainBadge descriptor={giveDescriptor} size="sm" /> : giveChainId} />
+                    {giveDescriptor ? <DetailRow label="Give chain" value={<ChainBadge descriptor={giveDescriptor} size="sm" />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
-                    <DetailRow label="Get chain" value={getDescriptor ? <ChainBadge descriptor={getDescriptor} size="sm" /> : getChainId} />
+                    {getDescriptor ? <DetailRow label="Get chain" value={<ChainBadge descriptor={getDescriptor} size="sm" />} /> : null}
                     <DetailRow label="Receive at" value={<AddressText address={getAddress} />} />
                     <DetailRow label="Expiration" value={expMode === 'custom' && expInput.trim() ? new Date(expInput).toLocaleString() : 'Default window'} />
                     {memo ? <DetailRow label="Memo" value={memo} /> : null}
@@ -544,13 +543,6 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             label="Create cross-chain order"
             onSubmit={handleReview}
             sectioned
-            intro={(
-                <>
-                    Your order waits on the network&apos;s order book and fills automatically, possibly in parts,
-                    as matching offers arrive.
-                    For an all-or-nothing single fill use Cross-chain swap.
-                </>
-            )}
             status={validationError || formError ? (
                 <>
                     {validationError ? <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage> : null}
@@ -571,6 +563,13 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 </>
             )}
         >
+            <details>
+                <summary>How orders fill</summary>
+                <p className={styles.hint}>
+                    The order waits on the network&apos;s order book and fills automatically, possibly in parts.
+                    Use Cross-chain swap for an all-or-nothing single fill.
+                </p>
+            </details>
             <FormSection title="You give">
                     <ChainPicker
                         label="Give chain"

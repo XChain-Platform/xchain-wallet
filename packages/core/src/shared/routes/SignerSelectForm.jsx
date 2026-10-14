@@ -35,7 +35,7 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
-import { FormPage, FormSection, RadioGroup } from '@xchain-wallet/core/ui';
+import { FormPage, FormSection, InfoTip, RadioGroup } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -126,9 +126,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     return (
         <FormPage as="div" sectioned label={t('signerSelect.choose')}>
             <FormSection title={t('signerSelect.choose')}>
-                <p style={INTRO_STYLE}>
-                    {t('signerSelect.intro')}
-                </p>
+                <InfoTip label={t('signerSelect.intro')} />
                 {isWatcherMode ? (
                     <p role="note" style={WATCH_ONLY_STYLE}>
                         {t('signerSelect.watcherNote')}
@@ -151,12 +149,6 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         </FormPage>
     );
 }
-
-const INTRO_STYLE = {
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-xs)',
-    margin: '0 0 var(--xc-space-2)',
-};
 
 const WATCH_ONLY_STYLE = {
     color: 'var(--xc-warning-fg, var(--xc-text))',

@@ -19,7 +19,6 @@ import {
     Icon,
     Input,
     ListPage,
-    ListRow,
     PageHeader,
     RadioGroup,
     Screen,
@@ -68,6 +67,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
+import { ActivityRow } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import {
     applyHistoryFilters,
@@ -3032,19 +3032,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
         <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
     )]);
 
-    // Network uses the same badge as list rows so custom chain names and
-    // non-mainnet kinds come from the descriptor rather than id parsing.
-    if (entry.chainId) {
-        const descriptor = chainRegistry.get(entry.chainId);
-        rows.push(['Network', (
-            <span className={styles.copyableValue}>
-                {descriptor
-                    ? <ChainBadge descriptor={descriptor} size="sm" />
-                    : <span>{entry.chainId}</span>}
-            </span>
-        )]);
-    }
-    // Hero stays minimal: Action, Status, Network, Time only. Block,
+    // Hero stays minimal: Action, Status, and Time only. Block,
     // Index, Tx hash, Source, Destination, Amount, Memo, and every
     // per-action field live in the Details tab below.
     if (entry.timestamp) rows.push(['Time', formatTimestamp(entry.timestamp)]);
@@ -3745,105 +3733,76 @@ function contractRowLabel(entry) {
 export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
-    const peerAddress = peerAddressOfEntry(entry);
-    const rowAddress = peerAddress || entry.source || '-';
+    const actionKind = classifyEntryAction(entry, walletAddresses);
     const receiveLabel = entry.receiveLabel
-        && classifyEntryAction(entry, walletAddresses) === 'receive'
+        && actionKind === 'receive'
         ? entry.receiveLabel
         : '';
+    const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });
+    const rawTick = entry.raw?.tick ?? entry.raw?.TICK ?? entry.raw?.token;
+    const tick = String(settledAmount?.tick || rawTick || nativeTick || '?');
+    const amount = settledAmount ? (
+        <span
+            data-history-amount={settledAmount.direction || 'unknown'}
+            aria-label={formatHistoryAmountForSpeech(
+                settledAmount.amount,
+                settledAmount.tick,
+                settledAmount.direction,
+            )}
+        >
+            {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+        </span>
+    ) : entry.blockIndex ? tick : (
+        <>
+            <PendingRowLabel entry={entry} />
+            <PendingAmountLabel entry={entry} />
+        </>
+    );
+    const contextLabel = contractRowLabel(entry)
+        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '')
+        || entry.source
+        || '';
+    const linkedTo = entry.link
+        ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
+        : '';
+    const rowDescription = entry.blockIndex ? [
+        t('history.row.block', { block: formatDecimalAmount(entry.blockIndex) }),
+        chainTip ? t('history.row.confirmations', {
+            count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
+        }) : '',
+    ].filter(Boolean).join(', ') : '';
     return (
         <li data-history-key={entry.key}>
-            <ListRow
+            <ActivityRow
                 onClick={() => onClick(entry)}
                 data-history-row
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
                 aria-expanded={selected}
-                leading={(
+                chainId={entry.chainId}
+                tick={tick}
+                isNative={tick === nativeTick}
+                label={actionDisplayLabel(actionKind) || actionDisplayLabel(entry.action)}
+                context={(
                     <>
-                        {showConnector ? (
-                            <span className={styles.connector} aria-hidden="true" />
-                        ) : null}
-                        {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{entry.chainId}</span>}
-                    </>
-                )}
-                title={(
-                    <span className={styles.rowHeader}>
-                        <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
-                        {entry.link ? (
-                            <span
-                                className={styles.crosschainBadge}
-                                title={t('history.row.linkedTo', {
-                                    ticker: entry.link.peerCoinTicker,
-                                    index: entry.link.peerActionIndex,
-                                })}
-                            >
-                                🔗
-                            </span>
-                        ) : null}
-                        <StatusPill status={classifyEntryStatus(entry)} />
+                        {linkedTo ? <span role="img" aria-label={linkedTo} title={linkedTo}>🔗</span> : null}
                         {verify ? (
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
                         ) : null}
-                    </span>
+                        {contextLabel ? <span title={contextLabel}>{contextLabel}</span> : null}
+                    </>
                 )}
-                subtitle={(
-                    <span className={styles.rowDetails}>
-                        <span className={styles.rowSourceAddress} title={rowAddress === '-' ? undefined : rowAddress}>
-                            {rowAddress}
-                        </span>
-                        {receiveLabel ? (
-                            <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
-                        ) : null}
-                        {contractRowLabel(entry) ? (
-                            <span className={styles.rowContractLabel}>
-                                {contractRowLabel(entry)}
-                            </span>
-                        ) : null}
-                    </span>
-                )}
-                trailing={(
-                    <span className={styles.rowMeta}>
-                        {entry.blockIndex ? (
-                            <>
-                                <span>{t('history.row.block', {
-                                    block: formatDecimalAmount(entry.blockIndex),
-                                })}</span>
-                                {settledAmount ? (
-                                    <span
-                                        className={styles.pendingAmount}
-                                        data-history-amount={settledAmount.direction || 'unknown'}
-                                        aria-label={formatHistoryAmountForSpeech(
-                                            settledAmount.amount,
-                                            settledAmount.tick,
-                                            settledAmount.direction,
-                                        )}
-                                    >
-                                        {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
-                                    </span>
-                                ) : null}
-                                {chainTip ? (
-                                    <span className={styles.confirmationsPill}>
-                                        {t('history.row.confirmations', {
-                                            count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
-                                        })}
-                                    </span>
-                                ) : null}
-                            </>
-                        ) : (
-                            <>
-                                <PendingRowLabel entry={entry} />
-                                <PendingAmountLabel entry={entry} />
-                            </>
-                        )}
-                        {entry.timestamp ? (
-                            <RelativeTime
-                                className={styles.rowRelativeTime}
-                                timestamp={entry.timestamp}
-                            />
-                        ) : null}
-                    </span>
-                )}
-                chevron={<DoubleChevron direction={selected ? 'up' : 'down'} />}
+                amount={amount}
+                status={classifyEntryStatus(entry)}
+                statusLabels={{
+                    confirmed: t('history.status.confirmed'),
+                    failed: t('history.status.failed'),
+                    pending: t('history.status.pending'),
+                }}
+                timestamp={entry.timestamp}
+                selected={selected}
+                aria-description={rowDescription || undefined}
+                decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}
+                trailing={<DoubleChevron direction={selected ? 'up' : 'down'} />}
             />
             {selected ? (
                 <DetailCard
@@ -3870,12 +3829,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
 function GroupCard({ item, expanded, onToggle }) {
     const [balancesHidden] = useBalancesHidden();
     const d = chainRegistry.get(item.leader.chainId);
-    // §28.3: link-pair groups span two chains; surface both badges so
-    // the user sees the cross-chain relationship without expanding.
-    // Other subkinds keep their single-chain header.
     const isLinkPair = item.subkind === 'link-pair';
-    const peer = isLinkPair ? item.members[0] : null;
-    const peerDescriptor = peer ? chainRegistry.get(peer.chainId) : null;
     const newest = item.members[0];
     // Only issue-mint group summaries embed a financial amount
     // ("Launched TICK (supply 12345)"); strip the supply parenthetical
@@ -3884,38 +3838,32 @@ function GroupCard({ item, expanded, onToggle }) {
     const displaySummary = (balancesHidden && item.subkind === 'issue-mint')
         ? stripSupplyParenthetical(item.summary)
         : item.summary;
+    const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(item.leader.chainId) });
+    const tick = String(item.leader.raw?.tick ?? item.leader.raw?.TICK ?? nativeTick ?? '?');
     return (
-        <ListRow
+        <ActivityRow
             onClick={onToggle}
             data-history-row
             className={`${styles.row} ${styles.groupCard} ${expanded ? styles.groupCardExpanded : ''}`}
             aria-expanded={expanded}
-            leading={(
-                <>
-                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{item.leader.chainId}</span>}
-                    {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
-                        <>
-                            <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
-                            <ChainBadge descriptor={peerDescriptor} size="sm" />
-                        </>
-                    ) : null}
-                </>
-            )}
-            title={(
-                <span className={styles.rowHeader}>
-                    <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
-                    {!isLinkPair ? (
-                        <span className={styles.groupCount}>{item.members.length}</span>
-                    ) : null}
-                </span>
-            )}
-            subtitle={<span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>}
-            trailing={newest?.timestamp ? (
-                <RelativeTime timestamp={newest.timestamp}>
-                    {(when) => t('history.group.latest', { when })}
-                </RelativeTime>
-            ) : '-'}
-            chevron={<DoubleChevron direction={expanded ? 'up' : 'down'} />}
+            chainId={item.leader.chainId}
+            tick={tick}
+            isNative={tick === nativeTick}
+            label={groupBadgeLabel(item.subkind)}
+            context={isLinkPair ? 'Linked' : `${item.members.length}`}
+            amount={displaySummary}
+            status={classifyEntryStatus(item.leader)}
+            statusLabels={{
+                confirmed: t('history.status.confirmed'),
+                failed: t('history.status.failed'),
+                pending: t('history.status.pending'),
+            }}
+            timestamp={newest?.timestamp}
+            selected={expanded}
+            aria-description={newest?.timestamp
+                ? t('history.group.latest', { when: formatTimestamp(newest.timestamp) })
+                : undefined}
+            trailing={<DoubleChevron direction={expanded ? 'up' : 'down'} />}
         />
     );
 }
@@ -4030,21 +3978,6 @@ function shortenAddress(addr) {
     if (!addr) return '';
     if (addr.length <= 26) return addr;
     return `${addr.slice(0, 16)}…${addr.slice(-8)}`;
-}
-
-/**
- * Per-row success / error / pending indicator. Reads the entry's
- * classified status and renders a colored pill so the user can scan a
- * long list and pick out failures at a glance.
- */
-function StatusPill({ status }) {
-    if (status === 'confirmed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title={t('history.status.confirmed')}>{t('history.status.confirmed')}</span>;
-    }
-    if (status === 'failed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title={t('history.status.failed')}>{t('history.status.failed')}</span>;
-    }
-    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title={t('history.status.pending')}>{t('history.status.pending')}</span>;
 }
 
 function formatTimestamp(ts) {

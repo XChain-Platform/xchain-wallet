@@ -171,7 +171,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         openAdvanced();
         // Wait for the tip so the future-block rail has something to
         // compare against (the form must not block while it is null).
-        await waitFor(() => expect(screen.getByText(/Current block on/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
         // Exact match: "Description (optional)" is the free-text field,
         // "Description" on its own is the lock-matrix row.
@@ -210,7 +210,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard({ divisibility: 8 });
         await driveToCustomDetails();
         openAdvanced();
-        await waitFor(() => expect(screen.getByText(/Current block on/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
         fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
             target: { value: 'XCHAIN' },
@@ -245,7 +245,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard({ divisibility: null });
         await driveToCustomDetails();
         openAdvanced();
-        await waitFor(() => expect(screen.getByText(/Current block on/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
         fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
             target: { value: 'GHOST' },

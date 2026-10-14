@@ -171,6 +171,12 @@ describe('TotalBalanceHero message formatting', () => {
 });
 
 describe('TotalBalanceHero refresh status', () => {
+    it('renders the current update label once', () => {
+        mount({ lastSyncedAt: Date.now() });
+
+        expect(screen.getAllByText('Updated just now')).toHaveLength(1);
+    });
+
     it('shows one shared status using the oldest balance or price update', () => {
         const onRefresh = vi.fn();
         const lastSyncedAt = Date.now() - 2 * 60_000;
@@ -204,9 +210,12 @@ describe('TotalBalanceHero responsive layout', () => {
         mount();
 
         const label = screen.getByText('Active address balance');
+        const region = screen.getByRole('region', { name: 'Active address balance' });
         const total = screen.getByText('$1,234.56');
         const action = screen.getByRole('button', { name: 'Hide balance' });
 
+        expect(region).toHaveAttribute('aria-labelledby', label.id);
+        expect(region).not.toHaveAttribute('aria-label');
         expect(label.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
         expect(total.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING)

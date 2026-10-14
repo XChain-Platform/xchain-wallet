@@ -317,42 +317,6 @@
     flex-direction: column;
 }
 
-.walletSwitcher {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-4);
-    background: transparent;
-    border: 0;
-    color: var(--xc-text);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    text-align: start;
-    cursor: pointer;
-}
-
-.walletSwitcher:hover,
-.walletSwitcher:focus-visible {
-    background: var(--xc-surface);
-    outline: none;
-}
-
-.walletSwitcher:focus-visible {
-    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
-    outline-offset: -2px;
-}
-
-.walletName {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 @media (prefers-contrast: more) {
     .itemActive {
         outline: 2px solid currentColor;
@@ -399,10 +363,9 @@
     --xc-notice-inset: var(--xc-space-6);
 }
 
-/* The brand wordmark and the wallet switcher have no icon-only form.
-   Both stay reachable from the app header at this width. */
-.layout[data-xc-tier='rail'] .brand,
-.layout[data-xc-tier='rail'] .walletSwitcher {
+/* The brand wordmark has no icon-only form. The app header keeps the
+   product identity visible at this width. */
+.layout[data-xc-tier='rail'] .brand {
     display: none;
 }
 

@@ -236,9 +236,7 @@ function ObligationRow({ row, onPay }) {
         <li className={styles.row}>
             <div className={styles.rowMain}>
                 <div className={styles.rowHead}>
-                    {descriptor
-                        ? <ChainBadge descriptor={descriptor} size="sm" />
-                        : <span>{row.chainId}</span>}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
                     <span className={styles.rowTitle}>
                         Matched order #{row.orderMatchActionIndex}
                     </span>

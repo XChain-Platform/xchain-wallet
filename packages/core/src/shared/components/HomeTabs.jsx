@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { Button, ChainBadge, Icon, Tabs } from '@xchain-wallet/core/ui';
+import { Button, Icon, Tabs } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
@@ -28,6 +28,7 @@ import { TotalBalanceHero as TotalBalanceHeroBase } from './TotalBalanceHero.jsx
 import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
+import { ActivityRow as SharedActivityRow } from './ActivityRow.jsx';
 import {
     isDemoWallet,
     synthesizeDemoHistory,
@@ -50,7 +51,7 @@ import {
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { isMainnetChainId } from '../../flows/mainnetPrelaunch.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatHistoryAmount } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 
@@ -690,7 +691,6 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             balances={balances}
                             networkFilter={networkFilter}
                             walletId={walletId}
-                            chainRegistry={chainRegistry}
                             onSelectEntry={onSelectEntry}
                             allowRemoteImages={allowRemoteImages}
                         />
@@ -887,18 +887,11 @@ const ACTION_ICON = {
     other:      (k) => <Icon.HistoryIcon key={k} />,
 };
 
-// One activity row. Visual mirrors the DeFi row layout: 48px icon on
-// the left (circular chain icon for native, square token tile for
-// tokens with a chain overlay), three-line body on the right:
-//   1. action icon + action label + status pill (right)
-//   2. amount + tick (primary content)
-//   3. Block N + Confirms pill + relative time (right)
-const ActivityRow = memo(function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, descriptor, onSelectEntry, allowRemoteImages }) {
+const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
     const tick = entry.raw?.tick || entry.raw?.TICK || '';
-    const chainIconUrl = branding.chainIconSmallUrl(entry.chainId);
     const tokenInfo = tick ? (assetLookup.get(`${entry.chainId}|${tick}`) || null) : null;
     const tokenImageUrl = isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
         ? tokenInfo.imageUrl
@@ -910,101 +903,33 @@ const ActivityRow = memo(function ActivityRow({ entry, walletAddresses, assetLoo
     const isNative = tick === nativeTicker;
     const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
     const amount = rawAmount ? formatAmount(rawAmount, tokenInfo?.divisibility ?? 8) : '';
-    const primary = amount ? `${amount}${tick ? ` ${tick}` : ''}` : (tick || '');
-    // Match the per-row quantity mask used by BalanceList; privacy
-    // mode should opaque every financial figure the user sees, not
-    // just balances on the Coins/Tokens tab.
-    const displayPrimary = balancesHidden && primary ? '•••••' : primary;
     const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
-    const iconFn = ACTION_ICON[kind] || ACTION_ICON.other;
-    const statusLabel = status === 'confirmed' ? 'Confirmed'
-        : status === 'failed' ? 'Failed'
-        : 'Pending';
-    const statusClass = status === 'confirmed' ? styles.statusValid
-        : status === 'failed' ? styles.statusInvalid
-        : styles.statusPending;
-    const confirms = (chainTip && entry.blockIndex)
-        ? Math.max(0, chainTip - Number(entry.blockIndex) + 1)
-        : null;
+    const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
+    const primary = amount
+        ? `${formatHistoryAmount(amount, direction)}${tick ? ` ${tick}` : ''}`
+        : (tick || nativeTicker);
+    const displayPrimary = balancesHidden && primary ? '•••••' : primary;
     return (
         <li>
-            <button
-                type="button"
+            <SharedActivityRow
+                chainId={entry.chainId}
+                tick={tick || nativeTicker}
+                imageUrl={tokenImageUrl}
+                isNative={isNative}
+                label={label}
+                amount={displayPrimary}
+                status={status}
+                timestamp={entry.timestamp}
                 onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry(entry) : undefined}
-                className={styles.demoRowButton}
-            >
-                <div className={balanceStyles.iconWrap}>
-                    <span
-                        className={balanceStyles.iconLetter}
-                        style={{ background: tickerColor(tick || 'X') }}
-                        aria-hidden="true"
-                    >
-                        {(tick || '?').slice(0, 1)}
-                    </span>
-                    {isNative && chainIconUrl ? (
-                        <img
-                            src={chainIconUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={balanceStyles.iconImg}
-                            loading="lazy"
-                            decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                        />
-                    ) : tokenImageUrl ? (
-                        <img
-                            src={tokenImageUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.tokenIconSquare}
-                            loading="lazy"
-                            decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                    ) : null}
-                    {!isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} loading="lazy" decoding="async" />
-                    ) : null}
-                </div>
-                <div className={styles.demoRowBody}>
-                    <div className={styles.demoRowMain}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : <span>{entry.chainId}</span>}
-                        <span className={styles.activityActionIcon} aria-hidden="true">{iconFn('icon')}</span>
-                        <span className={styles.demoActionTag}>{label}</span>
-                        <span className={`${styles.statusBadge} ${statusClass}`}>{statusLabel}</span>
-                    </div>
-                    {primary ? (
-                        <div className={styles.demoRowPrimary}>{displayPrimary}</div>
-                    ) : null}
-                    <div className={styles.demoRowMeta}>
-                        {entry.blockIndex ? (
-                            <>
-                                <span>Block {Number(entry.blockIndex).toLocaleString('en-US')}</span>
-                                {confirms != null ? (
-                                    <span className={styles.confirmationsPill}>
-                                        {confirms} Confirms
-                                    </span>
-                                ) : null}
-                            </>
-                        ) : (
-                            <span className={styles.confirmationsPill}>Unconfirmed</span>
-                        )}
-                        {entry.timestamp ? (
-                            <span className={styles.rowRelativeTime}>
-                                {formatRelativeTime(entry.timestamp)}
-                            </span>
-                        ) : null}
-                    </div>
-                </div>
-            </button>
+                data-activity-row
+            />
         </li>
     );
 });
 
 // Demo activity feed: synthesizes per-chain rows, wraps each in the
 // History entry shape so onSelectEntry can hand them to ActionDetail.
-function DemoActivityList({ chainIds, balances, networkFilter, walletId, chainRegistry, onSelectEntry, allowRemoteImages }) {
+function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry, allowRemoteImages }) {
     void walletId;
     const walletAddresses = useMemo(() => new Set(['demo-address']), []);
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
@@ -1035,35 +960,17 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, chainRe
         return all.sort((a, b) => b.timestamp - a.timestamp);
     }, [chainIds, networkFilter]);
 
-    // Synthetic chain tip per chainId: max blockIndex across visible
-    // entries + a small buffer so the Confirms pill on the freshest
-    // confirmed entry reads as a plausible number instead of "1".
-    const chainTips = useMemo(() => {
-        /** @type {Record<string, number>} */
-        const tips = {};
-        for (const e of entries) {
-            if (!e.chainId || !e.blockIndex) continue;
-            if (!tips[e.chainId] || e.blockIndex > tips[e.chainId]) {
-                tips[e.chainId] = e.blockIndex;
-            }
-        }
-        for (const cid of Object.keys(tips)) tips[cid] += 8;
-        return tips;
-    }, [entries]);
-
     if (entries.length === 0) {
         return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any chains active." />;
     }
     return (
         <ul className={styles.demoList}>
             {entries.map((e) => (
-                <ActivityRow
+                <ActivityEntryRow
                     key={e.key}
                     entry={e}
                     walletAddresses={walletAddresses}
                     assetLookup={assetLookup}
-                    chainTip={chainTips[e.chainId] || null}
-                    descriptor={chainRegistry.get(e.chainId)}
                     allowRemoteImages={allowRemoteImages}
                     onSelectEntry={onSelectEntry}
                 />
@@ -1206,9 +1113,6 @@ function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, a
                             </div>
                             <div className={styles.demoRowBody}>
                                 <div className={styles.demoRowMain}>
-                                    {chainRegistry.get(p.chainId)
-                                        ? <ChainBadge descriptor={chainRegistry.get(p.chainId)} size="sm" />
-                                        : <span>{p.chainId}</span>}
                                     {(() => {
                                         const iconFn = ACTION_ICON[String(p.action || '').toLowerCase()] || ACTION_ICON.other;
                                         return (

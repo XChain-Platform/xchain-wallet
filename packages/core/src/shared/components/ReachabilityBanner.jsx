@@ -10,22 +10,12 @@
 
 // ReachabilityBanner: §49.1 / §49.2 / G152.
 //
-// Mounted near the app root above the route surface. Hidden when the
-// last reachability poll reported `'normal'`; renders a status banner
-// when the wallet is in degraded or offline mode. The banner itself
-// drives no UI gating; features that need encoder/hub already disable
-// themselves with their own per-feature affordances. The banner is the
-// "you're not getting fresh data" notice the spec calls out.
-//
-// Polls via `useReachability` so a single network round-trip per
-// `intervalMs` services every banner / staleness label / etc. that
-// shares this hook (the hook returns identical state to every caller
-// once Messaging caches kick in; until then each mount probes
-// independently; that's tolerable given typical mount counts).
+// The compact notice sits below persistent app chrome and reports only the
+// user-facing consequence. Its disclosure identifies affected coins without
+// exposing service names or network kinds.
 
-import { useId, useState } from 'react';
 import { useReachability } from '../hooks/useReachability.js';
-import { registry as registryLib } from '../../index.js';
+import { branding as brandingLib, registry as registryLib } from '../../index.js';
 import styles from './ReachabilityBanner.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -38,9 +28,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {number} [props.startupGraceMs] override the cold-start silence window
  */
 export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGraceMs }) {
-    const detailsId = useId();
-    const [expanded, setExpanded] = useState(false);
-    const { loading, overall, perChain, refresh, lastChecked } = useReachability({
+    const { loading, overall, perChain, refresh } = useReachability({
         chainIds,
         intervalMs,
         confirmMs,
@@ -49,157 +37,67 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
 
     if (overall !== 'degraded' && overall !== 'offline') return null;
 
-    const summary = summariseDegradation(perChain);
-    const staleness = lastChecked
-        ? `Last checked ${formatAgo(Date.now() - lastChecked)} ago.`
-        : null;
+    const coins = affectedCoins(perChain);
 
     return (
         <div
             role="status"
             aria-live="polite"
             aria-atomic="true"
-            className={`${styles.notice} ${overall === 'offline' ? styles.offline : styles.degraded}`}
+            className={`${styles.banner} ${overall === 'offline' ? styles.offline : styles.degraded}`}
         >
-            <div className={styles.banner}>
-                <span
-                    className={styles.icon}
-                    aria-hidden="true"
-                    style={{ fontSize: 'var(--xc-icon-md)' }}
-                >
-                    {overall === 'offline' ? '⛔' : '⚠'}
-                </span>
-                <div className={styles.title}>
-                    {overall === 'offline' ? 'Wallet offline' : 'Network issues'}
-                </div>
-                <button
-                    type="button"
-                    className={styles.detailsToggle}
-                    aria-expanded={expanded}
-                    aria-controls={detailsId}
-                    onClick={() => setExpanded((value) => !value)}
-                >
-                    Details
-                </button>
-                <button
-                    type="button"
-                    className={styles.retry}
-                    onClick={refresh}
-                    disabled={loading}
-                >
-                    {loading ? 'Checking…' : 'Try again'}
-                </button>
-            </div>
-            <div id={detailsId} className={styles.detailPanel} hidden={!expanded}>
-                <div className={styles.detail}>
-                    {summary}
-                    {staleness ? <span className={styles.staleness}> {staleness}</span> : null}
-                </div>
-            </div>
+            <span className={styles.message}>Some balances may be out of date</span>
+            <button
+                type="button"
+                className={styles.retry}
+                onClick={refresh}
+                disabled={loading}
+            >
+                {loading ? 'Checking…' : 'Try again'}
+            </button>
+            {coins.length > 0 ? (
+                <details className={styles.details}>
+                    <summary className={styles.detailsToggle}>Details</summary>
+                    <ul className={styles.coinList} aria-label="Affected coins">
+                        {coins.map((coin) => (
+                            <li key={coin.key} className={styles.coin}>
+                                {coin.iconUrl ? (
+                                    <img src={coin.iconUrl} alt="" aria-hidden="true" />
+                                ) : (
+                                    <span className={styles.coinFallback} aria-hidden="true" />
+                                )}
+                                <span>{coin.name}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            ) : null}
         </div>
     );
 }
 
-// What an unreachable backend actually COSTS the user. The service names
-// themselves (encoder / hub / explorer) stay out of the copy, because they
-// are our vocabulary and not the user's; what replaces them is not a name at
-// all but the consequence, which is the part someone stuck on a form needs.
-//
-// "partly unavailable; some features may not work" told a first-time user
-// nothing: on 2026-09-02 one was blocked by the fee-price half of exactly
-// this banner and had no way to learn that from it. The probe result already
-// carries which service failed, so the answer was in hand and thrown away.
-const CONSEQUENCE = {
-    encoder: "you can't send or create transactions",
-    hub: 'fee prices are unavailable',
-    explorer: 'balances and history may be out of date',
-};
-
-// Chain ids are ours too: "bitcoin-testnet" is a config key, not something to
-// show a person. Fall back to the raw id only for a chain the registry does
-// not know, where a wrong-but-recognisable string beats an empty one.
-function chainLabel(chainId) {
-    const d = chainRegistry.get(chainId);
-    if (!d || !d.displayName) return chainId;
-    return d.networkKind && d.networkKind !== 'mainnet'
-        ? `${d.displayName} ${d.networkKind}`
-        : d.displayName;
+function affectedCoins(perChain) {
+    if (!Array.isArray(perChain)) return [];
+    const seen = new Set();
+    const coins = [];
+    for (const chain of perChain) {
+        if (chain?.mode !== 'degraded' && chain?.mode !== 'offline') continue;
+        const descriptor = chainRegistry.get(chain.chainId);
+        const key = descriptor?.coin || coinNameFromChainId(chain.chainId).toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        coins.push({
+            key,
+            name: descriptor?.displayName || coinNameFromChainId(chain.chainId),
+            iconUrl: brandingLib.chainIconSmallUrl(
+                descriptor?.coin ? `${descriptor.coin}-mainnet` : chain.chainId,
+            ),
+        });
+    }
+    return coins;
 }
 
-// "a", "a and b", "a, b and c".
-function joinList(items) {
-    if (items.length <= 1) return items[0] || '';
-    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-}
-
-function summariseDegradation(perChain) {
-    if (!Array.isArray(perChain) || perChain.length === 0) {
-        return "Can't reach the network. Check your internet connection.";
-    }
-    const offline = perChain.filter((c) => c.mode === 'offline');
-    const degraded = perChain.filter((c) => c.mode === 'degraded');
-    if (offline.length === perChain.length) {
-        return "Can't connect to any selected network.";
-    }
-    const summaries = [];
-    for (const c of degraded) {
-        const effects = consequencesFor(c);
-        if (effects.length > 0) {
-            summaries.push(`On ${chainLabel(c.chainId)}, ${joinList(effects)}.`);
-        }
-        // Reachable but behind: the explorer answered from an indexed tip
-        // that is older than it should be. Everything the wallet shows for
-        // this chain is real up to that block; say where it stops and why,
-        // because "may be out of date" tells someone waiting on a payment
-        // nothing they can act on.
-        const delay = delayedDataSummary(c);
-        if (delay) summaries.push(`On ${chainLabel(c.chainId)}, ${delay}`);
-    }
-    for (const c of offline) {
-        summaries.push(`${chainLabel(c.chainId)}: can't reach the network.`);
-    }
-    if (summaries.length === 0) {
-        return 'Part of the network is unavailable right now.';
-    }
-    return summaries.join(' ');
-}
-
-function consequencesFor(chainResult) {
-    const services = chainResult?.services || {};
-    const out = [];
-    // Ordered by how much the user cares, not alphabetically: being unable to
-    // spend outranks a stale balance.
-    for (const name of ['encoder', 'hub', 'explorer']) {
-        if (services[name] === 'unreachable' && CONSEQUENCE[name]) out.push(CONSEQUENCE[name]);
-    }
-    return out;
-}
-
-function delayedDataSummary(chainResult) {
-    const f = chainResult?.freshness?.explorer;
-    if (!f || !f.stale) return null;
-    let text = 'balances and history are behind';
-    if (f.tipBlock != null) {
-        text += `: last confirmed block ${Number(f.tipBlock).toLocaleString()}`;
-        if (f.tipAgeSeconds != null) text += ` was ${formatTipAge(f.tipAgeSeconds)} ago`;
-    }
-    text += f.replicaHalted === true
-        ? '. Indexing is paused while the service is repaired; it will catch up on its own.'
-        : '. The service is catching up and will update shortly.';
-    return text;
-}
-
-// Coarse, one unit, for "last confirmed block was 2 days ago".
-function formatTipAge(seconds) {
-    const s = Number(seconds);
-    if (s < 60) return 'under a minute';
-    if (s < 3_600) { const m = Math.round(s / 60); return `${m} minute${m === 1 ? '' : 's'}`; }
-    if (s < 86_400) { const h = Math.round(s / 3_600); return `${h} hour${h === 1 ? '' : 's'}`; }
-    const d = Math.round(s / 86_400); return `${d} day${d === 1 ? '' : 's'}`;
-}
-
-function formatAgo(diffMs) {
-    if (diffMs < 60_000) return `${Math.max(1, Math.round(diffMs / 1000))}s`;
-    if (diffMs < 3_600_000) return `${Math.round(diffMs / 60_000)}m`;
-    return `${Math.round(diffMs / 3_600_000)}h`;
+function coinNameFromChainId(chainId) {
+    const coin = String(chainId || 'Unknown').split('-')[0];
+    return `${coin.charAt(0).toUpperCase()}${coin.slice(1)}`;
 }

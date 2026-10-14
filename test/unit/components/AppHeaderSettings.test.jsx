@@ -197,7 +197,7 @@ describe('AppHeader action row', () => {
         onMenuOpen: () => {},
     };
 
-    it('keeps only network, lock, and menu visible while secondary actions are menu rows', () => {
+    it('keeps only lock and menu visible while secondary actions are menu rows', () => {
         render(<AppHeader {...allActions} />);
         const header = screen.getByRole('region', { name: 'App header' });
         const controls = [...header.querySelectorAll('[data-header-control]')];
@@ -205,7 +205,6 @@ describe('AppHeader action row', () => {
             control.matches('button') ? control : control.querySelector('button')
         ));
         expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
-            'Mainnet. Network connected',
             'Lock wallet',
             'Open menu',
         ]);
@@ -268,9 +267,10 @@ describe('AppHeader action row', () => {
         expect(close.className).toMatch(/sm/);
     });
 
-    it('keeps only network state, lock and menu in one header row at 360px', () => {
+
+    it.each([320, 360, 400])('keeps the logo and buttons in one header row at %dpx', (width) => {
         const originalWidth = window.innerWidth;
-        window.innerWidth = 360;
+        window.innerWidth = width;
         const { container } = render(
             <MessagingProvider
                 shell="web"
@@ -290,15 +290,29 @@ describe('AppHeader action row', () => {
             </MessagingProvider>,
         );
 
+        const barRule = /\.bar\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
+        const leftRule = /\.left\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
         const rightRule = /\.right\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
+        expect(barRule).toMatch(/display:\s*flex/);
+        expect(barRule).toMatch(/align-items:\s*center/);
+        expect(barRule).toMatch(/justify-content:\s*space-between/);
+        expect(barRule).toMatch(/flex-wrap:\s*nowrap/);
+        expect(barRule).toMatch(/padding:\s*var\(--xc-space-2\) var\(--xc-space-3\)/);
+        expect(barRule).not.toMatch(/(?:min-|max-)?height\s*:/);
+        expect(leftRule).toMatch(/flex:\s*1 1 auto/);
+        expect(leftRule).toMatch(/min-width:\s*0/);
         expect(rightRule).toMatch(/gap:\s*var\(--xc-space-1\)/);
+        expect(rightRule).toMatch(/flex:\s*0 0 auto/);
         expect(rightRule).toMatch(/flex-wrap:\s*nowrap/);
         expect(container.querySelector('[data-xc-tier]')).toHaveAttribute('data-xc-tier', 'compact');
-        expect(screen.getByRole('region', { name: 'App header' }).style.flexWrap).toBe('');
-        expect(container.querySelectorAll('[data-header-control]')).toHaveLength(3);
-        expect(screen.getByRole('button', { name: 'Mainnet. Network connected' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Lock wallet' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Open menu' })).toBeTruthy();
+        const header = screen.getByRole('region', { name: 'App header' });
+        expect(header.style.flexWrap).toBe('');
+        expect(header.children).toHaveLength(2);
+        expect(header.firstElementChild).toContainElement(screen.getByAltText('XChain Wallet'));
+        expect(header.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
+        expect(header.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Open menu' }));
+        expect(container.querySelectorAll('[data-header-control]')).toHaveLength(2);
+        expect(screen.queryByRole('button', { name: /Network/ })).toBeNull();
         expect(screen.getByText('Wallet: Main')).toBeTruthy();
         window.innerWidth = originalWidth;
     });
@@ -309,9 +323,9 @@ describe('AppHeader action row', () => {
         ['iOS', { onLock: () => {}, onOpenNetworkSettings: () => {}, activeNetwork: 'mainnet' }],
         ['Android', { onLock: () => {}, onOpenNetworkSettings: () => {}, activeNetwork: 'testnet' }],
         ['desktop', { onCommandPalette: () => {}, onLock: () => {}, onOpenNetworkSettings: () => {}, activeNetwork: 'mainnet' }],
-    ])('%s shell has at most three visible controls on the right', (_shell, props) => {
+    ])('%s shell has at most two visible controls on the right', (_shell, props) => {
         const { container } = render(<AppHeader {...props} />);
-        expect(container.querySelectorAll('[data-header-control]').length).toBeLessThanOrEqual(3);
+        expect(container.querySelectorAll('[data-header-control]').length).toBeLessThanOrEqual(2);
     });
 
     it('offers pop-out on web-capable surfaces and suppresses it in native and desktop apps', () => {
@@ -581,19 +595,14 @@ describe('HeaderSettingsButton section gating', () => {
     });
 });
 
-describe('combined network chip', () => {
-    it.each([
-        ['mainnet', 'Mainnet'],
-        ['regtest', 'Regtest'],
-    ])('keeps the full %s name beside the status dot', (network, label) => {
+describe('network status', () => {
+    it('does not render a network control in the toolbar', () => {
         render(
             <AppHeader
-                activeNetwork={network}
+                activeNetwork="regtest"
                 onOpenNetworkSettings={() => {}}
             />,
         );
-        const chip = screen.getByRole('button', { name: `${label}. Network connected` });
-        expect(chip).toHaveTextContent(label);
-        expect(chip.querySelector('[aria-hidden="true"]')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /Network/ })).toBeNull();
     });
 });

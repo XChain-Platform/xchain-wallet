@@ -19,8 +19,7 @@ import styles from './ChainPicker.module.css';
  * "which network are we operating on" form (Send, Swap, Issue,
  * Compose message, Markets filter, etc.).
  *
- * Each row carries the chain's icon + display name + network-kind
- * suffix (mainnet implicit; testnet / regtest shown). Reads the icon
+ * Each row carries the chain's icon and display name. Reads the icon
  * URL from `branding.chainIconSmallUrl(chainId)` so the component
  * stays decoupled from the chain registry's image tick wiring.
  *
@@ -35,11 +34,6 @@ import styles from './ChainPicker.module.css';
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
  * @param {'sm' | 'md' | 'lg'} [props.size] field size matching Input; defaults to 'md'.
- * @param {boolean} [props.hideNetworkKind]   When true, suppresses the
- *        ` · testnet` / ` · regtest` suffix in the subtext. Useful on
- *        Receive where the page is already scoped to the user's own
- *        addresses; defaults to false so Send / Swap / Issue keep the
- *        "real money vs play money" cue.
  */
 export function ChainPicker({
     value,
@@ -50,7 +44,6 @@ export function ChainPicker({
     placeholder = 'Select a network',
     disabled,
     size = 'md',
-    hideNetworkKind = false,
 }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -160,10 +153,7 @@ export function ChainPicker({
     // The visual label is a span, so the accessible name pairs the field label
     // with its current selection. An unlabelled picker keeps its visible text as
     // its name.
-    const selectionText = selected
-        ? `${selected.label}${!hideNetworkKind && selected.networkKind !== 'mainnet'
-            ? ` · ${selected.networkKind}` : ''}`
-        : placeholder;
+    const selectionText = selected ? selected.label : placeholder;
     const accessibleName = label ? `${label}: ${selectionText}` : undefined;
 
     return (
@@ -196,12 +186,7 @@ export function ChainPicker({
                 ) : null}
                 <span className={styles.triggerText}>
                     {selected ? (
-                        <>
-                            <span className={styles.triggerLabel}>{selected.label}</span>
-                            {!hideNetworkKind && selected.networkKind !== 'mainnet' ? (
-                                <span className={styles.triggerKind}>{` · ${selected.networkKind}`}</span>
-                            ) : null}
-                        </>
+                        <span className={styles.triggerLabel}>{selected.label}</span>
                     ) : (
                         <span className={styles.triggerPlaceholder}>{placeholder}</span>
                     )}
@@ -248,10 +233,7 @@ export function ChainPicker({
                                     </span>
                                     <span className={styles.itemBody}>
                                         <span className={styles.itemLabel}>{e.label}</span>
-                                        <span className={styles.itemSub}>
-                                            {e.ticker}
-                                            {!hideNetworkKind && e.networkKind !== 'mainnet' ? ` · ${e.networkKind}` : ''}
-                                        </span>
+                                        <span className={styles.itemSub}>{e.ticker}</span>
                                     </span>
                                 </button>
                             </li>

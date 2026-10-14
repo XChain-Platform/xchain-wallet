@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -42,8 +42,8 @@ const RESULTS_PAGE_SIZE = 25;
  *     `address` to `dispensersForAddress`, matching either source or
  *     dispenser address.
  *
- * Chain filter narrows the query to a single chain; "All chains"
- * fans out in parallel and merges results. Click a row → host's
+ * Searches fan out across the chains on the active Settings network and merge
+ * results. Click a row → host's
  * onOpenDispenser(chainId, actionIndex) navigates to the detail page
  * (same one Piece 7b-part-1 "My dispensers" uses).
  *
@@ -57,8 +57,8 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
 
     const { settings } = useSettings();
 
-    // D-34(b): scope BOTH the dropdown and the "All chains" fan-out to the
-    // user's active network. `supportedChains()` is every chain the registry
+    // D-34(b): scope the search fan-out to the user's active network.
+    // `supportedChains()` is every chain the registry
     // knows, so a wallet sitting on Regtest was querying mainnet and testnet
     // explorers on every search - requests it has no business making, against
     // hosts it is not configured for, whose failures it then showed the user.
@@ -75,7 +75,6 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
 
     const [searchMode, setSearchMode] = useState(/** @type {'token' | 'address'} */ ('token'));
     const [query, setQuery] = useState('');
-    const [chainFilter, setChainFilter] = useState(/** @type {string} */ ('all'));
     const [searching, setSearching] = useState(false);
     const [rowsByChain, setRowsByChain] = useState(
         /** @type {Record<string, { rows: any[], error: string | null, moreError?: string | null, page?: number, total?: number | null, hasMore?: boolean, loadingMore?: boolean }>} */ ({}),
@@ -85,16 +84,18 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const searchRequestId = useRef(0);
     const searchInFlightRef = useRef(/** @type {string | null} */ (null));
     const loadMoreInFlightRef = useRef(/** @type {Set<string>} */ (new Set()));
+    const chainScopeRef = useRef('');
     useEffect(() => {
-        if (chainFilter === 'all' || chains.includes(chainFilter)) return;
+        const scope = chains.join('\u0000');
+        if (scope === chainScopeRef.current) return;
+        chainScopeRef.current = scope;
         searchRequestId.current += 1;
         searchInFlightRef.current = null;
         loadMoreInFlightRef.current.clear();
-        setChainFilter('all');
         setSearching(false);
         setRowsByChain({});
         setLastQueried(null);
-    }, [chainFilter, chains]);
+    }, [chains]);
     const searchDisabledReason = !settings
         ? 'Loading available networks…'
         : chains.length === 0
@@ -112,7 +113,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         const q = query.trim();
         if (!q) return;
         const mode = searchMode;
-        const targetChains = chainFilter === 'all' ? chains : [chainFilter];
+        const targetChains = chains;
         const searchKey = `${mode}\u0000${q}\u0000${targetChains.join('\u0000')}`;
         if (searchInFlightRef.current === searchKey) return;
         const requestId = searchRequestId.current + 1;
@@ -214,7 +215,6 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         loadMoreInFlightRef.current.clear();
         setSearchMode('token');
         setQuery('');
-        setChainFilter('all');
         setSearching(false);
         setRowsByChain({});
         setLastQueried(null);
@@ -303,25 +303,6 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     className={local.searchModes}
                 />
                 <div className={local.filterRow}>
-                    <div className={local.chainControl}>
-                        <Select
-                            label="Chain"
-                            size="md"
-                            value={chainFilter}
-                            onChange={(e) => setChainFilter(e.target.value)}
-                            className={local.chainSelect}
-                        >
-                            <option value="all">All chains</option>
-                            {chains.map((cid) => {
-                                const d = chainRegistry.get(cid);
-                                return (
-                                    <option key={cid} value={cid}>
-                                        {d ? `${d.displayName} (${d.networkKind})` : cid}
-                                    </option>
-                                );
-                            })}
-                        </Select>
-                    </div>
                     <div className={local.queryControl}>
                         <Input
                             type="search"
@@ -376,12 +357,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     onRetry={runSearch}
                     onReset={resetFilters}
                 />
-            ) : (
-                <p className={styles.entryDescription}>
-                    Search by token ticker to find open dispensers, or by address to find
-                    a specific creator's or dispenser's listings.
-                </p>
-            )}
+            ) : null}
             </ListPage>
         </Screen>
     );
@@ -438,8 +414,8 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                         <SectionHeader
                             title={(
                                 <>
-                                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
-                                    {' '}
+                                    {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                                    {d ? ' ' : null}
                                     <span>
                                         {state.total != null && state.total > state.rows.length
                                             ? `${state.rows.length} of ${state.total}`
@@ -481,7 +457,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                                         variant="secondary"
                                         loading={state.loadingMore}
                                         onClick={() => onLoadMore(cid)}
-                                        aria-label={`Load more results for ${d?.displayName || cid}`}
+                                        aria-label={`Load more results for ${d?.displayName || 'this chain'}`}
                                     >
                                         Load more results
                                     </Button>

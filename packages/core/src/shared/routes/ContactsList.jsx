@@ -61,16 +61,13 @@ function persistContactsSort(walletId, value) {
 }
 
 /**
- * Chain badge for a contact entry. The address selects the network kind so
- * testnet rows say testnet instead of relying on the coin artwork alone.
- * Unknown formats keep the question-mark fallback.
+ * Chain icon for a contact entry. The address selects the matching descriptor,
+ * while unknown formats keep the question-mark fallback.
  */
 function ChainCoinIcon({ chain, address }) {
     const chainId = chainIdFor(chain, address);
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     if (descriptor) return <ChainBadge descriptor={descriptor} size="sm" />;
-    const opt = NETWORK_OPTIONS.find((n) => n.value === chain);
-    if (opt) return <span>{opt.label}</span>;
     return (
         <span className={picker.unknownIcon} aria-label="Unknown network" title="Unknown network">?</span>
     );

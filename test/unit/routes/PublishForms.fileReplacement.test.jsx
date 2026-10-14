@@ -11,10 +11,10 @@ import { AttachContentForm } from '../../../packages/core/src/shared/routes/Atta
 import { GatedPublishForm } from '../../../packages/core/src/shared/routes/GatedPublishForm.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 
-const CHAIN = 'bitcoin-mainnet';
+const CHAIN = 'bitcoin-regtest';
 const SOURCE = {
     id: 'addr-1',
-    address: 'bc1qexampleexampleexampleexampleexampleex',
+    address: 'bcrt1qexampleexampleexampleexampleexample',
     publicKey: '02aa',
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
@@ -79,6 +79,7 @@ describe('publish forms replace file state safely', () => {
     it('exposes gated metadata through the shared field roles and counters', async () => {
         mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
 
+        const file = await screen.findByLabelText('File to publish');
         const title = await screen.findByRole('textbox', { name: 'Title' });
         const memo = screen.getByRole('textbox', { name: 'Memo' });
         fireEvent.change(title, { target: { value: 'Member brief' } });
@@ -86,8 +87,16 @@ describe('publish forms replace file state safely', () => {
 
         expect(title).toHaveValue('Member brief');
         expect(memo).toHaveValue('October');
+        expect(file).toHaveAccessibleDescription(/Publish a file that only holders of GATE can read/);
         expect(screen.getByText('12 / 120')).toBeInTheDocument();
         expect(screen.getByText('7 / 120')).toBeInTheDocument();
+    });
+
+    it('keeps the public chain picker free of network-kind text', async () => {
+        mount(<PublishFileForm walletId="w" onBack={() => {}} />);
+
+        await screen.findByRole('button', { name: /^Chain: Bitcoin/ });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it.each([

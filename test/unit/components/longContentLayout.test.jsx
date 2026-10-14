@@ -17,6 +17,7 @@ import { formatAtomicAmount } from '../../../packages/core/src/shared/utils/amou
 const balanceCss = readFileSync('packages/core/src/shared/components/BalanceList.module.css', 'utf8');
 const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
 const historyCss = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
+const activityRowCss = readFileSync('packages/core/src/shared/components/ActivityRow.module.css', 'utf8');
 const tokenDetailCss = readFileSync('packages/core/src/shared/routes/TokenDetail.module.css', 'utf8');
 const walletPickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
 const pageHeaderCss = readFileSync('packages/core/src/ui/PageHeader.module.css', 'utf8');
@@ -114,7 +115,8 @@ describe('long content layout', () => {
         const pendingAmount = document.querySelector('[data-pending-amount]');
         expect(pendingAmount.getAttribute('title').replace(/,/g, '')).toContain(amount);
         expect(pendingAmount.textContent.replace(/,/g, '')).toContain(amount);
-        expect(rule(historyCss, '.rowSourceAddress')).toMatch(/text-overflow:\s*ellipsis/);
+        // The source address sits in the shared row's context cell, which ellipsizes.
+        expect(rule(activityRowCss, '.context')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(historyCss, '.pendingAmount')).toMatch(/overflow-x:\s*auto/);
         expect(rule(historyCss, '.pendingAmount')).not.toMatch(/text-overflow:\s*ellipsis/);
     });

@@ -254,12 +254,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         : onBack}
             backDisabled={stage === 'submitting'}
             title={{
-                explain: 'Upgrade recovery phrase',
+                explain: 'Upgrade to a BIP39 recovery phrase',
                 create: 'Set up new wallet',
-                backup: 'Back up recovery phrase',
-                verify: 'Verify recovery phrase',
-                submitting: 'Creating new wallet',
-                done: 'BIP39 wallet created',
+                backup: 'Write down your recovery phrase',
+                verify: 'Verify your written copy',
+                submitting: 'Creating your new wallet',
+                done: 'New BIP39 wallet ready',
             }[stage]}
         />
     );
@@ -272,7 +272,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'explain') {
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Upgrade to a BIP39 recovery phrase</h2>
                 <p style={explainParagraphStyle}>
                     Your current wallet uses the legacy 12-word Counterwallet
                     recovery format. BIP39 is widely supported and gives your
@@ -315,7 +314,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     </>
                 )}
             >
-                <h2 className={styles.successTitle}>Write down your recovery phrase</h2>
                 <p style={explainParagraphStyle}>
                     These 12 words are your new recovery phrase. Write them on
                     paper, store them safely, and keep them private. You can use
@@ -353,7 +351,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     </>
                 )}
             >
-                <h2 className={styles.successTitle}>Verify your written copy</h2>
                 <p style={explainParagraphStyle}>
                     Enter the requested words from the recovery phrase you just
                     wrote down. The new wallet is created only after every word
@@ -386,7 +383,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         return wrap(
             <FormPage label="Wallet creation status">
                 <div role="status" aria-live="polite">
-                    <h2 className={styles.successTitle}>Creating your new wallet</h2>
                     <p style={explainParagraphStyle}>
                         XChain Platform is encrypting the new BIP39 wallet with
                         your password. This can take a minute on some devices.
@@ -400,7 +396,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'done') {
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>New BIP39 wallet ready</h2>
                 <p style={explainParagraphStyle}>
                     Your new recovery phrase is verified and the wallet is saved.
                     Your legacy wallet is unchanged, and nothing moves until
@@ -433,7 +428,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                             return (
                                 <div key={row.chainId}>
                                     <dt className={styles.detailsLabel}>
-                                        {d ? <ChainBadge descriptor={d} size="sm" /> : row.chainId}
+                                        {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Chain'}
                                     </dt>
                                     <dd className={styles.detailsValue}>
                                         {row.legacy ? (

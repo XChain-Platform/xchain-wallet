@@ -20,7 +20,7 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FeeSelector, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -270,7 +270,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             <ActionConfirmScreen
                 {...ownerLane.confirmProps}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
                 hwSignerInfo={hwSignerInfo}
                 hintClassName={styles.hint}
@@ -338,10 +337,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     value; the protocol has no &quot;keep current&quot; for this action.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>Address</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -378,12 +373,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             label="On-chain preferences"
             onSubmit={handleReview}
             sectioned
-            intro={(
-                <>
-                On-chain preferences apply to <AddressText address={address} /> itself
-                and are visible to the whole network once written.
-                </>
-            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -391,6 +380,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 <Button type="submit" variant="primary">Review</Button>
             )}
         >
+            <details>
+                <summary>Who can see these preferences?</summary>
+                <p className={styles.hint}>
+                    They apply to <AddressText address={address} /> and are visible to the whole network once written.
+                </p>
+            </details>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
                     <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>

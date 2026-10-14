@@ -42,6 +42,14 @@ function mount() {
 afterEach(() => cleanup());
 
 describe('BatchComposerForm rows', () => {
+    it('keeps batch limits in a collapsed disclosure', async () => {
+        mount();
+
+        const disclosure = (await screen.findByText('Batch limits')).closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent('Queue up to 250 actions from one address');
+    });
+
     it('adds and removes stable action rows without allowing the last row to disappear', async () => {
         mount();
         const add = await screen.findByRole('button', { name: /Add action/ });

@@ -77,14 +77,13 @@ import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
+import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
-import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
@@ -546,6 +545,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 });
             });
     }, [extensionHandoff]);
+    useDemoAutoWipe(activeWalletId, refresh);
 
     function clearTransientActionState() {
         setFormReturnView(null);
@@ -2777,7 +2777,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
-                        demoBannerInHeader
                         onCommandPalette={palette.openPalette}
                         // The popup's only VISIBLE route into Settings.
                         // Web and desktop deliberately pass nothing here: they
@@ -2804,18 +2803,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                                 name: activeWallet?.name,
                             } : null}
                             activeNetwork={settings?.activeNetwork}
-                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                         />
                     )}
-                    notices={(
-                        <>
-                            <NetworkBanner activeNetwork={settings?.activeNetwork} />
-                            <ReachabilityBanner />
-                            {/* Banners stay inside the layout so route content
-                                yields without expanding the document. */}
-                            {activeWalletId ? <DemoBanner activeWalletId={activeWalletId} onExited={refresh} /> : null}
-                        </>
-                    )}
+                    notices={<ReachabilityBanner />}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}

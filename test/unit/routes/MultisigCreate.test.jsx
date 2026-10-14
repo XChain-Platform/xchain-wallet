@@ -117,10 +117,14 @@ async function fillValidDraft(messaging) {
 afterEach(() => cleanup());
 
 describe('MultisigCreate local cosigner', () => {
-    it('describes Bitcoin support without exposing internal specification text', async () => {
+    it('keeps setup guidance in a compact disclosure', async () => {
         await mount(mkMessaging());
-        expect(screen.getByText(/currently available only on Bitcoin networks/i)).toBeTruthy();
+        const summary = screen.getByText('How multisig setup works');
+        const disclosure = summary.closest('details');
+        expect(disclosure).not.toHaveAttribute('open');
+        expect(disclosure).toHaveTextContent(/available only on Bitcoin networks/i);
         expect(screen.queryByText(/§10\.3/)).toBeNull();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('auto-fills the master fingerprint from the unlocked wallet', async () => {
@@ -173,7 +177,7 @@ describe('MultisigCreate local cosigner', () => {
             fireEvent.click(screen.getByRole('button', { name: /^Network:/i }));
         });
         await act(async () => {
-            fireEvent.click(screen.getByRole('option', { name: /Bitcoin BTC.*testnet/i }));
+            fireEvent.click(screen.getAllByRole('option', { name: 'Bitcoin BTC' })[1]);
         });
 
         expect(screen.getByText(/select a local address on the chosen network/i)).toBeTruthy();

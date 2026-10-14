@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { sumFiatValue } from './BalanceList.jsx';
 import { StalenessLabel } from './StalenessLabel.jsx';
@@ -94,6 +94,7 @@ function enabledMenuItems(menu) {
  * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
 export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
+    const labelId = useId();
     const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
     // The demo wallet prices its synthetic test-network holdings on purpose.
     const testCoinsOnly = !isDemoWallet(walletId)
@@ -290,9 +291,9 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         // "Total balance" read as the whole wallet while the wallet's other
         // addresses went uncounted (xchain-wallet#57). The label says what the
         // figure is.
-        <section className={styles.hero} aria-label="Active address balance">
+        <section className={styles.hero} aria-labelledby={labelId}>
             <div className={styles.row}>
-                <span className={styles.label}>
+                <span id={labelId} className={styles.label}>
                     Active address balance
                     {filterLabel ? (
                         <span className={styles.scope}>· {filterLabel}</span>

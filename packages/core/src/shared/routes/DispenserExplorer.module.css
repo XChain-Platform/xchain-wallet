@@ -15,13 +15,6 @@
     margin-bottom: 0;
 }
 
-.chainSelect {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
-}
-
 .filterRow {
     display: flex;
     flex-wrap: wrap;
@@ -29,17 +22,11 @@
     gap: var(--xc-space-2);
 }
 
-.chainControl {
-    flex: 1 1 12rem;
-    min-width: 0;
-}
-
 .queryControl {
     flex: 2 1 18rem;
     min-width: 0;
 }
 
-.chainControl > *,
 .queryControl > * {
     margin-bottom: 0;
 }

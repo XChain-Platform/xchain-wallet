@@ -225,10 +225,11 @@ describe('Home large-wallet performance', () => {
                 divisibility: 0,
                 fiatRate: 1,
             };
-            Object.defineProperty(row, 'networkKind', {
+            // Each row render reads its pending quantity once, so reads count row renders.
+            Object.defineProperty(row, 'pendingQuantity', {
                 get() {
                     rowReads += 1;
-                    return 'mainnet';
+                    return '0';
                 },
             });
             return row;

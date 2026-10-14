@@ -151,11 +151,9 @@ import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
-import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
+import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { useDeepLinks } from './deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
@@ -574,6 +572,7 @@ function AppInner() {
                 });
             });
     }, []);
+    useDemoAutoWipe(activeWalletId, refresh);
 
     function clearTransientActionState() {
         setFormReturnView(null);
@@ -2653,12 +2652,8 @@ function AppInner() {
             }
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
-                    {/* `demoBannerInHeader`: this shell mounts DemoBanner in
-                        the layout header, which already renders above Home, so Home
-                        must not mount a second one. */}
                     <Home
                     activeWalletId={activeWalletId}
-                    demoBannerInHeader
                     onLocked={refresh}
                     onSend={activeWalletId ? () => {
                         setSendPrefill(null);
@@ -2831,20 +2826,15 @@ function AppInner() {
                             isWatcherMode={isWatcherMode}
                             activeWallet={activeWalletId ? { id: activeWalletId, name: activeWalletName } : null}
                             activeNetwork={settings?.activeNetwork}
-                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                         />
                     }
                     notices={
                         activeWalletId ? (
                             <>
-                                <NetworkBanner activeNetwork={settings?.activeNetwork} />
-                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
-                                    unlocked view via the shared layout notices slot. */}
-                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
-                                {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
+                                <ReachabilityBanner />
                             </>
-                        ) : <NetworkBanner activeNetwork={settings?.activeNetwork} />
+                        ) : null
                     }
                 >
                     <ShellRouteOutlet

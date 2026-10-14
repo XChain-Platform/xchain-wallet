@@ -294,7 +294,6 @@ export function StakeDetail({
 
     return wrap(
         <>
-            <SectionHeader title="Position details" />
             {/* Hero: what's staked, where, how it's doing. */}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Staked</dt>

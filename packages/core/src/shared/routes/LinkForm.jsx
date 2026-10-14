@@ -560,7 +560,7 @@ export function LinkForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={submitDescriptor?.displayName || submitChainId}
+                chainLabel={null}
                 feeText={feeEstimate?.coinAmount && feeCoinTicker
                     ? `Network fee: ${feeEstimate.coinAmount} ${feeCoinTicker}`
                     : undefined}
@@ -622,15 +622,15 @@ export function LinkForm({ walletId, onBack }) {
                 )}
             >
                 <p className={styles.summary}>
-                    Link {ticker1} #{actionIndex1} to {ticker2} #{actionIndex2}
+                    Link action #{actionIndex1} to action #{actionIndex2}
                     {memo.trim() ? `, memo: "${memo.trim()}"` : ''}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
                         {submitDescriptor
-                            ? <ChainBadge descriptor={submitDescriptor} size="sm" />
-                            : submitChainId}
+                            ? <ChainBadge descriptor={submitDescriptor} size="sm" showName={false} />
+                            : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -638,7 +638,7 @@ export function LinkForm({ walletId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>Linking</dt>
                     <dd className={styles.detailsValue}>
-                        {ticker1} #{actionIndex1} {'↔'} {ticker2} #{actionIndex2}
+                        Action #{actionIndex1} {'↔'} action #{actionIndex2}
                     </dd>
                     <dt className={styles.detailsLabel}>Side A decoded</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
@@ -770,10 +770,13 @@ export function LinkForm({ walletId, onBack }) {
                 value={submitOn}
                 onChange={(nextValue) => setSubmitOn(nextValue)}
                 options={[
-                    { value: 'chain1', label: descriptor1?.displayName || 'Chain A' },
+                    {
+                        value: 'chain1',
+                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" /> : 'Chain A',
+                    },
                     {
                         value: 'chain2',
-                        label: descriptor2?.displayName || 'Chain B',
+                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" /> : 'Chain B',
                         disabled: !chain2Id || chain2Id === chain1Id,
                     },
                 ]}
@@ -784,8 +787,8 @@ export function LinkForm({ walletId, onBack }) {
                     <dt className={styles.detailsLabel}>Submit on</dt>
                     <dd className={styles.detailsValue}>
                         {chainRegistry.get(submitChainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" />
-                            : submitChainId}
+                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" showName={false} />
+                            : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -842,6 +845,7 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
                 onChange={onChainChange}
                 chainIds={chainIds}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
 
             <Input

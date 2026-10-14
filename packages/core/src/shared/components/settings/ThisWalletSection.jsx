@@ -520,7 +520,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
             title={`Remove ${walletName}?`}
             description={(
                 <>
-                    Removing this wallet deletes its accounts, addresses, signers, and pending transactions.
+                    Its accounts, addresses, signers, and pending transactions will be deleted.
                     Make sure you have a backup before continuing. The encrypted seed is destroyed and
                     cannot be recovered. This cannot be undone. Type the wallet name{' '}
                     <strong className={styles.confirmName}>{walletName}</strong> to confirm.

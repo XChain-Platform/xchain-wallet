@@ -31,7 +31,6 @@ import {
     Input,
     Select,
     ChainPicker,
-    ChainBadge,
     CopyButton,
     AddressText,
     FormPage,
@@ -229,20 +228,10 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         );
     }
 
-    const descriptor = chainRegistry.get(chainId);
-
     return wrap(
         <FormPage
             label="Create agent account"
             onSubmit={handleSubmit}
-            intro={(
-                <>
-                An agent account is a 2-of-2 shared address between an automated
-                agent and this wallet. This wallet acts as the policy co-signer:
-                it signs a request automatically when it fits the rules you set
-                below, and refuses anything out of policy. Bitcoin-only at launch.
-                </>
-            )}
             status={(
                 <>
                     {submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
@@ -260,7 +249,13 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 </Button>
             )}
         >
-
+            <details>
+                <summary>How agent accounts work</summary>
+                <p className={styles.hint}>
+                    An automated agent shares a 2-of-2 address with this wallet. This wallet signs requests that
+                    fit the policy and refuses requests outside it. Agent accounts support Bitcoin networks.
+                </p>
+            </details>
             <ChainPicker
                 label="Network"
                 value={chainId}
@@ -298,13 +293,6 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             />
 
             <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
-
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                </dd>
-            </dl>
 
         </FormPage>,
     );

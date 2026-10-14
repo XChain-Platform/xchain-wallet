@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -475,7 +475,6 @@ function TokenDetailContent({
                                     src={branding.chainIconSmallUrl(chainId)}
                                     alt=""
                                     aria-hidden="true"
-                                    title={descriptor?.displayName || chainId}
                                     className={styles.balanceHeroChainOverlay}
                                 />
                             ) : null}
@@ -1155,7 +1154,9 @@ function DetailsPanel({
                     </DetailRow>
                 ) : null}
                 <DetailRow label="Type">{kindLabel(kind)}</DetailRow>
-                <DetailRow label="Chain">{descriptor?.displayName || chainId}</DetailRow>
+                {descriptor ? (
+                    <DetailRow label="Chain"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
+                ) : null}
                 {!isNative ? (
                     <DetailRow label="Divisibility">{detailText(divisibility)}</DetailRow>
                 ) : null}

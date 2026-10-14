@@ -198,7 +198,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 const descriptor = chainRegistry.get(unavailableChain);
                 return (
                     <p className={styles.error} key={unavailableChain}>
-                        Shared lists unavailable from {descriptor?.displayName || unavailableChain}.
+                        Shared lists unavailable{descriptor ? <> from <ChainBadge descriptor={descriptor} size="sm" /></> : null}.
                     </p>
                 );
             })}
@@ -269,7 +269,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
         <dl
             role="listitem"
             className={styles.detailsList}
-            aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)} on ${valueOrUnknown(entry.homeChain)}`}
+            aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)}`}
         >
             {entry.name ? (
                 <>
@@ -279,7 +279,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
             ) : null}
             <dt className={styles.detailsLabel}>Home chain</dt>
             <dd className={styles.detailsValue}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : valueOrUnknown(entry.homeChain)}
+                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : '?'}
             </dd>
             <dt className={styles.detailsLabel}>Home list index</dt>
             <dd className={styles.detailsValue}>{valueOrUnknown(entry.homeListIndex)}</dd>

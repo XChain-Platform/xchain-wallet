@@ -100,8 +100,6 @@ vi.mock('@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx', () =>
 vi.mock('@xchain-wallet/core/shared/components/ReachabilityBanner.jsx', () => ({
     ReachabilityBanner: () => null,
 }));
-vi.mock('@xchain-wallet/core/shared/components/DemoBanner.jsx', () => ({ DemoBanner: () => null }));
-vi.mock('@xchain-wallet/core/shared/components/NetworkBanner.jsx', () => ({ NetworkBanner: () => null }));
 
 import { App } from '../../../packages/desktop/renderer/App.jsx';
 

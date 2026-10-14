@@ -16,8 +16,15 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
- NetworkField,  Icon, StatusMessage, FeeSelector, AddressField, FormErrorSummary, Switch,} from '@xchain-wallet/core/ui';
+    Icon,
+    StatusMessage,
+    FeeSelector,
+    AddressField,
+    FormErrorSummary,
+    Switch,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -508,11 +515,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             }
         }
         if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
-            setFormError(`Transfer ownership address is not valid for ${descriptor?.displayName || 'this chain'}.`);
+            setFormError('Transfer ownership address is not valid for the active chain.');
             return;
         }
         if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
-            setFormError(`Initial mint destination is not valid for ${descriptor?.displayName || 'this chain'}.`);
+            setFormError('Initial mint destination is not valid for the active chain.');
             return;
         }
         // A supply destination with no initial mint would be silently dropped
@@ -767,18 +774,18 @@ export function IssueTokenForm({ walletId, onBack }) {
                             ? t('send.review.createUnsigned')
                             : isHwSource
                                 ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                                : (descriptor
-                                    ? t('send.review.signOn', { device: descriptor.displayName })
-                                    : t('send.review.sign'))}
+                                : t('send.review.sign')}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -838,7 +845,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -940,7 +947,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             )}
         >
             {draftBanner}
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker label={t('settings.network.label')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField

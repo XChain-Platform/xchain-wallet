@@ -279,12 +279,6 @@ export function MarketsList({
             ? selectorTickUpper.slice(0, 1)
             : (selectorNativeTicker || selectorDescriptor?.displayName || '?').slice(0, 1))
         : '?';
-    const assetSub = selectedAsset && selectorDescriptor
-        ? (isTokenSelection
-            ? selectorTickUpper
-            : (selectorDescriptor.networkKind !== 'mainnet' ? selectorDescriptor.networkKind : (selectorDescriptor.displayName || '')))
-        : '';
-
     return (
         <Screen variant={variant} header={header}>
             <ListPage
@@ -324,18 +318,16 @@ export function MarketsList({
                                             src={chainPipUrl}
                                             alt=""
                                             aria-hidden="true"
-                                            title={selectorDescriptor.displayName}
                                             className={receiveStyles.assetChainOverlay}
                                         />
                                     ) : null;
                                 })() : null}
                             </span>
-                            <span className={receiveStyles.assetText}>
-                                <span className={receiveStyles.assetName}>{assetName}</span>
-                                {assetSub ? (
-                                    <span className={receiveStyles.assetSub}>{assetSub}</span>
-                                ) : null}
-                            </span>
+                            {isTokenSelection ? (
+                                <span className={receiveStyles.assetText}>
+                                    <span className={receiveStyles.assetName}>{assetName}</span>
+                                </span>
+                            ) : null}
                             <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
                         </Button>
 

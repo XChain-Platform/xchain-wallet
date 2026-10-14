@@ -44,6 +44,7 @@ describe('LinkForm action preview validation', () => {
         );
 
         const inputs = await screen.findAllByLabelText('Action to reference');
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
 

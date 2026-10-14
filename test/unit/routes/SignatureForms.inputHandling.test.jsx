@@ -83,6 +83,17 @@ describe('message signing inputs', () => {
         await waitFor(() => expect(screen.getByLabelText('Address').value).toBe('ltc'));
         expect(screen.getByRole('button', { name: /Chain: Litecoin/ })).toBeTruthy();
     });
+
+    it('does not render the selected network kind', async () => {
+        renderForm(SignMessageForm, messagingFor({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                'bitcoin-regtest': [{ id: 'btc-regtest', address: 'bcrt1qexample', source: 'hd' }],
+            }),
+        }));
+
+        await screen.findByRole('button', { name: 'Chain: Bitcoin' });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
 });
 
 describe('signature verification inputs and results', () => {

@@ -9,19 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useId } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
 import { TickerIcon } from './TickerIcon.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
 import styles from './TokenField.module.css';
 import inputStyles from '../../ui/Input.module.css';
 
-const chainRegistry = registryLib.defaultRegistry();
-
 /**
  * TokenField: the canonical inline token/asset selector for forms.
  *
  * A field-shaped button that shows the selected token's icon (with its
- * chain pip), ticker, and chain, and opens the full-page TokenPicker when
+ * chain pip) and ticker, and opens the full-page TokenPicker when
  * tapped. Presentation + click only: the host owns the picker navigation and
  * feeds the chosen `{ chainId, tick }` back in via `value`, mirroring how
  * AmountField is presentation-only and the route owns the data. This keeps
@@ -60,17 +57,12 @@ export function TokenField({
     const chainId = value?.chainId;
     const tick = value?.tick;
     const hasValue = Boolean(chainId && tick);
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const networkSuffix = descriptor?.networkKind && descriptor.networkKind !== 'mainnet'
-        ? ` · ${descriptor.networkKind}`
-        : '';
-    const chainName = descriptor ? `${descriptor.displayName}${networkSuffix}` : chainId;
     const iconSize = size === 'lg' ? 24 : 20;
 
     // Accessible name carries the field label + current selection (or the
     // empty-state text), since the visual chip isn't a native form control.
     const selectionText = hasValue
-        ? `${tick}${chainName ? ` on ${chainName}` : ''}`
+        ? tick
         : placeholder;
     const accessibleName = label ? `${label}: ${selectionText}` : selectionText;
 
@@ -92,9 +84,6 @@ export function TokenField({
                         <TickerIcon chainId={chainId} tick={tick} size={iconSize} />
                         <span className={styles.text}>
                             <span className={styles.tick} title={tick}>{tick}</span>
-                            {chainName ? (
-                                <span className={styles.chain} title={chainName}>on {chainName}</span>
-                            ) : null}
                         </span>
                     </>
                 ) : (

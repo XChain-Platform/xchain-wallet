@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -525,7 +525,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 {listType === '1' && missingTicks.length > 0 ? (
                     <p className={styles.hint}>
                         {missingTicks.length} of these ({missingTicks.join(', ')}) {missingTicks.length === 1 ? 'was' : 'were'} not
-                        found on {descriptor?.displayName || chainId}; the network leaves an unknown token out of the list.
+                        found on the selected chain; the network leaves an unknown token out of the list.
                         Check the members in My Lists once it's indexed.
                     </p>
                 ) : null}
@@ -546,7 +546,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -597,7 +597,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Type</dt>
@@ -717,11 +717,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 </Button>
             )}
         >
-            <NetworkField
+            <ChainPicker
+                label="Network"
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField
@@ -816,14 +818,14 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
-                                This list is published on {descriptor?.displayName || chainId}.
+                                This list is published on the selected chain.
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
                                 keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
-                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                    message: 'Does not belong to the selected chain.',
                                 }))}
                             />
                         </div>
@@ -861,7 +863,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     onChange={(value) => { setTicksText(value); setFormError(null); }}
                     items={tickItems}
                     chainId={chainId}
-                    chainLabel={descriptor?.displayName || chainId}
+                    chainLabel="the selected chain"
                     listCoin={coinTicker}
                     coinQualified={tickCoinSupported}
                     messaging={messaging}

@@ -150,7 +150,7 @@ function reviewActionLabel(decoded, fallback, chainLabel) {
         return [inlineAmount[1], inlineAmount[2], unit].filter(Boolean).join(' ');
     }
 
-    const withoutChain = chainLabel
+    const withoutChain = typeof chainLabel === 'string' && chainLabel
         ? summary.replace(new RegExp(`\\s+on\\s+${escapeRegExp(chainLabel)}(?=\\s|:|\\(|$)`, 'i'), '')
         : summary;
     const actionPhrase = withoutChain

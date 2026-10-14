@@ -452,7 +452,6 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             <FormPage
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
-                intro={`${verb} ${actionParams.QUANTITY} ${actionParams.TICK} ${preposition} contract #${actionParams.CONTRACT_ACTION_INDEX}.`}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
@@ -471,15 +470,19 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
+                                : verb}
                     </Button>
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={descriptor} size="sm" />
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />

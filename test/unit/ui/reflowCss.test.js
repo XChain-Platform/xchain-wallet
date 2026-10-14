@@ -18,13 +18,15 @@ describe('zoom reflow CSS', () => {
         expect(tierForWidth(320)).toBe('compact');
     });
 
-    it('keeps the compact app header on one row without widening the shell', () => {
+    it('keeps the compact app header on one row while identity text shrinks', () => {
         const css = readCss('packages/core/src/shared/components/AppHeader.module.css');
 
-        // Operator ruling: one header row at every width, logo at the start edge
-        // and controls at the end edge; the wallet name truncates first.
-        expect(css).toMatch(/:global\(\[data-xc-tier='compact'\]\) \.bar\s*\{[^}]*flex-wrap:\s*nowrap/s);
-        expect(css).toMatch(/:global\(\[data-xc-tier='compact'\]\) \.right\s*\{[^}]*flex:\s*0 0 auto[^}]*flex-wrap:\s*nowrap/s);
+        expect(css).toMatch(/\.bar\s*\{[^}]*flex-wrap:\s*nowrap/s);
+        expect(css).toMatch(/\.left\s*\{[^}]*flex:\s*1 1 auto[^}]*min-width:\s*0/s);
+        expect(css).toMatch(/\.right\s*\{[^}]*flex:\s*0 0 auto[^}]*flex-wrap:\s*nowrap/s);
+        expect(css).not.toMatch(/data-xc-tier='compact'[\s\S]*?\.bar\s*\{/);
+        // Operator ruling: one header row at every width; nothing in the
+        // header may wrap, and the identity side truncates first.
         expect(css).not.toMatch(/flex:\s*1 1 100%/);
         expect(css).not.toMatch(/flex-wrap:\s*wrap/);
         expect(css).toMatch(/\.left\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s);

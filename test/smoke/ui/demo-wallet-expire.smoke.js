@@ -17,8 +17,8 @@
 //     localStorage; default TTL is 24 hours.
 //   - isDemoWalletExpired flips true once now >= createdAt + ttl.
 //   - clearDemoWalletId wipes all three storage keys (id + created-at + ttl).
-//   - DemoBanner mounts an interval-based auto-exit when isDemoWalletExpired
-//     reports true, and surfaces an "Auto-wipes in …" hint.
+//   - useDemoAutoWipe runs an interval-based auto-exit when isDemoWalletExpired
+//     reports true, and WalletDetails surfaces an "auto-wipes in …" hint.
 //   - flows/index.js re-exports the new symbols.
 
 import { strict as assert } from 'node:assert';
@@ -46,8 +46,12 @@ const flowIndexSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'flows', 'index.js'),
     'utf8',
 );
-const bannerSrc = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'DemoBanner.jsx'),
+const autoWipeSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'hooks', 'useDemoAutoWipe.js'),
+    'utf8',
+);
+const walletDetailsSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'WalletDetails.jsx'),
     'utf8',
 );
 
@@ -117,19 +121,19 @@ assert.equal(getDemoWalletExpiry(), null, 'expiry cleared');
 assert.equal(isDemoWalletExpired({ now: Date.now() + 100 * DEMO_DEFAULT_TTL_MS }), false,
     'no demo → not expired');
 
-// ─── 3. DemoBanner auto-exit wiring ────────────────────────────────────
+// ─── 3. Shell auto-exit wiring and the wallet-details countdown ─────────
 
-assert.match(bannerSrc, /flowsLib\.getDemoWalletExpiry\(\)/,
-    'banner reads the expiry record on mount');
-assert.match(bannerSrc, /flowsLib\.isDemoWalletExpired\(\{ now: tickNow \}\)/,
-    'banner checks expiry against the same clock value shown by the countdown');
-assert.match(bannerSrc, /setInterval\(tick, 60_000\)/,
-    'banner re-checks expiry on a 60-second interval');
-assert.match(bannerSrc, /Auto-wipes in/,
-    'banner copy mentions auto-wipe countdown');
-assert.match(bannerSrc, /Auto-wipe imminent\./,
-    'banner copy covers the past-expiry edge case');
-assert.match(bannerSrc, /function formatExpiryHint/,
-    'banner has formatExpiryHint helper for countdown copy');
+assert.match(autoWipeSrc, /isDemoWalletExpired\(\)/,
+    'the shell hook checks the expiry record');
+assert.match(autoWipeSrc, /setInterval\(tick, 60_000\)/,
+    'the shell hook re-checks expiry on a 60-second interval');
+assert.match(autoWipeSrc, /exitDemoWallet\(\{ messaging, walletId \}\)/,
+    'the shell hook exits through the shared demo teardown');
+assert.match(walletDetailsSrc, /getDemoWalletExpiry\(\)/,
+    'wallet details reads the expiry record');
+assert.match(walletDetailsSrc, /auto-wipes in/,
+    'wallet details copy mentions the auto-wipe countdown');
+assert.match(walletDetailsSrc, /auto-wipe imminent/,
+    'wallet details copy covers the past-expiry edge case');
 
 console.log('demo-wallet-expire smoke OK');

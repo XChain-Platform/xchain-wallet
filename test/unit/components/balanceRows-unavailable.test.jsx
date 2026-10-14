@@ -147,26 +147,19 @@ describe('BalanceList rendering of an unavailable balance (Q-1)', () => {
     });
 });
 
-describe('BalanceList network labelling off mainnet (D-60)', () => {
-    it('a non-mainnet coin names its network in the row', () => {
-        // Demo mode is started with `activeNetwork: 'regtest'` by Onboarding
-        // and never says so, so the user reads "Bitcoin / BTC" priced at
-        // $7,000,000 for coins worth nothing. The first time the word regtest
-        // reached them was a Send-form validation error.
+describe('BalanceList network labelling', () => {
+    it('a non-mainnet coin does not repeat its network in the row', () => {
+        // The active network is a Settings choice; rows never restate it.
         const rows = buildBalanceRows(
             { 'bitcoin-regtest': [healthy('bcrt1qa', 100000000)] },
             chainRegistry,
         );
         expect(rows, 'the registry has no bitcoin-regtest chain').toHaveLength(1);
         render(<BalanceList rows={rows} />);
-        expect(screen.getByText(/regtest/i),
-            'a regtest balance is presented indistinguishably from a mainnet one')
-            .toBeTruthy();
+        expect(screen.queryByText(/regtest/i)).toBeNull();
     });
 
-    it('but a mainnet coin does not, because there the network IS the default', () => {
-        // Repeating "mainnet" on every row is the noise the original rule was
-        // written to avoid, and that rule is still right where it applies.
+    it('nor does a mainnet coin', () => {
         const rows = buildBalanceRows({ [CHAIN]: [healthy('bc1qa', 100000000)] }, chainRegistry);
         render(<BalanceList rows={rows} />);
         expect(screen.queryByText(/mainnet/i)).toBeNull();

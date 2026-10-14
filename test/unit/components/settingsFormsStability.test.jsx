@@ -262,6 +262,24 @@ describe('settings form validation', () => {
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
+    it('does not repeat the active network kind in fee headings', () => {
+        settings = {
+            ...createDefaultSettings(),
+            activeNetwork: 'testnet',
+            fees: {
+                'bitcoin-testnet': {
+                    strategy: 'normal',
+                    customSatsPerKb: null,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+
+        expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(screen.queryByText(/testnet/i)).toBeNull();
+    });
+
     it('saves a comma-decimal custom fee rate as the same numeric setting', async () => {
         await setLocale('de-DE');
         settings = {

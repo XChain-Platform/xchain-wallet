@@ -118,14 +118,6 @@
     white-space: nowrap;
 }
 
-.triggerKind {
-    flex: 0 0 auto;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-family: var(--xc-font-mono);
-    letter-spacing: 0.04em;
-}
-
 .triggerPlaceholder {
     color: var(--xc-text-muted);
 }
