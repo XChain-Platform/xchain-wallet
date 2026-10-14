@@ -763,6 +763,14 @@ function permanentReleasePatch(entry, failure) {
     };
 }
 
+const QUEUED_BROADCAST_RETRY_BASE_MS = 1_000;
+const QUEUED_BROADCAST_RETRY_MAX_MS = 60_000;
+
+function queuedBroadcastRetryDelay(attempt) {
+    const exponent = Math.max(0, Math.min(16, attempt - 1));
+    return Math.min(QUEUED_BROADCAST_RETRY_MAX_MS, QUEUED_BROADCAST_RETRY_BASE_MS * (2 ** exponent));
+}
+
 async function retainReplacementPlan(vault, result, fallbackPsbtHex, requestedRbf, descriptor) {
     // Record the RBF the encoder was allowed to signal, not the one the caller asked for.
     const rbf = capRbfToDescriptor(descriptor, { rbf: requestedRbf }).rbf;
@@ -3374,6 +3382,18 @@ export function createBackgroundHost(deps) {
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
             const entry = q[idx];
+            const retryAfterMs = Number.isFinite(entry.nextRetryAt)
+                ? Math.ceil(entry.nextRetryAt - Date.now())
+                : 0;
+            if (retryAfterMs > 0) {
+                const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
+                const retryError = new Error(
+                    `Sending is paused after a network failure. Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+                );
+                retryError.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
+                retryError.retryAfterMs = retryAfterMs;
+                throw retryError;
+            }
             const sdk = sdkRegistry.get(entry.chainId);
             // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
             // encoder as a second argument and refuses without it ("Encoder client
@@ -3487,6 +3507,23 @@ export function createBackgroundHost(deps) {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
+                } else {
+                    const retryAttempt = Number.isSafeInteger(entry.retryAttempt) && entry.retryAttempt > 0
+                        ? entry.retryAttempt + 1
+                        : 1;
+                    const retryDelayMs = queuedBroadcastRetryDelay(retryAttempt);
+                    const cur = q.findIndex((e) => e.id === id);
+                    if (cur >= 0) {
+                        q[cur] = {
+                            ...q[cur],
+                            retryAttempt,
+                            nextRetryAt: Date.now() + retryDelayMs,
+                        };
+                        await persistQueue();
+                    }
+                    if (err && typeof err === 'object') {
+                        try { err.retryAfterMs = retryDelayMs; } catch { /* a frozen error keeps no retry hint */ }
+                    }
                 }
                 // Carry the verdict this catch just ACTED on across the messaging
                 // boundary, which keeps only { name, message }. Without it the

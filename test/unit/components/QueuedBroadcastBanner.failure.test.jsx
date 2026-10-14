@@ -106,6 +106,21 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         expect(toasts).toHaveLength(0);
     });
 
+    it('states the retry delay without exposing the node error', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        broadcastImpl = async () => {
+            const err = named('BroadcastFailedTransientError', 'Encoder RPC error: ETIMEDOUT');
+            err.retryAfterMs = 2_100;
+            throw err;
+        };
+        pressBroadcast();
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toBe(
+            'Sending failed, and the transaction is still queued. Try again in 3 seconds.',
+        );
+        expect(alert.textContent).not.toMatch(/Encoder RPC|ETIMEDOUT/);
+    });
+
     it('drops a row the host refused as no longer queued without telling the user to compose again', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         broadcastImpl = async ({ id }) => {

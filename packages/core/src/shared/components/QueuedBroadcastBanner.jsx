@@ -346,6 +346,17 @@ export function queuedBroadcastFailure(err, list, id) {
         };
     }
     if (kind === 'transient') {
+        const retryAfterMs = err && typeof err === 'object'
+            ? Number(/** @type {any} */ (err).retryAfterMs)
+            : NaN;
+        if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+            const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
+            return {
+                removed,
+                message: 'Sending failed, and the transaction is still queued. '
+                    + `Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+            };
+        }
         return {
             removed,
             message: 'Sending failed, and the transaction is still queued. '
