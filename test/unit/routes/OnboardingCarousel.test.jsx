@@ -33,6 +33,10 @@ const carouselCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/OnboardingCarousel.module.css'),
     'utf8',
 );
+const buttonCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/Button.module.css'),
+    'utf8',
+);
 
 const FRAMES = [
     { id: 'a', title: 'Frame A title', body: 'Body A' },
@@ -485,12 +489,22 @@ describe('Onboarding: license gate', () => {
         await withElementDimensions({ scrollHeight: 600, clientHeight: 200 }, async () => {
             mountLicenseGate();
             const checkbox = screen.getByRole('checkbox');
+            const accept = screen.getByRole('button', { name: 'Accept and continue' });
             expect(checkbox).toBeDisabled();
+            expect(accept).toBeDisabled();
+            expect(accept).toHaveAccessibleDescription('Review all license terms to continue.');
+            expect(buttonCss).toMatch(/\.btn:disabled:not\(\.link\)\s*\{[^}]*background:\s*var\(--xc-control-disabled-bg\)[^}]*border-color:\s*var\(--xc-control-disabled-border\)[^}]*color:\s*var\(--xc-control-disabled-text\)/s);
 
             const terms = screen.getByLabelText('License terms');
             terms.scrollTop = 400;
             fireEvent.scroll(terms);
             expect(checkbox).toBeEnabled();
+            expect(accept).toBeDisabled();
+            expect(accept).toHaveAccessibleDescription('Check "I have read and agree to these terms" to continue.');
+
+            fireEvent.click(checkbox);
+            expect(accept).toBeEnabled();
+            expect(accept).not.toHaveAttribute('aria-describedby');
         });
     });
 });

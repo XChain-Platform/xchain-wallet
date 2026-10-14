@@ -162,6 +162,11 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     const [explainerSeenAt, setExplainerSeenAt] = useState(() => readExplainerSeen());
     const licenseScrollRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const licenseSatisfied = !!licenseAcceptedAt && licenseAcceptedVersion === LICENSE_VERSION;
+    const licenseDisabledReason = !scrolledToEnd
+        ? 'Review all license terms to continue.'
+        : !licenseAck
+            ? 'Check "I have read and agree to these terms" to continue.'
+            : null;
 
     useEffect(() => {
         const el = licenseScrollRef.current;
@@ -394,10 +399,18 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                     )}
                     actions={(
                         <div className={styles.licenseActions}>
+                            {licenseDisabledReason ? (
+                                <span id="license-accept-disabled-reason" className="sr-only">
+                                    {licenseDisabledReason}
+                                </span>
+                            ) : null}
                             <Button
                                 variant="primary"
                                 onClick={handleAcceptLicense}
-                                disabled={!licenseAck || !scrolledToEnd}
+                                disabled={Boolean(licenseDisabledReason)}
+                                aria-describedby={licenseDisabledReason
+                                    ? 'license-accept-disabled-reason'
+                                    : undefined}
                                 icon={<Icon.CheckIcon />}
                             >
                                 Accept and continue
