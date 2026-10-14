@@ -76,7 +76,7 @@ describe('regression/scanner-without-camera', () => {
             ? await within(page).findByRole('alert')
             : within(page).getByTestId('qr-scanner-unsupported');
         expect(cameraState).toHaveTextContent(message);
-        expect(screen.queryByRole('form', { name: 'This screen could not be shown' })).toBeNull();
+        expect(screen.queryByRole('form', { name: 'This screen couldn\'t be shown' })).toBeNull();
         expect(onBoundaryError).not.toHaveBeenCalled();
         if (getUserMedia) expect(getUserMedia).toHaveBeenCalledOnce();
     });
