@@ -8,13 +8,18 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { findChrome102CssIssues } from '../../helpers/chrome102CssAudit.js';
+import {
+    SAFARI_16_UNSUPPORTED_CSS_FEATURES,
+    findChrome102CssIssues,
+    findSafari16CssIssues,
+} from '../../helpers/chrome102CssAudit.js';
 
 const requireFromVite = createRequire(
     createRequire(join(process.cwd(), 'packages', 'web', 'package.json')).resolve('vite'),
 );
 const postcss = requireFromVite('postcss');
 const audit = (css) => findChrome102CssIssues(postcss.parse(css));
+const safariAudit = (css) => findSafari16CssIssues(postcss.parse(css));
 
 describe('Chrome 102 CSS compatibility audit', () => {
     it('reports every unsupported feature family when it has no fallback or guard', () => {
@@ -88,5 +93,47 @@ describe('Chrome 102 CSS compatibility audit', () => {
         expect(css).toContain('@media (max-width: 480px)');
         expect(css).not.toMatch(/@container|container-type/);
         expect(audit(css)).toEqual([]);
+    });
+});
+
+describe('Safari 16 CSS compatibility audit', () => {
+    it('pins the unsupported feature list for the iOS shell', () => {
+        expect(SAFARI_16_UNSUPPORTED_CSS_FEATURES).toEqual([
+            'color-mix()',
+            'text-wrap: balance',
+            'native CSS nesting',
+            'scrollbar-gutter',
+        ]);
+    });
+
+    it('reports every unsupported CSS feature when it has no fallback or guard', () => {
+        const css = `
+            .mix { color: color-mix(in srgb, red, blue); }
+            .title { text-wrap: balance; }
+            .parent { & .child { color: red; } }
+            .scroll { scrollbar-gutter: stable; }
+        `;
+        expect(safariAudit(css).map(({ feature }) => feature)).toEqual(
+            SAFARI_16_UNSUPPORTED_CSS_FEATURES,
+        );
+    });
+
+    it('accepts Safari 16 fallbacks and matching feature guards', () => {
+        const css = `
+            .mix { color: red; color: color-mix(in srgb, red, blue); }
+            .title { text-wrap: wrap; text-wrap: balance; }
+            @supports selector(&) { .parent { & .child { color: red; } } }
+            @supports (scrollbar-gutter: stable) {
+                .scroll { scrollbar-gutter: stable; }
+            }
+        `;
+        expect(safariAudit(css)).toEqual([]);
+    });
+
+    it('keeps the shared screen CSS safe for Safari 16', () => {
+        const css = readFileSync(join(
+            process.cwd(), 'packages', 'core', 'src', 'ui', 'Screen.module.css',
+        ), 'utf8');
+        expect(safariAudit(css)).toEqual([]);
     });
 });

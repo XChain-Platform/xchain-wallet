@@ -47,9 +47,14 @@
     overflow-y: auto;
     overflow-x: hidden;
     scroll-padding-block: var(--xc-space-3);
-    /* Content ends at the scrollbar and never runs under it, and a screen
-       that scrolls is as wide as one that does not. */
-    scrollbar-gutter: stable;
+}
+
+/* Desktop layouts reserve space for non-overlay scrollbars. Safari 16 skips
+   this enhancement, while iOS overlay scrollbars need no reserved gutter. */
+@supports (scrollbar-gutter: stable) {
+    .body {
+        scrollbar-gutter: stable;
+    }
 }
 
 /* macOS draws overlay scrollbars that take no space, so the gutter above
