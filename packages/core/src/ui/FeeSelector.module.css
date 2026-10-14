@@ -219,7 +219,7 @@
 }
 
 /* Click-to-edit readout figures (fee amount, tier rate). Rendered as
-   buttons so they're keyboard-reachable; the dashed underline appears on
+   buttons so they're keyboard-reachable; the underline appears on
    hover/focus as the "this is editable" affordance without adding visual
    noise to the resting readout. */
 .readoutEdit {
@@ -232,7 +232,7 @@
     font: inherit;
     color: inherit;
     cursor: text;
-    border-bottom: 1px dashed transparent;
+    border-bottom: 1px solid transparent;
 }
 
 .readoutEdit:hover:not(:disabled),

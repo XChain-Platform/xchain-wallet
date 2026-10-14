@@ -280,7 +280,6 @@ it('limits ViewPrivateKey raw pixels to documented hairlines and sub-scale inset
     });
 
     expect(rawPixelDeclarations.map(({ declaration }) => declaration)).toEqual([
-        'border: 1px solid var(--xc-border)',
         'padding: 2px var(--xc-space-1)',
         'border: 1px solid var(--xc-border)',
         'border: 1px solid var(--xc-border)',
@@ -380,8 +379,11 @@ it('uses the shared padding and radius for explicit card modules', () => {
     expect(tokens).toContain('--xc-card-pad: var(--xc-space-4);');
     expect(tokens).toContain('--xc-card-radius: var(--xc-radius-md);');
 
+    // A card module either composes the shared card (ui/Card.module.css)
+    // or, for a tone notice, draws its box from the same two tokens.
     for (const file of cardModules) {
         const css = readFileSync(join(componentsRoot, file), 'utf8');
+        if (/composes: (card|flush) from '[^']*\/Card\.module\.css'/.test(css)) continue;
         expect(css, file).toContain('padding: var(--xc-card-pad);');
         expect(css, file).toContain('border-radius: var(--xc-card-radius);');
     }
@@ -391,7 +393,6 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
     const expectedPixelDeclarations = {
         'ActionIntentSummary.module.css': [
             'border-inline-start: 3px solid var(--xc-warning)',
-            'border: 1px solid var(--xc-border)',
         ],
         'AlertsOverlay.module.css': [
             'max-width: min(380px, 100%)',
@@ -402,25 +403,23 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
         ],
         'AmountField.module.css': [],
         'BackupReminderCard.module.css': [
-            'border: 1px solid var(--xc-border)',
             'flex: 1 1 240px',
             'outline: 2px solid var(--xc-focus-ring)',
             'outline-offset: 2px',
         ],
         'BalanceChanges.module.css': [
-            'border: 1px solid var(--xc-border)',
-            'border-bottom: 1px dashed var(--xc-border-soft, var(--xc-border))',
+            'border-bottom: 1px solid var(--xc-border-soft, var(--xc-border))',
             'border-top: 1px solid var(--xc-border-soft, var(--xc-border))',
         ],
         'CollectiblesView.module.css': [
-            'border: 1px solid var(--xc-border)',
             'outline: 2px solid var(--xc-focus-ring)',
             'outline-offset: -2px',
             'outline: 2px solid var(--xc-on-accent)',
             'outline-offset: 2px',
-            'border-top: 1px dashed var(--xc-border)',
+            'border-top: 1px solid var(--xc-border)',
         ],
     };
+
 
     for (const file of tokenCleanupModules) {
         const css = readFileSync(join(componentsRoot, file), 'utf8');

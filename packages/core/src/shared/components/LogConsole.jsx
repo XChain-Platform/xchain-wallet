@@ -50,10 +50,10 @@ const PANEL = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-2)',
-    background: 'var(--xc-bg)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
+    padding: 'var(--xc-card-pad)',
+    background: 'var(--xc-card-bg)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
     fontFamily: 'var(--xc-font-mono, monospace)',
     fontSize: 'var(--xc-text-xs)',
 };
@@ -61,10 +61,6 @@ const PANEL = {
 const LIST = {
     maxHeight: 240,
     overflowY: 'auto',
-    background: 'var(--xc-bg-muted)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1)',
 };
 
 const ROW = {

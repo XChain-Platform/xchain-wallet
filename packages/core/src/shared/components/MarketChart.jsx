@@ -231,9 +231,10 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         return (
             <div
                 style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: '4px',
-                    padding: '0.75rem',
+                    border: 'var(--xc-card-border)',
+                    background: 'var(--xc-card-bg)',
+                    borderRadius: 'var(--xc-card-radius)',
+                    padding: 'var(--xc-card-pad)',
                     minHeight: '6rem',
                 }}
             >
@@ -249,9 +250,10 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         <div
             aria-busy={loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
             <div

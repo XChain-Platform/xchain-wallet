@@ -1225,10 +1225,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     aria-label={t('receive.multisigReceiveAddress')}
                     style={{
                         marginTop: 'var(--xc-space-3)',
-                        padding: 'var(--xc-space-3)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        background: 'var(--xc-bg-muted)',
+                        padding: 'var(--xc-card-pad)',
+                        border: 'var(--xc-card-border)',
+                        borderRadius: 'var(--xc-card-radius)',
+                        background: 'var(--xc-card-bg)',
                     }}
                 >
                     <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
