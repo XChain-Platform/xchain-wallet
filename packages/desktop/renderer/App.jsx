@@ -150,7 +150,7 @@ import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.j
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
-import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
@@ -247,6 +247,7 @@ function BottomTabBarWithObligations({ badges, ...rest }) {
 }
 
 function AppInner() {
+    const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const statusRequest = useRef(0);
     // Keyboard-binding overrides for the palette + shortcuts live in
@@ -743,12 +744,20 @@ function AppInner() {
     // D-34(c): switch the active WALLET and remember it, so a restart returns
     // to it instead of snapping back to the first wallet. Twin of the account
     // handler above, one level up.
-    const handleSwitchWallet = (id) => {
+    const handleSwitchWallet = (id, name) => {
         setActiveAccountId(null);
         const changed = typeof id === 'string' && id.length > 0 && id !== activeWalletId;
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id);
+        if (id) writeActiveWallet(id, name);
         if (changed) messaging.setActiveWallet(id).catch(() => { /* best-effort sibling-window notice */ });
+    };
+
+    const handleWalletAdded = (wallet) => {
+        if (wallet?.id) {
+            handleSwitchWallet(wallet.id, wallet.name);
+            showToast({ message: `${wallet.name || 'New wallet'} is now active.`, variant: 'success' });
+        }
+        refresh();
     };
 
     // Two gates, because the lanes stopped agreeing. Staking,
@@ -2603,7 +2612,7 @@ function AppInner() {
                         <CreateWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={handleWalletAdded}
                         />
                     );
                 }
@@ -2612,7 +2621,7 @@ function AppInner() {
                         <ImportWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }
@@ -2622,7 +2631,7 @@ function AppInner() {
                             mode="add"
                             variant="freewallet"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }

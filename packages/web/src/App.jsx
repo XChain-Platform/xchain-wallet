@@ -895,10 +895,18 @@ function AppInner() {
     // Switch the active wallet and remember it, so a reload returns to it
     // instead of snapping back to the first wallet. Twin of the account
     // handler below.
-    const handleSwitchWallet = (id) => {
+    const handleSwitchWallet = (id, name) => {
         setActiveAccountId(null);
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id, walletList.find((wallet) => wallet.id === id)?.name);
+        if (id) writeActiveWallet(id, name || walletList.find((wallet) => wallet.id === id)?.name);
+    };
+
+    const handleWalletAdded = (wallet) => {
+        if (wallet?.id) {
+            handleSwitchWallet(wallet.id, wallet.name);
+            showToast({ message: `${wallet.name || 'New wallet'} is now active.`, variant: 'success' });
+        }
+        refresh();
     };
 
     // Switch the active account and remember it per wallet, so a reload
@@ -2745,7 +2753,7 @@ function AppInner() {
                         <CreateWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={handleWalletAdded}
                         />
                     );
                 }
@@ -2754,7 +2762,7 @@ function AppInner() {
                         <ImportWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }
@@ -2764,7 +2772,7 @@ function AppInner() {
                             mode="add"
                             variant="freewallet"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }

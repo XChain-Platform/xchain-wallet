@@ -80,7 +80,7 @@ import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
-import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
@@ -241,6 +241,7 @@ export function App() {
 }
 
 function AppInner({ canOpenInTab, titleEnabled }) {
+    const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
     const [extensionHandoff] = useState(() => (
@@ -676,14 +677,22 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // D-34(c): switch the active wallet AND remember it, so the next popup
     // open returns to it instead of snapping back to the first wallet. Twin of
     // `handleSwitchAccount` one level down.
-    const handleSwitchWallet = (id) => {
+    const handleSwitchWallet = (id, name) => {
         // Only a real change is announced to connected dApps; a restore never comes through here.
         const changed = typeof id === 'string' && id.length > 0 && id !== activeWalletId;
         setActiveAccountId(null);
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id);
+        if (id) writeActiveWallet(id, name);
         // Best-effort: a failed notice must never undo the switch itself.
         if (changed) messaging.setActiveWallet(id).catch(() => {});
+    };
+
+    const handleWalletAdded = (wallet) => {
+        if (wallet?.id) {
+            handleSwitchWallet(wallet.id, wallet.name);
+            showToast({ message: `${wallet.name || 'New wallet'} is now active.`, variant: 'success' });
+        }
+        refresh();
     };
 
     // Load BIP44 accounts for the active wallet and pick the first
@@ -2661,7 +2670,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         <CreateWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={handleWalletAdded}
                         />
                     );
                 }
@@ -2670,7 +2679,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         <ImportWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                             initialLane={extensionHandoff?.flow === 'import' ? extensionHandoff.lane : undefined}
                             onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
                                 flow: 'import', mode: 'add', variant: 'default', lane,
@@ -2684,7 +2693,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             mode="add"
                             variant="freewallet"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                             onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
                                 flow: 'import', mode: 'add', variant: 'freewallet', lane,
                             }) : undefined}
