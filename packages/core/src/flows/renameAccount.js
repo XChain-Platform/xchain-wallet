@@ -12,6 +12,7 @@
 // vault metadata update; no signer needed. Twin of renameWallet.
 
 const NAME_MAX_LENGTH = 64;
+const nameLength = (value) => Array.from(value).length;
 
 /**
  * @param {object} opts
@@ -27,7 +28,8 @@ export async function renameAccount({ accountId, name, vault }) {
     if (typeof name !== 'string' || name.trim().length === 0) {
         throw new Error('renameAccount: name must be a non-empty string');
     }
-    if (name.trim().length > NAME_MAX_LENGTH) {
+    const trimmed = name.trim();
+    if (nameLength(trimmed) > NAME_MAX_LENGTH) {
         throw new Error(`renameAccount: name must be ${NAME_MAX_LENGTH} characters or fewer`);
     }
     if (!vault) throw new Error('renameAccount: vault is required');
@@ -35,7 +37,6 @@ export async function renameAccount({ accountId, name, vault }) {
     const account = await vault.accounts.get(accountId);
     if (!account) throw new Error('renameAccount: account not found: ' + accountId);
 
-    const trimmed = name.trim();
     const siblings = await vault.accounts.findBy('walletId', account.walletId);
     if (siblings.some((candidate) => candidate.id !== accountId
         && candidate.name.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
