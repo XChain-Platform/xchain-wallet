@@ -615,14 +615,16 @@ export function DisplaySection() {
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Saved chain filters</span>
-                    {resetMessage ? (
-                        <StatusMessage variant={resetMessage.variant}>{resetMessage.text}</StatusMessage>
-                    ) : null}
                 </div>
                 <Button size="sm" variant="secondary" icon={null} onClick={resetChainFilters}>
                     Reset list preferences
                 </Button>
             </div>
+            {/* Row results sit under the row at full width, like the other
+                settings messages, not squeezed into the label column. */}
+            {resetMessage ? (
+                <StatusMessage variant={resetMessage.variant}>{resetMessage.text}</StatusMessage>
+            ) : null}
             </FormSection>
 
             <FormSection title="Defaults">
@@ -630,13 +632,13 @@ export function DisplaySection() {
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>
                     <span style={ROW_HINT}>Restores balance display options and clears watched, pinned, hidden, and saved list preferences.</span>
-                    {displayMessage ? <StatusMessage variant="success">{displayMessage}</StatusMessage> : null}
-                    <DisplaySaveError error={saveError} controlKey="reset" />
                 </div>
                 <Button size="sm" variant="secondary" icon={null} onClick={resetDisplay}>
                     Reset to defaults
                 </Button>
             </div>
+            {displayMessage ? <StatusMessage variant="success">{displayMessage}</StatusMessage> : null}
+            <DisplaySaveError error={saveError} controlKey="reset" />
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}

@@ -44,6 +44,14 @@ describe('settings inline messages', () => {
         expect(settings).toMatch(/<StatusMessage variant=\{UPDATE_CHECK_VARIANT\[state\]/);
     });
 
+    it('puts a row result under the row at full width, not in its label column', () => {
+        const display = readFileSync(join(settingsDir, 'DisplaySection.jsx'), 'utf8');
+        expect(display).toMatch(/Saved chain filters<\/span>\s*<\/div>/);
+        expect(display).toMatch(/saved list preferences\.<\/span>\s*<\/div>/);
+        const region = readFileSync(join(settingsDir, 'LanguageRegionSection.jsx'), 'utf8');
+        expect(region).toMatch(/Asset balances are unchanged\.<\/span>\s*<\/div>/);
+    });
+
     it('shows a settings load failure as the shared load error, not a bare paragraph', () => {
         const keyboard = readFileSync(join(settingsDir, 'KeyboardSection.jsx'), 'utf8');
         expect(keyboard).toMatch(/if \(error\) return <SettingsLoadError error=\{error\} \/>;/);

@@ -186,12 +186,6 @@ export function LanguageRegionSection() {
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>Fiat currency</span>
                     <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
-                    {unsupportedFiatCurrency ? (
-                        <Status
-                            text={`${unsupportedFiatCurrency} is not supported. Values are shown in USD.`}
-                            tone="warning"
-                        />
-                    ) : null}
                 </div>
                 <div style={CONTROLS}>
                     <input
@@ -252,6 +246,12 @@ export function LanguageRegionSection() {
                 </div>
             </div>
             {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
+            {unsupportedFiatCurrency ? (
+                <Status
+                    text={`${unsupportedFiatCurrency} is not supported. Values are shown in USD.`}
+                    tone="warning"
+                />
+            ) : null}
         </div>
     );
 }
