@@ -9,9 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -67,7 +66,7 @@ const PROTOCOL_COIN_TICKER = {
  * @param {() => void} props.onBack
  */
 export function DelegationActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
-    // Seeded from the launching context; the Network field lets the user retarget.
+    // Keep the launching context's chain; network switching belongs in Settings.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
@@ -440,10 +439,12 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                         : `Revoke the delegated signing key ${shownPubkey.slice(0, 12)}…`}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -495,7 +496,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -559,7 +560,6 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"

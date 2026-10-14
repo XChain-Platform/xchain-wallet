@@ -25,13 +25,6 @@
     padding: 0;
 }
 
-.chainSelect {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
-}
-
 .searchActions {
     display: flex;
     justify-content: flex-end;

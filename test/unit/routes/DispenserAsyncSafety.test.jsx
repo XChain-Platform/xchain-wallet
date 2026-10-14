@@ -158,20 +158,21 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
-        const chain = await screen.findByRole('combobox');
-        await waitFor(() => expect(chain.options.length).toBeGreaterThan(1));
-        fireEvent.change(chain, { target: { value: chain.options[1].value } });
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
         const form = screen.getByRole('textbox').closest('form');
         await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).toBeEnabled());
         fireEvent.submit(form);
         fireEvent.submit(form);
 
-        await waitFor(() => expect(getDispensersForToken).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
+        const callsWhilePending = getDispensersForToken.mock.calls.length;
+        fireEvent.submit(form);
+        expect(getDispensersForToken).toHaveBeenCalledTimes(callsWhilePending);
         await act(async () => response.resolve({ data: [] }));
     });
 
-    it('invalidates an explorer search when its selected chain leaves the active network', async () => {
+    it('invalidates an explorer search when the active network changes', async () => {
         const response = deferred();
         const messaging = commonMessaging({
             getDispensersForToken: vi.fn(() => response.promise),
@@ -179,17 +180,15 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
-        const chain = await screen.findByRole('combobox');
-        await waitFor(() => expect(chain.options.length).toBeGreaterThan(1));
-        fireEvent.change(chain, { target: { value: chain.options[1].value } });
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
         fireEvent.submit(screen.getByRole('textbox').closest('form'));
-        await waitFor(() => expect(messaging.getDispensersForToken).toHaveBeenCalledOnce());
+        await waitFor(() => expect(messaging.getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
 
         await act(async () => window.dispatchEvent(new CustomEvent('xc:settings-changed', {
             detail: { activeNetwork: 'regtest', walletMode: 'full' },
         })));
-        await waitFor(() => expect(chain).toHaveValue('all'));
+        await waitFor(() => expect(screen.getByText(/Search by token ticker to find open dispensers/)).toBeTruthy());
         expect(screen.queryByText(/Searching dispensers/)).toBeNull();
 
         await act(async () => response.resolve({

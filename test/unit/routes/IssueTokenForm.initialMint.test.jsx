@@ -177,7 +177,7 @@ describe('IssueTokenForm initial mint', () => {
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('resets a custom fee preview when the network changes', async () => {
+    it('does not offer a per-form network selector', async () => {
         mountForm({
             getAddressesByChain: vi.fn().mockResolvedValue({
                 ...ADDRESSES,
@@ -191,28 +191,8 @@ describe('IssueTokenForm initial mint', () => {
             }),
         });
         await screen.findByLabelText('Ticker');
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '25' } });
-        expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
-            'aria-valuetext',
-            expect.stringMatching(/^Custom:/),
-        );
-
-        fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/i }));
-        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/i }));
-
-        await waitFor(() => expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
-            'aria-valuetext',
-            expect.stringMatching(/^Normal:/),
-        ));
-        expect(screen.queryByLabelText(/Custom fee rate/)).toBeNull();
-
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        expect(screen.getByLabelText(/Custom fee rate/)).toHaveValue('1');
+        expect(screen.queryByRole('button', { name: /Network:/i })).toBeNull();
+        expect(screen.queryByRole('option', { name: /Dogecoin/i })).toBeNull();
     });
 
     it('tabs in field order and opens review from Enter only when valid', async () => {
@@ -266,7 +246,7 @@ describe('IssueTokenForm initial mint', () => {
         fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
         await submit();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i);
+        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for the active chain/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

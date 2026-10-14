@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -241,7 +241,6 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
-    const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
     // Native-coin protocol fee (DIVIDEND is quotable); the
@@ -321,14 +320,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     }, [trimmedDividendTick, chainId, messaging]);
 
     const tickFieldError = tickIsNativeCoin
-        ? nativeCoinTickMessage(coinTicker, descriptor?.displayName || '')
+        ? nativeCoinTickMessage(coinTicker, 'the active chain')
         : tickCheck.verdict === 'missing'
-            ? unknownTickMessage(trimmedTick, descriptor?.displayName || chainId)
+            ? unknownTickMessage(trimmedTick, 'the active chain')
             : tickCheck.error
                 ? `Couldn't verify this token: ${tickCheck.error}`
                 : undefined;
     const dividendTickFieldError = dividendTickCheck.verdict === 'missing'
-        ? unknownTickMessage(trimmedDividendTick, descriptor?.displayName || chainId)
+        ? unknownTickMessage(trimmedDividendTick, 'the active chain')
         : dividendTickCheck.error
             ? `Couldn't verify this token: ${dividendTickCheck.error}`
             : undefined;
@@ -582,11 +581,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (tickIsNativeCoin) {
-            setFormError(nativeCoinTickMessage(coinTicker, descriptor?.displayName || ''));
+            setFormError(nativeCoinTickMessage(coinTicker, 'the active chain'));
             return;
         }
         if (tickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedTick, descriptor?.displayName || chainId));
+            setFormError(unknownTickMessage(trimmedTick, 'the active chain'));
             return;
         }
         if (!dividendTick.trim()) {
@@ -599,7 +598,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (dividendTickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedDividendTick, descriptor?.displayName || chainId));
+            setFormError(unknownTickMessage(trimmedDividendTick, 'the active chain'));
             return;
         }
         const amt = String(amount).trim();
@@ -873,16 +872,18 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                             ? 'Create unsigned transaction: pay dividend'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: pay dividend`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: pay dividend`}
+                                : 'Sign: pay dividend'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -962,7 +963,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1050,13 +1051,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 </Button>
             )}
         >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={tick} label="Holder-of token" />
-            ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
-            )}
+            {lockedToken && chainId ? <LockedTokenContext chainId={chainId} tick={tick} label="Holder-of token" /> : null}
 
             {fromAddress ? (
                 <AddressField

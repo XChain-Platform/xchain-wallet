@@ -58,7 +58,7 @@ function renderExplorer({ activeNetwork, getDispensersForToken }) {
 async function searchFor(token) {
     // The settings load is async; the chain list is empty until it lands, and
     // searching before then would escape the filter - so wait for it.
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
@@ -103,13 +103,13 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
     it('keeps a slower earlier search from replacing newer results', async () => {
         const pending = new Map();
         const getDispensersForToken = vi.fn(({ token }) => new Promise((resolve) => {
-            pending.set(token, resolve);
+            const resolvers = pending.get(token) || [];
+            resolvers.push(resolve);
+            pending.set(token, resolvers);
         }));
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
-        const chain = chainIdsOn('mainnet')[0];
-        const select = await screen.findByRole('combobox');
-        fireEvent.change(select, { target: { value: chain } });
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         const input = screen.getByRole('textbox');
         const form = input.closest('form');
 
@@ -121,16 +121,20 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
         fireEvent.submit(form);
         await waitFor(() => expect(pending.has('SECOND')).toBe(true));
 
-        pending.get('SECOND')({ rows: [{ action_index: 2, give_tick: 'SECOND', address: 'new-result' }] });
+        pending.get('SECOND').forEach((resolve, index) => resolve({
+            rows: index === 0 ? [{ action_index: 2, give_tick: 'SECOND', address: 'new-result' }] : [],
+        }));
         expect(await screen.findByText(/SECOND @/)).toBeTruthy();
 
-        pending.get('FIRST')({ rows: [{ action_index: 1, give_tick: 'FIRST', address: 'old-result' }] });
+        pending.get('FIRST').forEach((resolve, index) => resolve({
+            rows: index === 0 ? [{ action_index: 1, give_tick: 'FIRST', address: 'old-result' }] : [],
+        }));
         await Promise.resolve();
         expect(screen.queryByText(/FIRST @/)).toBeNull();
         expect(screen.getByText(/SECOND @/)).toBeTruthy();
     });
 
-    it('an "All chains" search on REGTEST queries only regtest chains', async () => {
+    it('a REGTEST search queries only regtest chains', async () => {
         const regtest = chainIdsOn('regtest');
         expect(regtest.length, 'the registry has no regtest chains, so this test proves nothing').toBeGreaterThan(0);
 
@@ -222,8 +226,7 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
             .mockResolvedValue({ data: [] });
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
-        const chain = chainIdsOn('mainnet')[0];
-        fireEvent.change(await screen.findByRole('combobox'), { target: { value: chain } });
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         const input = screen.getByRole('textbox');
         fireEvent.change(input, { target: { value: 'XCHAIN' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
@@ -234,7 +237,7 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
 
         expect(await screen.findByText('No matching dispensers')).toBeInTheDocument();
-        expect(getDispensersForToken).toHaveBeenCalledTimes(2);
+        expect(getDispensersForToken).toHaveBeenCalledTimes(chainIdsOn('mainnet').length * 2);
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(input).toHaveValue('');
         expect(screen.getByText(/Search by token ticker to find open dispensers/)).toBeInTheDocument();

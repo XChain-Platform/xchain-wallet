@@ -105,6 +105,51 @@
     font-family: var(--xc-font-mono);
 }
 
+.chainField {
+    min-width: 0;
+    margin: 0 0 var(--xc-space-3);
+    padding: 0;
+    border: 0;
+}
+
+.chainField legend {
+    margin-bottom: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+}
+
+.chainChoices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.chainChoice {
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
+    padding: var(--xc-space-1);
+    border: 1px solid transparent;
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.chainChoiceActive {
+    border-color: var(--xc-accent-primary);
+}
+
+.chainChoice:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.chainChoice:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 .mnemonicText {
     font-family: var(--xc-font-mono);
 }

@@ -67,7 +67,7 @@ function renderExplorer(extra = {}) {
 }
 
 async function searchFor(token) {
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
     fireEvent.change(screen.getByRole('textbox'), { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 }

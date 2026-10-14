@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -65,7 +65,7 @@ export function DelegateVoteForm(props) {
 }
 
 function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chainId: initialChainId, presetTick, onBack }) {
-    // Seeded from the launching context; the Network field lets the user retarget.
+    // Keep the launching context's chain; network switching belongs in Settings.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
@@ -382,8 +382,12 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Token</dt>
@@ -431,7 +435,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -505,7 +509,6 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             <div className={styles.actions} style={{ gap: '0.5rem' }}>
                 <Button type="button" variant={isClear ? 'ghost' : 'primary'} onClick={() => { setMode('delegate'); setFormError(null); }}>Delegate</Button>
                 <Button type="button" variant={isClear ? 'primary' : 'ghost'} onClick={() => { setMode('clear'); setFormError(null); }}>Clear</Button>

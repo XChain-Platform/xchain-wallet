@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -742,9 +742,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             ? t('send.review.createUnsigned')
                             : isHwSource
                                 ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                                : (descriptor
-                                    ? t('execute.executeOn', { network: descriptor.displayName })
-                                    : t('execute.callContract'))}
+                                : t('execute.callContract')}
                     </Button>
                 )}
             >
@@ -760,10 +758,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     })}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -852,7 +852,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -926,8 +926,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             )}
         >
             <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
-            {/* The target contract pins the network, so the field is single-option. */}
-            <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label={t('execute.caller')}
@@ -1024,7 +1022,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         label={t('execute.depositAmount')}
                         hint={t('execute.depositHint', {
                             contract: contractActionIndex,
-                            chain: descriptor?.displayName || t('send.rbf.thisChain'),
+                            chain: t('send.rbf.thisChain'),
                         })}
                         amount={depositQuantity}
                         tick={depositTick}
