@@ -91,7 +91,7 @@ describe('web startup imports', () => {
 
     it('loads the in-page background host through one cached dynamic import', () => {
         expect(messagingSource).toContain("import('./hostBridge.js')");
-        expect(messagingSource).toContain('hostBridgePromise ??=');
+        expect(messagingSource).toContain('memoizeRetryablePromise');
         expect(messagingSource).not.toMatch(/from ['"]\.\/hostBridge\.js['"]/);
     });
 
