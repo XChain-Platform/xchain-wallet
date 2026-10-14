@@ -74,6 +74,16 @@ export function MarketsList({
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const searchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const marketResultsRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+    const walletScopeRef = useRef(walletId);
+    if (walletScopeRef.current !== walletId) {
+        walletScopeRef.current = walletId;
+        watchlistRequestId.current += 1;
+        pendingWatchlistKeysRef.current.clear();
+        // React retries this render with empty wallet-owned state, keeping a
+        // previous wallet's watchlist out of the committed tree.
+        setWatchlist([]);
+        setPendingWatchlistKeys(new Set());
+    }
 
     useEffect(() => {
         const handle = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
