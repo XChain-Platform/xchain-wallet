@@ -1102,9 +1102,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         payer: buyerAddress?.address,
         amount: totalPayAmount || '',
     }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
+    // The confirm screen already titles itself; its summary needs no third
+    // "Review ..." heading of its own.
     const buyConfirmNotes = (
         <>
-            <p className={styles.successLabel}>Review purchase</p>
             <dl className={styles.detailsList} data-testid="buy-review-summary">
                 <dt className={styles.detailsLabel}>Price per fill</dt>
                 <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
@@ -2594,7 +2595,6 @@ function OwnerConfirmNotes({
     if (kind === 'refill') {
         return (
             <>
-                <p className={styles.successLabel}>Review refill</p>
                 <dl className={styles.detailsList} data-testid="refill-review-summary">
                     <dt className={styles.detailsLabel}>Dispenser</dt>
                     <dd className={styles.detailsValue}>#{actionIndex}</dd>
@@ -2617,7 +2617,6 @@ function OwnerConfirmNotes({
     }
     return (
         <>
-            <p className={styles.successLabel}>Review edit</p>
             <dl className={styles.detailsList} data-testid="edit-review-summary">
                 <dt className={styles.detailsLabel}>Dispenser</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
