@@ -103,6 +103,9 @@ export const en = {
     'backupReminder.remindTomorrow': 'Remind me tomorrow',
 
     // --- settings ------------------------------------------------
+    'settings.toggle.turnOn': 'Turn on',
+    'settings.developerMode.switchAccessibleLabel': 'Turn on developer mode',
+    'settings.ads.switchAccessibleLabel': 'Turn on Automatic Donation System',
     'settings.network.label': 'Network',
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchTitle': 'Switch to {network}?',

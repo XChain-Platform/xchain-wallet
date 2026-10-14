@@ -1686,7 +1686,7 @@ export async function switchToRegtest(page, password) {
     await openSettings(page);
 
     await page.getByRole('button', { name: /^Developer mode/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     await expect(devToggle).toBeVisible();
     if (!(await devToggle.isChecked())) {
         // `.check()` fails here: the input is fully controlled by PERSISTED
