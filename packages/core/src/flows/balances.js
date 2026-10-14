@@ -27,6 +27,9 @@
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
+
+const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
 /**
  * Most addresses one batch request may carry.
@@ -203,6 +206,67 @@ function atomicFromHumanAmount(amount, decimals) {
     const d = Number.isFinite(decimals) && decimals > 0 ? Math.floor(decimals) : 0;
     const frac = (m[2] || '').slice(0, d).padEnd(d, '0');
     return (BigInt(m[1]) * 10n ** BigInt(d) + BigInt(frac || '0')).toString();
+}
+
+function subtractAtomic(quantity, debit) {
+    try {
+        const remaining = BigInt(String(quantity)) - BigInt(String(debit));
+        return (remaining > 0n ? remaining : 0n).toString();
+    } catch {
+        return String(quantity);
+    }
+}
+
+/**
+ * Project locally committed sends onto explorer balances that still describe
+ * the pre-send chain state. Terminal and indexed records contribute nothing,
+ * so a failed or dropped send restores the fetched balance and confirmation
+ * cannot subtract the same spend twice.
+ *
+ * @param {Record<string, AddressBalancesEntry[]>} byChain
+ * @param {Array<import('../schemas/pendingTx.js').PendingTx>} pendingTxs
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {Record<string, AddressBalancesEntry[]>}
+ */
+export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
+    if (!byChain || !Array.isArray(pendingTxs)) return byChain;
+    for (const pending of pendingTxs) {
+        if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
+        const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
+        const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
+        for (const entry of entries) {
+            if (entry?.address !== pending.fromAddress || !entry.balances) continue;
+            const native = entry.balances.native;
+            const nativeTick = String(native?.tick || '').toUpperCase();
+            let appliedExactNativeDebit = false;
+            if (native && /^\d+$/.test(String(pending.nativeDebitSats ?? ''))) {
+                native.quantity = subtractAtomic(native.quantity, pending.nativeDebitSats);
+                appliedExactNativeDebit = true;
+            }
+            const debits = Array.isArray(pending.balanceDebits) && pending.balanceDebits.length > 0
+                ? pending.balanceDebits
+                : (pending.tick && pending.amount != null
+                    ? [{ tick: pending.tick, amount: pending.amount }]
+                    : []);
+            for (const debit of debits) {
+                const tick = String(debit?.tick || '').toUpperCase();
+                if (!tick) continue;
+                if (native && tick === nativeTick) {
+                    if (!appliedExactNativeDebit) {
+                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8);
+                        if (atomic !== null) native.quantity = subtractAtomic(native.quantity, atomic);
+                    }
+                    continue;
+                }
+                for (const token of Array.isArray(entry.balances.tokens) ? entry.balances.tokens : []) {
+                    if (String(token?.tick || '').toUpperCase() !== tick) continue;
+                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0);
+                    if (atomic !== null) token.quantity = subtractAtomic(token.quantity, atomic);
+                }
+            }
+        }
+    }
+    return byChain;
 }
 
 // D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger
@@ -784,5 +848,11 @@ export async function walletBalances({
             result[cid] = perChunk.flat();
         }),
     );
-    return result;
+    let pendingTxs = [];
+    try {
+        pendingTxs = await vault.pendingTxs.list();
+    } catch {
+        pendingTxs = [];
+    }
+    return applyPendingBalanceDeltas(result, pendingTxs, chainRegistry);
 }

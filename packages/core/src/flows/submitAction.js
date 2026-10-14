@@ -38,6 +38,7 @@ import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js'
 import { resolveChangeAddress } from './changeAddress.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 import { withAdsPlanAtEncode } from './buildActionPsbt.js';
+import { importedAddressIdsFor } from './_importedAddressIds.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -62,10 +63,47 @@ export function sendDeltaFromAction(actionData) {
 }
 
 /**
+ * Net native value that leaves the wallet in a built transaction. Inputs are
+ * reduced only by outputs returning to an owned address, so change remains in
+ * the wallet exactly once while payments and network fees leave immediately.
+ *
+ * @param {{ inputs?: Array<{value?: unknown}>, outputs?: Array<{value?: unknown, address?: string|null}> }} decomposed
+ * @param {Iterable<string>} ownedAddresses
+ * @returns {string|null}
+ */
+export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
+    const inputs = Array.isArray(decomposed?.inputs) ? decomposed.inputs : null;
+    const outputs = Array.isArray(decomposed?.outputs) ? decomposed.outputs : null;
+    if (!inputs || !outputs || inputs.length === 0) return null;
+    const exact = (value) => {
+        const raw = typeof value === 'bigint' ? value.toString() : String(value ?? '').trim();
+        return /^\d+$/.test(raw) ? BigInt(raw) : null;
+    };
+    const inputValues = inputs.map((input) => exact(input?.value));
+    const outputValues = outputs.map((output) => exact(output?.value));
+    if (inputValues.some((value) => value === null) || outputValues.some((value) => value === null)) {
+        return null;
+    }
+    let owned;
+    try {
+        owned = new Set(Array.from(ownedAddresses || []).filter(Boolean));
+    } catch {
+        return null;
+    }
+    const totalIn = inputValues.reduce((sum, value) => sum + value, 0n);
+    const ownedOut = outputs.reduce((sum, output, index) => (
+        output?.address && owned.has(output.address) ? sum + outputValues[index] : sum
+    ), 0n);
+    const debit = totalIn - ownedOut;
+    return debit >= 0n ? debit.toString() : null;
+}
+
+/**
  * @typedef {Object} PendingTxMeta
  * @property {string} fromAddress
  * @property {string} toAddress
  * @property {string} actionSummary   §21.1 plain-English summary
+ * @property {Array<{tick: string, amount: string}>} [balanceDebits]
  */
 
 /**
@@ -200,6 +238,9 @@ export async function submitAction({
             actionSummary: pendingTxMeta.actionSummary,
             psbtHex: '',
             ...(sendDelta ? { tick: sendDelta.tick, amount: sendDelta.amount } : {}),
+            balanceDebits: Array.isArray(pendingTxMeta.balanceDebits)
+                ? pendingTxMeta.balanceDebits
+                : (sendDelta ? [sendDelta] : []),
         });
         await vault.pendingTxs.put(pending);
     }
@@ -309,6 +350,43 @@ export async function submitAction({
         ? { ...effectiveEncoderOpts, change: changeRotation.address }
         : effectiveEncoderOpts;
 
+    const composedBeforeBroadcast = async (transactions) => {
+        if (pending && transactions?.signed?.signedPsbtHex) {
+            const owned = new Set([
+                pendingTxMeta?.fromAddress,
+                encoderOptsForSubmit?.change,
+            ].filter(Boolean));
+            try {
+                const [accounts, addresses, importedIds] = await Promise.all([
+                    vault.accounts?.findBy?.('walletId', walletId) ?? [],
+                    vault.addresses?.list?.() ?? [],
+                    importedAddressIdsFor(vault, walletId),
+                ]);
+                const accountIds = new Set(accounts.map((account) => account.id));
+                for (const address of addresses) {
+                    if (address.chain !== descriptor.coin || address.network !== descriptor.networkKind) continue;
+                    if (accountIds.has(address.accountId) || importedIds.has(address.id)) {
+                        owned.add(address.address);
+                    }
+                }
+            } catch {
+                // Source and explicit change still provide a safe minimum when ownership lookup is unavailable.
+            }
+            let nativeDebitSats = null;
+            try {
+                const sdk = sdkRegistry.get(chainId);
+                nativeDebitSats = nativeDebitSatsFromPsbt(
+                    sdk.wallet.decomposePsbt(transactions.signed.signedPsbtHex),
+                    owned,
+                );
+            } catch {
+                nativeDebitSats = null;
+            }
+            if (nativeDebitSats !== null) await writePending({ nativeDebitSats });
+        }
+        if (typeof beforeBroadcast === 'function') await beforeBroadcast(transactions);
+    };
+
     let result;
     try {
         try {
@@ -331,7 +409,7 @@ export async function submitAction({
                 waitForTxid,
                 waitOpts,
                 onProgress: composedOnProgress,
-                beforeBroadcast,
+                beforeBroadcast: composedBeforeBroadcast,
                 verifyBuiltTx,
             });
         } catch (err) {
