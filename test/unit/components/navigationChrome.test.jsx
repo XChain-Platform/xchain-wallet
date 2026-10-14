@@ -331,7 +331,7 @@ describe('navigation Tab order', () => {
         const order = [
             'Open command palette', 'Home', 'History', 'Send', 'Receive',
             'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
-            'Lists', 'Payments due', 'Main wallet', 'Settings', 'Lock',
+            'Lists', 'Payments due', 'Settings', 'Lock',
             'After navigation',
         ];
         for (const label of order) {

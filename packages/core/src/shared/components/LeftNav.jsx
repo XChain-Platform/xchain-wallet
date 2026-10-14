@@ -19,7 +19,7 @@ import styles from './LeftNav.module.css';
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
  * sidebar listing primary surfaces (Home, History, Send, Receive,
  * Scan, DEX, Marketplace, Dispensers, Contracts, Messaging) plus a contacts row,
- * a wallet switcher, Settings, and Lock. Active row gets
+ * Settings, and Lock. Active row gets
  * `aria-current="page"`.
  *
  * Two of those rows are conditional on the wallet, not the build:
@@ -63,9 +63,7 @@ export function formatBadgeCount(n) {
  * @param {(view: string) => void} props.onSelect
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
- * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
- * @param {string} [props.walletName]
  * @param {boolean} [props.hasVmAddress] gates the Contracts row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the tab is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops Send + Receive from the nav
@@ -76,9 +74,7 @@ export function LeftNav({
     onSelect,
     onLock,
     onOpenSettings,
-    onOpenWalletPicker,
     onCommandPalette,
-    walletName,
     hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
@@ -227,17 +223,6 @@ export function LeftNav({
             </ul>
             <div className={styles.spacer} />
             <div className={styles.footer}>
-                {walletName && onOpenWalletPicker ? (
-                    <button
-                        type="button"
-                        className={styles.walletSwitcher}
-                        onClick={onOpenWalletPicker}
-                        title={walletName}
-                    >
-                        <span className={styles.walletName}>{walletName}</span>
-                        <span aria-hidden="true">▾</span>
-                    </button>
-                ) : null}
                 {onOpenSettings ? (
                     <button
                         type="button"
