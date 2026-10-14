@@ -308,12 +308,12 @@ describe('filtered list empty states', () => {
         await screen.findByText('DOGE');
 
         fireEvent.change(screen.getByLabelText('Search markets'), { target: { value: 'missing' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watchlist' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }));
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(screen.getByLabelText('Search markets')).toHaveValue('');
-        expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true');
         expect(await screen.findByText('DOGE')).toBeInTheDocument();
     });
 

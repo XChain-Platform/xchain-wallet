@@ -393,6 +393,7 @@ export function MarketsList({
             >
                 <div
                     id={selectedAsset ? `${tabsId}-panel` : undefined}
+                    role={selectedAsset ? 'tabpanel' : undefined}
                     aria-labelledby={selectedAsset ? `${tabsId}-tab-${tab}` : undefined}
                 >
                     <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
