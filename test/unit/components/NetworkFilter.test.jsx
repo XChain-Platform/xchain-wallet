@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
@@ -19,6 +19,22 @@ import dropdownStyles from '../../../packages/core/src/shared/components/Network
 import filterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+
+let nativeBack;
+let capacitorApp;
+
+beforeEach(() => {
+    resetBackStackForTests();
+    capacitorApp = {
+        addListener: vi.fn((_event, listener) => {
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn(),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
+});
 
 const descriptors = {
     bitcoin: { displayName: 'Bitcoin', color: '#f7931a' },
@@ -58,6 +74,8 @@ function openList() {
 
 afterEach(() => {
     cleanup();
+    resetBackStackForTests();
+    delete globalThis.Capacitor;
     vi.restoreAllMocks();
     globalThis.localStorage?.removeItem('xc:homeFilters:wallet-a');
     globalThis.localStorage?.removeItem('xc:homeFilters:wallet-b');
@@ -125,6 +143,25 @@ describe('NetworkFilter selection', () => {
 });
 
 describe('NetworkFilter dismissal', () => {
+    it.each([
+        ['network filter', false],
+        ['compact network filter dropdown', true],
+    ])('closes the %s on Android Back instead of minimizing the app', (_name, compact) => {
+        if (compact) render(<NetworkFilterDropdown value="all" onChange={() => {}} />);
+        else mount();
+        const trigger = compact
+            ? screen.getByRole('button', { name: 'Filter by network' })
+            : screen.getByRole('button', { name: /All networks/ });
+        fireEvent.click(trigger);
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(trigger).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
     it('closes on Escape', () => {
         mount();
         const { trigger } = openList();

@@ -13,10 +13,10 @@
 // These guards pin the optional settings sections and the compact header's
 // labels, tooltips, source order, and width budget.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
@@ -24,9 +24,27 @@ import { FullLayoutWithNav, LeftNav } from '../../../packages/core/src/shared/co
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
 import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+
+let nativeBack;
+let capacitorApp;
+
+beforeEach(() => {
+    resetBackStackForTests();
+    capacitorApp = {
+        addListener: vi.fn((_event, listener) => {
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn(),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
+});
 
 afterEach(() => {
     cleanup();
+    resetBackStackForTests();
+    delete globalThis.Capacitor;
     vi.restoreAllMocks();
 });
 
@@ -307,9 +325,40 @@ describe('AppHeader action row', () => {
         expect(screen.queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(trigger);
     });
+
+    it('closes the scan menu on Android Back instead of minimizing the app', () => {
+        render(<AppHeader onScan={() => {}} onManageAddresses={() => {}} />);
+        const trigger = screen.getByRole('button', { name: 'Scan and addresses' });
+        fireEvent.click(trigger);
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(trigger).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
 });
 
 describe('HeaderSettingsButton section gating', () => {
+    it('closes the settings popover on Android Back instead of minimizing the app', () => {
+        render(
+            <HeaderSettingsButton
+                activeWallet={{ id: 'w1', name: 'Main' }}
+                onOpenWalletPicker={() => {}}
+            />,
+        );
+        const trigger = gear();
+        fireEvent.click(trigger);
+        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
+        expect(trigger).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
     it('renders without a network section when the filter props are absent', () => {
         render(
             <HeaderSettingsButton
