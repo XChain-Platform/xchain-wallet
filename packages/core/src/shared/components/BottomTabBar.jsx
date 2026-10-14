@@ -10,7 +10,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
-import { activeLeftNavItem, formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
+import {
+    formatBadgeCount,
+    isNavItemActive,
+    LEFT_NAV_VIEW_GROUPS,
+} from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -74,10 +78,28 @@ const SHEET_PRIMARY = [
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
+const WALLET_MANAGEMENT_VIEWS = new Set([
+    'wallet-picker',
+    'account-picker',
+    'wallet-details',
+    'wallet-rename',
+    'account-rename',
+    'add-wallet',
+    'add-account',
+    'migrate-bip39',
+]);
+
 function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
-    const routeGroup = activeLeftNavItem(currentView);
-    if (routeGroup === 'settings') return 'more';
-    return primaryTabs.some((tab) => tab.id === routeGroup) ? routeGroup : 'home';
+    const routeGroup = Object.entries(LEFT_NAV_VIEW_GROUPS)
+        .find(([, views]) => views.includes(currentView))?.[0];
+    if (!routeGroup) return null;
+    if (WALLET_MANAGEMENT_VIEWS.has(currentView)) return 'more';
+    if (primaryTabs.some((tab) => tab.id === routeGroup)) return routeGroup;
+    if (
+        routeGroup === 'settings'
+        || SHEET_PRIMARY.some((row) => row.id === routeGroup)
+    ) return 'more';
+    return null;
 }
 
 function scrollMainToTop() {
@@ -244,15 +266,17 @@ export function BottomTabBar({
                     >
                         <div className={styles.sheetHeader}>
                             <div className={styles.handle} aria-hidden="true" />
-                            <h2 className={styles.sheetTitle}>More</h2>
-                            <span className={styles.sheetClose}>
-                                <Button
-                                    variant="secondary"
-                                    icon={<Icon.XIcon />}
-                                    onClick={() => setSheetOpen(false)}
-                                    aria-label="Close more navigation"
-                                />
-                            </span>
+                            <div className={styles.sheetTitleRow}>
+                                <h2 className={styles.sheetTitle}>More</h2>
+                                <span className={styles.sheetClose}>
+                                    <Button
+                                        variant="secondary"
+                                        icon={<Icon.XIcon />}
+                                        onClick={() => setSheetOpen(false)}
+                                        aria-label="Close more navigation"
+                                    />
+                                </span>
+                            </div>
                         </div>
                         <div className={styles.sheetBody}>
                             {/* Navigation rows stay native buttons to preserve full-row menu semantics. */}

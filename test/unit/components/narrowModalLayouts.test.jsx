@@ -199,7 +199,13 @@ describe('320x568 modal layout contracts', () => {
         expect(sheet).toMatch(/max-height:\s*70vh/);
         expect(sheet).toMatch(/overflow:\s*hidden/);
         expect(sheet).toMatch(/flex-direction:\s*column/);
-        expect(rule(bottomBar, '.sheetHeader')).toMatch(/flex:\s*0 0 auto/);
+        const header = rule(bottomBar, '.sheetHeader');
+        expect(header).toMatch(/flex:\s*0 0 auto/);
+        expect(header).toMatch(/flex-direction:\s*column/);
+        const titleRow = rule(bottomBar, '.sheetTitleRow');
+        expect(titleRow).toMatch(/grid-template-columns:\s*var\(--xc-control-h-md, 40px\) 1fr var\(--xc-control-h-md, 40px\)/);
+        expect(titleRow).toMatch(/min-height:\s*var\(--xc-control-h-md, 40px\)/);
+        expect(rule(bottomBar, '.handle')).toMatch(/width:\s*36px/);
         expect(rule(bottomBar, '.sheetBody')).toMatch(/min-height:\s*0/);
         expect(rule(bottomBar, '.sheetBody')).toMatch(/flex:\s*1 1 auto/);
         expect(rule(bottomBar, '.sheetBody')).toMatch(/overflow-y:\s*auto/);

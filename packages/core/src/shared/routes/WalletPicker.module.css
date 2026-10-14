@@ -145,7 +145,7 @@
 }
 
 .footerActions button {
-    min-height: var(--xc-tap-min);
+    min-height: var(--xc-control-h-md, 40px);
 }
 
 @media not all and (min-width: 360px) {

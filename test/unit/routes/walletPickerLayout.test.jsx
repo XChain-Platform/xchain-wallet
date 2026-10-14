@@ -82,6 +82,14 @@ describe('WalletPicker row layout', () => {
         expect(add.closest('footer')).toBeTruthy();
         expect(manage.closest('footer')).toBeTruthy();
 
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const footerButtonRule = /\.footerActions button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(footerButtonRule).toMatch(/min-height:\s*var\(--xc-control-h-md, 40px\)/);
+        expect(footerButtonRule).not.toMatch(/--xc-tap-min/);
+
         fireEvent.click(manage);
         expect(onShowDetails).toHaveBeenCalledWith(wallet.id);
     });
