@@ -56,12 +56,12 @@ describe('HomeTabs when balances could not be checked', () => {
     it('shows the first-funding nudge when the empty read is trustworthy', () => {
         mount({ onRecheckBalances: vi.fn() });
         expect(screen.getByText('Fund your wallet')).toBeInTheDocument();
-        expect(screen.queryByText('Balances could not be checked')).toBeNull();
+        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
     });
 
     it('replaces the first-funding nudge with one unchecked state and a retry', () => {
         const props = mount({ balancesUnchecked: true, onRecheckBalances: vi.fn() });
-        expect(screen.getByText('Balances could not be checked')).toBeInTheDocument();
+        expect(screen.getByText("Balances couldn't be checked")).toBeInTheDocument();
         expect(screen.queryByText('Fund your wallet')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -73,7 +73,7 @@ describe('HomeTabs when balances could not be checked', () => {
     it('words the empty Tokens tab the same way, but keeps a search miss as a search miss', () => {
         mount({ balancesUnchecked: true, onRecheckBalances: vi.fn() });
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
-        expect(screen.getByText('Balances could not be checked')).toBeInTheDocument();
+        expect(screen.getByText("Balances couldn't be checked")).toBeInTheDocument();
         expect(screen.queryByText('No tokens yet')).toBeNull();
 
         cleanup();

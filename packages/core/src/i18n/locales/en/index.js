@@ -44,7 +44,7 @@ export const en = {
     'common.tryAgain': 'Try again',
     'common.checking': 'Checking…',
     // One state in place of an empty state and the stale-balances notice.
-    'balances.unchecked.title': 'Balances could not be checked',
+    'balances.unchecked.title': "Balances couldn't be checked",
     'balances.unchecked.body': 'Your balance may be out of date. Try again to refresh it.',
     'common.openNetworkSettings': 'Open network settings',
     'common.done': 'Done',

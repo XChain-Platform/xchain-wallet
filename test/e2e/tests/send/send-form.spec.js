@@ -216,7 +216,7 @@ test('a zero-balance wallet offers Receive instead of the Send form', async ({ p
     // same screen says the balances could not be checked; either way it offers
     // Receive and no form.
     await expect(page.getByRole('heading', { name: 'Nothing to send yet', exact: true })
-        .or(page.getByRole('heading', { name: 'Balances could not be checked', exact: true })))
+        .or(page.getByRole('heading', { name: "Balances couldn't be checked", exact: true })))
         .toBeVisible();
     await expect(page.getByRole('form', { name: 'Send' })).toHaveCount(0);
 
@@ -230,11 +230,11 @@ test('a zero-balance wallet whose balances could not be checked says so once', a
     await createWallet(page, { password: PASSWORD });
     // No dev services run here, so the check fails once its startup grace
     // ends; Home's empty Coins tab is the first place that says so.
-    const unchecked = page.getByText('Balances could not be checked', { exact: true });
+    const unchecked = page.getByText("Balances couldn't be checked", { exact: true });
     await expect(unchecked.first()).toBeVisible({ timeout: 90_000 });
     await gotoSection(page, 'Send');
 
-    await expect(page.getByRole('heading', { name: 'Balances could not be checked', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: "Balances couldn't be checked", exact: true })).toBeVisible();
     await expect(page.getByText('Your balance may be out of date. Try again to refresh it.')).toBeVisible();
     // One message: no "Nothing to send yet" and no stale-balances notice beside it.
     await expect(page.getByText('Nothing to send yet')).toHaveCount(0);

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // One message, not two: when balances could not be checked, Send with a
-// zero read says so once ("Balances could not be checked" with Try again)
+// zero read says so once ("Balances couldn't be checked" with Try again)
 // instead of "Nothing to send yet" beside the stale-balances notice.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -93,14 +93,14 @@ describe('Send empty state and the balance check', () => {
     it('says "Nothing to send yet" when the empty read is trustworthy', async () => {
         mount('0');
         expect(await screen.findByRole('heading', { name: 'Nothing to send yet' })).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { name: 'Balances could not be checked' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
     });
 
-    it('shows one "Balances could not be checked" state when balances could not be checked', async () => {
+    it('shows one unchecked-balances state when balances could not be checked', async () => {
         reachability.overall = 'degraded';
         const { messaging, onReceive } = mount('0');
 
-        const heading = await screen.findByRole('heading', { name: 'Balances could not be checked' });
+        const heading = await screen.findByRole('heading', { name: "Balances couldn't be checked" });
         expect(heading).toBeInTheDocument();
         expect(screen.getByText('Your balance may be out of date. Try again to refresh it.')).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
@@ -119,20 +119,20 @@ describe('Send empty state and the balance check', () => {
     it('treats an offline verdict the same way', async () => {
         reachability.overall = 'offline';
         mount('0');
-        expect(await screen.findByRole('heading', { name: 'Balances could not be checked' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: "Balances couldn't be checked" })).toBeInTheDocument();
     });
 
     it('keeps the form when the wallet holds coin, whatever the check says', async () => {
         reachability.overall = 'degraded';
         mount('100000000');
         expect(await screen.findByRole('form', { name: 'Send' }, { timeout: 10_000 })).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { name: 'Balances could not be checked' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
     });
 
     it('does not also show the stale-balances notice on that screen', async () => {
         reachability.overall = 'degraded';
         mount('0', { inShell: true });
-        expect(await screen.findByRole('heading', { name: 'Balances could not be checked' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: "Balances couldn't be checked" })).toBeInTheDocument();
         expect(screen.queryByText('Some balances may be out of date')).toBeNull();
     });
 

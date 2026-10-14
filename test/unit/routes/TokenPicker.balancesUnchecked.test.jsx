@@ -63,13 +63,13 @@ describe('TokenPicker empty list and the balance check', () => {
     it('says "Nothing to send yet" when the empty read is trustworthy', async () => {
         mount();
         expect(await screen.findByText('Nothing to send yet')).toBeInTheDocument();
-        expect(screen.queryByText('Balances could not be checked')).toBeNull();
+        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
     });
 
     it('says balances could not be checked instead, and Try again reloads them', async () => {
         reachability.overall = 'degraded';
         const messaging = mount();
-        expect(await screen.findByText('Balances could not be checked')).toBeInTheDocument();
+        expect(await screen.findByText("Balances couldn't be checked")).toBeInTheDocument();
         expect(screen.queryByText('Nothing to send yet')).toBeNull();
 
         const loadsBefore = messaging.getWalletBalances.mock.calls.length;
