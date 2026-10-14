@@ -838,7 +838,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
             haptic.tap();
-            announce('Copied');
+            announce(label === 'address' ? 'Dispenser address copied.' : 'Action index copied.');
             return;
         }
         setCopied(null);
@@ -2147,7 +2147,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 role="menuitem"
                                 onClick={() => { setMoreOpen(false); handleCopy(dispAddress || source || '', 'address'); }}
                             >
-                                {copied === 'address' ? 'Copied' : 'Copy dispenser address'}
+                                {copied === 'address' ? 'Dispenser address copied' : 'Copy dispenser address'}
                             </Button>
                             <Button
                                 variant="ghost"
@@ -2157,7 +2157,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 role="menuitem"
                                 onClick={() => { setMoreOpen(false); handleCopy(String(actionIndex), 'index'); }}
                             >
-                                {copied === 'index' ? 'Copied' : 'Copy action index'}
+                                {copied === 'index' ? 'Action index copied' : 'Copy action index'}
                             </Button>
                         </div>
                     ) : null}

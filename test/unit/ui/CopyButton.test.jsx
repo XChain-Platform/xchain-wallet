@@ -47,6 +47,20 @@ describe('<CopyButton>', () => {
         });
     });
 
+    it.each([
+        ['address', 'bc1qexactaddress', 'Copy address'],
+        ['transaction ID', 'aabbcc001122', 'Copy transaction ID'],
+        ['amount', '1234567.8900', 'Copy amount'],
+    ])('copies an exact %s value and names it in the confirmation', async (_kind, value, label) => {
+        render(<CopyButton value={value} label={label} />);
+        fireEvent.click(screen.getByRole('button', { name: label }));
+
+        await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith(value));
+        expect(screen.getByRole('button', { name: `Copied: ${label.slice(5)}` }))
+            .toHaveTextContent(`Copied: ${label.slice(5)}`);
+        expect(screen.getByRole('status')).toHaveTextContent(`Copied: ${label.slice(5)}`);
+    });
+
     it('flips label to "Copied" briefly after a successful write', async () => {
         // `shouldAdvanceTime` lets fake setTimeout still tick along, which
         // is what waitFor needs to poll the assertion. Without it the
@@ -57,12 +71,12 @@ describe('<CopyButton>', () => {
             render(<CopyButton value="x" feedbackMs={100} />);
             fireEvent.click(screen.getByRole('button'));
             await waitFor(() => {
-                expect(screen.getByRole('button')).toHaveTextContent('Copied');
+                expect(screen.getByRole('button')).toHaveTextContent('Copied: value');
             });
             expect(haptic.tap).toHaveBeenCalledOnce();
             expect(haptic.error).not.toHaveBeenCalled();
             const announcement = screen.getByRole('status');
-            expect(announcement).toHaveTextContent('Copied');
+            expect(announcement).toHaveTextContent('Copied: value');
             expect(announcement).toHaveAttribute('aria-live', 'polite');
             expect(announcement).toHaveAttribute('aria-atomic', 'true');
             expect(screen.getByRole('button')).not.toHaveAttribute('aria-live');
@@ -82,9 +96,9 @@ describe('<CopyButton>', () => {
             </div>,
         );
         fireEvent.click(screen.getByRole('button'));
-        await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
+        await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied: value'));
         expect(screen.getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByRole('status')).toHaveTextContent('Copied');
+        expect(screen.getByRole('status')).toHaveTextContent('Copied: value');
     });
 
     it('names clipboard unavailability when every copy path is refused', async () => {
@@ -118,7 +132,7 @@ describe('<CopyButton>', () => {
 
         fireEvent.click(button);
         await waitFor(() => expect(screen.getByRole('status')).not.toBe(first));
-        expect(screen.getAllByText('Copied')).toHaveLength(2);
+        expect(screen.getAllByText('Copied: value')).toHaveLength(2);
         expect(button).toHaveFocus();
     });
 

@@ -37,6 +37,7 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
 export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
+    const [copiedText, setCopiedText] = useState('');
     const [announcement, setAnnouncement] = useState({
         id: 0,
         text: '',
@@ -47,6 +48,9 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
     const haptic = useHapticFeedback();
 
     async function handleCopy() {
+        const actionLabel = String(ariaLabel || label).trim();
+        const subject = actionLabel.replace(/^copy(?:\s+to\s+clipboard)?\s*/i, '').trim() || 'value';
+        const successText = `Copied: ${subject}`;
         // A sensitive copy can come back false on a native shell whose
         // clipboard plugin did not register: the shared path refuses rather
         // than leaking through the web API, and the user sees "Copy failed"
@@ -55,6 +59,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
         if (ok) {
             setState('copied');
             setFailureText('');
+            setCopiedText(successText);
             haptic.tap();
             onCopied?.();
         } else {
@@ -65,7 +70,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
             haptic.error();
         }
         const resultText = ok
-            ? 'Copied'
+            ? successText
             : reason === CopyFailure.NO_NATIVE_CLIPBOARD
                 ? 'Copy blocked: this app has no secure clipboard.'
                 : 'Copy failed: the clipboard is unavailable.';
@@ -85,7 +90,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
         }, feedbackMs);
     }
 
-    const text = state === 'copied' ? 'Copied' : state === 'failed' ? failureText : label;
+    const text = state === 'copied' ? copiedText : state === 'failed' ? failureText : label;
     const icon = state === 'copied' ? <CheckIcon /> : <CopyIcon />;
     return (
         <>
@@ -94,7 +99,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
                 type="button"
                 onClick={handleCopy}
                 className={styles.btn}
-                aria-label={ariaLabel || label}
+                aria-label={state === 'copied' ? text : ariaLabel || label}
                 data-state={state}
             >
                 <span className={styles.icon} aria-hidden="true">{icon}</span>
