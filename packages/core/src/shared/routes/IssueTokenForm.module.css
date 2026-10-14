@@ -75,6 +75,15 @@
     resize: vertical;
 }
 
+/* A dropdown picker keeps the shared dropdown height and text size from
+   tokens.css instead of the textarea padding above. */
+select.picker {
+    height: var(--xc-control-h-md);
+    padding-block: 0;
+    font-size: var(--xc-control-font-md);
+    border-radius: var(--xc-control-radius);
+}
+
 .tickItems {
     list-style: none;
     padding: 0;

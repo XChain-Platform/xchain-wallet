@@ -47,14 +47,11 @@ export const ROW_HINT = {
     marginTop: 2,
     lineHeight: 1.3,
 };
+// Settings dropdowns take the shared dropdown look from tokens.css (the
+// Network picker's height, padding, border, surface and chevron), so the
+// inline style only keeps the control inside its row.
 export const SELECT = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
+    maxWidth: '100%',
 };
 export const INPUT = {
     background: 'var(--xc-bg)',
