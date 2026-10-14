@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { NotificationService } from '../../../packages/core/src/notifications/NotificationService.js';
 import { getActiveAddresses } from '../../../packages/core/src/notifications/getActiveAddresses.js';
+import { PriceAlertWatcher } from '../../../packages/core/src/notifications/PriceAlertWatcher.js';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -348,6 +349,45 @@ describe('NotificationService: confirmation wording', () => {
         await flush();
         expect(h.notify).toHaveBeenCalledTimes(1);
     });
+
+    it('reserves a transaction before concurrent address frames finish delivery', async () => {
+        let releaseDelivery;
+        const deliveryPending = new Promise((resolve) => { releaseDelivery = resolve; });
+        const addresses = [
+            { address: OURS, chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' },
+            { address: 'addrSecond', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' },
+        ];
+        const h = await started({ addresses });
+        h.notify.mockImplementation(() => deliveryPending);
+        const data = {
+            action_index: 91,
+            tx_hash: 'shared-payment',
+            source: 'sender',
+            destinations: [OURS, 'addrSecond'],
+        };
+
+        h.sdk.emit(OURS, { type: 'NEW_ACTION', data });
+        h.sdk.emit('addrSecond', { type: 'NEW_ACTION', data: { ...data, action_index: 92 } });
+        await flush();
+        expect(h.notify).toHaveBeenCalledTimes(1);
+        releaseDelivery(true);
+        await flush();
+    });
+
+    it('names the owning wallet in a background payment notification', async () => {
+        const addresses = [{
+            address: OURS,
+            chainId: 'bitcoin-mainnet',
+            label: 'Bitcoin',
+            network: 'mainnet',
+            walletName: 'Savings',
+        }];
+        const h = await started({ addresses });
+        h.sdk.emit(OURS, confirmedFrame());
+        await flush();
+
+        expect(h.notify.mock.calls[0][0].body).toContain("Savings wallet's Bitcoin address");
+    });
 });
 
 describe('getActiveAddresses: demo wallet exclusion', () => {
@@ -362,7 +402,7 @@ describe('getActiveAddresses: demo wallet exclusion', () => {
                 { id: 'account-demo', walletId: 'wallet-demo' },
             ] },
             wallets: { list: async () => [
-                { id: 'wallet-real', origin: 'created' },
+                { id: 'wallet-real', name: 'Savings', origin: 'created' },
                 { id: 'wallet-demo', origin: 'demo' },
             ] },
         };
@@ -372,7 +412,39 @@ describe('getActiveAddresses: demo wallet exclusion', () => {
         };
 
         await expect(getActiveAddresses(vault, registry)).resolves.toEqual([
-            { address: 'real', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' },
+            { address: 'real', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet', walletName: 'Savings' },
         ]);
+    });
+});
+
+describe('notification active-network scope', () => {
+    it('does not fetch or deliver an armed price alert from an inactive network', async () => {
+        const getNativePrices = vi.fn(async () => ({
+            prices: { 'bitcoin-testnet': { priceFiat: 100_000 } },
+        }));
+        const notify = vi.fn();
+        const watcher = new PriceAlertWatcher({
+            getNativePrices,
+            listArmedAlerts: async () => [{
+                id: 'testnet-alert',
+                chainId: 'bitcoin-testnet',
+                fiatCurrency: 'usd',
+                direction: 'above',
+                targetFiat: 90_000,
+                status: 'armed',
+            }],
+            getSettings: async () => ({
+                activeNetwork: 'mainnet',
+                privacy: { priceDataEnabled: true },
+                notifications: { priceAlerts: true },
+            }),
+            notify,
+            markTriggered: vi.fn(),
+        });
+
+        await watcher.pollOnce();
+
+        expect(getNativePrices).not.toHaveBeenCalled();
+        expect(notify).not.toHaveBeenCalled();
     });
 });

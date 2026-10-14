@@ -25,6 +25,7 @@
 //   1. settings.privacy.priceDataEnabled !== false  (the telemetry opt-out)
 //   2. settings.notifications.priceAlerts            (the feature toggle)
 //   3. at least one armed alert exists               (nothing to watch)
+//   4. the alert belongs to the active network        (the network filter)
 // With no armed alerts it never touches the network; an idle user with the
 // toggle on but no alerts set leaks nothing.
 
@@ -36,6 +37,13 @@ import { taggedLogger } from './taggedLogger.js';
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const FIRED_CAP = 500;
 const MAX_PRICE_AGE_MS = 5 * 60 * 1000;
+const NETWORK_NAMES = new Set(['mainnet', 'testnet', 'regtest']);
+
+function isOnActiveNetwork(chainId, activeNetwork) {
+    if (!activeNetwork || typeof chainId !== 'string') return true;
+    const network = chainId.split('-').pop();
+    return !NETWORK_NAMES.has(network) || network === activeNetwork;
+}
 
 export class PriceAlertWatcher {
     /**
@@ -142,7 +150,7 @@ export class PriceAlertWatcher {
             const featureOn = Boolean(settings && settings.notifications && settings.notifications.priceAlerts);
             if (!privacyOk || !featureOn) return;
 
-            // Gate 3: nothing armed → no network.
+            // Gates 3 + 4: nothing armed on the active network → no request.
             let armed;
             try {
                 armed = (await this._listArmedAlerts()) || [];
@@ -159,6 +167,7 @@ export class PriceAlertWatcher {
                 this._fired.delete(id);
                 this._firedDirty = true;
             }
+            armed = armed.filter((a) => isOnActiveNetwork(a.chainId, settings?.activeNetwork));
             for (const alert of armed) {
                 if (!this._pendingTriggered.has(alert.id)) continue;
                 if (await this._persistTriggered(alert.id)) {
