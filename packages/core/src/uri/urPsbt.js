@@ -540,6 +540,7 @@ export function parseUrFrame(frame) {
     const rest = trimmed.slice(UR_PREFIX.length);
     const segments = rest.split('/');
     if (segments.length < 2) throw new UrError('frame missing payload');
+    if (segments.length > 3) throw new UrError('frame has extra path segments');
     const type = segments[0];
     if (!/^[a-z0-9-]+$/.test(type)) throw new UrError(`invalid UR type "${type}"`);
 

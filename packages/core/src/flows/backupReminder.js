@@ -16,14 +16,30 @@
 // walletId so the data survives reload without churning the vault schema.
 // Home only prompts wallets that have no recorded verification.
 
+import { logConsole } from '../shared/utils/logConsole.js';
+
 const STORAGE_KEY = 'xc:backupVerifiedAt';
 const FUNDED_AT_KEY = 'xc:backupReminderFundedAt';
 const SESSION_DISMISS_KEY = 'xc:backupReminderDismissedUntil';
 const FIRM_AFTER_DAYS = 7;
 const DISMISS_HOURS = 24;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const memoryStores = new Map();
+let storageFailureLogged = false;
+
+function keepMemoryStore(key, map) {
+    memoryStores.set(key, { ...map });
+    if (storageFailureLogged) return;
+    storageFailureLogged = true;
+    logConsole.record({
+        source: 'backup-reminder',
+        level: 'warn',
+        message: 'local storage write failed; using in-memory state',
+    });
+}
 
 function readStore(key) {
+    if (memoryStores.has(key)) return { ...memoryStores.get(key) };
     try {
         const raw = globalThis.localStorage?.getItem(key);
         if (!raw) return {};
@@ -36,8 +52,16 @@ function readStore(key) {
 
 function writeStore(key, map) {
     try {
-        globalThis.localStorage?.setItem(key, JSON.stringify(map));
-    } catch { /* localStorage unavailable; best-effort */ }
+        const storage = globalThis.localStorage;
+        if (!storage) {
+            keepMemoryStore(key, map);
+            return;
+        }
+        storage.setItem(key, JSON.stringify(map));
+        memoryStores.delete(key);
+    } catch {
+        keepMemoryStore(key, map);
+    }
 }
 
 function announceStoreChange(key) {

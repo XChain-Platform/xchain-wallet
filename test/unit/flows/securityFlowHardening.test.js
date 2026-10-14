@@ -31,6 +31,7 @@ import {
     isDuressMatch,
     setDuressPassphrase,
 } from '../../../packages/core/src/flows/duressPassphrase.js';
+import { logConsole } from '../../../packages/core/src/shared/utils/logConsole.js';
 
 function deferred() {
     let resolve;
@@ -64,9 +65,40 @@ afterEach(() => {
     __resetPanicModePersistenceForTests();
     __resetDuressPersistenceForTests();
     localStorage.clear();
+    logConsole.clear();
+    vi.restoreAllMocks();
 });
 
 describe('security flow persistence hardening', () => {
+    it('keeps panic mode active when localStorage writes fail and logs once', () => {
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new DOMException('full', 'QuotaExceededError');
+        });
+
+        const first = activatePanicMode({ nowMs: Date.now() });
+        const second = activatePanicMode({ nowMs: Date.now() + 1 });
+
+        expect(getPanicModeState()).toEqual(second);
+        expect(getPanicModeState()).not.toEqual(first);
+        expect(logConsole.entries().filter((entry) => entry.source === 'panic-mode'))
+            .toHaveLength(1);
+    });
+
+    it('keeps the duress passphrase when localStorage writes fail and logs once', () => {
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new DOMException('full', 'QuotaExceededError');
+        });
+
+        setDuressPassphrase('first emergency phrase');
+        expect(isDuressMatch('first emergency phrase')).toBe(true);
+        setDuressPassphrase('replacement emergency phrase');
+
+        expect(isDuressMatch('first emergency phrase')).toBe(false);
+        expect(isDuressMatch('replacement emergency phrase')).toBe(true);
+        expect(logConsole.entries().filter((entry) => entry.source === 'duress-passphrase'))
+            .toHaveLength(1);
+    });
+
     it('consumes rejected async persistence writes without unhandled rejections', async () => {
         const observed = {
             lockoutSave: vi.fn(),

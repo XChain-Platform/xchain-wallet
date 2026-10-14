@@ -8,12 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import * as React from 'react';
 import { useGetChainAddress } from '../../../../packages/core/src/shared/hooks/useGetChainAddress.js';
 
 vi.mock('react', { spy: true });
+
+const { useState: actualUseState } = await vi.importActual('react');
+
+beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.mocked(React.useState).mockImplementation(actualUseState);
+});
 
 afterEach(() => {
     cleanup();
@@ -121,10 +129,9 @@ describe('useGetChainAddress touched state', () => {
 describe('useGetChainAddress after unmount', () => {
     it('sets nothing and logs no console error when a late result lands', async () => {
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const { useState } = await vi.importActual('react');
         let addressSetter;
         vi.spyOn(React, 'useState').mockImplementation((initialValue) => {
-            const [value, setValue] = useState(initialValue);
+            const [value, setValue] = actualUseState(initialValue);
             if (initialValue !== '') return [value, setValue];
             addressSetter ??= vi.fn(setValue);
             return [value, addressSetter];

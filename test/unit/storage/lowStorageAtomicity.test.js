@@ -1,7 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAddress } from '../../../packages/core/src/schemas/address.js';
 import { createContact } from '../../../packages/core/src/schemas/contact.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
@@ -19,6 +19,7 @@ class RefusingBackend extends InMemoryBackend {
 }
 
 const KEY = new Uint8Array(32).fill(7);
+const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 
 function address(label) {
     return createAddress({
@@ -34,8 +35,16 @@ function address(label) {
     });
 }
 
-afterEach(() => {
+beforeEach(() => {
     delete globalThis.localStorage;
+});
+
+afterEach(() => {
+    if (localStorageDescriptor) {
+        Object.defineProperty(globalThis, 'localStorage', localStorageDescriptor);
+    } else {
+        delete globalThis.localStorage;
+    }
 });
 
 describe('low-storage writes', () => {

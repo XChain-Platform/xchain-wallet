@@ -88,8 +88,8 @@ export function registerSigner(signerId, signer) {
     if (!signer || typeof signer.signPsbt !== 'function') {
         throw new Error('signerBridge.registerSigner: signer must implement Signer');
     }
-    liveSigners.set(signerId, signer);
     const { bridge } = ensureBridge();
+    liveSigners.set(signerId, signer);
     bridge.announce([signerId]);
 }
 

@@ -349,6 +349,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // failure shows an explicit warning rather than silently falling back
     // to the opaque hex.
     const psbtHexForSign = kind === 'signPsbt' ? payload?.payload?.psbtHex : null;
+    const psbtPayloadMissing = kind === 'signPsbt'
+        && (typeof psbtHexForSign !== 'string' || psbtHexForSign.trim().length === 0);
     const [psbtIntent, setPsbtIntent] = useState(
         /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null, feeMode: string | null }} */
         // Starts loading for a PSBT so the first paint says "Decoding", not the
@@ -596,16 +598,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
         { maxLength: 80 },
     );
 
-    // For a PSBT sign, block approval whenever the independent decode failed
-    // (or produced nothing). The summary already warns visually, but that is
-    // presentational only: without this gate the user can still approve a
-    // transaction whose effects could not be verified. Mirrors PsbtSignForm,
-    // which already refuses to sign on `!decomposed`.
+    // For a PSBT sign, block approval when the request has no usable payload
+    // or whenever the independent decode failed (or produced nothing). The
+    // summary already warns visually, but that is presentational only: without
+    // this gate the user can still approve a transaction whose effects could
+    // not be verified. Mirrors PsbtSignForm, which already refuses to sign on
+    // `!decomposed`.
     const psbtDecodeFailed =
-        kind === 'signPsbt' &&
-        !!psbtHexForSign &&
-        !psbtIntent.loading &&
-        (psbtIntent.error !== null || psbtIntent.decomposed === null);
+        psbtPayloadMissing ||
+        (kind === 'signPsbt' &&
+            !!psbtHexForSign &&
+            !psbtIntent.loading &&
+            (psbtIntent.error !== null || psbtIntent.decomposed === null));
 
     // Also hold approval while the independent decode is still in flight:
     // the intent summary (destinations / amounts / fee) has not rendered
@@ -810,6 +814,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         ? { ...psbtIntent.action, summary: psbtActionSummary(psbtIntent.action) }
                         : null}
                     decodeError={psbtIntent.error || psbtIntent.actionDecodeReason}
+                    unavailableMessage={psbtPayloadMissing
+                        ? 'This request is missing the transaction to sign'
+                        : null}
                 />
             ) : null}
 

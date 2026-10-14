@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
 
 const mocks = vi.hoisted(() => ({
@@ -24,47 +24,66 @@ const { ConnectApproval } = await import(
 
 const chain = BUNDLED_DESCRIPTORS[0];
 
-function mount() {
+const VALID_PAYLOAD = {
+    origin: 'https://dapp.test',
+    requestedChains: [chain.id],
+    accountOptions: [{ id: 'account-1', name: 'Account 1' }],
+};
+
+function mount(...args) {
+    const payload = args.length === 0 ? VALID_PAYLOAD : args[0];
     return render(
         <ConnectApproval
             id="connect-failure"
-            payload={{
-                origin: 'https://dapp.test',
-                requestedChains: [chain.id],
-                accountOptions: [{ id: 'account-1', name: 'Account 1' }],
-            }}
+            payload={payload}
             onReject={() => {}}
         />,
     );
 }
 
-afterEach(() => {
-    cleanup();
+beforeEach(() => {
     vi.clearAllMocks();
-    vi.restoreAllMocks();
     mocks.getSettings.mockResolvedValue({});
 });
 
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
+
 describe('ConnectApproval failure handling', () => {
-    it('shows a broker refusal and permits the same exact grant to be retried', async () => {
+    it.each([
+        ['missing', undefined],
+        ['unparseable', '{not-json'],
+        ['malformed', { origin: 'not a URL', requestedChains: [chain.id] }],
+    ])('blocks a %s request payload with plain copy', (_label, payload) => {
+        mount(payload);
+
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'This connection request is missing or invalid.',
+        );
+        expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+        expect(mocks.resolveApproval).not.toHaveBeenCalled();
+    });
+
+    it('permanently blocks a request the broker reports as expired', async () => {
         mocks.getSettings.mockResolvedValue({});
-        mocks.resolveApproval
-            .mockRejectedValueOnce(new Error('This connection request expired.'))
-            .mockResolvedValueOnce({ resolved: true });
+        const expired = new Error('approval.fetch: unknown id');
+        expired.name = 'ApprovalNotFoundError';
+        mocks.resolveApproval.mockRejectedValue(expired);
         const close = vi.spyOn(window, 'close').mockImplementation(() => {});
         mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            'This connection request expired.',
+            'This connection request has expired.',
         );
-        expect(screen.getByRole('button', { name: 'Connect' })).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
         expect(close).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
-        await waitFor(() => expect(close).toHaveBeenCalledOnce());
-
-        expect(mocks.resolveApproval).toHaveBeenNthCalledWith(2, 'connect-failure', {
+        expect(mocks.resolveApproval).toHaveBeenCalledOnce();
+        expect(mocks.resolveApproval).toHaveBeenCalledWith('connect-failure', {
             approved: true,
             chains: [chain.id],
             accounts: ['account-1'],

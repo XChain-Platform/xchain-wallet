@@ -964,11 +964,13 @@ void runMainTask(async () => {
     // so the latest event is retained for a renderer that subscribes later.
     // `getState` returns the broadcast shape and keeps one rendering path.
     let lastUpdaterEvent = null;
+    let downloadAndInstall = null;
+    let restartAndInstall = null;
     try {
         const {
             checkForUpdates,
-            downloadUpdate: downloadAndInstall,
-            restartAndInstall,
+            downloadUpdate,
+            restartAndInstall: restart,
             isActive,
         } = await attachUpdater({
             isPackaged: app.isPackaged,
@@ -980,49 +982,9 @@ void runMainTask(async () => {
             },
             canRestart: () => activeWalletOperations === 0,
         });
+        downloadAndInstall = downloadUpdate;
+        restartAndInstall = restart;
         runUpdaterCheck = isActive ? checkForUpdates : null;
-
-        // Same trust boundary as the install handler: the updater state says
-        // whether a version is on offer, which is not sensitive, but a
-        // positively-remote frame has no business reading the app's state.
-        ipcMain.handle('xchain:updater-state', async (event, ...args) => {
-            if (!isTrustedSender(event)) return null;
-            if (!hasNoIpcArguments(args)) return null;
-            return lastUpdaterEvent;
-        });
-
-        // THE INSTALL HANDLER IS THE HALF THAT WAS MISSING (row
-        // 142). The broadcast above has always fired, into a channel no
-        // renderer could subscribe to under contextIsolation, and nothing
-        // in the repo ever called `downloadAndInstall`. The app therefore
-        // checked for updates on launch and had no way to offer or apply
-        // one - while the feed, the pointers and the S5 manifest gate
-        // were all built and tested. Same sender check as the message
-        // channel below: an install is a quit-and-replace, so it must not
-        // be reachable from a frame that is positively remote.
-        ipcMain.handle('xchain:updater-install', async (event, ...args) => {
-            if (!isTrustedSender(event)) {
-                return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
-            }
-            // At most one argument, and it must be one of the known action
-            // names; anything else is rejected before it can steer main.
-            if (args.length > 1) {
-                return { ok: false, reason: 'desktop: update install takes at most one action' };
-            }
-            const action = args.length === 0 ? 'download' : args[0];
-            try {
-                if (action === 'check') {
-                    await requestUpdateCheck({ visible: true });
-                    return { ok: true };
-                }
-                if (action === 'restart') return await restartAndInstall();
-                if (action === 'download') return await downloadAndInstall();
-            } catch (error) {
-                reportMainFailure('updater IPC action', error);
-                return { ok: false, reason: 'desktop: update action failed' };
-            }
-            return { ok: false, reason: 'desktop: unknown update action' };
-        });
 
         // Kick a quiet check on launch. The menu path marks its events so
         // the renderer can show progress and an explicit up-to-date result.
@@ -1030,6 +992,42 @@ void runMainTask(async () => {
     } catch (err) {
         reportMainFailure('updater wiring', err);
     }
+
+    // Register these channels even when updater wiring fails. The renderer
+    // can treat null as no retained offer and an ok:false action as a visible
+    // failure instead of receiving Electron's raw no-handler rejection.
+    ipcMain.handle('xchain:updater-state', async (event, ...args) => {
+        if (!isTrustedSender(event)) return null;
+        if (!hasNoIpcArguments(args)) return null;
+        return lastUpdaterEvent;
+    });
+
+    ipcMain.handle('xchain:updater-install', async (event, ...args) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
+        }
+        if (args.length > 1) {
+            return { ok: false, reason: 'desktop: update install takes at most one action' };
+        }
+        const action = args.length === 0 ? 'download' : args[0];
+        if (action !== 'check' && action !== 'restart' && action !== 'download') {
+            return { ok: false, reason: 'desktop: unknown update action' };
+        }
+        if (!downloadAndInstall || !restartAndInstall) {
+            return { ok: false, reason: 'desktop: updater unavailable' };
+        }
+        try {
+            if (action === 'check') {
+                await requestUpdateCheck({ visible: true });
+                return { ok: true };
+            }
+            if (action === 'restart') return await restartAndInstall();
+            return await downloadAndInstall();
+        } catch (error) {
+            reportMainFailure('updater IPC action', error);
+            return { ok: false, reason: 'desktop: update action failed' };
+        }
+    });
 
     ipcMain.handle(IPC_CHANNEL, async (event, message, ...extraArgs) => {
         // Sender trust boundary behind the navigation lockdown: only an app
@@ -1158,13 +1156,18 @@ void runMainTask(async () => {
     ipcMain.handle('xchain:deep-link-take', async (event, ...args) => {
         if (!isTrustedSender(event)) return null;
         if (!hasNoIpcArguments(args)) return null;
-        const senderWindow = BrowserWindow.fromWebContents(event.sender);
-        if (!senderWindow || !windows.has(senderWindow) || detachedWindows.has(senderWindow)) return null;
-        if (deepLinkRecipient?.isDestroyed?.()) deepLinkRecipient = null;
-        if (deepLinkRecipient && deepLinkRecipient !== event.sender) return null;
-        const pending = deepLinkSlot.take();
-        deepLinkRecipient = null;
-        return pending;
+        try {
+            const senderWindow = BrowserWindow.fromWebContents(event.sender);
+            if (!senderWindow || !windows.has(senderWindow) || detachedWindows.has(senderWindow)) return null;
+            if (deepLinkRecipient?.isDestroyed?.()) deepLinkRecipient = null;
+            if (deepLinkRecipient && deepLinkRecipient !== event.sender) return null;
+            const pending = deepLinkSlot.take();
+            deepLinkRecipient = null;
+            return pending;
+        } catch (error) {
+            reportMainFailure('deep-link IPC action', error);
+            return null;
+        }
     });
 
     // Wire the signer-bridge ipc listener so renderer-hosted HW

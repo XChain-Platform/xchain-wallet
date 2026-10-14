@@ -38,6 +38,7 @@ import {
     ARWEAVE_GATEWAY_BASE,
     IPFS_GATEWAY_BASE,
 } from '../branding/branding.js';
+import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 
 /**
  * @typedef {Object} TisMediaEntry
@@ -1040,7 +1041,7 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) 
     const jsonUrl = descriptionJsonUrl(description);
     if (!jsonUrl || typeof fetchImpl !== 'function') return null;
     try {
-        const resp = await fetchImpl(jsonUrl, { signal, redirect: 'follow' });
+        const resp = await fetchWithRetry(fetchImpl, jsonUrl, { signal, redirect: 'follow' });
         if (!resp || !resp.ok) return null;
         const text = await resp.text();
         return parseTisText(text);
