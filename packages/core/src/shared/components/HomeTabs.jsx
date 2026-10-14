@@ -313,7 +313,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             : filteredRows,
         [filteredRows, hiddenKeys],
     );
-    const hasMainnetRows = portfolioRows.some((row) => isMainnetChainId(row.chainId));
+    // Test coins have no market price, so the fiat chart is hidden only when
+    // every held row is on a test network; an empty wallet keeps its chart.
+    const chainRows = portfolioRows.filter((row) => typeof row?.chainId === 'string' && row.chainId);
+    const testCoinsOnly = chainRows.length > 0
+        && chainRows.every((row) => !isMainnetChainId(row.chainId));
 
     const coins = useMemo(
         () => sortBalanceRows(filteredRows.filter((r) => r.kind === 'native'), sortBy, nativePriceMap),
@@ -431,7 +435,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 variant="compact"
                 resetKey={`${walletId || ''}:${networkFilter}:chart`}
             >
-                {hasMainnetRows ? (
+                {!testCoinsOnly ? (
                     <PortfolioChart
                         rows={portfolioRows}
                         walletId={walletId}
