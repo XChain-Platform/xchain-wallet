@@ -179,6 +179,7 @@ describe('ListShareForm', () => {
         fireEvent.change(confirm, { target: { value: ' SHARE ' } });
         expect(review.disabled).toBe(false);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('uses the reported owner, shows the fee choice, and composes format 2 through createList', async () => {

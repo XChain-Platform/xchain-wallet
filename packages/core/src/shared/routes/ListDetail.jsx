@@ -167,7 +167,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
             <SectionHeader title="List details" />
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Chain</dt>
-                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
                 <dt className={styles.detailsLabel}>List index</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
                 {name !== null ? (

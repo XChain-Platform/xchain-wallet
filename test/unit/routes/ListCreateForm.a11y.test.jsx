@@ -58,6 +58,7 @@ describe('ListCreateForm accessibility', () => {
 
         expect(textarea.id).toBeTruthy();
         expect(label.htmlFor).toBe(textarea.id);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('names every token that the existence preview did not check', async () => {
