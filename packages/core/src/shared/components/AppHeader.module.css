@@ -137,6 +137,12 @@
     font-size: var(--xc-text-xs);
 }
 
+@media (pointer: coarse), (hover: none) {
+    .shortcut {
+        display: none;
+    }
+}
+
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect
    ratio. Matches `.brandLogoPopup` in Home.module.css (about 36px tall). */
 .logo {

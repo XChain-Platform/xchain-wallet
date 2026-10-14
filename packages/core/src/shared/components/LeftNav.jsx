@@ -100,7 +100,7 @@ export function LeftNav({
         ...(hasDexSurface
             ? [
                 { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon },
-                { id: 'market-activity', label: 'Marketplace', Icon: Icon.DollarIcon },
+                { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon },
             ]
             : []),
         { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },

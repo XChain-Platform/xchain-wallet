@@ -62,8 +62,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--xc-icon-lg);
-    height: var(--xc-icon-lg);
+    width: max-content;
+    height: max-content;
     color: var(--xc-accent-text);
     flex: 0 0 auto;
 }
