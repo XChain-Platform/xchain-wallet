@@ -55,3 +55,14 @@ export function useHideReachabilityNotice(active) {
         return () => setHidden((count) => count - 1);
     }, [active, setHidden]);
 }
+
+/**
+ * Component form of useHideReachabilityNotice, for a screen that decides
+ * after its early returns, where a hook call is not allowed.
+ *
+ * @param {{ active?: boolean }} props
+ */
+export function HideReachabilityNotice({ active = true }) {
+    useHideReachabilityNotice(active);
+    return null;
+}

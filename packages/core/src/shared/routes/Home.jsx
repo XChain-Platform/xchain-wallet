@@ -18,6 +18,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { HideReachabilityNotice } from '../components/noticesRoute.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
@@ -1357,6 +1358,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             : t('home.offline.empty')}
                     </StatusMessage>
                 ) : null}
+                {/* Home's own balance error already says the balances could not
+                    be loaded, with Retry, so the shell notice steps aside. */}
+                {balanceStatusText ? <HideReachabilityNotice /> : null}
                 {balanceStatusText ? (
                     <StatusMessage
                         variant="error"

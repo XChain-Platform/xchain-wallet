@@ -14,8 +14,12 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import {
+    HideReachabilityNotice,
+    ReachabilityNoticeHiddenContext,
+} from '../../../packages/core/src/shared/components/noticesRoute.js';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
 
 afterEach(cleanup);
@@ -120,5 +124,18 @@ describe('shell notices placement', () => {
         render(<Route title="Locked" />);
         expect(screen.queryByTestId('notice')).toBeNull();
         expect(screen.getByRole('main').firstElementChild).toBe(screen.getByTestId('content-Locked'));
+    });
+
+    it('lets a screen that states the balance problem itself hide the reachability notice', () => {
+        function HideAware() {
+            return <p data-testid="hide-aware">{useContext(ReachabilityNoticeHiddenContext) ? 'hidden' : 'shown'}</p>;
+        }
+        const shell = (children) => (
+            <FullLayoutWithNav routeKey="home" nav={<nav />} notices={<HideAware />}>{children}</FullLayoutWithNav>
+        );
+        const view = render(shell(<Route title="Home"><HideReachabilityNotice /></Route>));
+        expect(screen.getByTestId('hide-aware')).toHaveTextContent('hidden');
+        view.rerender(shell(<Route title="Home" />));
+        expect(screen.getByTestId('hide-aware')).toHaveTextContent('shown');
     });
 });
