@@ -52,7 +52,7 @@ afterEach(() => {
 
 describe('regression/scanner-without-camera', () => {
     it.each([
-        ['an undefined mediaDevices API', null, /camera access is not available.*paste the code/i],
+        ['an undefined mediaDevices API', null, /camera access isn.t available.*paste the code/i],
         ['a NotAllowedError rejection', 'NotAllowedError', /allow the camera.*settings.*paste the code/i],
         ['a NotFoundError rejection', 'NotFoundError', /no camera.*paste the code/i],
     ])('keeps ScanRoute in its page template for %s', async (_case, errorName, message) => {
