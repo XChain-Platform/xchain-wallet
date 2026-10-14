@@ -125,6 +125,7 @@ test('rejects malformed release-gate arguments before contacting GitHub', () => 
 const SERVER = `
 const http = require('node:http');
 const statuses = JSON.parse(process.argv[1]);
+const extra = JSON.parse(process.argv[2] || '{}');
 const routes = {
     ['/repos/${REPO}/actions/runs']: {
         workflow_runs: [{
@@ -137,6 +138,7 @@ const routes = {
         }],
     },
     ['/repos/${REPO}/commits/${SHA}/status']: { statuses },
+    ...extra,
 };
 const server = http.createServer((req, res) => {
     const body = routes[req.url.split('?')[0]];
@@ -148,8 +150,8 @@ server.listen(0, '127.0.0.1', () => {
 });
 `;
 
-function serve(statuses) {
-    const child = spawn(process.execPath, ['-e', SERVER, JSON.stringify(statuses)], {
+function serve(statuses, extra = {}) {
+    const child = spawn(process.execPath, ['-e', SERVER, JSON.stringify(statuses), JSON.stringify(extra)], {
         stdio: ['ignore', 'pipe', 'inherit'],
     });
     return new Promise((resolve, reject) => {
@@ -169,8 +171,8 @@ function serve(statuses) {
     });
 }
 
-async function withStatuses(statuses, callback) {
-    const server = await serve(statuses);
+async function withStatuses(statuses, callback, extra = {}) {
+    const server = await serve(statuses, extra);
     try {
         return callback(runGate(['--sha', SHA, '--repo', REPO], {
             GITHUB_TOKEN: 'test-token',
@@ -197,4 +199,59 @@ test('requires a successful license/cla status in addition to the CI workflow', 
         assert.equal(result.status, 1, result.stdout);
         assert.match(result.stderr, /required status `license\/cla` does not exist/);
     });
+});
+
+const HEAD = 'b'.repeat(40);
+const claStatus = (state) => ({
+    context: 'license/cla',
+    state,
+    updated_at: '2026-10-13T10:00:00Z',
+    target_url: 'https://example.invalid/status/pr-cla',
+});
+const mergedPr = (overrides = {}) => [{
+    number: 77,
+    merged_at: '2026-10-13T09:00:00Z',
+    merge_commit_sha: SHA,
+    head: { sha: HEAD },
+    ...overrides,
+}];
+const prRoutes = (prs, headStatuses) => ({
+    [`/repos/${REPO}/commits/${SHA}/pulls`]: prs,
+    [`/repos/${REPO}/commits/${HEAD}/status`]: { statuses: headStatuses },
+});
+
+test('a license/cla status on the commit itself wins over the PR head', async () => {
+    await withStatuses([{ ...claStatus('failure'), target_url: 'https://example.invalid/own' }], (result) => {
+        assert.equal(result.status, 1, result.stdout);
+        assert.match(result.stderr, /required status `license\/cla` is `failure`/);
+        assert.doesNotMatch(result.stdout, /carried from PR/);
+    }, prRoutes(mergedPr(), [claStatus('success')]));
+});
+
+test('carries a successful license/cla from the merged PR head when the commit has none', async () => {
+    await withStatuses([], (result) => {
+        assert.equal(result.status, 0, result.stderr);
+        assert.match(result.stdout, /license\/cla: state=success carried from PR #77 head bbbbbbb/);
+        assert.match(result.stdout, /status\/pr-cla/);
+    }, prRoutes(mergedPr(), [claStatus('success')]));
+});
+
+test('a failing license/cla on the merged PR head refuses', async () => {
+    await withStatuses([], (result) => {
+        assert.equal(result.status, 1, result.stdout);
+        assert.match(result.stderr, /required status `license\/cla` is `failure`/);
+    }, prRoutes(mergedPr(), [claStatus('failure')]));
+});
+
+test('refuses when no merged PR produced the commit', async () => {
+    for (const prs of [
+        [],
+        mergedPr({ merge_commit_sha: 'c'.repeat(40) }),
+        mergedPr({ merged_at: null }),
+    ]) {
+        await withStatuses([], (result) => {
+            assert.equal(result.status, 1, result.stdout);
+            assert.match(result.stderr, /required status `license\/cla` does not exist/);
+        }, prRoutes(prs, [claStatus('success')]));
+    }
 });
