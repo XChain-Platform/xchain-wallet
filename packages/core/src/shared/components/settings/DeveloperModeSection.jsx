@@ -43,8 +43,9 @@
 //   - Logs and diagnostics console (§48.5 / G150).
 //
 import { useEffect, useState } from 'react';
-import { registry as registryLib, schemas, flows as flowsLib } from '@xchain-wallet/core';
+import { registry as registryLib, schemas } from '@xchain-wallet/core';
 import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
+import { fundActiveWalletFromMiner } from '../../../flows/regtestFaucet.js';
 import {
     Button,
     EmptyState,
@@ -86,7 +87,7 @@ const AUTO_SIGN_LABELS = {
     [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: '1 hour',
 };
 
-export function DeveloperModeSection({ onNavigateToMint } = {}) {
+export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateToMint } = {}) {
     const { settings, loading, error, update } = useSettings();
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -122,10 +123,16 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('showVariantBadge', v)}
             />
-            <RegtestNetworksRow developerMode={Boolean(settings.developerMode)} fees={settings.fees} />
+            <RegtestNetworksRow
+                developerMode={Boolean(settings.developerMode)}
+                fees={settings.fees}
+                activeWallet={activeWallet}
+            />
             <RegtestFaucetRow
                 developerMode={Boolean(settings.developerMode)}
                 fees={settings.fees}
+                activeWallet={activeWallet}
+                activeAccount={activeAccount}
                 onNavigateToMint={onNavigateToMint}
             />
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
@@ -203,7 +210,7 @@ function LogConsoleRow({ developerMode }) {
     );
 }
 
-function RegtestNetworksRow({ developerMode, fees }) {
+function RegtestNetworksRow({ developerMode, fees, activeWallet }) {
     const regtests = chainRegistry.supportedChains()
         .filter((d) => d.networkKind === 'regtest')
         .sort((a, b) => a.coin.localeCompare(b.coin));
@@ -227,6 +234,7 @@ function RegtestNetworksRow({ developerMode, fees }) {
                             descriptor={d}
                             isActive={Boolean(fees && fees[d.id])}
                             disabled={!developerMode}
+                            activeWallet={activeWallet}
                         />
                     </li>
                 ))}
@@ -235,7 +243,7 @@ function RegtestNetworksRow({ developerMode, fees }) {
     );
 }
 
-export function RegtestRow({ descriptor, isActive, disabled }) {
+export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
     const { messaging } = useMessaging();
     const [open, setOpen] = useState(false);
     const [password, setPassword] = useState('');
@@ -245,33 +253,23 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
     const [skippedAccounts, setSkippedAccounts] = useState(
         /** @type {Array<{ subject: string, message: string }>} */ ([]),
     );
-    const [walletId, setWalletId] = useState(/** @type {string | null} */ (null));
-    const [walletLoadError, setWalletLoadError] = useState(/** @type {string | null} */ (null));
+    const [activated, setActivated] = useState(Boolean(isActive));
     // §17.4 / FOLLOWUP 1: signer selection. null = the implicit software
     // seed (password path); a non-null signerId names a paired HW signer,
     // which activates through the device instead of a wallet password.
     const [signerId, setSignerId] = useState(/** @type {string | null} */ (null));
     const isHardware = Boolean(signerId);
+    const walletId = activeWallet?.id || null;
 
     useEffect(() => {
-        let cancelled = false;
-        if (typeof messaging?.listWallets !== 'function') return undefined;
-        messaging.listWallets().then((wallets) => {
-            if (cancelled) return;
-            const first = Array.isArray(wallets) ? wallets[0] : null;
-            setWalletId(first?.id ?? null);
-            setWalletLoadError(first?.id ? null : 'No wallet is available for network activation.');
-        }).catch(() => {
-            if (!cancelled) setWalletLoadError('Could not load a wallet for network activation.');
-        });
-        return () => { cancelled = true; };
-    }, [messaging]);
+        if (isActive) setActivated(true);
+    }, [isActive]);
 
     const onActivate = async (event) => {
         event.preventDefault();
         if (busy) return;
         if (!walletId) {
-            setErrorText(walletLoadError || 'No wallet is available for network activation.');
+            setErrorText('No active wallet is available for network activation.');
             return;
         }
         if (typeof messaging?.activateChainRequest !== 'function') {
@@ -308,6 +306,7 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
                     ? `Activated. Derived ${created} address${created === 1 ? '' : 'es'}.`
                     : 'Already activated. No new addresses needed.',
             );
+            setActivated(true);
             setPassword('');
             setOpen(false);
         } catch (err) {
@@ -331,7 +330,7 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
                 as="h3"
                 title={descriptor.displayName}
                 description={`${descriptor.id} · explorer ${descriptor.explorer?.defaultUrl}:${descriptor.explorer?.defaultPort}`}
-                trailing={isActive ? (
+                trailing={activated ? (
                     <span className={styles.active}>Active</span>
                 ) : (
                     <Button
@@ -394,7 +393,6 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
                 items={skippedAccounts}
             />
             {errorText ? <Status text={errorText} tone="error" /> : null}
-            {walletLoadError && !errorText ? <Status text={walletLoadError} tone="error" /> : null}
         </section>
     );
 }
@@ -407,8 +405,7 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
 //   - "Mint test XCHAIN" hands off to the real MintForm flow (via
 //     onNavigateToMint) since minting is a signed protocol action and
 //     XCHAIN only exists on the bitcoin chain (XCHAIN_GENESIS.md).
-function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
-    const { messaging } = useMessaging();
+function RegtestFaucetRow({ developerMode, fees, activeWallet, activeAccount, onNavigateToMint }) {
     const activeRegtests = chainRegistry.supportedChains()
         .filter((d) => d.networkKind === 'regtest' && fees && fees[d.id]);
     if (activeRegtests.length === 0) return null;
@@ -416,6 +413,28 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
     // XCHAIN can exist on), otherwise the first activated regtest chain.
     const descriptor = activeRegtests.find((d) => d.coin === 'bitcoin') || activeRegtests[0];
     const coinTicker = PROTOCOL_COIN_TICKER[descriptor.coin] || descriptor.coin;
+
+    return (
+        <RegtestFaucetForm
+            developerMode={developerMode}
+            descriptor={descriptor}
+            coinTicker={coinTicker}
+            activeWallet={activeWallet}
+            activeAccount={activeAccount}
+            onNavigateToMint={onNavigateToMint}
+        />
+    );
+}
+
+function RegtestFaucetForm({
+    developerMode,
+    descriptor,
+    coinTicker,
+    activeWallet,
+    activeAccount,
+    onNavigateToMint,
+}) {
+    const { messaging } = useMessaging();
 
     const [minerUrl, setMinerUrl] = useState(DEFAULT_MINER_URL);
     const [amount, setAmount] = useState('10');
@@ -426,10 +445,6 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
     const onGetFunds = async (event) => {
         event.preventDefault();
         if (busy) return;
-        if (typeof messaging?.listWallets !== 'function') {
-            setErrorText('The wallet list is not available in this build.');
-            return;
-        }
         const amountNumber = Number(amount);
         if (amount.trim() === '' || !Number.isFinite(amountNumber) || amountNumber <= 0) {
             setErrorText(`Enter an amount of ${coinTicker} greater than 0.`);
@@ -439,15 +454,17 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
         setStatusText(null);
         setErrorText(null);
         try {
-            const wallets = await messaging.listWallets();
-            const walletId = Array.isArray(wallets) ? wallets[0]?.id : null;
-            if (!walletId) throw new Error('No wallet found.');
-            const addr = await messaging.getNewestAddress(walletId, descriptor.id);
-            const address = addr?.address;
-            if (!address) throw new Error(`No ${descriptor.displayName} address yet. Use Receive first.`);
-            const result = await flowsLib.fundBtcFromMiner({ minerUrl, address, amount: amountNumber });
+            const result = await fundActiveWalletFromMiner({
+                messaging,
+                walletId: activeWallet?.id,
+                accountId: activeAccount?.id,
+                chainId: descriptor.id,
+                chainDisplayName: descriptor.displayName,
+                minerUrl,
+                amount: amountNumber,
+            });
             if (!result.ok) throw new Error(result.error || 'Funding failed.');
-            setStatusText(`Sent ${amount} ${coinTicker} to ${address}. txid ${result.txid}. Waiting for the regtest miner to confirm it.`);
+            setStatusText(`Sent ${amount} ${coinTicker} to ${result.address}. txid ${result.txid}. Waiting for the regtest miner to confirm it.`);
         } catch (err) {
             setErrorText(err?.message || 'Funding failed.');
         } finally {

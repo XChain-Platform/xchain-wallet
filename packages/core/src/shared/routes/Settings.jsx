@@ -327,7 +327,7 @@ export function Settings({
             keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
-            props: { onNavigateToMint },
+            props: { activeWallet, activeAccount, onNavigateToMint },
             summary: developerSummary(settings),
         },
         ...(desktopUpdaterBridge() ? [{
@@ -347,7 +347,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved, reload]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, onNavigateToMint, handleWalletRemoved, reload]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
