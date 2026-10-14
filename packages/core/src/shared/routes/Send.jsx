@@ -584,8 +584,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [draftPending, setDraftPending] = useState(
         () => !hasMeaningfulSendDraft(draft.load()),
     );
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         const values = { chainId, toAddress, tick, amount, memo };
         if (hasMeaningfulSendDraft(values)) draft.save(values);
         else draft.clear();
@@ -618,6 +626,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The settings read rides the address load so the last-used chain is
