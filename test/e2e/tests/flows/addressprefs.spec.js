@@ -80,6 +80,9 @@ async function expectScreenLayout(page, heading, label) {
                 ? candidate.closest('label') || candidate
                 : candidate;
             if (seen.has(target)) continue;
+            // An aria-hidden subtree is decoration, not a control: the fee slider's
+            // tick labels sit there, and only tier ticks carry an ETA line.
+            if (target.closest('[aria-hidden="true"]')) continue;
             seen.add(target);
 
             const style = getComputedStyle(target);
@@ -213,7 +216,9 @@ for (const viewport of VIEWPORTS) {
             ).toBeLessThanOrEqual(1);
 
             const review = main.getByRole('form', { name: 'Review preferences' });
-            await expect(review).toContainText(generatedAddress);
+            // AddressText middle-truncates on screen and carries the full address
+            // as its accessible name.
+            await expect(review.getByLabel(generatedAddress, { exact: true })).toBeVisible();
             await expect(review).toContainText('Destroy the fee (reduces supply) - CHANGED');
             await expect(review).toContainText('Memo required on incoming sends - CHANGED');
             await expect(review).toContainText('Anyone may open a dispenser here - CHANGED');
@@ -236,6 +241,10 @@ for (const viewport of VIEWPORTS) {
             await expect(use).toHaveAttribute('title', 'Make this the active address');
             await use.click();
             await expect(use).toBeHidden();
+            // Use returns to Home by design; let Home finish mounting before
+            // the palette opens, or the palette is torn down mid-fill.
+            await expect(page.getByRole('heading', { level: 1, name: 'Home', exact: true })).toBeVisible();
+            await settle(page);
 
             await gotoPalette(page, 'Addresses');
             await page.getByRole('button', {
