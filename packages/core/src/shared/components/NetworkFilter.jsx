@@ -103,9 +103,11 @@ export function NetworkFilter({
     const triggerLabel = value === 'all'
         ? 'All networks'
         : (entries.find((e) => e.coin === value)?.label || value);
-    const triggerSub = value === 'all'
+    const triggerCount = value === 'all'
         ? `${entries.length} ${entries.length === 1 ? 'network' : 'networks'}`
         : null;
+    const triggerAriaLabel = ariaLabel
+        || [triggerLabel, triggerCount].filter(Boolean).join(', ');
     const triggerIconUrl = value === 'all'
         ? null
         : branding.chainIconSmallUrl(entries.find((e) => e.coin === value)?.chainId || '');
@@ -174,7 +176,7 @@ export function NetworkFilter({
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
                 aria-controls={open ? listboxId : undefined}
-                aria-label={ariaLabel}
+                aria-label={triggerAriaLabel}
                 title={triggerLabel}
             >
                 <span className={styles.triggerIcon} aria-hidden="true">
@@ -186,9 +188,6 @@ export function NetworkFilter({
                 </span>
                 <span className={styles.triggerText}>
                     <span className={styles.triggerLabel}>{triggerLabel}</span>
-                    {triggerSub ? (
-                        <span className={styles.triggerSub}>{triggerSub}</span>
-                    ) : null}
                 </span>
                 <span className={styles.triggerCaret} aria-hidden="true">
                     {open ? '▴' : '▾'}

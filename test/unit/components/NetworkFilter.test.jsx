@@ -54,6 +54,7 @@ const chainRegistry = {
 
 const knownFamilies = ['bitcoin', 'litecoin', 'dogecoin'];
 const manyFamilies = [...knownFamilies, 'ethereum', 'solana', 'dash', 'cosmos'];
+const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
 function mount(overrides = {}) {
     const props = {
@@ -77,6 +78,8 @@ afterEach(() => {
     resetBackStackForTests();
     delete globalThis.Capacitor;
     vi.restoreAllMocks();
+    if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+    else delete window.innerWidth;
     globalThis.localStorage?.removeItem('xc:homeFilters:wallet-a');
     globalThis.localStorage?.removeItem('xc:homeFilters:wallet-b');
 });
@@ -90,7 +93,8 @@ describe('NetworkFilter trigger', () => {
 
         const trigger = screen.getByRole('button', { name: /All networks/ });
         expect(trigger).toHaveTextContent('All networks');
-        expect(trigger).toHaveTextContent(countLabel);
+        expect(trigger).not.toHaveTextContent(countLabel);
+        expect(trigger).toHaveAccessibleName(`All networks, ${countLabel}`);
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
 
@@ -333,6 +337,51 @@ describe('shared network filter surfaces', () => {
         expect(wrapper).toMatch(/flex:\s*1 1 0/);
         expect(wrapper).toMatch(/min-width:\s*0/);
         expect(wrapper).not.toMatch(/min-width:\s*10\.5rem/);
+    });
+
+    it('keeps Contacts and Dispensers filters on one line at 411px', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 411 });
+        render(
+            <div style={{ width: 411 }}>
+                <NetworkFilterDropdown
+                    value="all"
+                    onChange={() => {}}
+                    announceNetworkCount
+                />
+            </div>,
+        );
+
+        const trigger = screen.getByRole('button', {
+            name: 'Filter by network: All networks, 3 networks',
+        });
+        const filter = trigger.closest(`.${filterStyles.wrap}`);
+        const filterCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/NetworkFilter.module.css',
+        ), 'utf8');
+        const contactsCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/routes/ContactsList.module.css',
+        ), 'utf8');
+        const contactsSource = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/routes/ContactsList.jsx',
+        ), 'utf8');
+        const dispensersSource = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/routes/DispensersList.jsx',
+        ), 'utf8');
+
+        expect(window.innerWidth).toBe(411);
+        expect(trigger).toHaveTextContent('All networks');
+        expect(trigger).not.toHaveTextContent('3 networks');
+        expect(filter).toHaveClass(filterStyles.md);
+        expect(filterCss).toMatch(/\.trigger\s*\{[^}]*display:\s*flex[^}]*height:\s*var\(--network-filter-control-height/s);
+        expect(filterCss).toMatch(/\.triggerLabel\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s);
+        expect(contactsCss).toMatch(/\.toolbar\s*\{[^}]*flex-wrap:\s*wrap/s);
+        expect(contactsSource).toMatch(/<div className=\{picker\.toolbar\}>[\s\S]*announceNetworkCount/);
+        expect(dispensersSource).toMatch(/<div className=\{local\.toolbar\} style=\{\{ flexWrap: 'wrap' \}\}>/);
+        expect(dispensersSource).toMatch(/<div className=\{local\.searchField\}>\s*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
     });
 });
 
