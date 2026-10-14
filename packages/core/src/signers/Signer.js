@@ -42,6 +42,67 @@ export class SignerStatusError extends Error {
     }
 }
 
+const HARDWARE_FAILURE_COPY = Object.freeze({
+    'device-not-found': (vendor) => `No ${vendor} was found. Connect and unlock it, then try again.`,
+    locked: (vendor) => `Your ${vendor} is locked. Unlock it, then try again.`,
+    'wrong-app': () => 'The wrong app is open on your Ledger. Open the app for this network, then try again.',
+    cancelled: (vendor) => `Signing was canceled on your ${vendor} because the user rejected it. Nothing was signed.`,
+    disconnected: (vendor) => `Your ${vendor} disconnected before signing finished. Reconnect and unlock it, then try again.`,
+    firmware: (vendor) => `Your ${vendor} firmware is too old. Update it with the vendor app, reconnect and unlock the device, then try again.`,
+    error: (vendor) => `Your ${vendor} could not finish the request. Check the device and try again.`,
+});
+
+/**
+ * Convert vendor transport failures into stable states with copy safe for a
+ * signing form. The vendor response stays on `cause` for diagnostics while
+ * shell bridges can rely on the plain message when they preserve only name
+ * and message.
+ *
+ * @param {string} signerId
+ * @param {'trezor'|'ledger'} vendor
+ * @param {unknown} cause
+ * @returns {SignerStatusError}
+ */
+export function hardwareSigningError(signerId, vendor, cause) {
+    const detail = hardwareFailureFingerprint(cause);
+    let kind = 'error';
+    if (/Failure_ActionCancelled|action cancel(?:led|ed)|user.*(?:reject|denied|declined)|denied by user|0x6985|conditions of use not satisfied/i.test(detail)) {
+        kind = 'cancelled';
+    } else if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware|Failure_FirmwareError/i.test(detail)) {
+        kind = 'firmware';
+    } else if (/wrong[- ]app|app.*(?:not|isn't).*open|0x6a82|0x6e00|cla_not_supported/i.test(detail)) {
+        kind = 'wrong-app';
+    } else if (/SignerLockedError|LockedDevice|Device_Locked|device (?:is )?locked|pin locked|0x5515/i.test(detail)) {
+        kind = 'locked';
+    } else if (/NoDevice|Device_NotFound|no (?:compatible )?device|no device selected|device.*not found|not found.*device|unable to claim/i.test(detail)) {
+        kind = 'device-not-found';
+    } else if (/DisconnectedDevice|Device_Disconnected|disconnect|transport.*(?:unavailable|missing)|hid.*(?:unavailable|missing|error)|not connected/i.test(detail)) {
+        kind = 'disconnected';
+    }
+
+    const status = kind === 'device-not-found' ? 'disconnected' : kind;
+    const error = new SignerStatusError(signerId, status, '');
+    error.message = HARDWARE_FAILURE_COPY[kind](vendor === 'trezor' ? 'Trezor' : 'Ledger');
+    error.code = `HW_${kind.replace(/-/g, '_').toUpperCase()}`;
+    error.cause = cause;
+    if (kind === 'cancelled') error.name = 'HardwareUserRejectedError';
+    return error;
+}
+
+function hardwareFailureFingerprint(cause) {
+    if (!cause) return '';
+    if (typeof cause !== 'object') return String(cause);
+    return [
+        cause.name,
+        cause.code,
+        cause.reason,
+        cause.status,
+        cause.statusCode === undefined ? null : `0x${Number(cause.statusCode).toString(16)}`,
+        cause.message,
+        cause.error,
+    ].filter((value) => value !== undefined && value !== null).join(' ');
+}
+
 export class NotImplementedError extends Error {
     constructor(method) {
         super(`${method}: not yet implemented`);
@@ -125,7 +186,7 @@ export function assertFullInputCoverage(signerId, inputCount, signingPaths) {
 }
 
 /** @typedef {'software' | 'trezor' | 'ledger' | 'multisig' | 'airgap'} SignerKind */
-/** @typedef {'available' | 'locked' | 'disconnected' | 'wrong-app' | 'unsupported-network' | 'error'} SignerStatus */
+/** @typedef {'available' | 'locked' | 'disconnected' | 'wrong-app' | 'unsupported-network' | 'cancelled' | 'firmware' | 'error'} SignerStatus */
 
 /**
  * @typedef {Object} GetAddressesParams

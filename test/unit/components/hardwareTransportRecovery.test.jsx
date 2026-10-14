@@ -76,7 +76,7 @@ describe('hardware transport recovery', () => {
     it.each([
         [
             'device locked',
-            signerStatusError('locked', 'device locked'),
+            new Error('Your Ledger is locked. Unlock it, then try again.'),
             'Your hardware wallet is locked. Unlock it, then select Approve again.',
         ],
         [
@@ -85,9 +85,9 @@ describe('hardware transport recovery', () => {
             'The wrong app is open on your hardware wallet. Open the app for this network, then select Approve again.',
         ],
         [
-            'user rejected',
-            Object.assign(new Error('device declined'), { name: 'UserRejectedError' }),
-            'Signing was rejected on your hardware wallet. Review the details, then select Approve again when you are ready.',
+            'device not found',
+            new Error('No Ledger was found. Connect and unlock it, then try again.'),
+            'No hardware wallet was found. Connect and unlock it, then select Approve again.',
         ],
         [
             'disconnected mid-sign',
@@ -115,6 +115,26 @@ describe('hardware transport recovery', () => {
 
         fireEvent.click(screen.getByTestId('confirm-approve'));
 
+        expect(await screen.findByText('Signed without reloading')).toBeInTheDocument();
+        expect(transport).toHaveBeenCalledTimes(2);
+    });
+
+    it('treats an on-device rejection as a quiet cancellation and keeps the form usable', async () => {
+        const transport = vi.fn()
+            .mockRejectedValueOnce(Object.assign(new Error('device declined'), { name: 'UserRejectedError' }))
+            .mockResolvedValueOnce({ txid: 'signed-txid' });
+        render(<HardwareConfirmHarness transport={transport} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Review hardware send' }));
+        fireEvent.click(await screen.findByTestId('confirm-approve'));
+
+        expect(await screen.findByTestId('confirm-notice')).toHaveTextContent(
+            'Signing was canceled on your hardware wallet. Nothing was signed. Review the details and select Approve again when you are ready.',
+        );
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).toBeEnabled());
+
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         expect(await screen.findByText('Signed without reloading')).toBeInTheDocument();
         expect(transport).toHaveBeenCalledTimes(2);
     });

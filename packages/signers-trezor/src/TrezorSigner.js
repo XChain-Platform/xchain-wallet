@@ -40,6 +40,7 @@
 
 import {
     Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
+    hardwareSigningError,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
 import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
@@ -120,8 +121,8 @@ export class TrezorSigner extends Signer {
     /**
      * Reads device status by pinging `getFeatures`. Returns:
      *   - `'available'`: device reachable + same physical device we paired
+     *   - `'locked'`: Connect reports that the device needs to be unlocked
      *   - `'disconnected'`: Connect rejects or the device identifier doesn't match
-     *   - `'error'`: unexpected Connect failure
      *
      * @returns {Promise<import('../../core/src/signers/Signer.js').SignerStatus>}
      */
@@ -129,10 +130,16 @@ export class TrezorSigner extends Signer {
         let res;
         try {
             res = await this._connect.getFeatures();
-        } catch {
+        } catch (err) {
+            if (hardwareSigningError(this._id, 'trezor', err).status === 'locked') {
+                return 'locked';
+            }
             return 'disconnected';
         }
         if (!res?.success) {
+            if (signerFailure(this._id, 'getFeatures', res).status === 'locked') {
+                return 'locked';
+            }
             return 'disconnected';
         }
         const features = res.payload;
@@ -514,5 +521,10 @@ export function coinTypeFor(coin) {
 function signerFailure(signerId, method, res) {
     const code = res?.payload?.code ?? res?.error?.code ?? null;
     const msg = res?.payload?.error ?? res?.error?.error ?? 'unknown Trezor Connect failure';
-    return new SignerStatusError(signerId, 'error', `${method} failed: ${msg}${code ? ` (${code})` : ''}`);
+    return hardwareSigningError(signerId, 'trezor', {
+        name: 'TrezorConnectError',
+        code,
+        message: msg,
+        operation: method,
+    });
 }

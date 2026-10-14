@@ -710,21 +710,26 @@ function retryableHardwareSigningError(err) {
     ].filter((value) => value !== undefined && value !== null).join(' ');
 
     let message = null;
-    if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware/i.test(fingerprint)) {
+    if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware|HW_FIRMWARE/i.test(fingerprint)) {
         message = 'Your hardware wallet firmware is too old. Update it with the vendor app, reconnect and unlock the device, then select Approve again.';
     } else if (/wrong[- ]app|status ["']wrong-app["']|0x6a82|0x6e00|cla_not_supported/i.test(fingerprint)) {
         message = 'The wrong app is open on your hardware wallet. Open the app for this network, then select Approve again.';
-    } else if (/UserRejectedError|user[- ]rejected|Failure_ActionCancelled|action cancelled|denied by user|device declined|0x6985/i.test(fingerprint)) {
-        message = 'Signing was rejected on your hardware wallet. Review the details, then select Approve again when you are ready.';
-    } else if (/SignerLockedError|status ["']locked["']|device (?:is )?locked|pin locked/i.test(fingerprint)) {
+    } else if (/UserRejectedError|user[- ]rejected|Failure_ActionCancelled|action cancel(?:led|ed)|denied by user|device declined|0x6985|HW_CANCELLED/i.test(fingerprint)) {
+        message = 'Signing was canceled on your hardware wallet. Nothing was signed. Review the details and select Approve again when you are ready.';
+    } else if (/SignerLockedError|status ["']locked["']|(?:device|ledger|trezor) (?:is )?locked|pin locked/i.test(fingerprint)) {
         message = 'Your hardware wallet is locked. Unlock it, then select Approve again.';
-    } else if (/status ["']disconnected["']|signer bridge disconnected|device disconnected|disconnected.*(?:device|sign)|transport.*(?:disconnected|unavailable|missing)|no (?:compatible )?device/i.test(fingerprint)) {
+    } else if (/HW_DEVICE_NOT_FOUND|no device selected|no (?:compatible )?device|no (?:hardware wallet|ledger|trezor) was found|device.*not found|not found.*device/i.test(fingerprint)) {
+        message = 'No hardware wallet was found. Connect and unlock it, then select Approve again.';
+    } else if (/status ["']disconnected["']|signer bridge disconnected|device disconnected|disconnected.*(?:device|sign)|transport.*(?:disconnected|unavailable|missing)/i.test(fingerprint)) {
         message = 'Your hardware wallet disconnected before signing finished. Reconnect and unlock it, then select Approve again.';
     }
     if (!message) return null;
 
     const recovery = new Error(message);
-    recovery.name = 'HardwareSigningRetryError';
+    recovery.name = /cancel(?:led|ed) on your hardware wallet/i.test(message)
+        ? 'HardwareSigningCancellation'
+        : 'HardwareSigningRetryError';
+    recovery.presentation = recovery.name === 'HardwareSigningCancellation' ? 'status' : 'error';
     recovery.cause = err;
     return recovery;
 }
