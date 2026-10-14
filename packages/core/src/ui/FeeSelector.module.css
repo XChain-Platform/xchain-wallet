@@ -69,6 +69,9 @@
 
 .slider {
     width: 100%;
+    /* The browser's default 2px side margin on a range input pushed a
+       full-width slider 2px past the page gutter. */
+    margin-inline: 0;
     accent-color: var(--xc-accent-primary);
     cursor: pointer;
     /* slice 2: the native range input is drawn ~16px tall, which
