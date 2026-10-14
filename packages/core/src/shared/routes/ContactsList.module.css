@@ -8,22 +8,6 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
-/* Contacts list view. Mirrors the Send/Receive TokenPicker toolbar
-   (search left, control right) so the address book feels identical to
-   the picker users meet during a send. The control on the right is a
-   custom network dropdown (chain icon + name) rather than a native select,
-   because native selects can't render images inside options. */
-
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: var(--xc-space-2);
-    flex-wrap: wrap;
-}
-
 /* Search and network picker share the space left beside the sort control. */
 .search {
     flex: 1 1 0;
@@ -161,17 +145,6 @@
     line-height: 1;
 }
 
-/* Tab strip used in the contact detail view. Canonical underline pattern.
-   space-between pushes the trailing add-address button to the right edge. */
-.tabsRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0;
-    border-bottom: 1px solid var(--xc-border);
-    margin: var(--xc-space-4) 0 0;
-}
-
 /* Plus button on the Addresses tab line, right-justified. Matches the
    sub-header icon buttons but sized to sit on the tab row. */
 .addAddressBtn {
@@ -199,38 +172,6 @@
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    padding: var(--xc-space-3) var(--xc-space-3);
-    color: var(--xc-text-muted);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    transition: color 160ms ease, border-color 160ms ease;
-}
-
-.tab:hover { color: var(--xc-text); }
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.tabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
-.tabLabel { font-weight: 700; }
 
 .tabPanel {
     padding: var(--xc-space-3) 0;

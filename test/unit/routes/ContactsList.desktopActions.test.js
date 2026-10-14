@@ -12,6 +12,10 @@ const contactsCss = readFileSync(
     resolve(process.cwd(), 'packages/core/src/shared/routes/ContactsList.module.css'),
     'utf8',
 );
+const listPageCss = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/ui/ListPage.module.css'),
+    'utf8',
+);
 
 describe('Contacts desktop actions and narrow layout', () => {
     it('wires Send to the desktop send screen', () => {
@@ -25,8 +29,8 @@ describe('Contacts desktop actions and narrow layout', () => {
         expect(contactsRoute).toMatch(/setUnlockedView\('send'\)/);
     });
 
-    it('wraps the three toolbar controls on narrow screens', () => {
-        expect(contactsCss).toMatch(/\.toolbar\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+    it('uses the wrapping list-page toolbar with a full-width phone sort control', () => {
+        expect(listPageCss).toMatch(/\.toolbar\s*\{[\s\S]*?flex-wrap:\s*wrap/);
         expect(contactsCss).toMatch(
             /@media \(max-width: 420px\)[\s\S]*?\.sort\s*\{[\s\S]*?flex:\s*1 1 100%/,
         );

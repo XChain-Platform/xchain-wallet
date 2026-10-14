@@ -103,13 +103,6 @@
     overflow-wrap: anywhere;
 }
 
-.actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-4);
-}
-
 /* Status pill idiom shared with History.module.css: a rounded, uppercase
    tag tinted by outcome, using the theme's success/danger/warning tokens
    so it reads correctly in both light and dark. */

@@ -7,33 +7,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.hint {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin: 0 0 var(--xc-space-3);
-}
-
-.stack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-3);
-}
-
-.grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--xc-space-3);
-    margin-bottom: var(--xc-space-5);
-}
-
-.actionsPopup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-3);
-}
-
 /* Quick actions sit between the total-balance hero and the tab strip.
    Available actions share equal-width tracks, while demo and surface-gated
    builds can omit actions without leaving empty columns.

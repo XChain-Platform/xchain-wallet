@@ -8,17 +8,6 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
-/* Addresses page toolbar: search + network filter, each 50% wide, matching
-   the contacts list and the Send address-book picker. */
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: var(--xc-space-2);
-}
-
 .searchField {
     flex: 1 1 0;
     min-width: 0;
@@ -250,15 +239,6 @@
     align-items: flex-start;
     gap: var(--xc-space-2);
     min-width: 0;
-}
-
-.chainIcon {
-    flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    display: block;
-    margin-top: 2px;
 }
 
 .addrLine2 {

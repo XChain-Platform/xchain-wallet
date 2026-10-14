@@ -228,12 +228,6 @@
     gap: var(--xc-space-3);
 }
 
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-}
-
 .segGroup {
     display: inline-flex;
     border-radius: var(--xc-radius-sm);
@@ -336,36 +330,6 @@
 .dateError {
     color: var(--xc-danger-text, #b42318);
     font-size: var(--xc-text-sm);
-}
-
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-xs);
-    cursor: pointer;
-    font-family: inherit;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.chipActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent, #fff);
-    border-color: var(--xc-accent-primary);
-}
-
-.divider {
-    width: 1px;
-    align-self: stretch;
-    background: var(--xc-border);
-    margin: 0 var(--xc-space-1);
 }
 
 .timeline {
@@ -561,15 +525,6 @@
     width: 2px;
     height: 1rem;
     background: var(--xc-accent-secondary, var(--xc-accent-primary));
-}
-
-.detail {
-    margin: var(--xc-space-1) 0 var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg);
-    display: grid;
-    gap: var(--xc-space-3);
 }
 
 /* ───── ActionDetail page layout ───── */
@@ -952,17 +907,6 @@
     vertical-align: -3px;
 }
 
-.detailSide {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
-    min-width: 0;
-}
-
 .detailDecoded {
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
@@ -990,13 +934,6 @@
     background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
     border-radius: var(--xc-radius-sm);
     backdrop-filter: var(--xc-backdrop-filter);
-}
-
-.empty {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    text-align: center;
-    padding: var(--xc-space-4);
 }
 
 .actions {
