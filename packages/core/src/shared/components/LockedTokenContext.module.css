@@ -1,8 +1,10 @@
 .wrap {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-3);
+    gap: var(--xc-label-gap);
+    /* No outer margin: the form around the field spaces it with --xc-form-gap,
+       the same as every Input, so a picker never adds its own gap on top. */
+    margin: 0;
 }
 
 .label {

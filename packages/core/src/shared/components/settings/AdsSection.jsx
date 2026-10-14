@@ -25,8 +25,8 @@ import { InfoTip, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
-import { ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import { ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -101,8 +101,11 @@ export function AdsSection() {
 
     return (
         <div style={STACK}>
+            {/* The page title already names the subject, so the switch reads as
+                an action; screen readers hear the subject too. */}
             <ToggleRow
-                label={t('adsNotice.title')}
+                label={t('settings.toggle.turnOn')}
+                accessibleLabel={t('settings.ads.switchAccessibleLabel')}
                 hint={t('settings.ads.itSetsAsideASmall')}
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}

@@ -48,7 +48,7 @@ const UNMIGRATED_FILES = [
     '/components/UpdateNoticeBanner.jsx',
 ];
 
-const isUnmigrated = (file) => UNMIGRATED_FILES.some((suffix) => file.endsWith(suffix));
+const isUnmigrated = (file) => [...UNMIGRATED_FILES, ...PARTIAL_COPY_FILES].some((suffix) => file.endsWith(suffix));
 const GUARDED_SHARED_DIRS = /\/shared\/(components|keyboard|commandPalette)\//;
 
 const localizedComponents = [
@@ -114,6 +114,14 @@ const localizedRoutes = [
     'VerifySignatureForm.jsx',
     'WalletDetails.jsx',
     'WalletPicker.jsx',
+];
+
+// Routes that call t() only for single wording fixes. Their t() keys are still
+// checked against the dictionary; their remaining literals stay outside the
+// literal guard until the screen migrates.
+const PARTIAL_COPY_FILES = [
+    '/routes/CreateOrderForm.jsx',
+    '/routes/DispenserExplorer.jsx',
 ];
 
 describe('shipping JSX localization', () => {

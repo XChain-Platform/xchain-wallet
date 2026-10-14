@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Chip, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
+import { ChevronIcon } from '../../ui/ChainPicker.icons.jsx';
 import styles from './NetworkFilter.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -153,7 +154,7 @@ export function NetworkFilter({
         <div ref={triggerRef} className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             <Chip
                 pressed={value !== 'all'}
-                className={styles.trigger}
+                className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
                 onClick={() => {
                     if (open) closeFilter();
                     else openFilter(entries.length > 6 ? 'search' : 'selected');
@@ -180,7 +181,7 @@ export function NetworkFilter({
                     <span className={styles.triggerLabel}>{triggerLabel}</span>
                 </span>
                 <span className={styles.triggerCaret} aria-hidden="true">
-                    {open ? '▴' : '▾'}
+                    <ChevronIcon open={open} />
                 </span>
             </Chip>
             {open ? (
@@ -213,16 +214,16 @@ export function NetworkFilter({
                                 type="button"
                                 role="option"
                                 tabIndex={-1}
-                                aria-label={t('components.networkFilter.allNetworks')}
+                                aria-label={t('common.allNetworks')}
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
                                 onClick={() => { onChange('all'); closeFilter(true); }}
-                                title={t('components.networkFilter.allNetworks')}
+                                title={t('common.allNetworks')}
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
                                     <Icon.FilterIcon />
                                 </span>
-                                <span className={styles.itemLabel}>{t('components.networkFilter.allNetworks')}</span>
+                                <span className={styles.itemLabel}>{t('common.allNetworks')}</span>
                                 <span className={styles.itemTicker}>{entries.length}</span>
                             </button>
                         </li>

@@ -31,7 +31,7 @@ import { resolveFieldRequirement } from './fieldRequirement.js';
  *   so typed text never runs underneath; the resize grip they would cover is
  *   turned off.
  */
-export const Textarea = forwardRef(function Textarea(
+export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     {
         label,
         hint,

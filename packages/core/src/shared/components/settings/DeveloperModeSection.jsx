@@ -67,8 +67,8 @@ import {
     Status,
     ToggleRow,
 } from './_settingsPrimitives.jsx';
-import styles from './DeveloperModeSection.module.css';
 import { t } from '../../../i18n/index.js';
+import styles from './DeveloperModeSection.module.css';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -126,8 +126,12 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
     return (
         <FormPage as="div" sectioned fullWidth label={t('settings.developer.developerModeSettings')}>
             <FormSection title={t('settings.developer.developerOptions')}>
+                {/* The page title already names the subject, so the switch reads as
+                    an action; screen readers, which may reach it out of context,
+                    hear the subject too. */}
                 <ToggleRow
-                    label={t('settings.developer.developerMode')}
+                    label={t('settings.toggle.turnOn')}
+                    accessibleLabel={t('settings.developerMode.switchAccessibleLabel')}
                     hint={t('settings.developer.unlocksTestNetworksEndpointOverrides')}
                     checked={developerMode}
                     onChange={onDeveloperModeToggle}

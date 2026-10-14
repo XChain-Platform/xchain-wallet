@@ -71,6 +71,11 @@ export const en = {
         '{count, plural, one {Show # small balance} other {Show # small balances}}',
     'balanceList.smallBalances.hide':
         '{count, plural, one {Hide # small balance} other {Hide # small balances}}',
+    'balanceList.rowChainSpeech': 'on {chain}',
+    'createOrder.side.assetType': 'Asset type',
+    'common.allNetworks': 'All networks',
+    'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
+    'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
     'addressList.hidden.show':
         '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
     'addressList.hidden.hide':
@@ -102,6 +107,9 @@ export const en = {
     'backupReminder.remindTomorrow': 'Remind me tomorrow',
 
     // --- settings ------------------------------------------------
+    'settings.toggle.turnOn': 'Turn on',
+    'settings.developerMode.switchAccessibleLabel': 'Turn on developer mode',
+    'settings.ads.switchAccessibleLabel': 'Turn on Automatic Donation System',
     'settings.network.label': 'Network',
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchTitle': 'Switch to {network}?',
@@ -1197,7 +1205,6 @@ export const en = {
     'settings.backup.check2': 'Check',
     'settings.developer.developerModeSettings': 'Developer mode settings',
     'settings.developer.developerOptions': 'Developer options',
-    'settings.developer.developerMode': 'Developer Mode',
     'settings.developer.unlocksTestNetworksEndpointOverrides':
         'Unlocks test networks, endpoint overrides, custom chains, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet.',
     'settings.developer.learnMode': 'Learn Mode',
@@ -2390,7 +2397,6 @@ export const en = {
     'components.networkFilter.searchNetworks': 'Search networks…',
     'components.networkFilter.searchNetworks2': 'Search networks',
     'components.networkFilter.networks': 'Networks',
-    'components.networkFilter.allNetworks': 'All networks',
     'components.networkFilter.noMatchingNetworks': 'No matching networks.',
     'components.queuedBroadcastBanner.waitingToSend': 'Waiting to send (',
     'components.queuedBroadcastBanner.signed': 'signed',
@@ -2707,6 +2713,7 @@ export const en = {
     'routes.manageToken.pausedUntilBlock': 'Paused until block {resumeBlock}',
     'routes.manageToken.paused': 'Paused',
     'nav.marketplace': 'Marketplace',
+    // Copy moved out of JSX literals by the i18n sweep.
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {

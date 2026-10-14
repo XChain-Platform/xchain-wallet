@@ -271,18 +271,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                     value={periodId}
                     onChange={(e) => setPeriodId(e.target.value)}
                     aria-label={t('components.marketChart.chartTimeframe')}
-                    style={{
-                        background: 'var(--xc-bg-muted)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 999,
-                        padding: '2px 6px 2px 10px',
-                        maxWidth: '100%',
-                        fontSize: 'var(--xc-text-sm)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        font: 'inherit',
-                    }}
+                    style={{ maxWidth: '100%' }}
                 >
                     {PERIODS.map((p) => (
                         <option key={p.id} value={p.id}>{p.label}</option>
