@@ -196,9 +196,19 @@
     }
 }
 
+/* Wide screens: tiles size to their label and share the row, wrapping to a
+   second row of whole tiles instead of breaking a label across two lines. */
 @media (min-width: 1024px) {
     .actionsFull {
-        grid-template-columns: repeat(8, minmax(0, 1fr));
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .actionsFull > button {
+        flex: 1 1 auto;
+        width: auto;
+        padding-inline: var(--xc-space-3);
+        white-space: nowrap;
     }
 }
 

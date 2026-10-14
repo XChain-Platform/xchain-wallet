@@ -70,6 +70,7 @@ import {
 } from '../utils/dispenserPricing.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useToast } from '../components/ToastHost.jsx';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
@@ -134,6 +135,7 @@ const ADDRESS_CELL_STYLE = {
 export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
     const haptic = useHapticFeedback();
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     // A demo wallet's dispensers are fixtures; no explorer or chain read applies.
@@ -1567,6 +1569,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (refillStage === 'confirm' || refillStage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Refill dispenser"
                 onSubmit={handleRefill}
                 status={refillError ? <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage> : null}
@@ -1687,6 +1690,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const anyListFilled = Boolean(editAllowList.trim() || editBlockList.trim());
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Edit dispenser"
                 onSubmit={handleEdit}
                 status={editError ? <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage> : null}
@@ -1805,6 +1809,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (cancelStage === 'confirm' || cancelStage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Close dispenser"
                 onSubmit={handleCancel}
                 intro={decodedCancel?.summary}
@@ -2362,11 +2367,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 Signer-mode wallet, then broadcast from a Full-mode wallet.
                             </p>
                         ) : null}
+                        {demoGuard.note}
+                        {demoGuard.dialog}
                         <Button
                             variant="primary"
                             onClick={beginBuy}
                             loading={buyStage === 'submitting' || buyConfirm.composing}
-                            disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
+                            disabled={demoGuard.blocked || fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
                                 || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
                                 || buyerEligibilityBarred || dispenserSelfBarred || priceStale
                                 || Boolean(inventoryError)

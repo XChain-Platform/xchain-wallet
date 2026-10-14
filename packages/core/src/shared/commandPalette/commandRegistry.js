@@ -61,8 +61,9 @@ const SEND_QUERY_RE = /^(?:send|pay)\s+(\d+(?:\.\d+)?)\s+([a-z0-9]{1,32})\s*$/i;
 const TXID_QUERY_RE = /^[0-9a-f]{8,64}$/i;
 const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
-// Read-only demo wallets keep discovery and inspection commands, while
-// transaction authors and signing tools stay out of the palette.
+// Demo wallets keep discovery, inspection and the create and trade forms
+// (each shows the inline demo note and never composes), while the send
+// shortcuts and signing tools stay out of the palette.
 const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
     'nav-send',
     'nav-receive',
@@ -327,11 +328,7 @@ export function buildCommands(ctx) {
     );
 
     if (ctx.isDemoWallet) {
-        return list.filter((command) => (
-            !command.id.startsWith('create-')
-            && !command.id.startsWith('trade-')
-            && !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id)
-        ));
+        return list.filter((command) => !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id));
     }
     if (ctx.isWatcherMode) {
         return list.filter((command) => !WATCHER_UNAVAILABLE_COMMAND_IDS.has(command.id));

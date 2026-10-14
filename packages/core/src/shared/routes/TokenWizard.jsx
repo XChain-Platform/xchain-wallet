@@ -16,6 +16,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -99,6 +100,7 @@ function isValidIssueAddress(value, descriptor) {
  */
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const networkAvailable = useOnlineStatus();
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -682,6 +684,7 @@ export function TokenWizard({ walletId, onBack }) {
             <>
                 <WizardProgress stage={stage} />
                 {renderChainStage({
+                    demoGuard,
                     chainsWithAddresses,
                     chainId,
                     setChainId,
@@ -699,6 +702,7 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(<>
             <WizardProgress stage={stage} />
             {renderDetailsStage({
+            demoGuard,
             template,
             name, setName,
             displayName, setDisplayName,
@@ -796,6 +800,7 @@ export function TokenWizard({ walletId, onBack }) {
         <>
             <WizardProgress stage={stage} />
             <FormPage
+                demoGuard={demoGuard}
                 label="Review token issuance"
                 onSubmit={(event) => {
                     event.preventDefault();
@@ -1173,10 +1178,11 @@ function renderTemplateStage({ onPick }) {
 
 function renderChainStage({
     chainsWithAddresses, chainId, setChainId, descriptor, fromAddress,
-    subtoken, onPickSource, onNext,
+    subtoken, onPickSource, onNext, demoGuard,
 }) {
     return (
         <FormPage
+            demoGuard={demoGuard}
             label="Choose token chain"
             onSubmit={(event) => {
                 event.preventDefault();
@@ -1250,6 +1256,7 @@ const TEMPLATE_FIELDS = {
 };
 
 function renderDetailsStage({
+    demoGuard,
     template,
     name, setName,
     displayName, setDisplayName,
@@ -1274,6 +1281,7 @@ function renderDetailsStage({
     const isEdition = resolved === 'edition';
     return (
         <FormPage
+            demoGuard={demoGuard}
             label="Token details"
             onSubmit={onSubmit}
             onChangeCapture={onEdit}

@@ -117,7 +117,7 @@ describe('trading history panel display states', () => {
         const side = screen.getByText('Sell');
         expect(price.closest('td')).toHaveAttribute('data-label', 'Price');
         expect(price.className).toMatch(/numeric/);
-        expect(side.style.color).toBe('var(--xc-danger)');
+        expect(side.style.color).toBe('var(--xc-danger-fg)');
         expect(screen.getByRole('columnheader', { name: 'Price' }).closest('table').parentElement.style.overflowX).toBe('auto');
         expect(screen.getByRole('region', { name: 'Trade history' })).not.toHaveAttribute('aria-busy');
     });

@@ -209,11 +209,11 @@
     --xc-accent-primary-hover: #156690;
     --xc-accent-secondary: #7B2C8F;
     /* Accent and danger text stay close to their fill colours while clearing
-     * AA on the muted surface. The dark palette lifts them further because
+     * AA on the muted surface and on the tinted pill and hover fills. The dark palette lifts them further because
      * the fill shades fail AA as text on a dark card. Use these for `color:`,
      * and use the plain tokens for backgrounds and borders. */
-    --xc-accent-text: #1A77AA;
-    --xc-danger-fg: #DA2525;
+    --xc-accent-text: #156690;
+    --xc-danger-fg: #CC2020;
 
     /* Light theme - default */
     --xc-bg: #FFFFFF;

@@ -16,6 +16,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
@@ -117,6 +118,7 @@ function staleAgeText(seconds) {
  */
 export function OracleForm({ walletId, onBack, initialChainId, initialFromAddress, initialTick }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const {
@@ -520,6 +522,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review price publish"
                 onSubmit={handleSubmit}
                 intro={decoded?.summary}
@@ -594,6 +597,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Publish oracle price"
             onSubmit={handleReview}
             sectioned
