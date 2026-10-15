@@ -1219,16 +1219,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     </div>
                 ) : null}
             </div>
-            {isDemoActive && demoSendNoticeOpen ? (
-                <StatusMessage
-                    recovery={{
-                        label: t('walletDetails.exitDemo'),
-                        onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
-                    }}
-                >
-                    {t('home.demoSendBlocked')}
-                </StatusMessage>
-            ) : null}
             {demoExitConfirmOpen ? (
                 <DemoExitConfirm
                     busy={demoExitBusy}
@@ -1239,7 +1229,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             ) : null}
         </div>
     ), [
-        demoExitBusy, demoExitConfirmOpen, demoExitError, demoSendNoticeOpen, handleExitDemo,
+        demoExitBusy, demoExitConfirmOpen, demoExitError, handleExitDemo,
         homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onExchange,
         onReceive, onSend, quickActionCount, quickActionsReason, runNetworkAction,
     ]);
@@ -1344,6 +1334,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
                 <h1 className="sr-only">{t('home.title')}</h1>
+                {/* A notice is the first item of page content, never wedged
+                    between the quick actions and the tabs. */}
+                {isDemoActive && demoSendNoticeOpen ? (
+                    <StatusMessage
+                        recovery={{
+                            label: t('walletDetails.exitDemo'),
+                            onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
+                        }}
+                    >
+                        {t('home.demoSendBlocked')}
+                    </StatusMessage>
+                ) : null}
                 {interruptedAction ? (
                     <StatusMessage variant="warning">
                         {t('home.interruptedAction', { action: interruptedAction })}
