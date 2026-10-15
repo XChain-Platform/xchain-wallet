@@ -416,6 +416,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         };
     }, [address?.id, activeChainId, loadError, generateError]);
 
+    // The error sits first in the page content, but New address is lower down:
+    // bring the error into view so a failed tap is not silent on a phone.
+    useEffect(() => {
+        if (!generateError) return;
+        document.getElementById('receive-generate-error')?.scrollIntoView?.({ block: 'nearest' });
+    }, [generateError]);
+
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
         if (typeof messaging.verifyReceiveAddress !== 'function') {
@@ -1028,6 +1035,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <StatusMessage variant="error">{loadError}</StatusMessage>
             ) : null}
 
+            {generateError ? (
+                <StatusMessage variant="error" id="receive-generate-error">{generateError}</StatusMessage>
+            ) : null}
+
             {noAddresses ? (
                 <EmptyState
                     title={t('history.empty.noAddressesTitle')}
@@ -1050,10 +1061,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         <option key={type} value={type}>{addressTypeLabel(type)}</option>
                     ))}
                 </Select>
-            ) : null}
-
-            {generateError ? (
-                <StatusMessage variant="error">{generateError}</StatusMessage>
             ) : null}
 
             {!address && descriptor && addressType && !generating && !generateError ? (
