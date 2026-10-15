@@ -35,7 +35,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
@@ -348,6 +348,7 @@ function BlocklistAuditPanel({ confirm }) {
 
     if (entries === null) return null;
     return (
+        <SettingsInlineForm error={error}>
         <SettingsCard>
         <FormSection
             headingLevel="h3"
@@ -414,9 +415,9 @@ function BlocklistAuditPanel({ confirm }) {
                     ))}
                 </ul>
             )}
-            {error ? <Status text={error} tone="error" /> : null}
         </FormSection>
         </SettingsCard>
+        </SettingsInlineForm>
     );
 }
 
@@ -502,6 +503,8 @@ function SignThrottlePanel() {
             : undefined;
     const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
+        <SettingsInlineForm>
+        <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
         <SettingsCard>
         <FormSection
             headingLevel="h3"
@@ -568,9 +571,9 @@ function SignThrottlePanel() {
                     {submitting ? t('settings.connectedSites.applying') : t('settings.connectedSites.apply')}
                 </Button>
             </form>
-            <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
         </FormSection>
         </SettingsCard>
+        </SettingsInlineForm>
     );
 }
 
