@@ -83,8 +83,9 @@ describe('Chrome 102 shared form inputs', () => {
         const modesByFile = Object.groupBy(classified, ({ file }) => file);
         const inputModes = (file) => modesByFile[file]?.map(({ attributes }) => attributes.inputMode);
 
+        // Both amount fields come from the one shared AmountField.
         expect(inputModes('packages/core/src/shared/components/settings/AdsSection.jsx'))
-            .toEqual(['numeric', 'numeric']);
+            .toEqual(['numeric']);
         expect(inputModes('packages/core/src/shared/components/settings/FeesSection.jsx'))
             .toEqual(['decimal']);
         expect(inputModes('packages/core/src/shared/components/settings/SafetySection.jsx'))
@@ -92,7 +93,7 @@ describe('Chrome 102 shared form inputs', () => {
         expect(inputModes('packages/core/src/ui/FeeSelector.jsx'))
             .toEqual(['decimal', 'decimal']);
 
-        expect(classified).toHaveLength(9);
+        expect(classified).toHaveLength(8);
         for (const { file, attributes } of classified) {
             expect(attributes.autoComplete, `${file}: autocomplete`).toBe('off');
             expect(['done', 'go'], `${file}: enterKeyHint`).toContain(attributes.enterKeyHint);

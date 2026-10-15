@@ -21,6 +21,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -842,22 +843,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             ) : null}
             actions={actionsFor(conversations.length === 0)}
             toolbar={(
-                <div className={local.toolbar}>
-                    <Input
-                        type="search"
-                        size="md"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        placeholder="Search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search conversations"
-                    />
+                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search conversations">
                     <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
-                </div>
+                </ListToolbar>
             )}
         >
             {handshakeRequesters.length > 0 ? (
