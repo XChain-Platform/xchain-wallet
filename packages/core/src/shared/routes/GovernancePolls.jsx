@@ -170,15 +170,8 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     }
 
     return wrap(
-        <ListPage toolbar={(
-            <>
-                <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                <Button variant="primary" onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
-                <Button variant="ghost" onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
-            </>
-        )}>
-
-            {pollError ? (
+        <ListPage
+            notices={pollError ? (
                 <StatusMessage
                     variant="error"
                     recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
@@ -186,6 +179,14 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                     {pollError}
                 </StatusMessage>
             ) : null}
+            toolbar={(
+            <>
+                <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                <Button variant="primary" onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
+                <Button variant="ghost" onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
+            </>
+        )}>
+
             {chainId && !rows && !pollError ? (
                 <div role="status" aria-label={t('governance.loadingPollsLabel')} aria-busy="true">
                     {t('governance.loadingPolls')}
