@@ -132,7 +132,6 @@ function TokenDetailContent({
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     // A failed settings read still opens the screen in full mode.
     const walletModeReady = settings !== null || !settingsLoading;
-    const isWatcherMode = settings?.walletMode === 'watcher';
     const browserOnline = useOnlineStatus();
     const { overall: reachabilityOverall } = useReachability({});
     const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
