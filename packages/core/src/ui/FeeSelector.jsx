@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useId, useMemo, useState } from 'react';
+import { useContext, useEffect, useId, useMemo, useState } from 'react';
 import { isPerKbUnit } from '../flows/feeEstimate.js';
 import {
     formatWithThousands,
@@ -16,6 +16,8 @@ import {
 } from '../shared/utils/amountFormat.js';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
+import { StatusMessage } from './StatusMessage.jsx';
+import { FormNotices } from './formNoticeSlot.js';
 import { t } from '../i18n/index.js';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
@@ -134,13 +136,30 @@ export function FeeSelector({
         ({ estimate }) => estimate?.source === 'static-placeholder',
     );
 
-    if (!tiers || tierList.length === 0) {
+    // Inside a FormPage the notice is shown at the top of the form with the
+    // others; anywhere else it stays under the selector.
+    const formNotices = useContext(FormNotices);
+    const noticeId = useId();
+    const noEstimate = !tiers || tierList.length === 0;
+    let noticeText = null;
+    if (showEstimateNotice) {
+        if (noEstimate) noticeText = t('ui.feeSelector.feeEstimateUnavailableForThis');
+        else if (usesFallbackRates) noticeText = t('ui.feeSelector.liveFeeEstimateUnavailableUsing');
+    }
+    useEffect(() => {
+        if (!formNotices) return undefined;
+        formNotices.report(noticeId, noticeText);
+        return () => formNotices.report(noticeId, null);
+    }, [formNotices, noticeId, noticeText]);
+    const inlineNotice = noticeText && !formNotices
+        ? <StatusMessage variant="warning">{noticeText}</StatusMessage>
+        : null;
+
+    if (noEstimate) {
         return (
             <div className={styles.wrap}>
                 {headerRow()}
-                {showEstimateNotice ? (
-                    <p className={styles.placeholder}>{t('ui.feeSelector.feeEstimateUnavailableForThis')}</p>
-                ) : null}
+                {inlineNotice}
             </div>
         );
     }
@@ -446,11 +465,7 @@ export function FeeSelector({
                     );
                 })() : null}
             </div>
-            {showEstimateNotice && usesFallbackRates ? (
-                <p className={styles.placeholder} aria-live="polite">
-                    {t('ui.feeSelector.liveFeeEstimateUnavailableUsing')}
-                </p>
-            ) : null}
+            {inlineNotice}
         </div>
     );
 }

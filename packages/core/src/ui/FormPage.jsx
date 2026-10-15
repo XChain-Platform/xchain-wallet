@@ -8,7 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Children, cloneElement, forwardRef, isValidElement } from 'react';
+import { Children, cloneElement, forwardRef, isValidElement, useCallback, useMemo, useState } from 'react';
+import { FormNotices } from './formNoticeSlot.js';
+import { StatusMessage } from './StatusMessage.jsx';
 import { submitOnlyFromLastField } from './formEnter.js';
 import styles from './FormPage.module.css';
 
@@ -115,6 +117,18 @@ export const FormPage = forwardRef(function FormPage(
         onKeyDown?.(event);
         if (Root === 'form') submitOnlyFromLastField(event);
     };
+    // Notices raised by controls inside the form (the fee selector) join the
+    // form's own status at the top instead of sitting under their field.
+    const [controlNotices, setControlNotices] = useState(/** @type {Record<string, string>} */ ({}));
+    const noticeApi = useMemo(() => ({
+        report: (id, text) => setControlNotices((prev) => {
+            if ((prev[id] ?? null) === text) return prev;
+            const next = { ...prev };
+            if (text) next[id] = text; else delete next[id];
+            return next;
+        }),
+    }), []);
+    const controlNoticeList = Object.entries(controlNotices);
     const hasHeader = title != null || description != null || visual != null;
     const actionClassName = [
         styles.actions,
@@ -123,8 +137,15 @@ export const FormPage = forwardRef(function FormPage(
     // A form that draws its own logo or title is the page header; any other form
     // sits under the screen's PageHeader and its notice leads the content.
     const ownsHeading = title != null || visual != null;
-    const statusNode = demoBlocked || status
-        ? <div className={styles.status}>{demoBlocked ? demoGuard.note : status}</div>
+    const statusNode = demoBlocked || status || controlNoticeList.length > 0
+        ? (
+            <div className={styles.status}>
+                {demoBlocked ? demoGuard.note : status}
+                {!demoBlocked ? controlNoticeList.map(([id, text]) => (
+                    <StatusMessage key={id} variant="warning">{text}</StatusMessage>
+                )) : null}
+            </div>
+        )
         : null;
     return (
         <Root
@@ -160,7 +181,11 @@ export const FormPage = forwardRef(function FormPage(
             {ownsHeading ? statusNode : null}
             {/* data-form-stack marks a column the form gap spaces, so a shared row
                 class (an action row, a notice) can drop its own margin inside it. */}
-            {children != null ? <div className={styles.body} data-form-stack="">{children}</div> : null}
+            {children != null ? (
+                <FormNotices.Provider value={noticeApi}>
+                    <div className={styles.body} data-form-stack="">{children}</div>
+                </FormNotices.Provider>
+            ) : null}
             {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}
             {demoBlocked ? demoGuard.dialog : null}
         </Root>
