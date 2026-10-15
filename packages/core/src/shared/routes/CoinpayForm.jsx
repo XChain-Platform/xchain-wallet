@@ -33,6 +33,7 @@ import { classifyObligation } from '../../market/obligationStatus.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -73,7 +74,17 @@ const EXPIRY_LOSS_WARNING = 'This payment must confirm before the payment deadli
  * @param {string} [props.orderMatchActionIndex]  preselected obligation
  * @param {() => void} props.onBack
  */
-export function CoinpayForm({
+export function CoinpayForm(props) {
+    const scope = [
+        props.walletId,
+        props.chainId,
+        props.address,
+        props.orderMatchActionIndex,
+    ].map((value) => String(value ?? '')).join('\u0000');
+    return <ScopedCoinpayForm key={scope} {...props} />;
+}
+
+function ScopedCoinpayForm({
     walletId,
     chainId: initialChainId,
     address: initialAddress,
@@ -90,6 +101,7 @@ export function CoinpayForm({
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [scanning, setScanning] = useState(false);
+    const [scanError, setScanError] = useState(/** @type {string | null} */ (null));
     const [obligations, setObligations] = useState(/** @type {any[]} */ ([]));
     const [selected, setSelected] = useState(
         /** @type {{ chainId: string, address: string, obligation: any } | null} */ (null),
@@ -117,7 +129,9 @@ export function CoinpayForm({
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) {
+                    setLoadError(loadFailureMessage(err, 'load this wallet\'s addresses'));
+                }
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -126,11 +140,13 @@ export function CoinpayForm({
         if (!addressesByChain) return undefined;
         let cancelled = false;
         setScanning(true);
+        setScanError(null);
         setObligations([]);
         (async () => {
             /** @type {any[]} */
             const found = [];
             const pairs = [];
+            const failures = [];
             for (const [cId, addrs] of Object.entries(addressesByChain)) {
                 for (const addr of addrs) {
                     pairs.push({ chainId: cId, address: addr.address, addr });
@@ -152,13 +168,16 @@ export function CoinpayForm({
                             obligation: row,
                         });
                     }
-                } catch {
-                    // Isolated failure per chain/address; other lookups still land.
+                } catch (error) {
+                    failures.push(error);
                 }
             }));
             if (cancelled) return;
             setObligations(found);
             setScanning(false);
+            setScanError(failures.length > 0
+                ? loadFailureMessage(failures[0], 'load every payment due')
+                : null);
             if (initialActionIndex) {
                 const match = found.find((f) =>
                     String(f.obligation.action_index) === String(initialActionIndex)
@@ -186,9 +205,10 @@ export function CoinpayForm({
         if (!selected) return null;
         const o = selected.obligation;
         const payeeAddress = o.payee_address || o.payeeAddress;
+        const actionIndex = o.action_index ?? o.actionIndex;
         const expiration = Number(o.expiration);
         return {
-            actionIndex: String(o.action_index ?? o.actionIndex),
+            actionIndex: actionIndex == null ? '' : String(actionIndex).trim(),
             payeeAddress,
             // Base-unit native amount. null when missing OR beyond safe
             // integer precision (large DOGE): both the real-broadcast and
@@ -232,6 +252,14 @@ export function CoinpayForm({
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const validationError = obligationValidationError({
+        selected,
+        summary,
+        descriptor,
+        feePick,
+        feeEstimate,
+        feePerKb,
+    });
     const requiredBaseUnits = summary?.coinAmount == null
         ? null
         : BigInt(summary.coinAmount) + BigInt(feeEstimate?.sats || 0);
@@ -271,9 +299,12 @@ export function CoinpayForm({
     // Signs nothing; just gates stage transition.
     function handleReview(event) {
         event.preventDefault();
-        if (!selected || !summary) return;
-        if (summary.coinAmount == null || !summary.payeeAddress) {
-            setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
+        if (!selected || !summary) {
+            setSubmitError('Choose a payment before continuing.');
+            return;
+        }
+        if (validationError) {
+            setSubmitError(validationError);
             return;
         }
         if (insufficientBalance) {
@@ -291,8 +322,9 @@ export function CoinpayForm({
     async function handleSubmit(event) {
         event.preventDefault();
         if (!selected || !summary || stage === 'submitting' || ownerLane.composing) return;
-        if (summary.coinAmount == null || !summary.payeeAddress) {
-            setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
+        if (validationError) {
+            setSubmitError(validationError);
+            setStage('review');
             return;
         }
         if (insufficientBalance) {
@@ -373,12 +405,11 @@ export function CoinpayForm({
                 return;
             }
             const bad = err?.name === 'InvalidPasswordError';
-            // Was the raw `err?.message`, i.e. the encoder's developer string
-            // on screen; every other swept form maps through this helper.
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
                 chainId: selected.chainId,
                 coinTicker,
-                fallback: err?.message || 'Sign failed.',
+                verb: 'prepare this payment',
+                fallback: "Couldn't prepare this payment. Check your connection and try again.",
             }));
             setStage('review');
         }
@@ -467,12 +498,7 @@ export function CoinpayForm({
     // Review + submitting: show the obligation details, sign credentials,
     // and the confirm button. No signing happens until this stage.
     if (stage === 'review' || stage === 'submitting') {
-        const feeLabel = (() => {
-            if (!feeEstimate) return 'Estimate unavailable';
-            const ticker = coinTicker || 'coins';
-            const base = `${feeEstimate.coinAmount} ${ticker}`;
-            return feeEstimate.rate ? `${base} (${feeEstimate.rate})` : base;
-        })();
+        const feeRateLabel = feeEstimate?.rate || 'Unavailable';
 
         return wrap(
             <FormPage
@@ -522,7 +548,7 @@ export function CoinpayForm({
                     {coinpayExpiryText(summary.expiration) ? (
                         <DetailRow label="Payment deadline" value={coinpayExpiryText(summary.expiration)} />
                     ) : null}
-                    <DetailRow label="Network fee" value={feeLabel} />
+                    <DetailRow label="Network fee rate" value={feeRateLabel} />
                 </dl>
 
                 <StatusMessage className={styles.error}>{EXPIRY_LOSS_WARNING}</StatusMessage>
@@ -543,10 +569,16 @@ export function CoinpayForm({
     // picks an obligation then advances to review before signing.
     return wrap(
         <>
+            {addressesByChain === null ? (
+                <p className={styles.hint}>Loading addresses…</p>
+            ) : null}
             {scanning && obligations.length === 0 ? (
                 <p className={styles.hint}>Scanning for payments due…</p>
             ) : null}
-            {!scanning && obligations.length === 0 ? (
+            {scanError ? (
+                <StatusMessage variant="error" className={styles.error}>{scanError}</StatusMessage>
+            ) : null}
+            {addressesByChain !== null && !scanning && !scanError && obligations.length === 0 ? (
                 <EmptyState
                     title="No payments due"
                     body="When one of your orders matches, the coin payment for it appears here."
@@ -629,9 +661,9 @@ export function CoinpayForm({
                     demoGuard={demoGuard}
                     label="Selected payment obligation"
                     onSubmit={handleReview}
-                    status={(submitError || insufficientBalanceMessage) ? (
+                    status={(submitError || validationError || insufficientBalanceMessage) ? (
                         <StatusMessage variant="error" className={styles.error}>
-                            {submitError || insufficientBalanceMessage}
+                            {submitError || validationError || insufficientBalanceMessage}
                         </StatusMessage>
                     ) : nativeBalance.loading ? (
                         <StatusMessage>Checking available balance…</StatusMessage>
@@ -640,7 +672,8 @@ export function CoinpayForm({
                         <Button
                             type="submit"
                             variant="primary"
-                            disabled={!selected || !summary || nativeBalance.loading || insufficientBalance}
+                            disabled={!selected || !summary || nativeBalance.loading
+                                || Boolean(validationError) || insufficientBalance}
                         >
                             Review
                         </Button>
@@ -705,6 +738,50 @@ function DetailRow({ label, value }) {
             <dd className={styles.detailsValue}>{value}</dd>
         </>
     );
+}
+
+function obligationValidationError({
+    selected, summary, descriptor, feePick, feeEstimate, feePerKb,
+}) {
+    if (!selected || !summary) return null;
+    if (!selected.chainId || !descriptor?.coin || !descriptor?.networkKind) {
+        return 'This payment uses a network the wallet does not recognize. Return to Payments due and refresh.';
+    }
+    const sourceAddress = String(selected.addr?.address || '').trim();
+    if (!sourceAddress || sourceAddress !== String(selected.address || '').trim()) {
+        return 'The paying address no longer matches this wallet. Return to Payments due and refresh.';
+    }
+    if (!isValidAddressForChain(sourceAddress, descriptor.coin, descriptor.networkKind)) {
+        return 'The paying address is not valid for this network. Return to Payments due and refresh.';
+    }
+    if (!summary.actionIndex) {
+        return 'This payment has no matched order number. Return to Payments due and refresh.';
+    }
+    const payeeAddress = String(summary.payeeAddress || '').trim();
+    if (!payeeAddress) {
+        return 'This payment has no recipient address. Return to Payments due and refresh.';
+    }
+    if (!isValidAddressForChain(payeeAddress, descriptor.coin, descriptor.networkKind)) {
+        return addressValidationError(payeeAddress, descriptor)
+            || 'The recipient address is not valid for this network. Return to Payments due and refresh.';
+    }
+    if (summary.coinAmount == null) {
+        return 'This payment amount is missing, invalid, or too large to pay safely. Return to Payments due and refresh.';
+    }
+    if (!coinpayExpiryText(summary.expiration)) {
+        return 'This payment has no valid deadline. Return to Payments due and refresh.';
+    }
+    if (!feeEstimate || (feePick.mode === 'custom' && feePerKb == null)) {
+        return 'Choose a valid network fee before continuing.';
+    }
+    return null;
+}
+
+function loadFailureMessage(error, verb) {
+    return submitFailureMessage(error, {
+        verb,
+        fallback: `Couldn't ${verb}. Check your connection and try again.`,
+    });
 }
 
 // Parse an obligation's coin_amount into a safe positive base-unit

@@ -132,7 +132,8 @@ describe('long content layout', () => {
         expect(pendingAmount.textContent.replace(/,/g, '')).toContain(amount);
         // The source address sits in the shared row's context cell, which ellipsizes.
         expect(rule(activityRowCss, '.context')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(historyCss, '.pendingAmount')).toMatch(/overflow-x:\s*auto/);
+        expect(rule(historyCss, '.pendingAmount')).toMatch(/white-space:\s*normal/);
+        expect(rule(historyCss, '.pendingAmount')).toMatch(/overflow-wrap:\s*anywhere/);
         expect(rule(historyCss, '.pendingAmount')).not.toMatch(/text-overflow:\s*ellipsis/);
     });
 

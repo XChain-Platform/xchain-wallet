@@ -1473,6 +1473,9 @@ export const en = {
     'settings.privacy.requireTheIVeVerified':
         'Require the "I\'ve verified path + address" checkbox for every hardware-wallet sign instead of only for large amounts, first-time recipients, and multisig signs.',
     'settings.privacy.couldNotSaveThisPrivacy': "Couldn't save this privacy setting. Try again.",
+    'settings.privacy.resetPrivacySettings': 'Reset privacy settings',
+    'settings.privacy.restoreThePrivacyControlsAbove': 'Restore the privacy controls above to their defaults.',
+    'settings.privacy.enterAWholeNumberFrom': 'Enter a whole number from {min} to {max}.',
     'settings.privacy.clipboardAutoClear': 'Clipboard auto-clear',
     'settings.privacy.setTo0ToKeep':
         'Set to 0 to keep them until they are replaced; otherwise, clear sensitive clipboard copies after this many seconds.',
@@ -2270,6 +2273,16 @@ export const en = {
         'Watcher mode builds an unsigned transaction for a Signer-mode wallet.',
     'components.operatorPublisherMode.lastPublishedTxid': 'Last published: txid',
     'components.operatorPublisherMode.publishValue': 'Publish value',
+    'components.operatorPublisherMode.loadingFeed': 'Loading the most recent feed for this address.',
+    'components.operatorPublisherMode.sourceNotInWallet': "This wallet doesn't contain the source address on this network.",
+    'components.operatorPublisherMode.sourceLoadFailed': "Couldn't load the source address. Try again.",
+    'components.operatorPublisherMode.feeDecimals': 'Custom fee rate can have at most 8 decimal places.',
+    'components.operatorPublisherMode.feePositive': 'Custom fee rate must be greater than zero.',
+    'components.operatorPublisherMode.sourceStillLoading': 'Source address is still loading.',
+    'components.operatorPublisherMode.feedRequired': 'Feed reference number is required.',
+    'components.operatorPublisherMode.feedWholeNumber': 'Feed reference number must be a positive whole number.',
+    'components.operatorPublisherMode.valueRequired': 'Value is required.',
+    'components.operatorPublisherMode.valueNumber': 'Value must be a number.',
     'components.balanceChanges.balanceChanges': 'Balance changes',
     'components.balanceChanges.calculatingPreview': 'Calculating preview…',
     'components.balanceChanges.weCouldnTEstimateThis':
