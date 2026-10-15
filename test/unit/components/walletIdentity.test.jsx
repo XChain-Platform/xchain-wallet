@@ -144,7 +144,7 @@ function contrast(a, b) {
 describe('wallet identity avatar contrast', () => {
     // The tone is picked by hashing a random wallet id, so an axe run only
     // meets whichever tone that run's wallet drew. Check every tone here.
-    it('keeps the 10px initials at 4.5:1 on every tone tint in light and dark themes', () => {
+    it('keeps the extra-small initials at 4.5:1 on every tone tint in light and dark themes', () => {
         const css = readFileSync('packages/core/src/shared/components/WalletIdentity.module.css', 'utf8');
         const avatar = css.slice(css.indexOf('.avatar {'), css.indexOf('}', css.indexOf('.avatar {')));
         expect(avatar).toMatch(/background:\s*color-mix\(in srgb, var\(--xc-wallet-identity\) 14%, var\(--xc-surface\)\)/);
@@ -164,5 +164,13 @@ describe('wallet identity avatar contrast', () => {
                 expect(ratio, `${theme} ${tone}`).toBeGreaterThanOrEqual(4.5);
             }
         }
+    });
+
+    it('stretches the labelled Signing with card to the full confirm stack width', () => {
+        const css = readFileSync('packages/core/src/shared/components/WalletIdentity.module.css', 'utf8');
+        const context = /\.context \{([^}]*)\}/.exec(css)[1];
+        expect(context).toMatch(/composes: card from/);
+        expect(context).toMatch(/align-self: stretch/);
+        expect(context).not.toMatch(/flex-start/);
     });
 });

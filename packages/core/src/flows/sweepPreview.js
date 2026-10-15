@@ -34,6 +34,7 @@ import { tokensFromBalances } from './balances.js';
 import { normalizeTokenRow } from './listOwnedTokens.js';
 import { listGatedFiles } from './gatedContent.js';
 import { isDemoGatedActionIndex } from './demoGatedContent.js';
+import { hydrateMarketOffer, marketOfferIsExpired, readMarketExpiryClock } from './marketExpiry.js';
 
 // Order/swap/dispenser rows whose status marks them already closed.
 // Deny-list rather than an allow-list on 'open': the explorer's status
@@ -55,10 +56,11 @@ function liveStatus(row) {
     return String(row?.current_status || row?.swap_status || row?.state?.status || row?.status || '').toLowerCase();
 }
 
-function isOpenRow(row, address) {
+function isOpenRow(row, address, kind, clock) {
     const source = row?.source || row?.address;
     if (source && address && source !== address) return false;
     const status = liveStatus(row);
+    if (marketOfferIsExpired(row, kind, clock)) return false;
     if (!status) return true; // unknown status: over-state, never hide
     return !CLOSED_STATUSES.has(status);
 }
@@ -79,19 +81,6 @@ async function leg(fn) {
     }
 }
 
-async function enrichOrderRows(sdk, rows) {
-    if (typeof sdk?.getAction !== 'function') return rows;
-    return Promise.all(rows.map(async (row) => {
-        try {
-            const detail = await sdk.getAction(String(row.action_index ?? row.actionIndex ?? ''));
-            const state = detail?.state || detail?.data?.state;
-            return state && typeof state === 'object' ? { ...row, state } : row;
-        } catch {
-            return row;
-        }
-    }));
-}
-
 /**
  * The address's open ORDERs, SWAPs and DISPENSERs with what each still holds
  * in escrow, one leg per kind so a failed read reports on its own instead of
@@ -106,12 +95,15 @@ async function enrichOrderRows(sdk, rows) {
  */
 export async function openOfferRows({ sdk, address, includeClosingDispensers = false }) {
     const trimmed = address.trim();
-    const [orders, swaps, dispensers] = await Promise.all([
+    const clockPromise = readMarketExpiryClock(sdk);
+    const [, orders, swaps, dispensers] = await Promise.all([
+        clockPromise,
         leg(async () => {
             const listed = rowsOf(await sdk.getOrders(trimmed, 'address'))
                 .filter((r) => !r.source || r.source === trimmed);
-            const rows = await enrichOrderRows(sdk, listed);
-            return rows.filter((r) => isOpenRow(r, trimmed)).map((r) => ({
+            const rows = await Promise.all(listed.map((row) => hydrateMarketOffer(sdk, row)));
+            const clock = await clockPromise;
+            return rows.filter((r) => isOpenRow(r, trimmed, 'order', clock)).map((r) => ({
                 actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
                 giveTick: r.give_tick ?? r.giveTick ?? null,
                 giveCoin: r.give_coin ?? r.giveCoin ?? null,
@@ -121,25 +113,36 @@ export async function openOfferRows({ sdk, address, includeClosingDispensers = f
                 giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
             }));
         }),
-        leg(async () => rowsOf(await sdk.getSwaps(trimmed, 'address'))
-            .filter((r) => isOpenRow(r, trimmed))
-            .map((r) => ({
-                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
-                giveTick: r.give_tick ?? r.giveTick ?? null,
-                giveAmount: r.give_amount != null ? String(r.give_amount) : null,
-                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
-            }))),
-        leg(async () => rowsOf(await sdk.getDispensers(trimmed, 'source'))
-            .map((r) => ({ r, closing: includeClosingDispensers && isClosingDispenserRow(r, trimmed) }))
-            .filter(({ r, closing }) => closing || isOpenRow(r, trimmed))
-            .map(({ r, closing }) => ({
-                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
-                tick: r.tick ?? r.give_tick ?? null,
-                escrowRemaining: r.give_remaining != null ? String(r.give_remaining)
-                    : (r.escrow_remaining != null ? String(r.escrow_remaining) : null),
-                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
-                ...(closing ? { closing: true } : {}),
-            }))),
+        leg(async () => {
+            const clock = await clockPromise;
+            const rows = await Promise.all(rowsOf(await sdk.getSwaps(trimmed, 'address'))
+                .map((row) => hydrateMarketOffer(sdk, row)));
+            return rows
+                .filter((r) => isOpenRow(r, trimmed, 'swap', clock))
+                .map((r) => ({
+                    actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
+                    giveTick: r.give_tick ?? r.giveTick ?? null,
+                    giveAmount: r.give_amount != null ? String(r.give_amount) : null,
+                    giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
+                }));
+        }),
+        leg(async () => {
+            const clock = await clockPromise;
+            const rows = await Promise.all(rowsOf(await sdk.getDispensers(trimmed, 'source'))
+                .map((row) => hydrateMarketOffer(sdk, row)));
+            return rows
+                .map((r) => ({ r, closing: includeClosingDispensers && isClosingDispenserRow(r, trimmed) }))
+                .filter(({ r, closing }) => closing || isOpenRow(r, trimmed, 'dispenser', clock))
+                .map(({ r, closing }) => ({
+                    actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
+                    tick: r.tick ?? r.give_tick ?? null,
+                    escrowRemaining: r.state?.give_remaining != null ? String(r.state.give_remaining)
+                        : r.give_remaining != null ? String(r.give_remaining)
+                        : (r.escrow_remaining != null ? String(r.escrow_remaining) : null),
+                    giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
+                    ...(closing ? { closing: true } : {}),
+                }));
+        }),
     ]);
     return { orders, swaps, dispensers };
 }

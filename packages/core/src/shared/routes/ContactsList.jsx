@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -17,6 +17,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
@@ -60,16 +61,13 @@ function persistContactsSort(walletId, value) {
 }
 
 /**
- * Chain badge for a contact entry. The address selects the network kind so
- * testnet rows say testnet instead of relying on the coin artwork alone.
- * Unknown formats keep the question-mark fallback.
+ * Chain icon for a contact entry. The address selects the matching descriptor,
+ * while unknown formats keep the question-mark fallback.
  */
 function ChainCoinIcon({ chain, address }) {
     const chainId = chainIdFor(chain, address);
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     if (descriptor) return <ChainBadge descriptor={descriptor} size="sm" />;
-    const opt = NETWORK_OPTIONS.find((n) => n.value === chain);
-    if (opt) return <span>{opt.label}</span>;
     return (
         <span className={picker.unknownIcon} aria-label="Unknown network" title="Unknown network">?</span>
     );
@@ -590,6 +588,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     const header = (
         <PageHeader
+            nested={mode !== 'list'}
             onBack={() => {
                 if (mode !== 'list') {
                     if (mode === 'edit') leaveGuard.guardedOnBack();
@@ -603,7 +602,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 : mode === 'detail' ? 'View Contact' : 'Contacts'}
             titleIcon={
                 mode === 'list' ? <Icon.UsersIcon />
-                    : mode === 'detail' ? <Icon.UserIcon />
+                    : mode === 'detail' && active ? (
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="header"
+                        />
+                    )
                     : (mode === 'edit' && active) ? <Icon.PencilIcon />
                     : (mode === 'edit' && !active) ? <Icon.PlusIcon />
                     : undefined
@@ -622,8 +627,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         />
     );
 
+    // The list keeps its own offset: a contact or the edit form swaps into
+    // this same Screen, and with one key the short detail view clamped the
+    // list offset to its own height, so Back returned to the top. Those
+    // views open at the top.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            scrollKey={mode === 'list' ? 'list' : mode}
+            restoreScroll={mode === 'list'}
+        >
             {children}
             {confirmDialog.request ? (
                 <ConfirmModal
@@ -665,6 +679,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     if (mode === 'scan') {
         return (
             <ScanRoute
+                nested
                 onBack={() => { setScanFromEdit(false); setMode(scanFromEdit ? 'edit' : 'list'); }}
                 onClassified={handleScanned}
                 chainRegistry={chainRegistry}
@@ -766,8 +781,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             <ListPage>
                 {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
-                    <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
-                    <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600 }}>{active.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="hero"
+                        />
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
+                            <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600, overflowWrap: 'anywhere' }}>{active.name}</div>
+                        </div>
+                    </div>
                     {active.notes ? (
                         <>
                             <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>Notes</div>
@@ -841,7 +865,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         onClick={() => runAction(addrPicker, e)}
                                     >
                                         <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                        <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                        <AddressText address={e.address} className={picker.addressText} />
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                     </Button>
                                 </li>
@@ -870,7 +894,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         return (
                             <li key={i} className={picker.addressCard}>
                                 <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                <AddressText address={e.address} className={picker.addressText} />
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                 <Button
                                     type="button"
@@ -903,6 +927,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 label="Address"
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
+                                error={addAddrError}
                                 placeholder=""
                                 autoFocus
                                 autoComplete="off"
@@ -913,11 +938,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
-                            {addAddrError ? (
-                                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{addAddrError}</p>
-                            ) : null}
                             <div className={picker.modalActions}>
-                                <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
+                                <Button type="button" variant="secondary" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
                             </div>
                         </div>
@@ -931,39 +953,44 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     return wrap(
         <ListPage
             toolbar={(
-                <>
-                <div className={picker.search}>
-                    <Input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        placeholder="Search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search contacts"
+                <div className={picker.toolbar}>
+                    <div className={picker.search}>
+                        <Input
+                            type="search"
+                            size="md"
+                            enterKeyHint="search"
+                            autoCapitalize="off"
+                            placeholder="Search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            aria-label="Search contacts"
+                        />
+                    </div>
+                    <NetworkFilterDropdown
+                        value={networkFilter}
+                        onChange={setNetworkFilter}
+                        announceNetworkCount
                     />
+                    <div className={picker.sort}>
+                        <Select
+                            value={sortBy}
+                            onChange={(e) => {
+                                const value = /** @type {'name' | 'newest'} */ (e.target.value);
+                                setSortBy(value);
+                                persistContactsSort(walletId, value);
+                            }}
+                            aria-label="Sort contacts"
+                        >
+                            {/* Native options remain because Select renders a native listbox. */}
+                            <option value="name">A to Z</option>
+                            {/* Native options remain because Select renders a native listbox. */}
+                            <option value="newest">Newest</option>
+                        </Select>
+                    </div>
                 </div>
-                <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
-                <div className={picker.sort}>
-                    <Select
-                        value={sortBy}
-                        onChange={(e) => {
-                            const value = /** @type {'name' | 'newest'} */ (e.target.value);
-                            setSortBy(value);
-                            persistContactsSort(walletId, value);
-                        }}
-                        aria-label="Sort contacts"
-                    >
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="name">A to Z</option>
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="newest">Newest</option>
-                    </Select>
-                </div>
-                </>
             )}
         >
             {duplicateGroups.length > 0 ? (
@@ -991,7 +1018,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     {typeof onOpenBackup === 'function' ? (
                         <>
                             {' '}
-                            <Button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
+                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
                                 Not now
                             </Button>
                         </>
@@ -1033,6 +1060,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                     className={picker.row}
                                     onClick={() => { setActiveId(c.id); setMode('detail'); }}
                                     aria-label={c.name}
+                                    leading={(
+                                        <IdentityAvatar
+                                            name={c.name}
+                                            seed={c.avatarSeed || c.id}
+                                            context="list"
+                                        />
+                                    )}
                                     title={<span className={picker.rowName}>{c.name}</span>}
                                     trailing={(
                                         <span className={picker.rowChains}>

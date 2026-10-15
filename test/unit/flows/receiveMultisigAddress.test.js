@@ -159,3 +159,33 @@ it('rejects an empty address returned by the SDK', async () => {
     );
     expect(derive).toHaveBeenCalledOnce();
 });
+
+it('rejects an address whose decoded type does not match the declared scheme', async () => {
+    const derive = vi.fn().mockReturnValue({
+        address: '2NclassicInsteadOfSegwit',
+        scheme: 'p2wsh-multisig',
+        witnessScript: '52210211ae',
+    });
+    const opts = harness([config()], derive);
+    opts.sdkRegistry.get.mockReturnValue({
+        deriveMultisigAddress: derive,
+        validateAddress: vi.fn().mockReturnValue({ valid: true, type: 'p2sh' }),
+    });
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(
+        'derived address type p2sh does not match declared scheme p2wsh-multisig',
+    );
+});
+
+it('rejects an SDK result labeled with a different multisig scheme', async () => {
+    const derive = vi.fn().mockReturnValue({
+        address: 'tb1qwronglabel',
+        scheme: 'p2sh-multisig',
+        witnessScript: '52210211ae',
+    });
+    const opts = harness([config()], derive);
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(
+        'SDK derived p2sh-multisig for declared scheme p2wsh-multisig',
+    );
+});

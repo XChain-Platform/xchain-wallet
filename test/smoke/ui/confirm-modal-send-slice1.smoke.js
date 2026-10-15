@@ -129,7 +129,7 @@ assert.match(hookSrc, /isCredentialFailure\(err\)/, 'hook classifies credential 
 assert.match(hookSrc, /reason:\s*'bad-credentials'/, 'credential failure re-prompts instead of settling');
 assert.match(hookSrc, /!optsRef\.current\.reservationId/, 'reservation guarded against re-reserve on retry');
 const modalSrc = read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx');
-assert.match(modalSrc, /data-testid="confirm-error"/, 'modal has an in-modal error surface');
+assert.match(modalSrc, /testId="confirm-error"/, 'modal has an in-modal error surface');
 
 // --- the confirm surface is STYLED (regression guard) ---------------
 // It shipped unstyled once: the three components used global class-name
@@ -145,22 +145,20 @@ for (const name of ['ConfirmActionModal', 'ActionIntentSummary', 'PreflightPanel
     assert.ok(css.length > 200, `${name}.module.css is present and non-empty`);
 }
 
-// §5.2.7 reachability is a SAFETY property, not cosmetics: the user must
-// always be able to reach Reject. In the page form (operator direction
-// 2026-07-22: the overlay didn't fit small/mobile viewports) that holds
-// because this is an ordinary scrolling page whose action row flows
-// inline with the content, so nothing can trap the buttons behind a
-// fixed region. The overlay/panel markup must stay gone, and the footer
-// must NOT dock to the viewport (operator direction: no docked bar, no
-// banded panel above/below the buttons).
+// §5.2.7 reachability is a safety property: Reject and Approve stay outside
+// the scrolling review body in Screen's footer region.
 const modalCss = read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.module.css');
+const screenCss = read('packages', 'core', 'src', 'ui', 'Screen.module.css');
 assert.match(modalCss, /\.page\s*\{[^}]*flex-direction:\s*column/s, 'page is a flex column');
-assert.match(modalCss, /\.footer\s*\{[^}]*margin-top/s, 'action row is spaced from the content above it');
-assert.doesNotMatch(modalCss, /\.footer\s*\{[^}]*position:\s*(sticky|fixed)/s, 'action row is not docked to the viewport');
-assert.doesNotMatch(modalCss, /\.footer\s*\{[^}]*background/s, 'action row has no panel background band');
-assert.doesNotMatch(modalCss, /\.footer\s*\{[^}]*border-top/s, 'action row has no divider rule above the buttons');
+assert.match(modalCss, /\.footer\s*\{[^}]*display:\s*flex/s, 'footer groups both decisions');
+assert.match(screenCss, /\.screen\s*\{[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden/s,
+    'Screen constrains its header, scrolling body, and footer');
+assert.match(screenCss, /\.body\s*\{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s,
+    'Screen body is the internal scroll region');
+assert.match(screenCss, /\.footer\s*\{[^}]*flex:\s*0 0 auto[^}]*safe-area-inset-bottom/s,
+    'Screen footer stays pinned and clears the home indicator');
 assert.doesNotMatch(modalCss, /\.overlay\b/, 'no overlay backdrop remains');
-assert.match(modalSrc, /<Screen /, 'confirm surface renders as a Screen page');
+assert.match(modalSrc, /<Screen\s[\s\S]*?footer=\{footer\}/, 'confirm decisions use the Screen footer');
 assert.match(modalSrc, /title="Confirm"/, 'page header reads Confirm');
 assert.match(modalSrc, /onBack=\{handleReject\}/, 'header back arrow uses the guarded Reject handler');
 assert.match(modalSrc, /Promise\.resolve\(onReject\(\)\)\.catch/, 'Reject promises cannot escape the event handler');

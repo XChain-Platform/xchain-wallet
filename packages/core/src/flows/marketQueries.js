@@ -16,6 +16,8 @@
 // renders what's present and tolerates missing fields (indexer
 // state varies, especially for newer markets).
 
+import { withMarketExpiry } from './marketExpiry.js';
+
 /**
  * @typedef {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} SdkCtx
  */
@@ -77,7 +79,7 @@ export async function getMarketOrders({ sdkRegistry, chainId, tick1, tick2, addr
     if (!tick1) throw new Error('getMarketOrders: tick1 is required');
     if (!tick2) throw new Error('getMarketOrders: tick2 is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getMarketOrders(tick1, tick2, address, opts);
+    return withMarketExpiry(sdk, await sdk.getMarketOrders(tick1, tick2, address, opts), 'order', { hydrate: true });
 }
 
 /**
@@ -108,7 +110,7 @@ export async function ordersForToken({ sdkRegistry, chainId, tick, opts }) {
     if (!chainId) throw new Error('ordersForToken: chainId is required');
     if (!tick) throw new Error('ordersForToken: tick is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getOrders(tick, 'token', opts);
+    return withMarketExpiry(sdk, await sdk.getOrders(tick, 'token', opts), 'order', { hydrate: true });
 }
 
 /**
@@ -130,7 +132,7 @@ export async function ordersForAddress({ sdkRegistry, chainId, address, opts }) 
     if (!chainId) throw new Error('ordersForAddress: chainId is required');
     if (!address) throw new Error('ordersForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getOrders(address, 'address', opts);
+    return withMarketExpiry(sdk, await sdk.getOrders(address, 'address', opts), 'order', { hydrate: true });
 }
 
 /**
@@ -168,7 +170,7 @@ export async function orderDetail({ sdkRegistry, chainId, actionIndex }) {
         throw new Error('orderDetail: actionIndex is required');
     }
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getAction(String(actionIndex));
+    return withMarketExpiry(sdk, await sdk.getAction(String(actionIndex)), 'order');
 }
 
 /**
@@ -182,7 +184,7 @@ export async function swapsForToken({ sdkRegistry, chainId, tick, opts }) {
     if (!chainId) throw new Error('swapsForToken: chainId is required');
     if (!tick) throw new Error('swapsForToken: tick is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getSwaps(tick, 'token', opts);
+    return withMarketExpiry(sdk, await sdk.getSwaps(tick, 'token', opts), 'swap', { hydrate: true });
 }
 
 /**
@@ -200,7 +202,7 @@ export async function swapsForAddress({ sdkRegistry, chainId, address, opts }) {
     if (!chainId) throw new Error('swapsForAddress: chainId is required');
     if (!address) throw new Error('swapsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getSwaps(address, 'address', opts);
+    return withMarketExpiry(sdk, await sdk.getSwaps(address, 'address', opts), 'swap', { hydrate: true });
 }
 
 /**
@@ -230,7 +232,7 @@ export async function swapDetail({ sdkRegistry, chainId, actionIndex }) {
         throw new Error('swapDetail: actionIndex is required');
     }
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getAction(String(actionIndex));
+    return withMarketExpiry(sdk, await sdk.getAction(String(actionIndex)), 'swap');
 }
 
 /**

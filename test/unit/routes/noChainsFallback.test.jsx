@@ -84,7 +84,7 @@ describe('screens with no available chains', () => {
 
         expect(await screen.findByText('No networks available')).toBeTruthy();
         expect(screen.getByText(/chain registry could not be loaded/i)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Open Network settings' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open network settings' }));
         expect(await screen.findByText('Settings: network')).toBeTruthy();
     });
 });

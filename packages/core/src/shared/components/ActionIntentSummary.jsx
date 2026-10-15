@@ -18,12 +18,34 @@
 // (via txSimulator.simulateAction fed parse() output) and passes them in,
 // keeping this component pure and trivially testable.
 
+import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
+import { t } from '../../i18n/index.js';
 
 function reviewDetailValue(detail) {
     if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return detail?.value;
     return formatDisplayAmount(detail?.value);
+}
+
+function reviewSummary(decoded) {
+    const summary = String(decoded?.summary || '');
+    const destination = decoded?.details?.find((detail) => (
+        /^(?:To(?:\s|$)|Destination|Receive address|Dispenser address|Delegate to|Recipient(?:\s|$))/i
+            .test(String(detail?.label || ''))
+        && typeof detail?.value === 'string'
+        && summary.includes(detail.value)
+    ))?.value;
+    if (!destination) return summary;
+
+    const start = summary.indexOf(destination);
+    return (
+        <>
+            {summary.slice(0, start)}
+            <AddressText address={destination} />
+            {summary.slice(start + destination.length)}
+        </>
+    );
 }
 
 /**
@@ -34,12 +56,14 @@ function reviewDetailValue(detail) {
 export function ActionIntentSummary({ decoded, simulation }) {
     return (
         <div className={styles.intent} data-testid="action-intent">
-            <p className={styles.summary}>{decoded.summary}</p>
+            <p className={styles.summary}>{reviewSummary(decoded)}</p>
 
             {decoded.warnings.length > 0 ? (
-                <ul className={styles.warnings}>
-                    {decoded.warnings.map((w, i) => (<li key={i}>{w}</li>))}
-                </ul>
+                <StatusMessage variant="warning" role={null}>
+                    <ul>
+                        {decoded.warnings.map((w, i) => (<li key={i}>{w}</li>))}
+                    </ul>
+                </StatusMessage>
             ) : null}
 
             {decoded.details.length > 0 ? (
@@ -54,7 +78,11 @@ export function ActionIntentSummary({ decoded, simulation }) {
             ) : null}
 
             {simulation && Array.isArray(simulation.deltas) && simulation.deltas.length > 0 ? (
-                <div className={styles.deltas} data-testid="action-intent-deltas">
+                <div
+                    className={styles.deltas}
+                    data-testid="action-intent-deltas"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
                     {simulation.deltas.map((d, i) => {
                         // Label-only rows (empty before/after) are paired with
                         // the balance row that already carries the debit, so
@@ -69,8 +97,8 @@ export function ActionIntentSummary({ decoded, simulation }) {
                         if (d.isFee && d.feeUnknown && d.before === '') {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta} data-fee-unknown="true">
-                                    <span className={styles.deltaTick}>{d.feeLabel || 'Network fee'}</span>
-                                    <span className={styles.deltaValues}>unknown</span>
+                                    <span className={styles.deltaTick}>{d.feeLabel || t('send.networkFee')}</span>
+                                    <span className={styles.deltaValues}>{t('components.balanceChanges.unknown')}</span>
                                 </div>
                             );
                         }
@@ -79,7 +107,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta} data-before-unknown="true">
                                     <span className={styles.deltaTick}>{d.tick}</span>
-                                    <span className={styles.deltaValues}>balance unknown</span>
+                                    <span className={styles.deltaValues}>{t('components.actionIntentSummary.balanceUnknown')}</span>
                                 </div>
                             );
                         }
@@ -87,8 +115,10 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             if (!d.isProtocolFee) return null;
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta}>
-                                    <span className={styles.deltaTick}>{d.feeLabel || 'Protocol fee'}</span>
-                                    <span className={styles.deltaValues}>{d.tick} {d.feeAmount}</span>
+                                    <span className={styles.deltaTick}>{d.feeLabel || t('execute.protocolFee')}</span>
+                                    <span className={styles.deltaValues}>
+                                        {formatDisplayAmount(d.feeAmount)} {d.tick}
+                                    </span>
                                 </div>
                             );
                         }
@@ -99,7 +129,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta} data-after-unknown="true">
                                     <span className={styles.deltaTick}>{d.tick}</span>
-                                    <span className={styles.deltaValues}>{d.before} → unknown</span>
+                                    <span className={styles.deltaValues}>{d.before} {t('components.actionIntentSummary.unknown')}</span>
                                 </div>
                             );
                         }

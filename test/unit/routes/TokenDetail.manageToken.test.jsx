@@ -21,7 +21,11 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 // Both cases share a (chainId, tick) pair with different creators, and
 // useTokenInfo caches by that pair across the whole module, so a stale
 // hit from case 1 would otherwise leak into case 2's assertions.
-afterEach(() => { cleanup(); __clearTokenInfoCache(); });
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+    localStorage.removeItem('xc:activeAccount:w1');
+});
 
 // jsdom has no ResizeObserver; TokenDetail's balance hero uses one to
 // auto-shrink the amount text. Same stub as test/unit/routes-render.test.jsx.
@@ -42,13 +46,21 @@ const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const OTHER = 'bcrt1qotherotherotherotherotherotherotherot';
 
-function renderDetail({ creator, kind = 'token', onManageToken = vi.fn(), withPrimaryActions = false } = {}) {
+function renderDetail({
+    creator,
+    kind = 'token',
+    onManageToken = vi.fn(),
+    withPrimaryActions = false,
+    quantity = '100',
+    balances,
+} = {}) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ creator }),
+        getTokenInfo: vi.fn().mockResolvedValue({ creator, divisibility: 8 }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: MINE }] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
         listGatedContent: vi.fn().mockResolvedValue([]),
+        getWalletBalances: vi.fn().mockResolvedValue(balances),
     };
     render(React.createElement(
         MessagingProvider,
@@ -58,7 +70,7 @@ function renderDetail({ creator, kind = 'token', onManageToken = vi.fn(), withPr
             chainId: CHAIN,
             tick: 'S18PROBE',
             kind,
-            quantity: '100',
+            quantity,
             onBack() {},
             onSend: withPrimaryActions ? vi.fn() : undefined,
             onReceive: withPrimaryActions ? vi.fn() : undefined,
@@ -112,5 +124,24 @@ describe('TokenDetail "Manage token" action', () => {
         renderDetail({ creator: MINE, kind: 'native' });
 
         expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+    });
+
+    it('refetches a balance when restored route state omits quantity', async () => {
+        localStorage.setItem('xc:activeAccount:w1', 'account-2');
+        const { messaging } = renderDetail({
+            creator: OTHER,
+            quantity: null,
+            balances: {
+                [CHAIN]: [{
+                    address: MINE,
+                    balances: { tokens: [{ tick: 'S18PROBE', quantity: '250000000' }] },
+                }],
+            },
+        });
+
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledWith('w1', 'account-2'));
+        await waitFor(() => expect(
+            within(screen.getByRole('region', { name: 'S18PROBE balance' })).getByText('2.50000000'),
+        ).toBeInTheDocument());
     });
 });

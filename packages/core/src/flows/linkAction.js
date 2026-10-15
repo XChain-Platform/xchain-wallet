@@ -70,10 +70,10 @@ export async function linkAction(opts) {
     }
     const idx1 = String(opts.coin1ActionIndex ?? '');
     const idx2 = String(opts.coin2ActionIndex ?? '');
-    if (idx1.length === 0 || !/^\d+$/.test(idx1)) {
+    if (!/^[1-9]\d*$/.test(idx1)) {
         throw new Error('linkAction: coin1ActionIndex must be a non-empty integer string');
     }
-    if (idx2.length === 0 || !/^\d+$/.test(idx2)) {
+    if (!/^[1-9]\d*$/.test(idx2)) {
         throw new Error('linkAction: coin2ActionIndex must be a non-empty integer string');
     }
     if (opts.coin1.toUpperCase() === opts.coin2.toUpperCase() && idx1 === idx2) {

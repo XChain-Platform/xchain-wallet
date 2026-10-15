@@ -19,7 +19,7 @@ const CHAIN = 'bitcoin-mainnet';
 const DELEGATE = 'bc1qdevmock03aabbcc';
 const ADDRESS = Object.freeze({
     id: 'address-1',
-    address: 'bc1qexampleexampleexampleexampleexampleex',
+    address: 'bc1qdevmock01aabbcc',
     publicKey: '02aabbcc',
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
@@ -320,6 +320,44 @@ describe('governance route audit', () => {
         expect(await screen.findByText('Governance token is required.')).toBeTruthy();
     });
 
+    it('validates the source address and governance token before delegation compose', async () => {
+        const invalidSource = { ...ADDRESS, address: 'not-an-address' };
+        const sourceMessaging = messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [invalidSource] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: invalidSource.id } }),
+        });
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, sourceMessaging);
+        await screen.findByDisplayValue(invalidSource.address);
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('The selected source address is not valid for this network.')).toBeTruthy();
+        expect(sourceMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
+
+        cleanup();
+        const tickMessaging = messagingWith();
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'BAD|TICK', onBack() {},
+        }, tickMessaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText(/Governance token can only use letters/)).toBeTruthy();
+        expect(tickMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
+
+        cleanup();
+        const idMessaging = messagingWith();
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: '^0', onBack() {},
+        }, idMessaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('Governance token cannot contain ^. That form is reserved for token IDs.')).toBeTruthy();
+        expect(idMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
     it('validates delegation addresses and memo text before compose', async () => {
         const source = { ...ADDRESS, address: 'bc1qdevmock02aabbcc' };
         const messaging = messagingWith({
@@ -340,10 +378,86 @@ describe('governance route audit', () => {
         expect(await screen.findByText('Delegate-to address must be different from the source address.')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'bad|memo' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('Memo cannot contain | or ; characters.')).toBeTruthy();
+
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findByText('Memo is 251 bytes; the network accepts at most 250 bytes.')).toBeTruthy();
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('blocks vote delegation custom fee rates that cannot be built', async () => {
+        const messaging = messagingWith();
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeTruthy();
+
+        for (const rate of ['0', '-1']) {
+            fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
+            fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+            expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeTruthy();
+        }
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('Custom network fee rate can have at most 8 decimal places.')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText("Custom network fee rate is above this network's supported maximum.")).toBeTruthy();
+        expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('reviews and builds the same trimmed delegation values, then keeps form input on Back', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '00' });
+        const messaging = messagingWith({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+            buildActionPsbtRequest,
+        });
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: '  VoTe  ', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: `  ${DELEGATE}  ` } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '  keep my vote  ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect((await screen.findByText('Token')).nextElementSibling.textContent).toBe('VoTe');
+        expect(screen.getByLabelText(DELEGATE)).toBeTruthy();
+        expect(screen.getByText('Memo').nextElementSibling.textContent).toBe('keep my vote');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        expect(screen.getByLabelText('Delegate to address')).toHaveValue(`  ${DELEGATE}  `);
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('  keep my vote  ');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction: delegate votes' }));
+        expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
+            actionData: {
+                action: 'VOTE',
+                params: { VERSION: '3', TICK: 'VoTe', DELEGATE_TO: DELEGATE, MEMO: 'keep my vote' },
+            },
+        }));
+    });
+
+    it('turns delegation address-load failures into plain copy', async () => {
+        const internal = new Error('getAddressesByChain: failed at https://wallet.invalid/private');
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messagingWith({ getAddressesByChain: vi.fn().mockRejectedValue(internal) }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load your addresses. Something went wrong. Try again.");
+        expect(alert).not.toHaveTextContent('wallet.invalid');
     });
 
     it('starts a new delegation with fresh fields when the wallet context changes', async () => {
@@ -410,7 +524,7 @@ describe('governance route audit', () => {
             }),
         });
         mount(PollDetail, {
-            walletId: 'wallet-1', chainId: CHAIN, pollIndex: 7, onBack() {},
+            walletId: 'wallet-1', chainId: 'bitcoin-regtest', pollIndex: 7, onBack() {},
         }, messaging);
 
         expect(await screen.findByText('Ship it?')).toBeTruthy();
@@ -418,6 +532,7 @@ describe('governance route audit', () => {
         expect(screen.getAllByText('0: Yes')).toHaveLength(2);
         expect(screen.getByText('42 weight')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('shows the current ballot, delegation rules, change action, and block countdown', async () => {
@@ -586,8 +701,8 @@ describe('governance route audit', () => {
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'Fund it' } });
         fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
 
-        expect(await screen.findByText('Vote on poll #8 (VOTE).')).toBeTruthy();
-        expect(screen.getByText('Fund it')).toBeTruthy();
+        // The review lists the vote's fields; the repeated summary sentence is gone.
+        expect(await screen.findByText('Fund it')).toBeTruthy();
         expect(screen.getByText('Network fee').nextElementSibling).toHaveTextContent('BTC');
         fireEvent.click(screen.getByRole('button', { name: 'Back' }));
         expect(screen.getByLabelText('0: Yes')).toBeChecked();
@@ -599,7 +714,7 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
         });
         expect(await screen.findByText('No polls yet')).toBeTruthy();
-        expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
+        expect(screen.getByText('Polls created on this network appear here.')).toBeTruthy();
     });
 
     it('hides poll rows that belong to the previous wallet while the next list loads', async () => {

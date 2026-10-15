@@ -94,9 +94,23 @@ afterEach(() => {
     cleanup();
     localStorage.clear();
     delete navigator.clipboard;
+    vi.restoreAllMocks();
 });
 
 describe('MessagingInbox audit states', () => {
+    it('uses the same shared size class for the search and network controls', async () => {
+        mount(messagingFor());
+
+        await screen.findByText('No messages yet');
+        const searchField = screen.getByRole('searchbox', { name: 'Search conversations' })
+            .parentElement.parentElement;
+        const networkFilter = screen.getByRole('button', { name: 'Filter by network' })
+            .parentElement;
+
+        expect(searchField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(networkFilter.className).toMatch(/(?:^|\s)_?md_/);
+    });
+
     it('renders the address empty state when the account has no messageable addresses', async () => {
         mount(messagingFor({ addresses: {} }));
 
@@ -110,6 +124,8 @@ describe('MessagingInbox audit states', () => {
 
         const password = await screen.findByLabelText('Password');
         const unlock = screen.getByRole('button', { name: 'Unlock inbox' });
+        expect(password).toHaveAccessibleDescription("Decrypts this account's messages.");
+        expect(screen.queryByText("Enter your wallet password to decrypt this account's messages.")).toBeNull();
         expect(unlock.disabled).toBe(true);
 
         fireEvent.change(password, { target: { value: 'secret' } });
@@ -160,7 +176,7 @@ describe('MessagingInbox audit states', () => {
     it('shows an inbox key-share encoder failure as plain copy', async () => {
         const failure = new Error('no spendable UTXOs found for the funding address');
         failure.name = 'SDKEncoderError';
-        failure.code = 'ENCODER_NO_UTXOS';
+        failure.code = 'ENCODER_NETWORK';
         const messaging = messagingFor({ messages: [REQUEST] });
         messaging.composeForConfirm = vi.fn().mockRejectedValue(failure);
         mount(messaging);
@@ -168,7 +184,7 @@ describe('MessagingInbox audit states', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Share my key' }));
 
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toMatch(/transaction service could not complete this request/i);
+        expect(alert.textContent).toMatch(/could not reach the transaction service/i);
         expect(alert.textContent).not.toMatch(/no spendable UTXOs/i);
     });
 
@@ -181,7 +197,7 @@ describe('MessagingInbox audit states', () => {
         }));
 
         const warning = await screen.findByText(/could not be loaded from 1 address/i);
-        expect(warning.textContent).toMatch(/chain service did not answer/i);
+        expect(warning.textContent).toMatch(/network service did not answer/i);
         expect(warning.textContent).not.toMatch(/\/api\/messages|secret|HTTP 502/i);
     });
 
@@ -238,6 +254,21 @@ describe('MessagingInbox audit states', () => {
         expect(attachment).toHaveAttribute('download', 'notes.txt');
         expect(attachment.getAttribute('href')).toBe('data:text/plain;base64,aGVsbG8=');
         expect(document.body.textContent).not.toContain('xchain-attachment:v1');
+    });
+
+    it('uses the shared relative timestamp inside an opened message thread', async () => {
+        const now = new Date('2026-10-13T12:00:00Z').getTime();
+        const timestamp = Math.floor((now - 5 * 60_000) / 1000);
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+        mount(messagingFor({ messages: [incoming({
+            from: 'peer-time', txid: 'time-tx', text: 'timestamped message', timestamp,
+        })] }));
+
+        fireEvent.click(await screen.findByText('timestamped message'));
+
+        const time = await screen.findByText('5 minutes ago');
+        expect(time.tagName).toBe('TIME');
+        expect(time).toHaveAttribute('title');
     });
 });
 

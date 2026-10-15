@@ -94,6 +94,7 @@ vi.mock('../../../packages/extension/src/bridge/bridgeEvents.js', () => ({
 vi.mock('../../../packages/extension/src/background/layoutMode.js', () => ({
     applyLayoutMode: controls.applyLayoutMode,
     attachLayoutModeListener: controls.attachLayoutModeListener,
+    currentLayoutMode: () => controls.layoutMode,
     readLayoutMode: controls.readLayoutMode,
 }));
 vi.mock('../../../packages/extension/src/background/extensionCommands.js', () => ({
@@ -126,7 +127,7 @@ beforeAll(async () => {
         commands: {},
         runtime: {},
         sidePanel: { open: controls.openSidePanel },
-        windows: { getLastFocused: vi.fn(async () => ({ id: 19 })) },
+        windows: { WINDOW_ID_CURRENT: -2 },
     });
 
     backgroundModule = await import('../../../packages/extension/src/background.js');
@@ -143,12 +144,17 @@ describe('extension background entrypoint', () => {
 
     it('opens commands in a side panel or popup according to the live setting', async () => {
         controls.layoutMode = 'sidepanel';
-        await expect(controls.commandOptions.openWallet({ windowId: 7 }))
-            .resolves.toBe('side-panel-opened');
+        const firstOpen = controls.commandOptions.openWallet({ windowId: 7 });
         expect(controls.openSidePanel).toHaveBeenCalledWith({ windowId: 7 });
+        await expect(firstOpen)
+            .resolves.toBe('side-panel-opened');
+
+        await controls.commandOptions.openWallet({ windowId: 23 });
+        expect(controls.openSidePanel).toHaveBeenLastCalledWith({ windowId: 23 });
 
         await controls.commandOptions.openWallet({});
-        expect(controls.openSidePanel).toHaveBeenLastCalledWith({ windowId: 19 });
+        expect(controls.openSidePanel).toHaveBeenLastCalledWith({ windowId: -2 });
+        expect(controls.readLayoutMode).toHaveBeenCalledTimes(1);
 
         controls.layoutMode = 'popup';
         await expect(controls.commandOptions.openWallet({ windowId: 7 }))

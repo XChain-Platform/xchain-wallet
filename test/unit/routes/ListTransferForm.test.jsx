@@ -154,6 +154,7 @@ describe('ListTransferForm', () => {
 
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), { target: { value: 'transfer' } });
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(false);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('composes format 3 from the current owner and submits it through createList', async () => {

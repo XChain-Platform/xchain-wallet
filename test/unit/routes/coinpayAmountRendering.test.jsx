@@ -122,8 +122,9 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
         expect(screen.queryByText(/1000000000/)).toBeNull();
 
         fireEvent.click(review);
-        await screen.findByText(/Pay 10 DOGE to complete matched order #648/);
-        expect(screen.getAllByText(/\b10 DOGE\b/).length).toBeGreaterThanOrEqual(2);
+        await screen.findByText('Review payment');
+        expect(screen.getByText('648')).toBeInTheDocument();
+        expect(screen.getAllByText(/\b10 DOGE\b/).length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText(/1000000000/)).toBeNull();
         expect(screen.queryByText(/base units/)).toBeNull();
     });
@@ -131,8 +132,9 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
     it('[REGRESSION] "10.5" reads as 10.5 DOGE on review, not 1050000000 DOGE', async () => {
         const review = await mountPrefilled('10.5');
         fireEvent.click(review);
-        await screen.findByText(/Pay 10\.5 DOGE to complete matched order #648/);
-        expect(screen.getAllByText(/\b10\.5 DOGE\b/).length).toBeGreaterThanOrEqual(2);
+        await screen.findByText('Review payment');
+        expect(screen.getByText('648')).toBeInTheDocument();
+        expect(screen.getAllByText(/\b10\.5 DOGE\b/).length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText(/1050000000/)).toBeNull();
     });
 

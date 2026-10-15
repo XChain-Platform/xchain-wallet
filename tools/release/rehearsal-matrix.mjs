@@ -64,7 +64,8 @@
 // `stable.yml`, and upstream picks between them by substring-matching
 // `process.arch` against the filename). Selection is the half that does
 // not need an arm64 machine, so it is covered today, for every lane, by
-// the probe. What is still blocked on DD4 is only the swap.
+// the probe. The swap is the half that needs the lane's named device; see
+// below for what blocks it now.
 //
 // `device: null` means DD4 has not been answered for that lane. Per the
 // spec's own rule - "No named device for a lane = that lane does not

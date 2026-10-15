@@ -203,6 +203,50 @@ describe('startup theme', () => {
         );
     });
 
+    it('keeps the Android WebView layout stable and theme-aware', () => {
+        const config = JSON.parse(readFileSync(resolve('packages/mobile/capacitor.config.json'), 'utf8'));
+        const mainActivity = readFileSync(
+            resolve(
+                'packages/mobile/android/app/src/main/java/io/xchain/wallet/android/MainActivity.java',
+            ),
+            'utf8',
+        );
+        const manifest = readFileSync(
+            resolve('packages/mobile/android/app/src/main/AndroidManifest.xml'),
+            'utf8',
+        );
+        const androidStyles = readFileSync(
+            resolve('packages/mobile/android/app/src/main/res/values/styles.xml'),
+            'utf8',
+        );
+        const androidNightStyles = readFileSync(
+            resolve('packages/mobile/android/app/src/main/res/values-night/styles.xml'),
+            'utf8',
+        );
+        const iosInfo = readFileSync(resolve('packages/mobile/ios/App/App/Info.plist'), 'utf8');
+
+        expect(mainActivity).toContain('EdgeToEdge.enable(this)');
+        expect(mainActivity.indexOf('configureSystemBars();'))
+            .toBeLessThan(mainActivity.indexOf('super.onCreate(savedInstanceState)'));
+        expect(mainActivity).toContain('settings.setTextZoom(100)');
+        expect(mainActivity).not.toContain('settings.getTextZoom()');
+        expect(mainActivity).toMatch(
+            /onConfigurationChanged[\s\S]*?super\.onConfigurationChanged\(newConfig\);\s*configureWebViewLayout\(\);/,
+        );
+        expect(mainActivity).toContain('webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER)');
+        expect(manifest).toContain('android:windowSoftInputMode="adjustResize"');
+        expect(config.plugins.SystemBars).toMatchObject({
+            insetsHandling: 'css',
+            initialViewportFitValueHint: 'cover',
+            style: 'DEFAULT',
+        });
+        expect(androidStyles).toContain('<item name="android:statusBarColor">#FFFFFF</item>');
+        expect(androidStyles).toContain('<item name="android:windowLightStatusBar">true</item>');
+        expect(androidNightStyles).toContain('<item name="android:statusBarColor">#0B0F17</item>');
+        expect(androidNightStyles).toContain('<item name="android:windowLightStatusBar">false</item>');
+        expect(iosInfo).toMatch(/<key>UIStatusBarStyle<\/key>\s*<string>UIStatusBarStyleDefault<\/string>/);
+    });
+
     it('keeps native launch screens bounded, theme-aware, and tied to shell readiness', () => {
         const lightStyles = readFileSync(
             resolve('packages/mobile/android/app/src/main/res/values/styles.xml'),

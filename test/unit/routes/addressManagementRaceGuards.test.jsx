@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
@@ -77,16 +77,17 @@ describe('address management async guards', () => {
             </MessagingProvider>
         );
         const view = render(tree('wallet-1'));
-        expect(await screen.findByText(FIRST)).toBeInTheDocument();
+        // Address cards middle-truncate the visible text; the label carries the full value.
+        expect(await screen.findByLabelText(FIRST)).toBeInTheDocument();
 
         view.rerender(tree('wallet-2'));
 
-        expect(screen.queryByText(FIRST)).toBeNull();
+        expect(screen.queryByLabelText(FIRST)).toBeNull();
         expect(screen.getByRole('status', { name: 'Loading addresses' })).toBeInTheDocument();
         await act(async () => oldLate.resolve({
             [CHAIN]: [{ address: FIRST, balances: { native: { tick: 'BTC', quantity: '1' } } }],
         }));
-        expect(screen.queryByText(FIRST)).toBeNull();
+        expect(screen.queryByLabelText(FIRST)).toBeNull();
         await act(async () => nextAddresses.resolve({}));
         expect(await screen.findByText('No addresses yet')).toBeInTheDocument();
     });
@@ -161,7 +162,8 @@ describe('address management async guards', () => {
         expect(await screen.findAllByRole('button', { name: `View address ${FIRST}` })).toHaveLength(2);
         const badges = await screen.findAllByTestId('multisig-badge');
         expect(badges).toHaveLength(1);
-        expect(badges[0].closest('button')).toHaveTextContent('Bitcoin');
+        // The row names its chain through the icon's accessible name, not visible text.
+        expect(within(badges[0].closest('button')).getByLabelText('Bitcoin')).toBeInTheDocument();
         expect(errorSpy.mock.calls.flat().join(' ')).not.toMatch(/same key|unique "key"/i);
     });
 

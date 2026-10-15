@@ -21,11 +21,13 @@ const dialog = (page) => page.getByRole('dialog', { name: 'Command palette' });
 const navItem = (page, name) => nav(page).getByRole('button', { name, exact: true });
 
 test.describe('command palette', () => {
-    test('opens from the header button and the shortcut, and navigates', async ({ page }) => {
+    test('opens from the header menu and the shortcut, and navigates', async ({ page }) => {
         await createWallet(page);
 
-        // Header search button opens it; Enter runs the top match.
-        await page.getByRole('button', { name: 'Open command palette' }).click();
+        // The condensed header keeps Search in its action menu; Enter runs
+        // the top match.
+        await page.getByRole('button', { name: 'Open menu' }).click();
+        await page.getByRole('menuitem', { name: /^Search/ }).click();
         await expect(dialog(page)).toBeVisible();
         await dialog(page).getByRole('combobox').fill('history');
         await page.keyboard.press('Enter');

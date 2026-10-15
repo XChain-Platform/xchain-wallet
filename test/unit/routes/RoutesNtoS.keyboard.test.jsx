@@ -50,6 +50,8 @@ async function expectTab(user, element) {
 
 async function tabToStakeMore(user) {
     for (const name of ['Back to staking', 'Claim', 'Unstake', 'Delegate', 'More']) {
+        // The truncated staking address after Back reveals its full value on focus.
+        if (name === 'Claim') await expectTab(user, screen.getByLabelText(ADDRESS));
         await expectTab(user, screen.getByRole('button', { name }));
     }
 }
@@ -90,6 +92,9 @@ describe('N through S route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(obligationState.refresh).toHaveBeenCalledOnce();
 
+        // The truncated payee and paying addresses are tab stops that reveal the full value.
+        await expectTab(user, screen.getByLabelText('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'));
+        await expectTab(user, screen.getByLabelText(ADDRESS));
         await expectTab(user, screen.getByRole('button', { name: 'Pay now' }));
         await user.keyboard('{Enter}');
         expect(onPay).toHaveBeenCalledWith({
@@ -207,6 +212,8 @@ describe('N through S route keyboard flows', () => {
             ['Delegate', actions.onDelegate],
         ];
         for (const [name, callback] of orderedActions) {
+            // The truncated staking address after Back is a tab stop that reveals the full value.
+            if (name === 'Claim') await expectTab(user, screen.getByLabelText(ADDRESS));
             await expectTab(user, screen.getByRole('button', { name }));
             await user.keyboard('{Enter}');
             expect(callback).toHaveBeenCalledOnce();

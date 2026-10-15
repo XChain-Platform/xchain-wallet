@@ -57,7 +57,13 @@ import { requireSdkDeep } from '../../helpers/sdkDeepPaths.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { joinEndpoint } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { gotoSection, openSettings } from './wallet.js';
-import { REGTEST_COIN, expectConfirmModal, mintXchain, unlockAfterReload } from './regtest.js';
+import {
+    REGTEST_COIN,
+    activeNetworkControl,
+    expectConfirmModal,
+    mintXchain,
+    unlockAfterReload,
+} from './regtest.js';
 import { priceVerdict } from './priceSeed.js';
 
 const { XChainSDK, WalletUtils } = xchainSdk;
@@ -633,7 +639,7 @@ export function waitForActivationHeight(venue, height, { timeoutMs = 3_600_000 *
  */
 export async function switchToTestnet(page, password) {
     await openSettings(page);
-    await page.getByLabel('Active network', { exact: true }).selectOption('testnet');
+    await activeNetworkControl(page).selectOption('testnet');
     await unlockAfterReload(page, password);
 }
 
@@ -645,7 +651,10 @@ export async function switchToTestnet(page, password) {
  */
 export async function readTestnetReceiveAddress(page) {
     await gotoSection(page, 'Receive');
-    const field = page.getByLabel('Address', { exact: true });
+    const field = page.getByRole('textbox', {
+        name: 'Copy payment link for receive address',
+        exact: true,
+    });
     await expect(field).toBeVisible({ timeout: 30_000 });
     await expect(field, 'Receive never showed a Bitcoin testnet address')
         .toHaveValue(TESTNET_ADDRESS_RE, { timeout: 30_000 });

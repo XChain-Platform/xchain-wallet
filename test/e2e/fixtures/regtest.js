@@ -1658,6 +1658,10 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = INDEX_
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
+export function activeNetworkControl(page) {
+    return page.getByRole('combobox', { name: 'Active network', exact: true });
+}
+
 /**
  * Flips the wallet onto the regtest network and waits for it to come
  * back up.
@@ -1682,7 +1686,7 @@ export async function switchToRegtest(page, password) {
     await openSettings(page);
 
     await page.getByRole('button', { name: /^Developer mode/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     await expect(devToggle).toBeVisible();
     if (!(await devToggle.isChecked())) {
         // `.check()` fails here: the input is fully controlled by PERSISTED
@@ -1698,7 +1702,10 @@ export async function switchToRegtest(page, password) {
     // network it switches to. Before that fix it only moved a filter,
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
-    await page.getByLabel('Active network', { exact: true }).selectOption('regtest');
+    await activeNetworkControl(page).selectOption('regtest');
+    // The switch reloads the wallet, so Settings asks first.
+    const confirm = page.getByRole('dialog', { name: 'Switch to Regtest?' });
+    await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
 
     await unlockAfterReload(page, password);
 }
@@ -1763,7 +1770,10 @@ export async function unlockAfterReload(page, password) {
 export async function readReceiveAddress(page) {
     await gotoSection(page, 'Receive');
 
-    const field = page.getByLabel('Address', { exact: true });
+    const field = page.getByRole('textbox', {
+        name: 'Copy payment link for receive address',
+        exact: true,
+    });
     await expect(field).toBeVisible({ timeout: 30_000 });
 
     if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {

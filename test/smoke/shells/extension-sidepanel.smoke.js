@@ -79,7 +79,8 @@ assert.ok(/attachLayoutModeListener\(\)/.test(bgSrc),
 const togglePath = 'packages/core/src/shared/components/LayoutModeToggle.jsx';
 assert.ok(existsSync(join(root, togglePath)), `${togglePath} exists`);
 const toggleSrc = read(togglePath);
-assert.ok(/STORAGE_KEY\s*=\s*'xchain\.layoutMode'/.test(toggleSrc),
+assert.ok(/LAYOUT_MODE_STORAGE_KEY/.test(toggleSrc)
+    && /LAYOUT_MODE_STORAGE_KEY\s*=\s*'xchain\.layoutMode'/.test(read('packages/core/src/shared/utils/layoutModeStorageKey.js')),
     'toggle uses the same canonical storage key as the controller');
 assert.ok(/pick\('popup'\)/.test(toggleSrc) && /pick\('sidepanel'\)/.test(toggleSrc),
     'toggle renders both modes');

@@ -571,6 +571,7 @@ describe('useConfirmAction', () => {
         // The composed envelope as it looks in native-fee mode: the quote that
         // sized the FEE_DESTINATION output rides on it.
         const COMPOSED_WITH_FEE = { ...COMPOSED, quote: { requiredFeeSats: 2000000, feeDestination: 'feeDest' } };
+        const COMPOSED_WITH_FREE_QUOTE = { ...COMPOSED, quote: { requiredFeeSats: 0, feeDestination: 'feeDest' } };
 
         function freshQuote(overrides) {
             return {
@@ -628,7 +629,55 @@ describe('useConfirmAction', () => {
             expect(out.ok).toEqual({ txid: 'T' });
         });
 
-        it('never asks when the action attaches no native fee', async () => {
+        it('re-quotes a zero fee and refuses when a fee becomes required', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const onApprove = vi.fn(async () => ({ txid: 'T' }));
+            const requoteNativeFee = vi.fn(async () => freshQuote({
+                requiredFeeSats: 2000000, minAcceptable: '0.01900000', maxAcceptable: '0.02200000',
+            }));
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED_WITH_FREE_QUOTE, onApprove,
+                    chainId: 'ltc', preflight: preflightWith(), requoteNativeFee,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { out = await result.current.approve({}); });
+
+            expect(requoteNativeFee).toHaveBeenCalledOnce();
+            expect(onApprove).not.toHaveBeenCalled();
+            expect(out).toMatchObject({
+                interrupted: true,
+                reason: 'fee-changed',
+                requote: { verdict: 'short', paidSats: 0, expectedSats: 2000000 },
+            });
+            await act(async () => { result.current.reject(); await p; });
+        });
+
+        it('refuses a fresh quote that says the action is no longer priceable', async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const onApprove = vi.fn(async () => ({ txid: 'T' }));
+            const requoteNativeFee = vi.fn(async () => freshQuote({
+                requiredFeeSats: 0, valid: false, error: 'no usable current price',
+            }));
+            let p, out;
+            await act(async () => {
+                p = settle(result.current.confirm({
+                    compose: async () => COMPOSED_WITH_FEE, onApprove,
+                    chainId: 'ltc', preflight: preflightWith(), requoteNativeFee,
+                }));
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+            await act(async () => { out = await result.current.approve({}); });
+
+            expect(onApprove).not.toHaveBeenCalled();
+            expect(out).toMatchObject({ interrupted: true, requote: { verdict: 'invalid' } });
+            expect(result.current.error?.message).toMatch(/quote expired/i);
+            await act(async () => { result.current.reject(); await p; });
+        });
+
+        it('never asks when the action has no native-fee quote', async () => {
             const { result } = renderHook(() => useConfirmAction());
             const requoteNativeFee = vi.fn(async () => freshQuote());
             let p, out;

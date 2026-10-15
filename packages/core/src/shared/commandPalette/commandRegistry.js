@@ -61,6 +61,27 @@ const SEND_QUERY_RE = /^(?:send|pay)\s+(\d+(?:\.\d+)?)\s+([a-z0-9]{1,32})\s*$/i;
 const TXID_QUERY_RE = /^[0-9a-f]{8,64}$/i;
 const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
+// Demo wallets keep discovery, inspection and the create and trade forms
+// (each shows the inline demo note and never composes), while the send
+// shortcuts and signing tools stay out of the palette.
+const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
+    'nav-send',
+    'nav-receive',
+    'nav-actions',
+    'nav-multisig-create',
+    'nav-multisig-sign',
+    'sign-message',
+    'sign-psbt',
+    'wallet-scan',
+]);
+
+// Watch-only wallets can author unsigned transactions, but they cannot use
+// commands whose only outcome requires a private key in this wallet.
+const WATCHER_UNAVAILABLE_COMMAND_IDS = new Set([
+    'sign-message',
+    'sign-psbt',
+]);
+
 /**
  * Parse a free-form palette query into synthetic action commands (§33.3).
  * Currently recognizes "send <amount> <TICK>" / "pay <amount> <TICK>" and
@@ -73,7 +94,7 @@ const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
  * and prepends the result above the fuzzy matches.
  *
  * @param {string} rawQuery
- * @param {{ composeSend?: (intent: { amount: string, tick: string }) => void, searchHistory?: (query: string) => void }} ctx
+ * @param {{ composeSend?: (intent: { amount: string, tick: string }) => void, searchHistory?: (query: string) => void, isDemoWallet?: boolean, isSignerMode?: boolean }} ctx
  * @returns {import('./fuzzyMatch.js').Command[]}
  */
 export function parseFreeformCommands(rawQuery, ctx) {
@@ -82,7 +103,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
     const out = [];
 
     const send = SEND_QUERY_RE.exec(query);
-    if (send && typeof ctx?.composeSend === 'function') {
+    if (send && !ctx?.isDemoWallet && !ctx?.isSignerMode
+        && typeof ctx?.composeSend === 'function') {
         const amount = send[1];
         const tick = send[2].toUpperCase();
         out.push({
@@ -127,6 +149,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {boolean} [hasGovernanceAddress]    gates governance polls
  * @property {boolean} [hasDexSurface] false only when the build compiled the DEX surface out; its commands then point at views that do not exist
  * @property {boolean} [isSignerMode] §20 air-gapped signer mode; drops the Send and Receive navigate commands
+ * @property {boolean} [isWatcherMode] hides commands that require a private key in this wallet
+ * @property {boolean} [isDemoWallet] hides commands that mutate the read-only demo wallet
  */
 
 /**
@@ -166,7 +190,7 @@ export function buildCommands(ctx) {
         // other build has stays exactly as it was.
         ...(hasDex ? [
             { id: 'nav-markets', category: 'Navigate', title: 'Open DEX', subtitle: 'Markets and orders', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
-            { id: 'nav-marketplace', category: 'Navigate', title: 'Marketplace', subtitle: 'Dispensers and exchange activity', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.DollarIcon, run: go('market-activity') },
+            { id: 'nav-marketplace', category: 'Navigate', title: 'Marketplace', subtitle: 'Dispensers and exchange activity', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.LineChartIcon, run: go('market-activity') },
             { id: 'nav-my-orders', category: 'Navigate', title: 'My orders', subtitle: 'Your open DEX orders', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
             { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
@@ -303,6 +327,12 @@ export function buildCommands(ctx) {
         { id: 'nav-connected-sites', category: 'Settings', title: 'Connected sites', subtitle: 'dApp permissions', keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') },
     );
 
+    if (ctx.isDemoWallet) {
+        return list.filter((command) => !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id));
+    }
+    if (ctx.isWatcherMode) {
+        return list.filter((command) => !WATCHER_UNAVAILABLE_COMMAND_IDS.has(command.id));
+    }
     return list;
 }
 

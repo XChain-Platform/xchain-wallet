@@ -4,6 +4,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: nowrap;
     gap: var(--xc-space-3);
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-surface);
@@ -15,6 +16,7 @@
 .left {
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
     gap: var(--xc-space-2);
     min-width: 0;
     overflow: hidden;
@@ -24,26 +26,122 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
-    flex-shrink: 0;
+    flex: 0 0 auto;
     flex-wrap: nowrap;
 }
 
-.actionSlot {
+.right > button,
+.actionTrigger > button {
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
+.bar [data-network-status-trigger] {
+    width: auto;
+    min-width: var(--xc-control-h-md);
+    gap: var(--xc-space-1);
+    padding: 0 var(--xc-space-2);
+}
+
+.bar [data-network-name] {
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.actionWrap {
+    position: relative;
     display: inline-flex;
     flex: 0 0 auto;
 }
 
-/* Compact shells keep every global action available on a second row. The
-   header grows with that row instead of widening the 320px content area. */
-:global([data-xc-tier='compact']) .bar {
-    align-items: flex-start;
-    flex-wrap: wrap;
+.actionTrigger {
+    display: inline-flex;
 }
 
-:global([data-xc-tier='compact']) .right {
-    flex: 1 1 100%;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+.actionMenu {
+    position: absolute;
+    box-sizing: border-box;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: 20;
+    width: min(280px, calc(100vw - (2 * var(--xc-space-2))));
+    /* Sized by the viewport alone: a fixed pixel cap cut the last visible row
+       through its label on tall phones that had room for every row. */
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: var(--xc-space-1);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    box-shadow: var(--xc-shadow-header-menu);
+}
+
+.actionRow {
+    appearance: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--xc-tap-min);
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 0;
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.settingsWrap,
+.settingsWrap > span {
+    width: 100%;
+}
+
+.actionRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+.actionRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.rowIcon {
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    position: relative;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-accent-text);
+}
+
+.rowLabel {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.shortcut {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+@media (pointer: coarse), (hover: none) {
+    .shortcut {
+        display: none;
+    }
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect
@@ -53,68 +151,6 @@
     height: auto;
     flex: 0 0 auto;
     display: block;
-}
-
-/* Scan / addresses dropdown anchored under the QR button. */
-.scanWrap {
-    position: relative;
-    display: inline-flex;
-    flex: 0 0 auto;
-}
-
-.scanTrigger {
-    display: inline-flex;
-}
-
-.scanMenu {
-    position: absolute;
-    top: calc(100% + 4px);
-    inset-inline-end: 0;
-    z-index: 20;
-    min-width: 184px;
-    padding: var(--xc-space-1);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    box-shadow: var(--xc-shadow-header-menu);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.scanItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 100%;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) 10px;
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    cursor: pointer;
-    overflow-wrap: anywhere;
-}
-
-.scanItem:hover {
-    background: var(--xc-bg-muted);
-}
-
-.scanItem:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.scanItemIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    color: var(--xc-text-muted);
 }
 
 /* Short landscape screens keep the persistent controls reachable while
@@ -130,29 +166,8 @@
     }
 }
 
-/* Phone portrait keeps identity and essential state in one row. Search,
-   settings, scan and platform links remain available from bottom navigation. */
 @media (max-width: 480px) {
-    :global([data-xc-tier='compact']) .bar.phoneCondensed {
-        align-items: center;
-        flex-wrap: nowrap;
-    }
-
-    :global([data-xc-tier='compact']) .bar.phoneCondensed .right {
-        flex: 0 0 auto;
-        flex-wrap: nowrap;
-    }
-
-    .phoneCondensed .phoneHidden {
-        display: none;
-    }
-
-    .phoneCondensed .networkSlot > div > button {
-        width: 28px;
-        border-color: transparent;
-    }
-
-    .phoneCondensed .logo {
+    .logo {
         width: 44px;
     }
 }

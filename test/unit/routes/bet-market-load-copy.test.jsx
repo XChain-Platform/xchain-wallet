@@ -31,6 +31,7 @@ import { render, act as domAct } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const RAW_502 = 'Explorer returned HTTP 502 for /RBTC/api/betfeeds?index=1169';
@@ -126,6 +127,14 @@ describe('BetFeedDetail: a failed market load', () => {
         const shown = utils.container.textContent || '';
         expect(shown).toContain('Will it ship?');
         expect(shown).not.toContain("Couldn't load this market.");
+    });
+
+    it('formats both deadlines with the shared local timestamp and zone', async () => {
+        const utils = await openMarket(harness(() => Promise.resolve({ data: [FEED] })));
+        const shown = utils.container.textContent || '';
+
+        expect(shown).toContain(`Betting closes: ${formatLocalDateTime(FEED.deadline)}`);
+        expect(shown).toContain(`Refunds if unresolved by: ${formatLocalDateTime(FEED.expire_at)}`);
     });
 
     // The mount effect and `reload` are two separate catches on the same read,

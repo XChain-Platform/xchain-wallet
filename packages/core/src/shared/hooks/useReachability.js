@@ -55,7 +55,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from './useSettings.js';
 import { useOnlineStatus } from './useOnlineStatus.js';
-import { registry as registryLib, flows as flowsLib } from '../../index.js';
+import { defaultRegistry } from '../../registry/index.js';
+import { filterChainIdsByActiveNetwork } from '../../flows/effectiveNetwork.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
 // How long to wait before re-probing after a single failed round-trip,
@@ -75,7 +76,7 @@ const CHAIN_ID_KEY_SEP = '\u0000';
 // the window the operator objected to: the banner appearing "immediately on
 // wallet load" is what makes a healthy wallet look broken to a new user.
 const DEFAULT_STARTUP_GRACE_MS = 8000;
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 function isDocumentHidden() {
     return typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -84,9 +85,16 @@ function isDocumentHidden() {
 // ReachabilityBanner and QueuedBroadcastBanner use the same host transport.
 // Their matching probes share one request and reuse its answer for the
 // documented interval, so mounting both banners does not double the traffic.
+//
+// The entry also holds the published verdict. The shell's notice and a
+// screen that words its own empty state from the same verdict (Send, Home,
+// the token pickers) must agree, or the page says "Some balances may be out
+// of date" beside "Nothing to send yet". A hook mounting later starts from the
+// last published verdict instead of its own silent cold start, and every hook
+// on the same chain set hears a new verdict at once.
 const readsByMessaging = new WeakMap();
 
-function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, force }) {
+function readEntry(messaging, chainIdsKey) {
     let reads = readsByMessaging.get(messaging);
     if (!reads) {
         reads = new Map();
@@ -94,9 +102,14 @@ function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, 
     }
     let read = reads.get(chainIdsKey);
     if (!read) {
-        read = { lastStartedAt: null, inFlight: null, result: null };
+        read = { lastStartedAt: null, inFlight: null, result: null, published: null, listeners: new Set() };
         reads.set(chainIdsKey, read);
     }
+    return read;
+}
+
+function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, force }) {
+    const read = readEntry(messaging, chainIdsKey);
     if (read.inFlight) return read.inFlight;
     const now = Date.now();
     const age = read.lastStartedAt === null ? Infinity : now - read.lastStartedAt;
@@ -167,7 +180,7 @@ export function useReachability(opts = {}) {
         // point probing testnet endpoints when the user only sees
         // mainnet. The filter helper tolerates an undefined settings
         // record (returns []).
-        return flowsLib.filterChainIdsByActiveNetwork(raw, settings, chainRegistry).join(CHAIN_ID_KEY_SEP);
+        return filterChainIdsByActiveNetwork(raw, settings, chainRegistry).join(CHAIN_ID_KEY_SEP);
     }, [opts.chainIds, settings?.fees, settings?.activeNetwork, settings]);
 
     const chainIds = useMemo(
@@ -188,6 +201,20 @@ export function useReachability(opts = {}) {
     const seqRef = useRef(0);
     const failuresRef = useRef(0);
     const probeRef = useRef(/** @type {null | (() => void)} */ (null));
+    // Shares a verdict with every other hook on this transport and chain set.
+    const sharedEntry = messaging && chainIdsKey ? readEntry(messaging, chainIdsKey) : null;
+    // Every hook on the chain set, this one included, takes the new verdict.
+    // A probe only runs with a transport and a chain set, so the entry
+    // exists here.
+    const publish = useCallback((nextOverall, rows, checkedAt) => {
+        const published = {
+            overall: nextOverall,
+            perChain: rows || [],
+            lastChecked: checkedAt,
+        };
+        sharedEntry.published = published;
+        sharedEntry.listeners.forEach((listener) => listener(published));
+    }, [sharedEntry]);
     // A non-normal verdict seen once but not yet corroborated. Held here
     // instead of on screen until a second probe returns the same answer.
     const provisionalRef = useRef(/** @type {string | null} */ (null));
@@ -252,8 +279,7 @@ export function useReachability(opts = {}) {
                     clearTimeout(confirmRef.current);
                     confirmRef.current = null;
                 }
-                setOverall(verdict);
-                setPerChain(rows);
+                publish(verdict, rows, Date.now());
                 return;
             }
 
@@ -263,8 +289,7 @@ export function useReachability(opts = {}) {
             const graceLeft = Math.max(0, startupGraceMs - sinceMount);
             if (provisionalRef.current === verdict && graceLeft === 0) {
                 provisionalRef.current = null;
-                setOverall(verdict);
-                setPerChain(rows);
+                publish(verdict, rows, Date.now());
                 return;
             }
             // Hold it. The screen keeps whatever was last PUBLISHED (silence
@@ -285,8 +310,9 @@ export function useReachability(opts = {}) {
             if (failuresRef.current >= 2) {
                 // Two failed round-trips in a row: the wallet really cannot
                 // talk to anything.
-                setOverall('offline');
-                setLastChecked(Date.now());
+                const checkedAt = Date.now();
+                publish('offline', undefined, checkedAt);
+                setLastChecked(checkedAt);
             } else if (retryRef.current === null) {
                 // One failure is not proof. On a cold load or a post-unlock
                 // re-mount the shell's own host may still be coming up, and
@@ -299,7 +325,7 @@ export function useReachability(opts = {}) {
         } finally {
             if (isCurrent()) setLoading(false);
         }
-    }, [messaging, chainIdsKey, chainIds, intervalMs, failureRetryMs, confirmMs, startupGraceMs, browserOnline]);
+    }, [messaging, chainIdsKey, chainIds, intervalMs, failureRetryMs, confirmMs, startupGraceMs, browserOnline, publish]);
 
     probeRef.current = probe;
 
@@ -315,6 +341,16 @@ export function useReachability(opts = {}) {
 
     useEffect(() => {
         mountedRef.current = true;
+        // Start from what another hook already published, then follow it.
+        // The probe below runs after, so a local offline reading still wins.
+        const adopt = (published) => {
+            provisionalRef.current = null;
+            setOverall(published.overall);
+            setPerChain(published.perChain);
+            setLastChecked(published.lastChecked);
+        };
+        if (sharedEntry?.published) adopt(sharedEntry.published);
+        sharedEntry?.listeners.add(adopt);
         if (chainIds.length === 0) {
             // Drop any verdict derived from the previous chain set rather
             // than leaving a stale "offline" on screen with nothing behind it.
@@ -334,6 +370,7 @@ export function useReachability(opts = {}) {
         if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
         return () => {
             mountedRef.current = false;
+            sharedEntry?.listeners.delete(adopt);
             if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
             // Retire this probe generation: a response still in flight is
             // about a chain set we are no longer showing.
@@ -351,7 +388,7 @@ export function useReachability(opts = {}) {
                 confirmRef.current = null;
             }
         };
-    }, [probe, intervalMs, chainIds]);
+    }, [probe, intervalMs, chainIds, sharedEntry]);
 
     return { loading, overall, perChain, lastChecked, refresh, error };
 }

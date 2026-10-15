@@ -7,33 +7,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.hint {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin: 0 0 var(--xc-space-3);
-}
-
-.stack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-3);
-}
-
-.grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--xc-space-3);
-    margin-bottom: var(--xc-space-5);
-}
-
-.actionsPopup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-3);
-}
-
 /* Quick actions sit between the total-balance hero and the tab strip.
    Available actions share equal-width tracks, while demo and surface-gated
    builds can omit actions without leaving empty columns.
@@ -43,6 +16,7 @@
    to the hero. */
 .quickActions {
     display: grid;
+    /* Keep action labels usable when all four actions share one row. */
     grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
     gap: var(--xc-space-2);
     margin-top: calc(var(--xc-space-2) - var(--xc-space-3));
@@ -52,6 +26,7 @@
    canonical quick-action measure instead of stretching it like a list row. */
 @media (min-width: 48rem) {
     .quickActionsSingle {
+        /* Keep the lone action at the same measure as a four-up action. */
         grid-template-columns: minmax(76px, 10rem);
     }
 }
@@ -62,7 +37,9 @@
     font-size: var(--xc-text-xs);
 }
 
-.quickAction {
+/* Two classes so the tile look outranks the kit Button variant whatever
+   order the bundler emits the stylesheets in. */
+.quickActions .quickAction {
     appearance: none;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-accent-primary);
@@ -78,12 +55,13 @@
     font-family: inherit;
     font-size: var(--xc-text-xs);
     font-weight: 600;
+    /* Keep enough vertical room for the icon and a wrapped label. */
     min-height: 72px;
     min-width: 0;
     text-align: center;
 }
 
-.quickAction > span:last-child {
+.quickActions .quickAction > span:last-child {
     max-width: 100%;
     overflow-wrap: anywhere;
 }
@@ -94,23 +72,23 @@
     }
 }
 
-.quickAction:hover:not(:disabled) {
+.quickActions .quickAction:hover:not(:disabled) {
     background: var(--xc-bg-muted);
 }
 
-.quickAction:focus-visible {
+.quickActions .quickAction:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
-.quickAction:disabled {
+.quickActions .quickAction:disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
 
 .quickActionIcon {
-    width: 32px;
-    height: 32px;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
     color: var(--xc-accent-text);
@@ -136,6 +114,7 @@
     position: absolute;
     inset-inline-end: 0;
     top: calc(100% + var(--xc-space-1));
+    /* Keep menu labels on one line at their intended content measure. */
     min-width: 200px;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
@@ -163,7 +142,7 @@
 .quickActionMoreItem:hover { background: var(--xc-bg-muted); }
 .quickActionMoreItem:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
+    outline-offset: calc(var(--xc-space-1) / -2);
 }
 .quickActionMoreItem:disabled {
     color: var(--xc-text-muted);
@@ -174,29 +153,72 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
     color: var(--xc-accent-text);
 }
 
-/* Supplementary actions wrap because the width-capped container cannot fit
-   every available action on one line. */
+/* Keep the complete action set even on phone layouts, then use one row once
+   every label has enough room at the shared page width. */
 .actionsFull {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
 }
 
+/* Labels wrap only between whole words; a narrower inline padding leaves
+   the eight-column row room for its longest single word. */
+.actionsFull > button {
+    width: 100%;
+    padding-inline: var(--xc-space-1);
+}
+
+.actionsFull > button,
+.actionsFull > button > span {
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: none;
+}
+
+/* In the four-column grid the icon sits above its label, so a label gets the
+   whole tile width and never runs into the next tile; a long label wraps
+   between whole words. Tiles start at the top so a two-line label leaves
+   every icon in the row on one line. */
+@media not all and (min-width: 1024px) {
+    .actionsFull > button {
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: var(--xc-space-1);
+        padding-block: var(--xc-space-2);
+        white-space: normal;
+        text-align: center;
+    }
+}
+
+/* Wide screens: tiles size to their label and share the row, wrapping to a
+   second row of whole tiles instead of breaking a label across two lines. */
+@media (min-width: 1024px) {
+    .actionsFull {
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .actionsFull > button {
+        flex: 1 1 auto;
+        width: auto;
+        padding-inline: var(--xc-space-3);
+        white-space: nowrap;
+    }
+}
+
 .pendingAirdropCard {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
     margin-bottom: var(--xc-space-2);
     width: 100%;
     text-align: start;

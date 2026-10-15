@@ -154,7 +154,7 @@ describe('dispenser async safety', () => {
         const first = mount();
         fireEvent.click(await screen.findByLabelText('A token'));
         fireEvent.change(screen.getByLabelText('Payment token'), { target: { value: 'PAY' } });
-        fireEvent.change(screen.getByLabelText('Payment amount (per fill)'), { target: { value: '4.5' } });
+        fireEvent.change(screen.getByLabelText('Payment amount per fill'), { target: { value: '4.5' } });
 
         const key = 'xc:formdraft:dispenser:wallet-draft';
         await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).values).toMatchObject({
@@ -166,7 +166,7 @@ describe('dispenser async safety', () => {
 
         await waitFor(() => expect(screen.getByLabelText('A token')).toBeChecked());
         expect(screen.getByLabelText('Payment token')).toHaveValue('PAY');
-        expect(screen.getByLabelText('Payment amount (per fill)')).toHaveValue('4.5');
+        expect(screen.getByLabelText('Payment amount per fill')).toHaveValue('4.5');
     });
 
     it('runs one identical explorer search while its request is pending', async () => {
@@ -178,20 +178,21 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
-        const chain = await screen.findByRole('combobox');
-        await waitFor(() => expect(chain.options.length).toBeGreaterThan(1));
-        fireEvent.change(chain, { target: { value: chain.options[1].value } });
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
         const form = screen.getByRole('textbox').closest('form');
         await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).toBeEnabled());
         fireEvent.submit(form);
         fireEvent.submit(form);
 
-        await waitFor(() => expect(getDispensersForToken).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
+        const callsWhilePending = getDispensersForToken.mock.calls.length;
+        fireEvent.submit(form);
+        expect(getDispensersForToken).toHaveBeenCalledTimes(callsWhilePending);
         await act(async () => response.resolve({ data: [] }));
     });
 
-    it('invalidates an explorer search when its selected chain leaves the active network', async () => {
+    it('invalidates an explorer search when the active network changes', async () => {
         const response = deferred();
         const messaging = commonMessaging({
             getDispensersForToken: vi.fn(() => response.promise),
@@ -199,18 +200,16 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
-        const chain = await screen.findByRole('combobox');
-        await waitFor(() => expect(chain.options.length).toBeGreaterThan(1));
-        fireEvent.change(chain, { target: { value: chain.options[1].value } });
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
         fireEvent.submit(screen.getByRole('textbox').closest('form'));
-        await waitFor(() => expect(messaging.getDispensersForToken).toHaveBeenCalledOnce());
+        await waitFor(() => expect(messaging.getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
 
         await act(async () => window.dispatchEvent(new CustomEvent('xc:settings-changed', {
             detail: { activeNetwork: 'regtest', walletMode: 'full' },
         })));
-        await waitFor(() => expect(chain).toHaveValue('all'));
-        expect(screen.queryByText(/Searching dispensers/)).toBeNull();
+        // The idle help paragraph is gone, so the reset shows as the in-flight search clearing.
+        await waitFor(() => expect(screen.queryByText(/Searching dispensers/)).toBeNull());
 
         await act(async () => response.resolve({
             data: [{ action_index: 'old', give_tick: 'XCHAIN', source: OWNER, current_status: 'open' }],
@@ -291,6 +290,8 @@ describe('dispenser async safety', () => {
         const form = submit.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
         expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1);
 
         await act(async () => build.resolve({ psbtHex: '00', fromAddress: SOURCE.address }));

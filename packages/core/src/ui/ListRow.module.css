@@ -20,21 +20,39 @@
 .interactive {
     min-height: var(--xc-control-h-lg, 24px);
     cursor: pointer;
-    transition: background-color var(--xc-transition);
+    transition: background-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
-.interactive:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .interactive:hover:not(:disabled) {
+        background: var(--xc-control-bg-hover);
+    }
+}
+
+.interactive:active:not(:disabled) {
+    background: var(--xc-control-bg-hover);
+    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
 }
 
 .interactive:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
+    outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: 2px;
+}
+
+.interactive:is([aria-current='page'], [aria-selected='true']) {
+    background: var(--xc-control-bg-hover);
+    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
 }
 
 .interactive:disabled {
     cursor: not-allowed;
+    background: var(--xc-control-disabled-bg);
+    color: var(--xc-control-disabled-text);
     opacity: var(--xc-disabled-opacity);
+}
+
+.interactive:disabled :is(.title, .subtitle, .trailing, .chevron) {
+    color: var(--xc-control-disabled-text);
 }
 
 .leading,
@@ -89,8 +107,4 @@
 .chevron {
     --xc-icon-size: var(--xc-icon-sm);
     color: var(--xc-text-muted);
-}
-
-.defaultChevron {
-    transform: rotate(-90deg);
 }

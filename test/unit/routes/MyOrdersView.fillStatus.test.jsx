@@ -151,6 +151,7 @@ describe('MyOrdersView: cancel rows', () => {
             details: { 665: detail(665, 'open', '500') },
         });
         const utils = await open(messaging);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
 
         const openList = section(utils, 'Open orders');
         const closedList = section(utils, 'Closed orders');

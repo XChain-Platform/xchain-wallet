@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { Button } from '@xchain-wallet/core/ui';
+import { t } from '../../../core/src/i18n/index.js';
 
 const RUNTIME_CONNECTION_CODES = new Set([
     'RUNTIME_DISCONNECTED',
@@ -53,15 +54,15 @@ export function BackgroundConnectionState({ failed = false, onReload }) {
             role={failed ? 'alert' : 'status'}
             aria-live="polite"
         >
-            <h1>{failed ? 'Unable to reconnect' : 'Reconnecting to wallet...'}</h1>
+            <h1>{failed ? t('extension.connection.unableToReconnect') : t('extension.connection.reconnectingToWallet')}</h1>
             <p>
                 {failed
-                    ? 'The wallet background is not responding. Reload the popup to try again.'
-                    : 'The wallet background is restarting. This should only take a moment.'}
+                    ? t('extension.connection.theWalletBackgroundIsNot')
+                    : t('extension.connection.theWalletBackgroundIsRestarting')}
             </p>
             {failed ? (
                 <Button type="button" variant="primary" block onClick={reload}>
-                    Reload
+                    {t('extension.connection.reload')}
                 </Button>
             ) : null}
         </section>

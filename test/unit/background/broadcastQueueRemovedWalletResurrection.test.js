@@ -60,20 +60,35 @@ async function removableVault() {
     };
 }
 
-/** chrome.storage.local over a shared object; reads fail while `down.reads` is set. */
+/**
+ * chrome.storage.local over a shared object; reads fail while `down.reads` is
+ * set, and writes to the queue key alone are refused while `down.queueWrites` is.
+ */
 function fakeChrome(initial) {
     const store = structuredClone(initial);
-    const down = { reads: false };
+    const down = { reads: false, queueWrites: false };
+    const runtime = {};
+    // Refuse the way MV3 does: the callback runs with `lastError` set.
+    const set = (obj, cb) => {
+        if (down.queueWrites && KEY in obj) {
+            runtime.lastError = { message: 'QUOTA_BYTES quota exceeded' };
+            cb();
+            delete runtime.lastError;
+            return;
+        }
+        Object.assign(store, structuredClone(obj));
+        cb();
+    };
     return {
         store,
         down,
         api: {
-            runtime: {},
+            runtime,
             storage: {
                 local: {
                     get: (key, cb) => (down.reads ? cb(undefined) : cb(key === null ? structuredClone(store) : { [key]: structuredClone(store[key]) })),
-                    set: (obj, cb) => { Object.assign(store, structuredClone(obj)); cb(); },
-                    remove: (key, cb) => { delete store[key]; cb(); },
+                    set,
+                    remove: (key, cb) => { for (const k of [].concat(key)) delete store[k]; cb(); },
                 },
             },
         },
@@ -126,6 +141,56 @@ async function removeThenEvictThenBoot({ prunedLedger }) {
         else globalThis.chrome = prior;
     }
 }
+
+// Remove a wallet from a store whose load already latched, with the queue
+// write refused or not, then boot a second process over the same storage.
+async function removeAfterLoadThenBoot({ refuseQueueWrite }) {
+    const fake = fakeChrome({ [KEY]: { queues: { [GONE]: [queued('G')], [KEPT]: [queued('K')] } } });
+    const prior = globalThis.chrome;
+    globalThis.chrome = fake.api;
+    try {
+        const vault = await removableVault();
+        const first = await boot(vault);
+        await first.call('broadcast.queue.list', { walletId: KEPT });
+        expect(first.broadcastQueueStore.loaded).toBe(true);
+        fake.down.queueWrites = refuseQueueWrite;
+        await first.call('wallet.remove', { walletId: GONE });
+        await settle();
+        const afterRemove = { queues: Object.keys(fake.store[KEY].queues).sort(), ledger: fake.store[LEDGER_KEY] };
+        const livePruned = first.broadcastQueueStore.prunedWallets.has(GONE);
+
+        fake.down.queueWrites = false;
+        const second = await boot(vault);
+        const gone = await second.call('broadcast.queue.list', { walletId: GONE });
+        const kept = await second.call('broadcast.queue.list', { walletId: KEPT });
+        await settle();
+        return { fake, afterRemove, livePruned, gone: gone.result, kept: kept.result };
+    } finally {
+        if (prior === undefined) delete globalThis.chrome;
+        else globalThis.chrome = prior;
+    }
+}
+
+describe('a removed wallet does not resurrect after a refused save once the store loaded', () => {
+    it('records the removal in the ledger so the next boot drops the wallet', async () => {
+        const { fake, afterRemove, gone, kept } = await removeAfterLoadThenBoot({ refuseQueueWrite: true });
+        expect(afterRemove.queues).toEqual([GONE, KEPT]);
+        expect(afterRemove.ledger).toBe(1);
+        expect(gone).toEqual([]);
+        expect(kept.map((e) => e.signedTxHex)).toEqual(['hex-K']);
+        expect(Object.keys(fake.store[KEY].queues)).toEqual([KEPT]);
+        expect(fake.store[LEDGER_KEY]).toBeUndefined();
+    });
+
+    it('leaves no ledger key and no live prune behind when the save lands', async () => {
+        const { fake, afterRemove, livePruned, gone } = await removeAfterLoadThenBoot({ refuseQueueWrite: false });
+        expect(afterRemove.queues).toEqual([KEPT]);
+        expect(afterRemove.ledger).toBeUndefined();
+        expect(livePruned).toBe(false);
+        expect(gone).toEqual([]);
+        expect(Object.keys(fake.store[KEY].queues)).toEqual([KEPT]);
+    });
+});
 
 describe('a removed wallet does not resurrect after a worker eviction', () => {
     it('keeps the wallet out of the next boot and out of the blob', async () => {

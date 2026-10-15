@@ -1,0 +1,3 @@
+.endpointCard {
+    composes: card from '../../../ui/Card.module.css';
+}

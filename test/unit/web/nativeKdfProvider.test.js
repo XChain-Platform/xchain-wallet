@@ -104,10 +104,21 @@ describe('installNativeKdfProvider', () => {
         });
     });
 
-    it('falls back silently when the shell build has no argon2id method', async () => {
+    it('leaves core on the JS fallback when the shell has no argon2id method', async () => {
         mockNativeCapacitor(pluginWith(null));
-        expect(installNativeKdfProvider()).toBe(true);
+        expect(installNativeKdfProvider()).toBe(false);
+        expect(hasNativeArgon2id()).toBe(false);
         expect(hex(await deriveMasterKeyAsync(SMALL.password, PARAMS))).toBe(SMALL.keyHex);
+    });
+
+    it('removes a stale provider when the native method becomes unavailable', () => {
+        mockNativeCapacitor(pluginWith(contractArgon2id));
+        expect(installNativeKdfProvider()).toBe(true);
+        expect(hasNativeArgon2id()).toBe(true);
+
+        mockNativeCapacitor(pluginWith(null));
+        expect(installNativeKdfProvider()).toBe(false);
+        expect(hasNativeArgon2id()).toBe(false);
     });
 
     it('falls back silently when the plugin rejects', async () => {

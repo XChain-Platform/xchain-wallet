@@ -79,15 +79,15 @@ describe('TokenDetail holder paging', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
         expect(await screen.findByText('Holders (25 of 49)')).toBeTruthy();
-        const list = screen.getByRole('table', { name: 'Holder balances' });
-        expect(list.querySelectorAll('tbody tr')).toHaveLength(25);
+        const list = screen.getByRole('list', { name: 'Holder balances' });
+        expect(within(list).getAllByRole('listitem')).toHaveLength(25);
         expect(within(list).getByText('1')).toBeTruthy();
 
         const scroller = document.querySelector('main');
         scroller.scrollTop = 137;
         fireEvent.click(screen.getByRole('button', { name: 'Load more holders' }));
 
-        await waitFor(() => expect(list.querySelectorAll('tbody tr')).toHaveLength(49));
+        await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(49));
         expect(screen.getByText('Holders (49)')).toBeTruthy();
         expect(getHoldersForToken).toHaveBeenLastCalledWith({
             chainId: CHAIN,
@@ -151,10 +151,13 @@ describe('DispenserExplorer result paging', () => {
             address: address(index + 25),
             status: 'valid',
         }))];
-        const getDispensersForToken = vi.fn(({ opts }) => Promise.resolve({
+        // The search fans out over every chain on the active network; one chain
+        // holds the paged results so its section pages on its own.
+        const chainId = chainRegistry.supportedChains().find((d) => d.networkKind === 'regtest').id;
+        const getDispensersForToken = vi.fn(({ chainId: cid, opts }) => Promise.resolve(cid === chainId ? {
             total: 49,
             data: opts.page === 1 ? first : second,
-        }));
+        } : { total: 0, data: [] }));
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ schemaVersion: 2, activeNetwork: 'regtest' }),
             updateSettings: vi.fn(),
@@ -167,9 +170,7 @@ describe('DispenserExplorer result paging', () => {
             </MessagingProvider>,
         );
 
-        const chainId = chainRegistry.supportedChains().find((d) => d.networkKind === 'regtest').id;
-        const select = await screen.findByRole('combobox');
-        fireEvent.change(select, { target: { value: chainId } });
+        await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
         fireEvent.change(screen.getByRole('textbox'), { target: { value: 'PAGED' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 

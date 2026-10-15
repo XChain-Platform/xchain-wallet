@@ -50,13 +50,13 @@ const DOGE = 'dogecoin-mainnet';
 const LTC = 'litecoin-mainnet';
 
 const BTC_ADDRESS = {
-    id: 'a-btc', address: 'bc1qexampleexampleexampleexampleexampleex', publicKey: '02aa', derivationPath: "m/84'/0'/0'/0/0", source: 'hd',
+    id: 'a-btc', address: 'bc1qdevmock02aa', publicKey: '02aa', derivationPath: "m/84'/0'/0'/0/0", source: 'hd',
 };
 const DOGE_ADDRESS = {
-    id: 'a-doge', address: 'DExampleDogeAddressxxxxxxxxxxxxxxxx', publicKey: '02bb', derivationPath: "m/44'/3'/0'/0/0", source: 'hd',
+    id: 'a-doge', address: 'Ddevmock02bb', publicKey: '02bb', derivationPath: "m/44'/3'/0'/0/0", source: 'hd',
 };
 const LTC_ADDRESS = {
-    id: 'a-ltc', address: 'ltc1qexampleexampleexampleexampleexample', publicKey: '02cc', derivationPath: "m/84'/2'/0'/0/0", source: 'hd',
+    id: 'a-ltc', address: 'ltc1qdevmock02cc', publicKey: '02cc', derivationPath: "m/84'/2'/0'/0/0", source: 'hd',
 };
 
 const WAIT = { timeout: 4000 };
@@ -71,6 +71,8 @@ const WAIT = { timeout: 4000 };
  * @param {string} [opts.walletMode]
  * @param {Function} [opts.requoteNativeFee]
  * @param {Function} [opts.buildActionPsbtRequest]
+ * @param {Function} [opts.getTokenInfo]
+ * @param {Function} [opts.composeForConfirm]
  */
 function mount(opts = {}) {
     const byChain = opts.byChain || { [BTC]: [BTC_ADDRESS], [DOGE]: [DOGE_ADDRESS] };
@@ -95,12 +97,12 @@ function mount(opts = {}) {
             (byChain[chainId] || [])[0] || null,
         )),
         getWalletBalances: vi.fn().mockResolvedValue(walletBalances),
-        getTokenInfo: vi.fn().mockResolvedValue(opts.tokenInfo ?? null),
+        getTokenInfo: opts.getTokenInfo || vi.fn().mockResolvedValue(opts.tokenInfo ?? null),
         requoteNativeFee: opts.requoteNativeFee || vi.fn().mockResolvedValue(opts.feeQuote ?? null),
         getSettings: vi.fn().mockResolvedValue({ walletMode: opts.walletMode || 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        composeForConfirm: vi.fn().mockResolvedValue({
+        composeForConfirm: opts.composeForConfirm || vi.fn().mockResolvedValue({
             psbt: 'aa00',
             encoding: 'psbt',
             chainId: BTC,
@@ -151,7 +153,7 @@ async function advanceFeeQuote() {
 }
 
 describe('BridgeMoveForm: the destination is resolved from the user\'s own account', () => {
-    it('fills the receiving address from the wallet\'s own address on the destination chain', async () => {
+    it('fills the receiving address from the wallet\'s own address on the destination network', async () => {
         const messaging = mount();
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
@@ -160,7 +162,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         expect(messaging.getNewestAddress).toHaveBeenCalledWith('w', DOGE, undefined);
     });
 
-    it('clears source-scoped input and ignores an old fee quote after the chain pair changes', async () => {
+    it('clears source-scoped input and ignores an old fee quote after the network pair changes', async () => {
         let resolveQuote;
         const quote = new Promise((resolve) => { resolveQuote = resolve; });
         const requoteNativeFee = vi.fn(() => quote);
@@ -234,16 +236,16 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
     it('states the direction and that the credit cannot be undone or redirected', async () => {
         mount();
         await waitFor(
-            () => expect(screen.getByText(/This locks XCHAIN on Bitcoin and credits it on Dogecoin/i))
+            () => expect(screen.getByText(/This locks XCHAIN on the source network and credits it on the destination network/i))
                 .toBeInTheDocument(),
             WAIT,
         );
         expect(screen.getByText(/cannot be undone or redirected/i)).toBeInTheDocument();
         const route = screen.getByLabelText('Bridge route');
-        expect(route.textContent).toContain('Source chainBitcoin');
-        expect(route.textContent).toContain('Destination chainDogecoin');
+        expect(route.querySelectorAll('img')).toHaveLength(2);
+        expect(route.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(route.textContent).toContain(
-            'Expected arrivalAfter the source transaction reaches its required confirmation depth on Bitcoin and validators sign the transfer.',
+            'Expected arrivalAfter the source transaction reaches its required confirmation depth and validators sign the transfer.',
         );
     });
 
@@ -267,12 +269,48 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
             },
         });
     });
+
+    it('shows values decoded from the composed action and Back keeps the form values', async () => {
+        const composeForConfirm = vi.fn(async ({ actionData }) => ({
+            psbt: 'aa00',
+            encoding: 'psbt',
+            chainId: BTC,
+            actionString: `XBRIDGE|0|DOGE|${DOGE_ADDRESS.address}|1.25|keep me`,
+            version: 1,
+            decoded: {
+                summary: 'Bridge transfer',
+                warnings: [],
+                details: [
+                    { label: 'Amount', value: actionData.params.AMOUNT },
+                    { label: 'Destination', value: actionData.params.DEST_ADDRESS },
+                    { label: 'Memo', value: actionData.params.MEMO },
+                ],
+            },
+        }));
+        mount({ composeForConfirm });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1.25' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'keep me' } });
+        fireEvent.click(moveButton());
+
+        expect(await screen.findByText('1.25', {}, WAIT)).toBeInTheDocument();
+        expect(screen.getByText(DOGE_ADDRESS.address)).toBeInTheDocument();
+        expect(screen.getByText('keep me')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        await waitFor(() => expect(amountInput()).toHaveValue('1.25'), WAIT);
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('keep me');
+        expect(composeForConfirm).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('BridgeMoveForm: unhappy path - no destination account', () => {
     it('refuses to offer a destination and says how to create one', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS] } });
-        const msg = await screen.findByText(/You have no address on another mainnet chain yet/i, {}, WAIT);
+        const msg = await screen.findByText(/You have no address on another network yet/i, {}, WAIT);
         expect(msg.textContent).toContain('Use Receive to create one first');
         expect(msg.textContent).toContain('cannot be redirected once it applies');
         expect(screen.queryByLabelText('Receive at')).toBeNull();
@@ -281,7 +319,7 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 
     it('does not treat an empty address group as a usable destination', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [] } });
-        expect(await screen.findByText(/You have no address on another mainnet chain yet/i, {}, WAIT))
+        expect(await screen.findByText(/You have no address on another network yet/i, {}, WAIT))
             .toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
         expect(moveButton()).toBeDisabled();
@@ -289,26 +327,26 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 });
 
 describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', () => {
-    it('refuses a destination the issuer never opted in to, and names the ones they did', async () => {
+    it('refuses a destination the issuer never opted in to without repeating network names', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] },
             initialTick: 'FUFU',
             balances: { FUFU: '100' },
             tokenInfo: { chainId: DOGE, tick: 'FUFU', bridgeChains: 'LTC' },
         });
-        const msg = await screen.findByText(/has not opened it to Bitcoin/i, {}, WAIT);
-        expect(msg.textContent).toContain('It can be moved to: Litecoin');
+        const msg = await screen.findByText(/cannot move to the selected destination network/i, {}, WAIT);
+        expect(msg.textContent).not.toMatch(/Bitcoin|Litecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(moveButton()).toBeDisabled();
     });
 
-    it('offers only the origin chain for a bridged copy, so a burn cannot be aimed anywhere else', async () => {
+    it('offers only the origin network for a bridged copy, so a burn cannot be aimed anywhere else', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], [LTC]: [LTC_ADDRESS] },
             initialTick: 'BTC.PEPECASH',
             balances: { 'BTC.PEPECASH': '50' },
         });
         await waitFor(
-            () => expect(screen.getByText(/PEPECASH here is a bridged copy of a Bitcoin asset/i))
+            () => expect(screen.getByText(/PEPECASH here is a bridged copy of its origin-chain asset/i))
                 .toBeInTheDocument(),
             WAIT,
         );
@@ -323,15 +361,16 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         expect(moveButton('Review move back')).toBeInTheDocument();
     });
 
-    it('explains when the wallet has another chain but no address on the only supported destination', async () => {
+    it('explains when the wallet has another network but no address on the only supported destination', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [LTC]: [LTC_ADDRESS] },
             initialTick: 'BTC.PEPECASH',
             balances: { 'BTC.PEPECASH': '50' },
         });
         const msg = await screen.findByText(/This bridge route is unavailable/i, {}, WAIT);
-        expect(msg.textContent).toContain('PEPECASH on Dogecoin can only move to Bitcoin');
-        expect(msg.textContent).toContain('Use Receive on Bitcoin to create one first');
+        expect(msg.textContent).toContain('no address on the required destination chain');
+        expect(msg.textContent).toContain('Use Receive there to create one first');
+        expect(msg.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
         expect(moveButton('Review move back')).toBeDisabled();
     });
@@ -407,17 +446,21 @@ describe('BridgePendingPanel', () => {
             leg: { leg: 'lock' },
             amount: '12.5',
             tickLabel: 'XCHAIN',
-            sourceLabel: 'Bitcoin',
-            destLabel: 'Dogecoin',
+            sourceDescriptor: {
+                id: BTC, coin: 'bitcoin', displayName: 'Bitcoin', networkKind: 'mainnet', color: '#f7931a',
+            },
+            destDescriptor: {
+                id: DOGE, coin: 'dogecoin', displayName: 'Dogecoin', networkKind: 'mainnet', color: '#c2a633',
+            },
             destAddress: DOGE_ADDRESS.address,
             minDepth: 8,
             onDone() {},
         }));
 
         expect(screen.getByRole('status')).toHaveTextContent('Bridge transfer pending');
-        expect(screen.getByText('Bitcoin', { selector: 'dd' })).toBeInTheDocument();
-        expect(screen.getByText('Dogecoin', { selector: 'dd' })).toBeInTheDocument();
-        expect(screen.getByText(/Lock broadcast on Bitcoin; pending on Dogecoin/)).toBeInTheDocument();
+        expect(document.body.querySelectorAll('dd img')).toHaveLength(2);
+        expect(document.body.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
+        expect(screen.getByText(/Lock broadcast; destination pending/)).toBeInTheDocument();
         expect(screen.getByText(/This token requires at least 8 confirmations/)).toBeInTheDocument();
     });
 });
@@ -430,7 +473,7 @@ describe('BridgeMoveForm: unhappy path - amount above balance', () => {
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '11' } });
-        const msg = await screen.findByText(/You hold 10 XCHAIN on Bitcoin/i, {}, WAIT);
+        const msg = await screen.findByText(/You hold 10 XCHAIN at the source address/i, {}, WAIT);
         expect(msg.textContent).toContain('cannot be partly funded');
         expect(moveButton()).toBeDisabled();
     });
@@ -442,12 +485,23 @@ describe('BridgeMoveForm: unhappy path - amount above balance', () => {
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '10' } });
-        await waitFor(() => expect(screen.queryByText(/You hold 10 XCHAIN on Bitcoin/i)).toBeNull(), WAIT);
+        await waitFor(() => expect(screen.queryByText(/You hold 10 XCHAIN at the source address/i)).toBeNull(), WAIT);
         expect(moveButton()).not.toBeDisabled();
     });
 });
 
 describe('BridgeMoveForm: invalid action fields', () => {
+    it('explains an empty amount before opening review', async () => {
+        const messaging = mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.click(moveButton());
+        expect(await screen.findByText('Enter an amount to move.')).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('blocks zero and incomplete decimal amounts before confirmation', async () => {
         mount();
         await waitFor(
@@ -460,6 +514,17 @@ describe('BridgeMoveForm: invalid action fields', () => {
 
         fireEvent.change(amountInput(), { target: { value: '.' } });
         expect(screen.getByText('Enter a positive amount to move.')).toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks a negative amount with plain decimal guidance', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '-1' } });
+        expect(await screen.findByText(/Enter a valid decimal amount/i)).toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
     });
 
@@ -485,5 +550,108 @@ describe('BridgeMoveForm: invalid action fields', () => {
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'left|right' } });
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks a memo above the on-chain byte limit', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'é'.repeat(126) } });
+        expect(await screen.findByText('Memo is 252 bytes; the network accepts at most 250 bytes.'))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks malformed source and destination addresses before compose', async () => {
+        const badSource = { ...BTC_ADDRESS, address: 'not-a-bitcoin-address' };
+        const messaging = mount({ byChain: { [BTC]: [badSource], [DOGE]: [DOGE_ADDRESS] } });
+        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        cleanup();
+        const badDestination = { ...DOGE_ADDRESS, address: 'not-a-dogecoin-address' };
+        const second = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [badDestination] } });
+        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+        expect(second.composeForConfirm).not.toHaveBeenCalled();
+
+        cleanup();
+        const missingId = { ...BTC_ADDRESS, id: '' };
+        const third = mount({ byChain: { [BTC]: [missingId], [DOGE]: [DOGE_ADDRESS] } });
+        expect(await screen.findByText(/No usable source address is available/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+        expect(third.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('explains an empty stored destination before review', async () => {
+        const emptyDestination = { ...DOGE_ADDRESS, address: '' };
+        const messaging = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [emptyDestination] } });
+        await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(''), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+        expect(await screen.findByText(/Pick one of your own destination addresses/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('blocks malformed token ids and out-of-range custom fee rates', async () => {
+        mount({ initialTick: '^0', balances: { '^0': '10' } });
+        expect(await screen.findByText(/Token can be a name, or \^ followed by the token's number/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+
+        cleanup();
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0.123456789' } });
+        expect(await screen.findByText(/Custom fee rate can have at most 8 decimal places/i))
+            .toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('refuses review when fresh bridge settings differ from the displayed route', async () => {
+        const getTokenInfo = vi.fn()
+            .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
+            .mockResolvedValueOnce({ bridgeChains: 'LTC', minDepth: '12' })
+            .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
+        const messaging = mount({
+            initialTick: 'FUFU',
+            balances: { FUFU: '10' },
+            getTokenInfo,
+        });
+        await waitFor(() => expect(screen.getByText(/at least 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+
+        expect(await screen.findByText(/bridge settings changed/i, {}, WAIT)).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('turns watcher build failures into plain user copy', async () => {
+        const buildActionPsbtRequest = vi.fn().mockRejectedValue(
+            new Error('composer.internal: exploded at field DEST_ADDRESS'),
+        );
+        mount({ walletMode: 'watcher', buildActionPsbtRequest });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+        const alert = await screen.findByRole('alert', {}, WAIT);
+        expect(alert).toHaveTextContent("Couldn't complete this; something went wrong. Try again.");
+        expect(alert).not.toHaveTextContent(/composer\.internal/);
     });
 });

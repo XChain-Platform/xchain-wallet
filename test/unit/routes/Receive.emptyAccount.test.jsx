@@ -119,13 +119,12 @@ describe('Receive with no addresses on any chain', () => {
 
         const address = await screen.findByDisplayValue('bcrt1qexample');
         const addressLabel = document.querySelector(`label[for="${address.id}"]`);
-        const token = screen.getByRole('button', { name: /^Token:/ });
-        const tokenLabel = screen.getByText('Token', { selector: 'span' });
+        const token = screen.getByRole('button', { name: /^Change asset/ });
 
         expect(addressLabel.compareDocumentPosition(address) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
-        expect(tokenLabel.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING)
-            .toBeTruthy();
+        expect(token).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
         expect(screen.queryByText(/^No addresses yet$/)).toBeNull();
     });
 });

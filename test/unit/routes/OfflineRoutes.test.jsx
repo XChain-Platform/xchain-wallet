@@ -72,7 +72,8 @@ function renderOffline(messaging, route) {
 }
 
 function expectOneOfflineNotice() {
-    expect(screen.getAllByText('Wallet is offline')).toHaveLength(1);
+    // The compact notice uses one sentence for offline and degraded states.
+    expect(screen.getAllByText('Some balances may be out of date')).toHaveLength(1);
 }
 
 beforeEach(() => {
@@ -117,7 +118,7 @@ describe('offline route behavior from reachability', () => {
             <Home activeWalletId={WALLET.id} onSend={vi.fn()} onReceive={() => {}} />
         ));
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
         expectOneOfflineNotice();
         const send = screen.getByRole('button', { name: 'Send' });

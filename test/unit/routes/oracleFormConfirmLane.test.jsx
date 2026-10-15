@@ -139,7 +139,7 @@ async function step(fn) {
 }
 
 async function fill(utils, { tick = 'PEPECASH', value = '0.05', fee, memo, coin } = {}) {
-    if (coin) await step(() => fireEvent.change(utils.getByLabelText(/^Token's chain/), { target: { value: coin } }));
+    if (coin) await step(() => fireEvent.change(utils.getByLabelText(/^Token's network/), { target: { value: coin } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } }));
     if (fee) await step(() => fireEvent.change(utils.getByLabelText(/^Usage fee/), { target: { value: fee } }));
@@ -340,7 +340,7 @@ describe('OracleForm wording for a quote still maturing', () => {
 describe('OracleForm cross-chain COIN', () => {
     const DOGE = { byChain: { 'dogecoin-mainnet': [DOGE_ADDRESS] }, formProps: { initialChainId: 'dogecoin-mainnet' } };
 
-    it('defaults COIN to the publishing chain', async () => {
+    it('defaults COIN to the publishing network', async () => {
         const { utils, calls } = await mountForm(DOGE);
         await fill(utils);
         await publishAndApprove(utils);
@@ -353,12 +353,12 @@ describe('OracleForm cross-chain COIN', () => {
         await publishAndApprove(utils);
 
         const sign = calls.find((c) => c.method === 'oraclePriceAction');
-        expect(sign.args.chainId, 'still published on the DOGE chain').toBe('dogecoin-mainnet');
+        expect(sign.args.chainId, 'still published on the DOGE network').toBe('dogecoin-mainnet');
         expect(sign.args.params.COIN, 'the quote prices the BTC token').toBe('BTC');
         expect(calls.find((c) => c.method === 'composeForConfirm').args.actionData.params.COIN).toBe('BTC');
     });
 
-    it('does not show an all-clear it could not check for another chain\'s dispensers', async () => {
+    it('does not show an all-clear it could not check for another network\'s dispensers', async () => {
         const { utils } = await mountForm(DOGE);
         await fill(utils, { coin: 'BTC' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
@@ -367,8 +367,8 @@ describe('OracleForm cross-chain COIN', () => {
     });
 });
 
-describe('OracleForm chain default', () => {
-    it('opens on the last-used chain when no chain is passed in', async () => {
+describe('OracleForm network default', () => {
+    it('opens on the last-used network when no network is passed in', async () => {
         const { calls } = await mountForm({
             byChain: { 'bitcoin-mainnet': [BTC_ADDRESS], 'litecoin-mainnet': [LTC_ADDRESS] },
             settings: { walletMode: 'full', activeNetwork: 'mainnet', lastUsedChain: { mainnet: 'litecoin-mainnet' } },

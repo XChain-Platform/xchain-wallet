@@ -15,7 +15,12 @@
 // from the returned key and refuses to encrypt on a mismatch.
 
 import { describe, it, expect } from 'vitest';
-import { messageAction, PubkeyMismatchError } from '../../../packages/core/src/flows/messageAction.js';
+import {
+    MAX_MESSAGE_BYTES,
+    messageAction,
+    messageWireByteLength,
+    PubkeyMismatchError,
+} from '../../../packages/core/src/flows/messageAction.js';
 
 const DESTINATION = 'bcrt1qdestaddr000000000000000000000000000000';
 const GOOD_PUBKEY = '02' + 'ab'.repeat(32); // 33-byte compressed hex
@@ -77,5 +82,39 @@ describe('messageAction recipient-pubkey binding (MSG-1)', () => {
             deriveAddress: () => { throw new Error('should not be called for x-only'); },
         });
         await expect(messageAction(opts)).rejects.toThrow('SENTINEL_ENCRYPT_REACHED');
+    });
+});
+
+describe('messageAction protocol limits', () => {
+    it('refuses empty and whitespace-only plaintext', async () => {
+        const opts = makeOpts({ deriveAddress: () => DESTINATION });
+        await expect(messageAction({ ...opts, method: null, message: '' }))
+            .rejects.toThrow('message is required');
+        await expect(messageAction({ ...opts, method: null, message: ' \n\t ' }))
+            .rejects.toThrow('message is required');
+    });
+
+    it('counts UTF-8 bytes for plaintext and refuses an oversized field', async () => {
+        const opts = makeOpts({ deriveAddress: () => DESTINATION });
+        const overLimit = 'é'.repeat((MAX_MESSAGE_BYTES / 2) + 1);
+
+        expect(messageWireByteLength('📦', null)).toBe(4);
+        await expect(messageAction({ ...opts, method: null, message: overLimit }))
+            .rejects.toThrow(
+                `Message is ${(MAX_MESSAGE_BYTES + 2).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
+            );
+    });
+
+    it('includes ECIES hex encoding and envelope bytes in the encrypted limit', async () => {
+        const opts = makeOpts({ deriveAddress: () => DESTINATION });
+        const atLimit = 'é'.repeat((MAX_MESSAGE_BYTES / 2 - 62) / 2);
+
+        expect(messageWireByteLength('', 1)).toBe(0);
+        expect(messageWireByteLength(atLimit, 1)).toBe(MAX_MESSAGE_BYTES);
+        expect(messageWireByteLength('📦', 2)).toBe(64);
+        await expect(messageAction({ ...opts, message: `${atLimit}a` }))
+            .rejects.toThrow(
+                `Encrypted message is ${(MAX_MESSAGE_BYTES + 2).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
+            );
     });
 });

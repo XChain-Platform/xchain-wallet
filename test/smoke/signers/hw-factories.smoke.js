@@ -548,6 +548,14 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
             `${permission} check is granted`,
         );
     }
+    // WebUSB and Web Serial are refused on the check path, as the bridge session refuses them.
+    for (const permission of ['usb', 'serial']) {
+        assert.equal(
+            checkHandler(null, permission, 'file://', { isMainFrame: true, requestingUrl: appIndex }),
+            false,
+            `${permission} check is refused even to the app's own frame`,
+        );
+    }
 
     // select-hid-device is the only callback that names the REQUESTING
     // frame, so it is the only one that can split these three apart. The

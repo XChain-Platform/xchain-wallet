@@ -18,6 +18,14 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
+vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        ChainBadge: ({ descriptor }) => <span role="img" aria-label={descriptor.displayName} />,
+    };
+});
+
 const CHAIN = 'bitcoin-regtest';
 const ICON_URL = 'https://assets.example/icon.png';
 const MEDIA_URL = 'https://assets.example/large.png';
@@ -71,6 +79,14 @@ function renderDetail(tokenInfo = {}) {
 }
 
 describe('TokenDetail collectible media', () => {
+    it('shows chain context as an icon without network-kind text', async () => {
+        renderDetail();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(await screen.findByRole('img', { name: 'Bitcoin' })).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
     it('shows text and ticker fallbacks when published images fail', async () => {
         renderDetail();
 

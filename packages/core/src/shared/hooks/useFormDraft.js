@@ -135,5 +135,11 @@ export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
         try { return store.getItem(storageKey) !== null; } catch { return false; }
     }, [storageKey]);
 
-    return { load, save, clear, hasDraft, storageKey };
+    // One object per storage key: forms list `draft` in their autosave
+    // effect deps, and a fresh object each render re-ran that effect on
+    // every render, re-saving values right after a discard cleared them.
+    return useMemo(
+        () => ({ load, save, clear, hasDraft, storageKey }),
+        [load, save, clear, hasDraft, storageKey],
+    );
 }

@@ -1,28 +1,37 @@
 .wrap {
+    --chain-picker-control-height: var(--xc-control-h-md);
+    --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
     position: relative;
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-3);
+    gap: var(--xc-label-gap);
+    /* No outer margin: the form around the field spaces it with --xc-form-gap,
+       the same as every Input, so a picker never adds its own gap on top. */
+    margin: 0;
 }
 
 .sm {
-    --chain-picker-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
-    --xc-icon-size: var(--xc-icon-sm);
-    --chain-picker-icon-size: var(--xc-icon-size);
+    --chain-picker-control-height: var(--xc-control-h-sm);
+    --chain-picker-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    --chain-picker-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-sm, var(--xc-control-font));
 }
 
 .md {
-    --chain-picker-control-height: var(--xc-control-h-md, 36px);
-    --xc-icon-size: var(--xc-icon-md);
-    --chain-picker-icon-size: var(--xc-icon-size);
+    --chain-picker-control-height: var(--xc-control-h-md);
+    --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
 }
 
 .lg {
-    --chain-picker-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
-    --xc-icon-size: var(--xc-icon-md);
-    --chain-picker-icon-size: var(--xc-icon-size);
+    --chain-picker-control-height: var(--xc-control-h-lg);
+    --chain-picker-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    --chain-picker-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-lg, var(--xc-control-font));
 }
 
 .label {
@@ -34,6 +43,9 @@
 /* The trigger follows the shared text-control dimensions while keeping the
    fuller ticker and network-kind detail in the dropdown rows. */
 .trigger {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     appearance: none;
     box-sizing: border-box;
     width: 100%;
@@ -41,16 +53,16 @@
     align-items: center;
     gap: var(--xc-space-2);
     min-height: 36px;
-    height: var(--chain-picker-control-height, var(--xc-control-h-md, 36px));
+    min-height: var(--chain-picker-control-height);
+    height: var(--chain-picker-control-height);
     padding: var(--xc-space-2) var(--xc-space-3);
-    padding: 0 var(--xc-control-pad-x, var(--xc-space-3));
+    padding: 0 var(--chain-picker-padding-x);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    font-size: var(--xc-control-font, var(--xc-text-md));
+    font-size: var(--chain-picker-font-size);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
-    border-radius: var(--xc-control-radius, var(--xc-radius-md));
+    border-radius: var(--xc-control-radius);
     color: var(--xc-text);
     cursor: pointer;
     text-align: start;
@@ -108,14 +120,6 @@
     white-space: nowrap;
 }
 
-.triggerKind {
-    flex: 0 0 auto;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-family: var(--xc-font-mono);
-    letter-spacing: 0.04em;
-}
-
 .triggerPlaceholder {
     color: var(--xc-text-muted);
 }
@@ -131,10 +135,6 @@
 
 .lg .trigger {
     min-height: 48px;
-    min-height: var(--chain-picker-control-height);
-}
-
-.sm .trigger {
     min-height: var(--chain-picker-control-height);
 }
 
@@ -156,9 +156,9 @@
     inset-inline-end: 0;
     z-index: var(--xc-z-dropdown);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
     max-height: 320px;
     display: flex;
     flex-direction: column;

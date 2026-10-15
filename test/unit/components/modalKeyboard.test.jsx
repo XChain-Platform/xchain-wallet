@@ -68,6 +68,7 @@ describe('ConfirmModal keyboard contract', () => {
         const cancel = screen.getByRole('button', { name: 'Cancel' });
         const confirm = screen.getByRole('button', { name: 'Confirm' });
 
+        expect(opener).toHaveAttribute('inert');
         expect(cancel).toHaveFocus();
         confirm.focus();
         fireEvent.keyDown(confirm, { key: 'Tab' });
@@ -134,6 +135,7 @@ describe('NoticeModal keyboard contract', () => {
         const opener = await openDialog();
         const ok = screen.getByRole('button', { name: 'OK' });
 
+        expect(opener).toHaveAttribute('inert');
         expect(ok).toHaveFocus();
         fireEvent.keyDown(ok, { key: 'Tab' });
         expect(ok).toHaveFocus();
@@ -170,6 +172,7 @@ describe('AlertsOverlay keyboard contract', () => {
         const close = screen.getByRole('button', { name: 'Close alerts' });
         const primary = screen.getByRole('button', { name: 'Upgrade' });
 
+        expect(opener).toHaveAttribute('inert');
         expect(close).toHaveFocus();
         primary.focus();
         fireEvent.keyDown(primary, { key: 'Tab' });
@@ -207,6 +210,7 @@ describe('GatedFileViewer keyboard contract', () => {
         const close = screen.getByRole('button', { name: 'Close' });
         const download = screen.getByRole('button', { name: 'Download' });
 
+        expect(opener).toHaveAttribute('inert');
         expect(close).toHaveFocus();
         download.focus();
         fireEvent.keyDown(download, { key: 'Tab' });
@@ -238,11 +242,14 @@ describe('GatedFileViewer keyboard contract', () => {
 describe('BottomTabBar modal sheet keyboard contract', () => {
     it('focuses the first choice, wraps Tab, and returns focus to More on Escape', async () => {
         render(
-            <BottomTabBar
-                currentView="home"
-                onSelect={() => {}}
-                onLock={() => {}}
-            />,
+            <>
+                <button type="button">Outside sheet</button>
+                <BottomTabBar
+                    currentView="home"
+                    onSelect={() => {}}
+                    onLock={() => {}}
+                />
+            </>,
         );
         const more = screen.getByRole('button', { name: 'More' });
         more.focus();
@@ -251,6 +258,7 @@ describe('BottomTabBar modal sheet keyboard contract', () => {
         const first = screen.getByRole('button', { name: 'Close more navigation' });
         const last = screen.getByRole('button', { name: 'Lock wallet' });
 
+        expect(screen.getByRole('button', { name: 'Outside sheet' })).toHaveAttribute('inert');
         expect(first).toHaveFocus();
         last.focus();
         fireEvent.keyDown(last, { key: 'Tab' });

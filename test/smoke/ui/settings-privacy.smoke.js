@@ -87,7 +87,13 @@ for (const name of ['ROW', 'STACK', 'ROW_HINT', 'ToggleRow', 'Status']) {
         `_settingsPrimitives exports ${name}`,
     );
 }
-assert.match(primSrc, /role="switch"/, 'ToggleRow renders an aria switch');
+assert.match(
+    primSrc,
+    /import \{[^}]*\bSwitch\b[^}]*\} from '@xchain-wallet\/core\/ui';/,
+    'ToggleRow imports the kit Switch',
+);
+assert.match(primSrc, /<Switch\b/, 'ToggleRow renders the kit Switch');
+assert.doesNotMatch(primSrc, /<input\b/, 'ToggleRow has no route-local checkbox input');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

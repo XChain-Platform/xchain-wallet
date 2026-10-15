@@ -399,6 +399,12 @@ describe('gateMinAmount (PC-29)', () => {
             .rejects.toThrow(/positive decimal/);
         await expect(gatedPublishAction(makeOpts({ gateMinAmount: '0' })))
             .rejects.toThrow(/positive decimal/);
+        await expect(gatedPublishAction(makeOpts({ gateMinAmount: '01' })))
+            .rejects.toThrow(/leading zeros/);
+        await expect(gatedPublishAction(makeOpts({ gateMinAmount: '1'.repeat(41) })))
+            .rejects.toThrow(/at most 40 characters/);
+        await expect(gatedPublishAction(makeOpts({ gateMinAmount: `0.${'1'.repeat(19)}` })))
+            .rejects.toThrow(/at most 18 decimal places/);
     });
 
     it('emits the ninth FILE field byte-exactly when active', async () => {

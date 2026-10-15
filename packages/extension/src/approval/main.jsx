@@ -15,11 +15,14 @@
 
 import { createRoot } from 'react-dom/client';
 import { flows, i18n, registry } from '@xchain-wallet/core';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { Router } from './Router.jsx';
 import { getSettings } from './messaging.js';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
 import { installExtensionWipeHook } from '../storage/wipeHook.js';
+
+logConsole.attach();
 
 // Publish the shell wipe hook on every extension page entry, not only the
 // ones that render a wipe today: a page that gains a wipe escape later must

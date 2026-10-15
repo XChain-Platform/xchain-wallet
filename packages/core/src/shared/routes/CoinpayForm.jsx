@@ -15,6 +15,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -80,6 +81,7 @@ export function CoinpayForm({
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -401,7 +403,7 @@ export function CoinpayForm({
         />
     );
     const wrap = (children, template = 'list') => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {template === 'list' ? <ListPage>{children}</ListPage> : children}
         </Screen>
     );
@@ -474,14 +476,9 @@ export function CoinpayForm({
 
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review matched order payment"
                 onSubmit={handleSubmit}
-                intro={(
-                    <>
-                    Pay {amountLabel} to complete
-                    matched order #{summary.actionIndex}.
-                    </>
-                )}
                 status={submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : stage === 'submitting' ? (
@@ -500,10 +497,12 @@ export function CoinpayForm({
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <DetailRow
-                        label="Chain"
-                        value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
-                    />
+                    {descriptor ? (
+                        <DetailRow
+                            label="Network"
+                            value={<ChainBadge descriptor={descriptor} size="sm" />}
+                        />
+                    ) : null}
                     <DetailRow
                         label="From"
                         value={<AddressText address={selected.address} />}
@@ -596,13 +595,16 @@ export function CoinpayForm({
                                         }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{row.chainId}</span>}
+                                            {d ? <ChainBadge descriptor={d} size="sm" /> : null}
                                             <span style={{ fontWeight: 600 }}>
                                                 Matched order #{String(row.obligation.action_index)}
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                                            Pay {rowAmountLabel} →{' '}
+                                            Pay {rowAmountLabel}{' '}
+                                            <span className={styles.inlineDirectionalIcon}>
+                                                <Icon.ForwardIcon />
+                                            </span>{' '}
                                             <AddressText address={row.obligation.payee_address} />
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
@@ -624,6 +626,7 @@ export function CoinpayForm({
 
             {selected && summary ? (
                 <FormPage
+                    demoGuard={demoGuard}
                     label="Selected payment obligation"
                     onSubmit={handleReview}
                     status={(submitError || insufficientBalanceMessage) ? (
@@ -644,10 +647,14 @@ export function CoinpayForm({
                     )}
                 >
                     <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Chain</dt>
-                        <dd className={styles.detailsValue}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
-                        </dd>
+                        {descriptor ? (
+                            <>
+                                <dt className={styles.detailsLabel}>Network</dt>
+                                <dd className={styles.detailsValue}>
+                                    <ChainBadge descriptor={descriptor} size="sm" />
+                                </dd>
+                            </>
+                        ) : null}
                         <dt className={styles.detailsLabel}>Matched order</dt>
                         <dd className={styles.detailsValue}>
                             <code>{summary.actionIndex}</code>

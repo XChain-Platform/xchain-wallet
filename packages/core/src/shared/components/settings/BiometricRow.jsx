@@ -45,6 +45,7 @@ import {
     registerBiometricCredential,
 } from '../../../flows/biometricUnlock.js';
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 export function BiometricRow() {
     const { messaging } = useMessaging();
@@ -138,8 +139,8 @@ export function BiometricRow() {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Biometric unlock</span>
-                    <span style={ROW_HINT}>Checking this device…</span>
+                    <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
+                    <span style={ROW_HINT}>{t('settings.biometric.checkingThisDevice')}</span>
                 </div>
             </div>
         );
@@ -149,8 +150,8 @@ export function BiometricRow() {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Biometric unlock</span>
-                    <span style={ROW_HINT}>Not available. {description.reason}</span>
+                    <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
+                    <span style={ROW_HINT}>{t('settings.biometric.notAvailable')} {description.reason}</span>
                 </div>
             </div>
         );
@@ -161,16 +162,15 @@ export function BiometricRow() {
             <div style={{ ...ROW, alignItems: 'flex-start' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 'var(--xc-space-2)' }}>
                     <div>
-                        <span style={labelStyle}>Biometric unlock</span>
+                        <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
                         <span style={{ ...ROW_HINT, display: 'block' }}>
-                            Enabled. Use {description.mechanism} on the unlock screen. Re-enrol after
-                            changing the biometrics saved on this device.
+                            {t('settings.biometric.enabledUse')} {description.mechanism} {t('settings.biometric.onTheUnlockScreenRe')}
                         </span>
                     </div>
                     {error ? (
                         <StatusMessage
                             variant="error"
-                            recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                            recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
                         >
                             {error}
                         </StatusMessage>
@@ -178,10 +178,10 @@ export function BiometricRow() {
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => { setEnrolAction('reenrol'); setError(null); }}>
-                        Re-enrol
+                        {t('settings.biometric.reEnrol')}
                     </Button>
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDisable} disabled={busy}>
-                        {busy ? 'Disabling…' : 'Disable'}
+                        {busy ? t('settings.biometric.disabling') : t('settings.biometric.disable')}
                     </Button>
                 </div>
             </div>
@@ -193,24 +193,25 @@ export function BiometricRow() {
         return (
             <form onSubmit={handleEnable} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <span style={labelStyle}>{isReenrol ? 'Re-enrol' : 'Enable'} biometric unlock</span>
+                    <span style={labelStyle}>{isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} {t('settings.biometric.biometricUnlock2')}</span>
                     <span style={ROW_HINT}>
-                        Confirm your current wallet password. {description.wrapNote}
+                        {t('settings.biometric.confirmYourCurrentWalletPassword')} {description.wrapNote}
                     </span>
                 </div>
                 <Input
                     type="password"
+                    revealable
                     enterKeyHint="go"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    placeholder="Wallet password"
+                    placeholder={t('send.gated.passwordLabel')}
                     autoComplete="current-password"
-                    aria-label="Wallet password"
+                    aria-label={t('send.gated.passwordLabel')}
                 />
                 {error ? (
                     <StatusMessage
                         variant="error"
-                        recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                        recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
                     >
                         {error}
                     </StatusMessage>
@@ -224,7 +225,7 @@ export function BiometricRow() {
                         onClick={() => { setEnrolAction(null); setPassword(''); setError(null); }}
                         disabled={busy}
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                     <Button
                         type="submit"
@@ -232,7 +233,7 @@ export function BiometricRow() {
                         icon={null}
                         disabled={busy || password.length === 0}
                     >
-                        {busy ? 'Pairing…' : (isReenrol ? 'Re-enrol' : 'Enable')}
+                        {busy ? t('settings.biometric.pairing') : (isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable'))}
                     </Button>
                 </div>
             </form>
@@ -242,9 +243,9 @@ export function BiometricRow() {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={labelStyle}>Biometric unlock</span>
+                <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
                 <span style={ROW_HINT}>
-                    Use {description.mechanism} to unlock without typing your password.
+                    {t('settings.biometric.use')} {description.mechanism} {t('settings.biometric.toUnlockWithoutTypingYour')}
                 </span>
             </div>
             <Button
@@ -254,7 +255,7 @@ export function BiometricRow() {
                 icon={null}
                 onClick={() => setEnrolAction('enable')}
             >
-                Enable
+                {t('settings.biometric.enable')}
             </Button>
         </div>
     );

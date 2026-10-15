@@ -56,6 +56,7 @@ describe('OperatorDashboard demo wallet staking', () => {
         const { methods } = mount(DEMO_ID);
         await waitFor(() => expect(screen.getByText(/^Total amount staked:/)).toBeTruthy());
         expect(screen.queryByText(/No active stake on this address/)).toBeNull();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
         expect(methods.getStakesForAddress).not.toHaveBeenCalled();
     });
 

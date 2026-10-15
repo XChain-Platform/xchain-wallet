@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -31,8 +32,8 @@ import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MEMO_HINT } from '../utils/memoLimit.js';
-import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -78,6 +79,7 @@ function latin1Of(bytes) {
  */
 export function PublishFileForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -139,7 +141,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
-                    setLoadError('No address on any chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on any network yet. Use Receive to generate one first.');
                 } else {
                     setChainId((prev) => prev || chains[0]);
                 }
@@ -411,11 +413,15 @@ export function PublishFileForm({ walletId, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
+        const memoError = memoLengthError(memo);
+        if (memoError) { setFormError(memoError); return; }
+        const feeError = publishFeeValidationError(feePick, feeCustomEstimate);
+        if (feeError) { setFormError(feeError); return; }
         // Re-check with the FINAL metadata: a title/memo typed after the
         // pick shrinks the byte budget.
         const cap = publicCapFor(fileMeta.name, fileMeta.type);
@@ -531,7 +537,11 @@ export function PublishFileForm({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
         </Screen>
     );
@@ -624,19 +634,16 @@ export function PublishFileForm({ walletId, onBack }) {
         const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review publish"
                 onSubmit={handleSubmit}
-                intro={(
-                    <>
-                        Publish <strong>{fileMeta?.name}</strong> on-chain, readable by anyone.
-                    </>
-                )}
                 status={(isWatcherMode || hw) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="secondary" type="button" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
+                        <Button variant="secondary" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={stage === 'submitting'}>
                             Back
                         </Button>
                         <Button
@@ -668,18 +675,26 @@ export function PublishFileForm({ walletId, onBack }) {
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>File</dt>
                     <dd className={styles.detailsValue}>
-                        {fileMeta?.name} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
+                        {fileMeta?.name.trim()} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
                     </dd>
                     {title.trim() ? (
                         <>
                             <dt className={styles.detailsLabel}>Title</dt>
                             <dd className={styles.detailsValue}>{title.trim()}</dd>
+                        </>
+                    ) : null}
+                    {memo ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}>{memo}</dd>
                         </>
                     ) : null}
                     <dt className={styles.detailsLabel}>Publishing from</dt>
@@ -723,14 +738,9 @@ export function PublishFileForm({ walletId, onBack }) {
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Publish file"
             onSubmit={handleReview}
-            intro={(
-                <>
-                    Store a file on the chain itself: publicly readable, or
-                    encrypted so only holders of your token can open it.
-                </>
-            )}
             status={mode === 'public' && formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -816,7 +826,7 @@ export function PublishFileForm({ walletId, onBack }) {
                                         >
                                             <TickerIcon tick={t.tick} chainId={t.chainId} size={20} />
                                             <code>{t.tick}</code>
-                                            {d ? <ChainBadge descriptor={d} size="sm" /> : t.chainId}
+                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
                                         </Button>
                                     );
                                 })}
@@ -827,11 +837,12 @@ export function PublishFileForm({ walletId, onBack }) {
             ) : (
                 <>
                     <ChainPicker
-                        label="Chain"
+                        label="Network"
                         value={chainId}
                         onChange={setChainId}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
+                        hideNetworkKind
                     />
 
                     <div style={{ margin: 'var(--xc-space-3) 0' }}>
@@ -879,7 +890,7 @@ export function PublishFileForm({ walletId, onBack }) {
                             upload: shorter names and titles leave a little more
                             room for the file itself.
                             {envelopeAvailable
-                                ? ' This chain and account support the compact Taproot'
+                                ? ' This network and account support the compact Taproot'
                                   + ' encoding, which is what makes the larger ceiling'
                                   + ' possible. Files are compressed automatically when'
                                   + ' that makes them smaller, so what lands on-chain is'
@@ -906,18 +917,11 @@ export function PublishFileForm({ walletId, onBack }) {
                         autoComplete="off"
                     />
 
-                    <label className={styles.checkRow}>
-                        {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
-                        <input
-                            type="checkbox"
-                            checked={ackForever}
-                            onChange={(e) => setAckForever(e.target.checked)}
-                        />
-                        <span>
-                            I understand the published bytes are on-chain forever
-                            and cannot be deleted.
-                        </span>
-                    </label>
+                    <Checkbox
+                        label="I understand the published bytes are on-chain forever and cannot be deleted."
+                        checked={ackForever}
+                        onChange={(e) => setAckForever(e.target.checked)}
+                    />
 
                     {feeTiers ? (
                         <FeeSelector

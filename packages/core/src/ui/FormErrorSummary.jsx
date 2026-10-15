@@ -9,6 +9,24 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef } from 'react';
+import styles from './FormErrorSummary.module.css';
+import statusStyles from './StatusMessage.module.css';
+import { t } from '../i18n/index.js';
+
+/**
+ * True when the field label adds something to the message. A message that
+ * already opens with the label ("Password must be at least 8 characters.")
+ * would otherwise read "Password: Password must be...".
+ *
+ * @param {{ label?: string, message: string }} error
+ */
+function showsLabel(error) {
+    const label = String(error.label || '').trim().toLowerCase();
+    if (!label) return false;
+    const message = String(error.message || '').trim().toLowerCase();
+    // "Word 5" opens "Word 5 does not match" but not "Word 50 does not match".
+    return !(message.startsWith(label) && !/^[\p{L}\p{N}]/u.test(message.slice(label.length)));
+}
 
 /**
  * Focusable validation summary. Every field-specific error is a link so the
@@ -16,7 +34,7 @@ import { useEffect, useMemo, useRef } from 'react';
  *
  * @param {object} props
  * @param {{ id?: string, label?: string, message: string }[]} props.errors
- * @param {string | number} [props.focusKey]
+ * @param {string | number} props.focusKey submit-attempt key; zero or empty keeps the summary hidden.
  * @param {{ label: string, onAction: () => void | Promise<void> }} [props.recovery]
  */
 export function FormErrorSummary({ errors, focusKey, recovery }) {
@@ -30,7 +48,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
         if (errors.length > 0) summaryRef.current?.focus();
     }, [signature, focusKey, errors.length]);
 
-    if (errors.length === 0) return null;
+    if (!focusKey || errors.length === 0) return null;
 
     const focusField = (event, id) => {
         event.preventDefault();
@@ -44,50 +62,41 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
             ref={summaryRef}
             role="alert"
             tabIndex={-1}
-            aria-label="Form errors"
-            style={{
-                padding: 'var(--xc-space-3)',
-                border: '1px solid var(--xc-danger-fg)',
-                borderRadius: 'var(--xc-radius-md)',
-                color: 'var(--xc-danger-fg)',
-            }}
+            aria-label={t('ui.formErrorSummary.formErrors')}
+            className={`${statusStyles.row} ${statusStyles.error}`}
+            data-variant="error"
         >
-            <p style={{ margin: 0, fontWeight: 600 }}>
-                {errors.length === 1 ? 'Fix this field:' : `Fix these ${errors.length} fields:`}
-            </p>
-            <ul style={{ margin: 'var(--xc-help-gap) 0 0', paddingInlineStart: 'var(--xc-space-5)' }}>
-                {errors.map((error, index) => (
-                    <li key={`${error.id || 'form'}-${index}`}>
-                        {error.id ? (
-                            <a
-                                href={`#${error.id}`}
-                                onClick={(event) => focusField(event, error.id)}
-                                style={{ color: 'inherit', textDecoration: 'underline' }}
-                            >
-                                {error.label ? <span>{error.label}: </span> : null}
-                                <span>{error.message}</span>
-                            </a>
-                        ) : error.message}
-                    </li>
-                ))}
-            </ul>
-            {recovery ? (
-                <button
-                    type="button"
-                    onClick={() => Promise.resolve(recovery.onAction()).catch(() => {})}
-                    style={{
-                        marginTop: 'var(--xc-help-gap)',
-                        color: 'inherit',
-                        background: 'transparent',
-                        border: 0,
-                        padding: 0,
-                        textDecoration: 'underline',
-                        cursor: 'pointer',
-                    }}
-                >
-                    {recovery.label}
-                </button>
-            ) : null}
+            <span className={statusStyles.icon} aria-hidden="true">✕</span>
+            <div className={statusStyles.text}>
+                <p className={styles.heading}>
+                    {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
+                </p>
+                <ul className={styles.list}>
+                    {errors.map((error, index) => (
+                        <li key={`${error.id || 'form'}-${index}`}>
+                            {error.id ? (
+                                <a
+                                    href={`#${error.id}`}
+                                    onClick={(event) => focusField(event, error.id)}
+                                    className={styles.link}
+                                >
+                                    {showsLabel(error) ? <span>{error.label}: </span> : null}
+                                    <span>{error.message}</span>
+                                </a>
+                            ) : error.message}
+                        </li>
+                    ))}
+                </ul>
+                {recovery ? (
+                    <button
+                        type="button"
+                        onClick={() => Promise.resolve(recovery.onAction()).catch(() => {})}
+                        className={styles.recovery}
+                    >
+                        {recovery.label}
+                    </button>
+                ) : null}
+            </div>
         </div>
     );
 }

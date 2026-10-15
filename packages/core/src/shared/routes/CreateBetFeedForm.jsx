@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, Button, FormPage, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -28,6 +29,7 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import {
@@ -125,6 +127,7 @@ export function CreateBetFeedForm({
 }) {
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const betChainIds = useBetChainIds();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -185,7 +188,7 @@ export function CreateBetFeedForm({
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
-                if (!sourceId) { setLoadError('No address on this chain. Use Receive to generate one first.'); return; }
+                if (!sourceId) { setLoadError('No address on this network. Use Receive to generate one first.'); return; }
                 setLoadError(null);
                 setFromAddressId(sourceId);
             })
@@ -335,18 +338,20 @@ export function CreateBetFeedForm({
     // Live cost quote. Keyed on the REFUND deadline, which is what the protocol
     // charges for, so the figure moves when the refund window moves.
     const [quote, setQuote] = useState(/** @type {any} */ (null));
-    const [quoteError, setQuoteError] = useState(/** @type {string | null} */ (null));
+    // Only whether the quote failed: the host's error text names SDK calls,
+    // which never reach the screen.
+    const [quoteFailed, setQuoteFailed] = useState(false);
     useEffect(() => {
         let cancelled = false;
         setQuote(null);
-        setQuoteError(null);
+        setQuoteFailed(false);
         if (!deadlineUnix || !refundSeconds) return undefined;
         if (typeof messaging.betProjectFeedCreateFee !== 'function') return undefined;
         messaging.betProjectFeedCreateFee({
             chainId, deadline: deadlineUnix, refundWindow: refundSeconds, blockTime: nowSec,
         })
             .then((q) => { if (!cancelled) setQuote(q || null); })
-            .catch((err) => { if (!cancelled) setQuoteError(err?.message || 'Cost unavailable.'); });
+            .catch(() => { if (!cancelled) setQuoteFailed(true); });
         return () => { cancelled = true; };
     }, [chainId, deadlineUnix, refundSeconds, nowSec, messaging]);
 
@@ -381,10 +386,10 @@ export function CreateBetFeedForm({
     // them host-side and is the authority; this just avoids a compose round trip
     // to learn that an outcome label has a comma in it.
     function validate() {
-        if (!fromAddress) return 'No address on this chain to create a market from.';
+        if (!fromAddress) return 'No address on this network to create a market from.';
         if (!label.trim()) return 'Give the market a question or title.';
         if (label.trim().length > MAX_LABEL) return `The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`;
-        if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the chain coin cannot be wagered.';
+        if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the network coin cannot be wagered.';
         if (cleanOutcomes.length !== outcomes.length) return 'Fill in every outcome, or remove the empty one.';
         if (cleanOutcomes.length < 2) return 'A market needs at least two outcomes.';
         if (cleanOutcomes.length > MAX_OUTCOMES) return `A market can have at most ${MAX_OUTCOMES} outcomes.`;
@@ -581,7 +586,7 @@ export function CreateBetFeedForm({
     }
 
     const quoteBlock = (() => {
-        if (quoteError) return <p className={styles.hint}>Cost estimate unavailable: {quoteError}</p>;
+        if (quoteFailed) return <p className={styles.hint}>{t('betCreate.costUnavailable')}</p>;
         if (!deadlineUnix || !refundSeconds) {
             return (
                 <p className={styles.hint}>
@@ -624,6 +629,7 @@ export function CreateBetFeedForm({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Open a market"
             onSubmit={submit}
             status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
@@ -686,7 +692,7 @@ export function CreateBetFeedForm({
                 autoComplete="off"
             />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
                 <span className={styles.fromLabel}>Possible outcomes</span>
                 {outcomes.map((o, i) => (
                     <div key={i} className={styles.betOutcomeRow}>
@@ -809,7 +815,7 @@ export function CreateBetFeedForm({
                         autoComplete="off"
                     />
                     {cleanOutcomes.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
                             <span className={styles.fromLabel}>Notes per outcome (optional)</span>
                             {cleanOutcomes.map((o, i) => (
                                 <Input

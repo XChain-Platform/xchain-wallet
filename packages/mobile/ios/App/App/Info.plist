@@ -106,6 +106,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- The light launch fallback uses dark icons. SystemBars follows the live
+	     web theme after the bridge loads. -->
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>UIStatusBarStyle</key>

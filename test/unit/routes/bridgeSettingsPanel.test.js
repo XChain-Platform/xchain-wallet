@@ -66,15 +66,15 @@ const applyButton = () => screen.getByRole('button', { name: /Bridge settings|Si
 afterEach(() => { cleanup(); vi.clearAllMocks(); __clearTokenInfoCache(); });
 
 describe('TokenAdminForm bridge settings: the opt-in', () => {
-    it('offers every chain but the one the token is native to, unchecked by default', async () => {
+    it('offers every network but the one the token is native to, unchecked by default', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
-        await waitFor(() => expect(screen.getByText('Destination chains')).toBeInTheDocument(), WAIT);
+        await waitFor(() => expect(screen.getByText('Destination networks')).toBeInTheDocument(), WAIT);
         expect(screen.getByLabelText('Bitcoin')).not.toBeChecked();
         expect(screen.getByLabelText('Litecoin')).not.toBeChecked();
         expect(screen.queryByLabelText('Dogecoin')).toBeNull();
     });
 
-    it('pre-fills the chains the issuer already opted in to', async () => {
+    it('pre-fills the networks the issuer already opted in to', async () => {
         mountAdmin({
             chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains: 'BTC',
         });
@@ -96,7 +96,7 @@ describe('TokenAdminForm bridge settings: the opt-in', () => {
         await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
     });
 
-    it('says plainly that closing a chain never strands existing holders', async () => {
+    it('says plainly that closing a network never strands existing holders', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
         const note = await screen.findByText(/closes the door to NEW transfers/i, {}, WAIT);
         expect(note.textContent).toContain('holders can still bring those');
@@ -109,7 +109,7 @@ describe('TokenAdminForm bridge settings: policy and freeze refusals', () => {
             chainId: DOGE, tick: 'FUFU', locks: {}, allowList: '1234',
         });
         const msg = await screen.findByText(/bound to an address list/i, {}, WAIT);
-        expect(msg.textContent).toContain('would carry none of that policy on the other chain');
+        expect(msg.textContent).toContain('would carry none of that policy on the other network');
         expect(msg.textContent).toContain('Detach the policy list first');
         expect(screen.getByLabelText('Bitcoin')).toBeDisabled();
     });

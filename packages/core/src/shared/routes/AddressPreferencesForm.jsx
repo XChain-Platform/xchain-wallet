@@ -20,9 +20,10 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FeeSelector, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -59,6 +60,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function AddressPreferencesForm({ walletId, chainId: initialChainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const {
@@ -77,7 +79,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         initialChainId,
         initialFromAddress: address,
         lockedToken: true,
-        noAddressMessage: 'This wallet has no addresses on this chain.',
+        noAddressMessage: 'This wallet has no addresses on this network.',
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -257,7 +259,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -270,7 +272,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             <ActionConfirmScreen
                 {...ownerLane.confirmProps}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
                 hwSignerInfo={hwSignerInfo}
                 hintClassName={styles.hint}
@@ -317,6 +318,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         const rows = writtenRows(actionParams, reviewBaseline);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review preferences"
                 onSubmit={handleSubmit}
                 status={submitError ? (
@@ -338,10 +340,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     value; the protocol has no &quot;keep current&quot; for this action.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>Address</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -375,15 +373,10 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="On-chain preferences"
             onSubmit={handleReview}
             sectioned
-            intro={(
-                <>
-                On-chain preferences apply to <AddressText address={address} /> itself
-                and are visible to the whole network once written.
-                </>
-            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -391,6 +384,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 <Button type="submit" variant="primary">Review</Button>
             )}
         >
+            <details>
+                <summary>Who can see these preferences?</summary>
+                <p className={styles.hint}>
+                    They apply to <AddressText address={address} /> and are visible to the whole network once written.
+                </p>
+            </details>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
                     <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
@@ -398,31 +397,21 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 {current ? (
                     <dl className={styles.detailsList}>
                         <DetailRow
-                            label="Currently on chain"
+                            label="Currently on the network"
                             value={current.onChain ? 'Custom preferences set' : 'Protocol defaults (never written)'}
                         />
                     </dl>
                 ) : null}
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="feePref"
-                        checked={feePref === '2'}
-                        onChange={() => pick('fee', setFeePref)('2')}
-                    />
-                    <span>Donate to protocol development (default)</span>
-                </label>
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="feePref"
-                        checked={feePref === '1'}
-                        onChange={() => pick('fee', setFeePref)('1')}
-                    />
-                    <span>{feePreferenceLabel(1)}</span>
-                </label>
+                <RadioGroup
+                    legend="Choose how the protocol fee is handled"
+                    name="feePref"
+                    value={feePref}
+                    onChange={pick('fee', setFeePref)}
+                    options={[
+                        { value: '2', label: 'Donate to protocol development (default)' },
+                        { value: '1', label: feePreferenceLabel(1) },
+                    ]}
+                />
             </FormSection>
 
             <FormSection title="Incoming sends">
@@ -438,26 +427,16 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             </FormSection>
 
             <FormSection title="Dispensers on this address">
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="dispPref"
-                        checked={dispPref === '1'}
-                        onChange={() => pick('dispenser', setDispPref)('1')}
-                    />
-                    <span>Only this address may open dispensers (default)</span>
-                </label>
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="dispPref"
-                        checked={dispPref === '2'}
-                        onChange={() => pick('dispenser', setDispPref)('2')}
-                    />
-                    <span>Anyone may open a dispenser funded by this address</span>
-                </label>
+                <RadioGroup
+                    legend="Choose who may open dispensers"
+                    name="dispPref"
+                    value={dispPref}
+                    onChange={pick('dispenser', setDispPref)}
+                    options={[
+                        { value: '1', label: 'Only this address may open dispensers (default)' },
+                        { value: '2', label: 'Anyone may open a dispenser funded by this address' },
+                    ]}
+                />
                 <Input
                     label="Memo (optional)"
                     value={memo}

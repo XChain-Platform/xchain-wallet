@@ -71,13 +71,16 @@ describe('large text layout styles', () => {
         expect(rule(networkFilter, '.triggerLabel')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
-    it('wraps button labels while truncating balance names without icon shrinkage', () => {
+    it('keeps button labels whole while truncating balance names without icon shrinkage', () => {
         const button = readCore('ui', 'Button.module.css');
         const balances = readCore('shared', 'components', 'BalanceList.module.css');
 
         expect(rule(button, '.btn')).toMatch(/max-width:\s*100%/);
-        expect(rule(button, '.btn')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(rule(button, '.label')).toMatch(/white-space:\s*normal/);
+        expect(rule(button, '.btn')).toMatch(/flex-shrink:\s*1/);
+        // Whole labels: never truncated; one wider than its column wraps.
+        expect(rule(button, '.btn')).toMatch(/white-space:\s*normal/);
+        expect(rule(button, '.btn')).toMatch(/overflow-wrap:\s*break-word/);
+        expect(rule(button, '.label')).not.toMatch(/white-space:\s*nowrap/);
         expect(rule(button, '.label')).not.toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(balances, '.name')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(balances, '.name')).toMatch(/min-width:\s*0/);
@@ -95,11 +98,12 @@ describe('large text layout styles', () => {
         expect(sendPhone).toMatch(/\.detailsList,[\s\S]*?\.advancedReviewList\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
         expect(sendPhone).toMatch(/\.successTxidRow,[\s\S]*?\.recipientRowHead\s*\{[^}]*flex-wrap:\s*wrap/);
 
-        const receivePhone = block(receive, '@media (max-width: 480px)');
-        expect(receivePhone).toMatch(/\.labelEditor\s*\{[^}]*grid-template-columns:\s*1fr/s);
+        // The Receive label editor keeps its field action attached in one row at
+        // every width (Receive.layout.test.js), so it has no phone reflow block.
+        expect(receive).not.toMatch(/@media \(max-width: 480px\)/);
 
         const historyPhone = block(history, '@media not all and (min-width: 480px)');
-        expect(historyPhone).toMatch(/\.rowHeader,[\s\S]*?\.rowMeta\s*\{[^}]*flex-wrap:\s*wrap/);
+        expect(historyPhone).toMatch(/\.rowMeta\s*\{[^}]*flex-wrap:\s*wrap/);
         expect(historyPhone).toMatch(/\.detailsTable tbody\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
         expect(rule(history, '.resultsHeader')).toMatch(/flex-wrap:\s*wrap/);
         expect(rule(history, '.resultsHeader > div')).toMatch(/flex-wrap:\s*wrap/);

@@ -103,7 +103,7 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 // Show fixed copy for every parse failure: the parse handler throws only
 // precondition text and decoder exceptions, never wording written for a user.
 const PARSE_FAILED_MESSAGE = "This doesn't look like a transaction this wallet can read. "
-    + 'Check that you pasted the whole thing and picked the right chain.';
+    + 'Check that you pasted the whole thing and picked the right network.';
 
 // Say what the user cannot do here, not which shell API is missing.
 const SIGN_UNAVAILABLE_MESSAGE = "This version of the wallet can't sign transactions on this screen.";
@@ -684,7 +684,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 if (Object.keys(signingByChain).length === 0) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before signing.');
+                        : 'No addresses on any network yet. Use Receive to generate one before signing.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
@@ -834,7 +834,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 : 'This transaction contains finalized inputs and cannot be signed on this screen.';
         }
         if (walletOwnedInputCount === 0) {
-            return 'This transaction has no inputs this wallet can sign. Check the selected chain or import a different transaction.';
+            return 'This transaction has no inputs this wallet can sign. Check the selected network or import a different transaction.';
         }
         return null;
     }, [decomposed, finalizedInputCount, walletOwnedInputCount]);
@@ -910,10 +910,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         event.preventDefault();
         if (busy) return;
         setError(null);
-        if (!chainId) { setError('Pick a chain.'); return; }
+        if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId) { setError('Pick a signing address.'); return; }
         if (!psbtHex) { setError('Paste a valid transaction (hex or base64).'); return; }
-        if (!decomposed) { setError('Transaction could not be parsed for this chain.'); return; }
+        if (!decomposed) { setError('Transaction could not be parsed for this network.'); return; }
         if (importEligibilityError) return;
         if (ownedInputCount === 0) {
             setError(
@@ -999,9 +999,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
-                <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
-                    {loadError}
-                </div>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </Screen>
         );
     }
@@ -1017,8 +1015,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         {/* ChainBadge takes a descriptor, not an id: passing an
                             id crashed this screen on every successful signing. */}
                         {chainRegistry.get(chainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" />
-                            : <span>{chainId}</span>}
+                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" showName={false} />
+                            : null}
                         <AddressText address={selectedAddress?.address || ''} />
                     </div>
                 </div>
@@ -1052,10 +1050,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         role="status"
                         aria-live="polite"
                         style={{
-                            background: 'var(--xc-surface-raised)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-md)',
-                            padding: 'var(--xc-space-3)',
+                            background: 'var(--xc-card-bg)',
+                            border: 'var(--xc-card-border)',
+                            borderRadius: 'var(--xc-card-radius)',
+                            padding: 'var(--xc-card-pad)',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 4,
@@ -1075,14 +1073,12 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         <CopyButton value={broadcastTxid} label="Copy txid" />
                     </div>
                 ) : broadcastState === 'queued' ? (
-                    <div role="status" aria-live="polite" style={{ color: 'var(--xc-text-muted)' }}>
+                    <StatusMessage variant="warning">
                         The network could not take the transaction yet. Its signed bytes are saved in the
                         queued-transactions banner, where you can retry without signing again.
-                    </div>
+                    </StatusMessage>
                 ) : broadcastState === 'error' ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-sm)' }}>
-                        {broadcastError}
-                    </div>
+                    <StatusMessage variant="error">{broadcastError}</StatusMessage>
                 ) : signedPsbtHex ? (
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                         Broadcast directly from this wallet, or hand the signed transaction
@@ -1167,10 +1163,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const previewBlock = decomposed ? (
         <div style={{
-            background: 'var(--xc-surface)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-2)',
+            background: 'var(--xc-card-bg)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
+            padding: 'var(--xc-card-pad)',
             display: 'flex',
             flexDirection: 'column',
             gap: 4,
@@ -1311,7 +1307,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         setChainId(nextChainId);
                         if (error) setError(null);
                     }}
-                    label="Chain"
+                    label="Network"
+                    hideNetworkKind
                 />
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
@@ -1391,15 +1388,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <div style={{ marginTop: 'var(--xc-space-2)' }}>
                         <QrScanner onFrame={handleScannerFrame} alt="Transaction QR scanner" />
                         {scanProgress ? (
-                            <p
-                                role="status"
-                                aria-live="polite"
-                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}
-                            >
+                            <StatusMessage variant="info">
                                 {scanProgress.format === 'UR'
                                     ? `UR decoding progress: ${scanProgress.percent}%`
                                     : `${scanProgress.format} frames received: ${scanProgress.received} of ${scanProgress.total}`}
-                            </p>
+                            </StatusMessage>
                         ) : null}
                     </div>
                 ) : null}

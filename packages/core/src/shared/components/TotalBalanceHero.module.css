@@ -5,6 +5,7 @@
     padding: var(--xc-card-pad);
     display: flex;
     flex-direction: column;
+    /* Preserve the untokenized 2px optical separation within the hero. */
     gap: 2px;
     box-shadow: var(--xc-shadow-md);
 }
@@ -16,11 +17,13 @@
         'amount amount';
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+    /* Preserve the untokenized 2px row gap while tokenizing the column gap. */
     gap: 2px var(--xc-space-2);
 }
 
 .label {
     grid-area: label;
+    /* Keep the untokenized basis wide enough for the balance label. */
     flex: 1 1 140px;
     min-width: 0;
     font-size: var(--xc-text-xs);
@@ -42,8 +45,56 @@
     grid-area: actions;
     display: inline-flex;
     align-items: center;
+    /* Preserve the untokenized 6px optical gap between compact actions. */
     gap: 6px;
     margin-inline-start: auto;
+}
+
+.compactActions {
+    grid-area: actions;
+    position: relative;
+    display: inline-flex;
+    margin-inline-start: auto;
+}
+
+.actionMenu {
+    position: absolute;
+    box-sizing: border-box;
+    top: calc(100% + var(--xc-space-1));
+    inset-inline-end: 0;
+    z-index: var(--xc-z-dropdown);
+    width: min(260px, calc(100vw - (2 * var(--xc-space-2))));
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+    padding: var(--xc-space-1);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    box-shadow: var(--xc-shadow-header-menu);
+}
+
+.actionRow {
+    appearance: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--xc-tap-min);
+    justify-content: flex-start;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 0;
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-align: start;
+}
+
+.actionRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+.actionRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
 .eye {
@@ -51,9 +102,10 @@
     background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
     border: none;
     color: var(--xc-on-accent);
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -95,14 +147,26 @@
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
+    /* Preserve the untokenized 6px optical gap before the currency code. */
     column-gap: 6px;
+    direction: ltr;
+    unicode-bidi: isolate;
     min-width: 0;
     font-family: var(--xc-font-mono);
+    /* Keep the untokenized 32px headline above the body type scale. */
     font-size: 32px;
     font-weight: 800;
     line-height: 1.1;
     letter-spacing: -0.01em;
     color: var(--xc-on-accent);
+}
+
+.amountMessage {
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+    line-height: var(--xc-control-line);
+    letter-spacing: 0;
 }
 
 /* Large exact totals stay inside the hero while the currency code remains
@@ -119,7 +183,7 @@
    the same baseline as the amount and prevented from wrapping away
    from the trailing digits. */
 .amountCode {
-    font-size: 16px;
+    font-size: var(--xc-text-lg);
     font-weight: 600;
     color: color-mix(in srgb, var(--xc-on-accent) 75%, transparent);
     letter-spacing: 0;
@@ -146,6 +210,7 @@
 
 .metaLeft {
     display: flex;
+    /* Keep the untokenized basis wide enough for the summary facts. */
     flex: 1 1 220px;
     flex-wrap: wrap;
     column-gap: var(--xc-space-1);
@@ -190,6 +255,12 @@
 
 .changeNeutral {
     color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
+}
+
+@media not all and (min-width: 480px) {
+    .row {
+        grid-template-columns: minmax(0, 1fr) var(--xc-control-h-sm);
+    }
 }
 
 /* Engines disagree on whether gradients survive forced-colors mode, so pin

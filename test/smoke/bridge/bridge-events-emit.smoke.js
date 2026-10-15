@@ -352,8 +352,9 @@ assert.ok(
     'background.js constructs broadcaster with chrome.tabs + chrome.runtime + the registry',
 );
 assert.ok(
-    /bridgeEvents:[\s\S]*?createBridgeEventBroadcaster/.test(bgSrc),
-    'background.js passes bridgeEvents into createBackgroundHost',
+    /const bridgeEvents =[\s\S]*?createBridgeEventBroadcaster/.test(bgSrc)
+        && /createBackgroundHost\(\{[\s\S]*?bridgeEvents,/.test(bgSrc),
+    'background.js constructs one broadcaster and passes it into createBackgroundHost',
 );
 // The registry only holds anything if the runtime adapter feeds it. Without
 // this half the broadcaster looks wired and still delivers to nobody, which is

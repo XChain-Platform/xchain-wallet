@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
@@ -22,9 +20,10 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 
+// The dev wallet holds its tokens on Bitcoin.
 const CHAIN = {
-    chainId: 'bitcoin-regtest',
-    chainLabel: 'Bitcoin · regtest',
+    chainId: 'bitcoin-mainnet',
+    chainLabel: 'Bitcoin',
 };
 
 async function settle(page) {
@@ -200,7 +199,8 @@ async function openManagedToken(page) {
 for (const viewport of VIEWPORTS) {
     test(`token administration reaches every review at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets hide the create commands, so this walk uses a real dev wallet.
+        await createWallet(page);
         await useWatcherReviews(page);
 
         const run = `${viewport.width}${viewport.height}`;
@@ -226,10 +226,11 @@ for (const viewport of VIEWPORTS) {
                 summary: `Create token ${issueTick} with max supply 1000 on Bitcoin`,
                 details: {
                     Token: issueTick,
-                    'Max supply': '1000',
-                    'Max mint per tx': '50',
+                    // Review amounts carry their unit.
+                    'Max supply': `1000 ${issueTick}`,
+                    'Max mint per tx': `50 ${issueTick}`,
                     Description: 'Responsive token admin fixture',
-                    'Initial mint': '250',
+                    'Initial mint': `250 ${issueTick}`,
                 },
                 label: `${viewport.name} Issue review`,
             });
@@ -255,7 +256,7 @@ for (const viewport of VIEWPORTS) {
                 summary: 'Mint 25 XCP on Bitcoin',
                 details: {
                     Token: 'XCP',
-                    Amount: '25',
+                    Amount: '25 XCP',
                     Destination: 'broadcasting address',
                 },
                 label: `${viewport.name} Mint review`,
@@ -283,7 +284,7 @@ for (const viewport of VIEWPORTS) {
                 details: {
                     'Holders of': 'XCP',
                     Receive: 'PEPECASH',
-                    'Per-unit amount': '0.0001',
+                    'Per-unit amount': '0.0001 PEPECASH',
                     Memo: 'Quarterly payout',
                 },
                 label: `${viewport.name} Dividend review`,
@@ -306,7 +307,7 @@ for (const viewport of VIEWPORTS) {
                 summary: 'Destroy 2 XCP on Bitcoin',
                 details: {
                     Token: 'XCP',
-                    Amount: '2',
+                    Amount: '2 XCP',
                 },
                 label: `${viewport.name} Destroy review`,
             });

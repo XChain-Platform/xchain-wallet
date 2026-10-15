@@ -37,6 +37,7 @@ describe('core CSS module media breakpoints', () => {
     it('uses only the documented viewport width scale', () => {
         const widths = new Set([...modules.values()].flatMap(widthValues));
         expect([...widths].sort()).toEqual([
+            '1024px',
             '360px',
             '400px',
             '420px',

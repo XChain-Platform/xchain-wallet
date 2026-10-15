@@ -26,8 +26,11 @@ describe('ios-console.sh', () => {
     it('streams unbuffered output for a staged simulator build', () => {
         const fixture = makeFixture({ profile: 'store' });
         const capture = join(fixture.root, 'captured.log');
+        // The stub prints its line and exits, and the script returns as soon
+        // as the console ends, so this waits for the line rather than racing
+        // a short window. DURATION is only the ceiling for a stub that hangs.
         const result = run(fixture, ['iPhone 17 Pro'], {
-            DURATION: '0.1',
+            DURATION: '30',
             LOG: capture,
             SKIP_BUILD: '1',
         });
@@ -53,7 +56,7 @@ describe('ios-console.sh', () => {
         expect(commands).toContain('simctl install 11111111-1111-1111-1111-111111111111');
     });
 
-    it.skip('stops before launch when unknown (bug: pipefail exits before the missing-simulator diagnostic)', () => {
+    it('stops before launch when the simulator is unknown', () => {
         const fixture = makeFixture({ profile: 'default' });
         const result = run(fixture, ['iPhone Missing']);
 

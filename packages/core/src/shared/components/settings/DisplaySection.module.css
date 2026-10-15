@@ -1,0 +1,32 @@
+.fieldRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 2fr);
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-height: var(--xc-control-h-md);
+    padding: var(--xc-space-1) 0;
+}
+
+.watchControls {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) minmax(7.5rem, 0.6fr) auto;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.watchControls > * {
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+    .fieldRow,
+    .watchControls {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .watchControls > button {
+        width: 100%;
+    }
+}

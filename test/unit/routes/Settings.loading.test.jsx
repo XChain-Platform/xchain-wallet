@@ -19,6 +19,22 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 
+const SETTINGS_SUBPAGE_IDS = [
+    'this-wallet',
+    'display',
+    'keyboard',
+    'privacy',
+    'safety',
+    'wallet-mode',
+    'backup',
+    'fees',
+    'network-endpoints',
+    'connected-sites',
+    'ads',
+    'developer',
+    'about',
+];
+
 describe('Settings while settings are loading', () => {
     it('renders the section list with a never-resolving getSettings', () => {
         const messaging = {
@@ -83,5 +99,19 @@ describe('Settings while settings are loading', () => {
         expect(screen.queryByLabelText('Confirm wallet name')).toBeNull();
         expect(screen.getByText('Beta')).toBeTruthy();
         expect(screen.getByText('Beta').closest('[data-settings-layout="responsive"]')).toBeTruthy();
+    });
+
+    it.each(SETTINGS_SUBPAGE_IDS)('renders the %s sub-page through the shared Settings template', (subpageId) => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings onBack={() => {}} initialSubpageId={subpageId} />
+            </MessagingProvider>,
+        );
+
+        expect(container.querySelector('[data-settings-page-template="subpage"]')).toBeTruthy();
     });
 });

@@ -23,6 +23,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { classify, firstRefusal } from '../../../tools/release/phase4-rehearsal.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const SIGN = join(root, 'tools/release/sign.sh');
@@ -75,17 +77,19 @@ const stage = ({ record = null, marker = false } = {}) => {
     writeFileSync(join(dir, 'xchain-wallet-v9.9.9.apk'), 'apk\n');
     if (record || marker) mkdirSync(join(dir, 'records'));
     if (record) {
-        // Uneven padding, exactly as android-ceremony.sh writes it.
+        // Uneven padding, exactly as android-ceremony.sh writes it; an undefined field is left out,
+        // the way a record from a ceremony that predates that field reads.
         writeFileSync(join(dir, 'records', 'PROVENANCE.txt'), [
-            `tag:        ${record.tag}`,
-            `head:       ${record.head}`,
-            `tag_commit: ${record.tagCommit}`,
-            `dirty_paths: ${record.dirty}`,
-            `rehearsal:  ${record.rehearsal}`,
+            ['tag:        ', record.tag],
+            ['head:       ', record.head],
+            ['tag_commit: ', record.tagCommit],
+            ['dirty_paths: ', record.dirty],
+            ['rehearsal:  ', record.rehearsal],
+        ].filter(([, v]) => v !== undefined).map(([k, v]) => `${k}${v}`).concat([
             'profiles:   store',
             'built_at:   2026-01-01T00:00:00Z',
             '',
-        ].join('\n'));
+        ]).join('\n'));
     }
     if (marker) {
         writeFileSync(join(dir, 'records', 'DO-NOT-PUBLISH.txt'),
@@ -149,6 +153,16 @@ refused(runSign(plain.repo, stage({
     record: { ...good, head: 'b'.repeat(40), tagCommit: 'b'.repeat(40) },
 })), 'bytes built from another commit', /tag_commit 'b{40}' is not v9\.9\.9/);
 
+// A record from a ceremony that predates a field is refused with the word 'missing', and the
+// Phase 4 rehearsal tool must still place that refusal before the dev-mock gate, not at lane scope.
+{
+    const r = runSign(plain.repo, stage({ record: { ...good, rehearsal: undefined } }));
+    refused(r, 'a record with no rehearsal field', /rehearsal is 'missing', expected 'no'/);
+    assert.equal(classify(r.out), 'gpg-key-named',
+        `phase4-rehearsal classify() must read a ceremony-record refusal as gpg-key-named:\n${r.out}`);
+    assert.match(firstRefusal(r.out), /^sign\.sh: ceremony record refuses this signing: /);
+}
+
 // --- 3. A re-sign tag signs its release's record -------------------------
 const re = makeRepo({ resign: true });
 const reGood = { tag: TAG, head: re.release, tagCommit: re.release, dirty: 0, rehearsal: 'no' };
@@ -160,4 +174,4 @@ refused(runSign(re.repo, stage({
 rmSync(work, { recursive: true, force: true });
 
 console.log('OK  release ceremony records: sign.sh refuses rehearsal, dirty or off-tag Android '
-    + 'records before hashing, and passes a clean record, a re-sign and a set with no records (11 cases)');
+    + 'records before hashing, and passes a clean record, a re-sign and a set with no records (12 cases)');

@@ -78,6 +78,7 @@ describe('ListForkForm addition validation', () => {
     it('keeps malformed token names out of review and writes the error as a sentence', async () => {
         mountFork();
         const additions = await screen.findByLabelText(/Add tokens/);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         fireEvent.change(additions, { target: { value: 'BAD TICK' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 

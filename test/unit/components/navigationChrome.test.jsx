@@ -8,16 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent as keyboardUser } from '../../helpers/userEvent.js';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
+    activeLeftNavItem,
     isNavItemActive,
     LeftNav,
-    LEFT_NAV_VIEW_GROUPS,
 } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import {
+    ROUTE_NAV_SECTIONS,
+    ROUTE_REGISTRY,
+} from '../../../packages/core/src/shared/routeRegistry.js';
+import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 
 afterEach(() => cleanup());
@@ -69,6 +76,7 @@ const NAV_ITEMS = [
     'receive',
     'scan',
     'markets',
+    'market-activity',
     'dispensers-list',
     'contracts-list',
     'messaging',
@@ -79,25 +87,70 @@ const NAV_ITEMS = [
 ];
 
 describe('navigation route highlighting', () => {
-    it('marks exactly one owning bottom tab for every grouped route', () => {
-        const tabByGroup = {
+    it('uses the shared section assignment for every registered route', () => {
+        const bottomTabBySection = {
             home: 'Home',
             history: 'History',
             send: 'Send',
             scan: 'Scan',
-            settings: 'More',
         };
-        const { rerender } = render(<BottomTabBar currentView="home" onSelect={() => {}} />);
-        const bottomNavigation = within(screen.getByRole('navigation', { name: 'Bottom navigation' }));
+        const sidebarLabelBySection = {
+            home: 'Home',
+            history: 'History',
+            send: 'Send',
+            receive: 'Receive',
+            scan: 'Scan',
+            markets: 'DEX',
+            'market-activity': 'Marketplace',
+            'dispensers-list': 'Dispensers',
+            'contracts-list': 'Contracts',
+            messaging: 'Messaging',
+            contacts: 'Contacts',
+            lists: 'Lists',
+            obligations: 'Payments due',
+            settings: 'Settings',
+        };
+        const { rerender } = render(
+            <>
+                <BottomTabBar currentView="home" onSelect={() => {}} />
+                <LeftNav
+                    currentView="home"
+                    onSelect={() => {}}
+                    onOpenSettings={() => {}}
+                    hasVmAddress
+                />
+            </>,
+        );
 
-        for (const [group, routes] of Object.entries(LEFT_NAV_VIEW_GROUPS)) {
-            for (const route of routes) {
-                rerender(<BottomTabBar currentView={route} onSelect={() => {}} />);
-                const activeTabs = bottomNavigation.getAllByRole('button')
-                    .filter((tab) => tab.getAttribute('aria-current') === 'page');
+        for (const route of Object.keys(ROUTE_REGISTRY)) {
+            const section = ROUTE_NAV_SECTIONS[route];
+            expect(section, route).toBeTypeOf('string');
+            rerender(
+                <>
+                    <BottomTabBar currentView={route} onSelect={() => {}} />
+                    <LeftNav
+                        currentView={route}
+                        onSelect={() => {}}
+                        onOpenSettings={() => {}}
+                        hasVmAddress
+                    />
+                </>,
+            );
 
-                expect(activeTabs, route).toHaveLength(1);
-                expect(activeTabs[0], route).toHaveAccessibleName(tabByGroup[group] || 'Home');
+            const bottomNavigation = within(screen.getByRole('navigation', { name: 'Bottom navigation' }));
+            const activeTabs = bottomNavigation.getAllByRole('button')
+                .filter((tab) => tab.getAttribute('aria-current') === 'page');
+            const expectedBottomTab = bottomTabBySection[section];
+            expect(activeTabs, route).toHaveLength(expectedBottomTab ? 1 : 0);
+            if (expectedBottomTab) expect(activeTabs[0]).toHaveAccessibleName(expectedBottomTab);
+
+            const sidebar = within(screen.getByRole('navigation', { name: 'Primary navigation' }));
+            const activeSidebarItems = sidebar.getAllByRole('button')
+                .filter((item) => item.getAttribute('aria-current') === 'page');
+            const expectedSidebarItem = sidebarLabelBySection[section];
+            expect(activeSidebarItems, route).toHaveLength(expectedSidebarItem ? 1 : 0);
+            if (expectedSidebarItem) {
+                expect(activeSidebarItems[0]).toHaveAccessibleName(expectedSidebarItem);
             }
         }
     });
@@ -107,14 +160,19 @@ describe('navigation route highlighting', () => {
         ['receive-picker', 'receive'],
         ['action-detail', 'history'],
         ['cross-chain-order', 'markets'],
+        ['market-activity', 'market-activity'],
         ['contract-stake', 'contracts-list'],
         ['list-transfer', 'lists'],
         ['coinpay', 'obligations'],
         ['connected-sites', 'settings'],
-        ['wizard', 'home'],
-    ])('maps %s to one active parent, %s', (view, expected) => {
+        ['wizard', 'create-token'],
+        ['addresses', 'addresses'],
+        ['account-picker', 'accounts'],
+        ['wallet-picker', 'wallets'],
+    ])('maps %s to section %s', (view, expected) => {
+        expect(activeLeftNavItem(view)).toBe(expected);
         const active = NAV_ITEMS.filter((item) => isNavItemActive(item, view));
-        expect(active).toEqual([expected]);
+        expect(active).toEqual(NAV_ITEMS.includes(expected) ? [expected] : []);
     });
 
     it('marks the matching LeftNav row on drilldown routes', () => {
@@ -123,7 +181,20 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
-    it('marks Home and the matching row for sheet-only destinations', () => {
+    it('places Marketplace after DEX and removes both when trading is unavailable', () => {
+        const { rerender } = render(<LeftNav currentView="market-activity" onSelect={() => {}} />);
+        const labels = screen.getAllByRole('button').map((button) => button.textContent.trim());
+
+        expect(labels.indexOf('Marketplace')).toBe(labels.indexOf('DEX') + 1);
+        expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('title', 'Marketplace');
+
+        rerender(<LeftNav currentView="home" onSelect={() => {}} hasDexSurface={false} />);
+        expect(screen.queryByRole('button', { name: 'DEX' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Marketplace' })).toBeNull();
+    });
+
+    it('marks the matching row without treating More as the current page', () => {
         render(
             <BottomTabBar
                 currentView="contract-stake"
@@ -132,16 +203,52 @@ describe('navigation route highlighting', () => {
             />,
         );
         const more = screen.getByRole('button', { name: 'More' });
-        expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
         expect(more).not.toHaveAttribute('aria-current');
         fireEvent.click(more);
         expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('marks the More sheet Settings row on Settings routes, as the desktop rail does', () => {
+        const { rerender } = render(
+            <BottomTabBar currentView="connected-sites" onSelect={() => {}} onOpenSettings={() => {}} />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+
+        rerender(<BottomTabBar currentView="home" onSelect={() => {}} onOpenSettings={() => {}} />);
+        if (!screen.queryByRole('button', { name: 'Settings' })) {
+            fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        }
+        expect(screen.getByRole('button', { name: 'Settings' })).not.toHaveAttribute('aria-current');
+    });
+
+    it('does not attribute account management to a different nav item', () => {
+        render(<BottomTabBar currentView="account-picker" onSelect={() => {}} />);
+        expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
+        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
     it('marks Home for the compact menu route in the shared Home group', () => {
         render(<BottomTabBar currentView="menu" onSelect={() => {}} />);
         expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
         expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
+    });
+
+    it.each(['receive', 'addresses', 'contacts', 'wizard', 'account-picker', 'wallet-picker'])(
+        'does not highlight an unrelated bottom tab on %s',
+        (view) => {
+            render(<BottomTabBar currentView={view} onSelect={() => {}} />);
+            expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+            expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
+        },
+    );
+
+    it('leaves every tab unselected for an unknown screen', () => {
+        render(<BottomTabBar currentView="outside-wallet" onSelect={() => {}} />);
+        const bottomNavigation = within(screen.getByRole('navigation', { name: 'Bottom navigation' }));
+        expect(bottomNavigation.getAllByRole('button')
+            .filter((tab) => tab.hasAttribute('aria-current'))).toHaveLength(0);
     });
 });
 
@@ -280,14 +387,52 @@ describe('navigation Tab order', () => {
 
         const order = [
             'Open command palette', 'Home', 'History', 'Send', 'Receive',
-            'Scan', 'DEX', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
-            'Lists', 'Payments due', 'Main wallet', 'Settings', 'Lock',
+            'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
+            'Lists', 'Payments due', 'Settings', 'Lock',
             'After navigation',
         ];
         for (const label of order) {
             userEvent.tab();
             expect(screen.getByRole('button', { name: label })).toHaveFocus();
         }
+    });
+});
+
+describe('Settings account picker navigation', () => {
+    it('uses the Settings-specific back label without changing other picker entry points', () => {
+        const messaging = { listAccounts: vi.fn().mockResolvedValue([]) };
+        const { rerender } = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AccountPicker
+                    walletId="wallet-1"
+                    activeAccountId={null}
+                    onSwitch={() => {}}
+                    onAddAccount={() => {}}
+                    onBack={() => {}}
+                    backLabel="Back to settings"
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Back to settings' })).toBeInTheDocument();
+
+        rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AccountPicker
+                    walletId="wallet-1"
+                    activeAccountId={null}
+                    onSwitch={() => {}}
+                    onAddAccount={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeInTheDocument();
+
+        const webApp = readFileSync('packages/web/src/App.jsx', 'utf8');
+        expect(webApp).toContain(
+            "backLabel={accountPickerBackTo === 'settings' ? t('shell.settings.back') : undefined}",
+        );
     });
 });
 
@@ -304,13 +449,29 @@ describe('route scroll position', () => {
         const view = render(<Route routeKey="history" />);
         const main = document.getElementById('xc-main');
         main.scrollTop = 418;
+        fireEvent.scroll(main);
 
         view.rerender(<Route routeKey="action-detail" />);
         expect(document.getElementById('xc-main').scrollTop).toBe(0);
         document.getElementById('xc-main').scrollTop = 73;
+        fireEvent.scroll(document.getElementById('xc-main'));
 
         view.rerender(<Route routeKey="history" />);
         expect(document.getElementById('xc-main').scrollTop).toBe(418);
+    });
+
+    it('keeps the offset the user scrolled to when the view swap clamps the body first', () => {
+        const view = render(<Route routeKey="settings-list" />);
+        const main = document.getElementById('xc-main');
+        main.scrollTop = 586;
+        fireEvent.scroll(main);
+        // The browser clamps the offset to the incoming, shorter content
+        // before the outgoing view's cleanup runs; no scroll event yet.
+        main.scrollTop = 0;
+
+        view.rerender(<Route routeKey="settings-privacy" />);
+        view.rerender(<Route routeKey="settings-list" />);
+        expect(document.getElementById('xc-main').scrollTop).toBe(586);
     });
 
     it('scrolls the active bottom tab to the top', () => {
@@ -332,7 +493,7 @@ describe('route scroll position', () => {
 });
 
 describe('AppHeader button labels and tooltips', () => {
-    it('gives each header action an accessible label and tooltip', () => {
+    it('labels the three visible header controls and the overflow rows', () => {
         render(
             <AppHeader
                 onMenuOpen={() => {}}
@@ -345,15 +506,16 @@ describe('AppHeader button labels and tooltips', () => {
         );
 
         const expected = [
-            ['Settings', 'Settings'],
-            ['Open command palette', 'Search (Cmd/Ctrl+K)'],
-            ['Scan and addresses', 'Scan and addresses'],
             ['Lock wallet', 'Lock wallet'],
-            ['XChain platform sites', 'XChain platform sites'],
             ['Open menu', 'Open menu'],
         ];
         for (const [label, title] of expected) {
             expect(screen.getByRole('button', { name: label })).toHaveAttribute('title', title);
+        }
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+        for (const label of ['Settings', 'Search', 'Scan', 'More wallet actions']) {
+            expect(screen.getByRole('menuitem', { name: label })).toBeTruthy();
         }
     });
 });

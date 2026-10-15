@@ -31,7 +31,7 @@ assert.match(
 );
 
 // Master toggle
-assert.match(src, /label="Automatic Donation System"/, 'master ON/OFF toggle present');
+assert.match(src, /label=\{t\('settings\.toggle\.turnOn'\)\}\s*accessibleLabel=\{t\('settings\.ads\.switchAccessibleLabel'\)\}/, 'master ON/OFF toggle present');
 assert.match(
     src,
     /update\(\{\s*ads:\s*\{\s*enabled:\s*next\s*\}\s*\}\)/,
@@ -59,7 +59,8 @@ for (const field of ['lifetimeDonatedSats', 'lifetimeTxCount', 'accumulatedSats'
 
 // Donation address: placeholder vs real
 assert.match(src, /isPlaceholder\b/, 'placeholder branch present');
-assert.match(src, /Not set yet\. A donation address for /, 'placeholder copy present');
+assert.match(src, /Not available yet\./, 'short placeholder copy present');
+assert.match(src, /aria-description=\{placeholderDescription\}/, 'full placeholder description remains accessible');
 
 // Inputs disable when ADS is off so the user can't poke them
 assert.match(src, /disabled=\{!settings\.ads\.enabled\}/, 'inputs disable when ADS is off');

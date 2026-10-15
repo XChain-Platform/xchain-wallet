@@ -36,6 +36,8 @@
 // Screenshots of each stop land in `test-results/forced-colors/` as the record
 // of the walk.
 
+import { fileURLToPath } from 'node:url';
+
 import {
     createWallet,
     dismissIntroCarousel,
@@ -55,7 +57,9 @@ import {
 // that turns a silent regression here back into a failure.
 test.use({ contextOptions: { forcedColors: 'active' } });
 
-const SHOT_DIR = 'test-results/forced-colors';
+// Anchored to the wallet root: a bare relative path followed the caller's cwd
+// and dropped the shots into whatever checkout launched the run.
+const SHOT_DIR = fileURLToPath(new URL('../../../../test-results/forced-colors', import.meta.url));
 
 /**
  * Fail loudly if the emulation is not on. Everything below would pass

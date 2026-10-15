@@ -19,7 +19,7 @@ describe('consensusRefusalMessage', () => {
         const raw = 'invalid: trailing data after batch signatures';
         const finding = refusal(raw);
         expect(consensusRefusalMessage(finding))
-            .toBe('The network refused this price batch because it contains extra data after its signatures.');
+            .toBe('This price batch would be refused because it contains extra data after its signatures.');
         expect(consensusRefusalMessage(finding)).not.toContain('trailing data');
     });
 
@@ -27,21 +27,29 @@ describe('consensusRefusalMessage', () => {
         const raw = 'invalid: future internal consensus wording';
         const finding = refusal(raw);
         expect(consensusRefusalMessage(finding))
-            .toBe('The network refused this action for a reason the wallet could not explain.');
+            .toBe('This action would be refused for a reason the wallet could not explain.');
         expect(consensusRefusalDetail(finding)).toBe('future internal consensus wording');
     });
 
     it('hides the encoder service\'s uninformative internal error', () => {
         const finding = refusal('invalid: Internal encoder error');
         expect(consensusRefusalMessage(finding))
-            .toBe('The network refused this action for a reason the wallet could not explain.');
+            .toBe('This action would be refused for a reason the wallet could not explain.');
         expect(consensusRefusalDetail(finding)).toBe('Internal encoder error');
     });
 
     it('keeps addresses and access-list numbers in a specific refusal', () => {
         const reason = 'address tb1qexample is not on allow-list #42';
         expect(consensusRefusalMessage(refusal(`invalid: ${reason}`)))
-            .toBe('The network refused this action: Address tb1qexample is not on allow-list #42.');
+            .toBe('This action would be refused because address tb1qexample is not on allow-list #42.');
+    });
+
+    it('describes every refusal as a pre-send result', () => {
+        for (const status of ['invalid: insufficient balance', 'invalid: unknown refusal']) {
+            const message = consensusRefusalMessage(refusal(status));
+            expect(message).toMatch(/would be refused/);
+            expect(message).not.toMatch(/network refused/i);
+        }
     });
 });
 

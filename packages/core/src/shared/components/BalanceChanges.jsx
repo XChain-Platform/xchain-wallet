@@ -13,6 +13,7 @@ import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useNativeFiatRates, useTokenFiatRates } from '../hooks/useFiatRate.js';
 import { subtractDecimalStrings } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * Renders a §21.2 simulation result (balance deltas, side-effects, and
@@ -38,7 +39,7 @@ export function BalanceChanges({
     result,
     loading = false,
     error = null,
-    title = 'Balance changes',
+    title = t('components.balanceChanges.balanceChanges'),
     chainCoin = null,
     nativeTicker = null,
     fiatCurrency = 'USD',
@@ -82,7 +83,7 @@ export function BalanceChanges({
         return (
             <section className={styles.root} data-state="loading" aria-busy="true">
                 <h3 className={styles.heading}>{title}</h3>
-                <p className={styles.skeleton}>Calculating preview…</p>
+                <p className={styles.skeleton}>{t('components.balanceChanges.calculatingPreview')}</p>
             </section>
         );
     }
@@ -92,7 +93,7 @@ export function BalanceChanges({
             <section className={styles.root} data-state="error">
                 <h3 className={styles.heading}>{title}</h3>
                 <p className={styles.error}>
-                    We couldn’t estimate this transaction’s effect (preview unavailable).
+                    {t('components.balanceChanges.weCouldnTEstimateThis')}
                 </p>
             </section>
         );
@@ -123,7 +124,7 @@ export function BalanceChanges({
             ) : null}
 
             {sideEffects.length > 0 ? (
-                <ul className={styles.sideEffects} aria-label="Side effects">
+                <ul className={styles.sideEffects} aria-label={t('components.balanceChanges.sideEffects')}>
                     {sideEffects.map((se, i) => (
                         <li
                             key={`${se.kind}:${i}`}
@@ -161,7 +162,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-fee-unknown="true"
                 data-coin={delta.isCoin ? 'true' : undefined}
             >
-                <dt className={styles.tick}>{delta.feeLabel || 'Network fee'}</dt>
+                <dt className={styles.tick}>{delta.feeLabel || t('send.networkFee')}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
                         signed="− unknown"
@@ -173,7 +174,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                         <span className={styles.feeNote} style={balanceLineStyle}>
                             <span className={styles.before}>{delta.before} {delta.tick}</span>
                             <span className={styles.arrow}>→</span>
-                            <span className={styles.after}>unknown</span>
+                            <span className={styles.after}>{t('components.balanceChanges.unknown')}</span>
                         </span>
                     ) : null}
                 </dd>
@@ -191,10 +192,10 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-direction="flat"
                 data-before-unknown="true"
             >
-                <dt className={styles.tick}>Your {delta.tick}</dt>
+                <dt className={styles.tick}>{t('receive.your')} {delta.tick}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <span className={styles.feeNote} style={balanceLineStyle}>
-                        <span className={styles.before}>Balance unknown</span>
+                        <span className={styles.before}>{t('components.balanceChanges.balanceUnknown')}</span>
                     </span>
                 </dd>
             </div>
@@ -212,7 +213,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-direction="flat"
                 data-after-unknown="true"
             >
-                <dt className={styles.tick}>Your {delta.tick}</dt>
+                <dt className={styles.tick}>{t('receive.your')} {delta.tick}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
                         signed="− unknown"
@@ -223,7 +224,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                     <span className={styles.feeNote} style={balanceLineStyle}>
                         <span className={styles.before}>{delta.before} {delta.tick}</span>
                         <span className={styles.arrow}>→</span>
-                        <span className={styles.after}>unknown</span>
+                        <span className={styles.after}>{t('components.balanceChanges.unknown')}</span>
                     </span>
                 </dd>
             </div>
@@ -247,7 +248,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
                 data-protocol-fee={delta.isProtocolFee ? 'true' : undefined}
                 data-coin={delta.isCoin ? 'true' : undefined}
             >
-                <dt className={styles.tick}>{delta.feeLabel || 'Network fee'}</dt>
+                <dt className={styles.tick}>{delta.feeLabel || t('send.networkFee')}</dt>
                 <dd className={styles.amount} style={amountStyle}>
                     <ChangeLine
                         signed={signedFee(delta.tick, delta.feeAmount)}
@@ -276,7 +277,7 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
             data-coin={delta.isCoin ? 'true' : undefined}
             data-direction={direction}
         >
-            <dt className={styles.tick}>Your {delta.tick}</dt>
+            <dt className={styles.tick}>{t('receive.your')} {delta.tick}</dt>
             <dd className={styles.amount} style={amountStyle}>
                 <ChangeLine
                     signed={signedChange(delta.before, delta.after)}
@@ -308,7 +309,7 @@ function ChangeLine({ signed, tick = '', numericValue, fiatRate, fiatCurrency, s
             {showFiat ? (
                 <span className={styles.feeNote}>
                     {fiatValue === null
-                        ? `Fiat unavailable (${fiatCurrency})`
+                        ? t('components.balanceChanges.fiatUnavailable', { fiatCurrency })
                         : `≈ ${formatFiatAmount(fiatValue, fiatCurrency)} ${fiatCurrency}`}
                 </span>
             ) : null}
@@ -325,6 +326,7 @@ const amountStyle = {
     minWidth: 0,
     overflowWrap: 'anywhere',
     wordBreak: 'normal',
+    fontVariantNumeric: 'tabular-nums',
 };
 
 const changeLineStyle = {
@@ -342,7 +344,7 @@ const balanceLineStyle = {
 
 function signedFee(tick, amount) {
     const value = String(amount ?? '').trim();
-    return value ? `− ${tick} ${value.replace(/^[+-]/, '')}` : `− unknown ${tick}`;
+    return value ? `−${value.replace(/^[+-]/, '')} ${tick}` : `− unknown ${tick}`;
 }
 
 function negativeValue(amount) {

@@ -20,7 +20,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -98,13 +98,15 @@ function swapDetail(actionIndex, status, expiration) {
     return { action: 'SWAP', action_index: String(actionIndex), state: { status, expiration } };
 }
 
-function harness({ swaps = [], cancels = [], details = {} } = {}) {
+function harness({ swaps = [], cancels = [], details = {}, detailReader, cancelReader } = {}) {
+    const composeForConfirm = vi.fn(async () => ({ psbt: 'aa00', encoding: 'psbt', actionString: 'ACT' }));
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getSwapsForAddress: () => Promise.resolve({ data: swaps }),
-        getSwapCancelsForAddress: () => Promise.resolve({ data: cancels }),
-        getSwapDetail: ({ actionIndex }) => Promise.resolve(details[String(actionIndex)] ?? null),
+        getSwapCancelsForAddress: cancelReader || (() => Promise.resolve({ data: cancels })),
+        getSwapDetail: detailReader || (({ actionIndex }) => Promise.resolve(details[String(actionIndex)] ?? null)),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
+        composeForConfirm,
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -112,7 +114,7 @@ function harness({ swaps = [], cancels = [], details = {} } = {}) {
             return () => Promise.resolve({});
         },
     });
-    return { messaging };
+    return { messaging, composeForConfirm };
 }
 
 async function drain(rounds = 24) {
@@ -238,6 +240,46 @@ describe('MySwapsView: settled status', () => {
         expect(within(row).getByText('Settled')).toBeTruthy();
         expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull();
         expect(within(row).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
+    it('refuses an action when a fresh detail says the listed swap settled', async () => {
+        const detailReader = vi.fn()
+            .mockResolvedValueOnce(swapDetail(705, 'open', FUTURE))
+            .mockResolvedValueOnce(swapDetail(705, 'complete', FUTURE));
+        const { messaging, composeForConfirm } = harness({
+            swaps: [swapRow(705, { swap_status: 'open' })],
+            detailReader,
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open swaps'), 705);
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel swap' }));
+
+        expect(await utils.findByText('This swap is no longer open. Refresh My swaps and try again.')).toBeTruthy();
+        expect(detailReader).toHaveBeenCalledTimes(2);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses an action when a fresh cancel feed closes the listed swap', async () => {
+        const cancelReader = vi.fn()
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: [cancelRow(9000, 706, 'valid')] });
+        const { messaging, composeForConfirm } = harness({
+            swaps: [swapRow(706, { swap_status: 'open' })],
+            details: { 706: swapDetail(706, 'open', FUTURE) },
+            cancelReader,
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open swaps'), 706);
+        fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+        fireEvent.change(utils.getByLabelText('New expiration (optional)'), {
+            target: { value: '2099-01-02T03:04' },
+        });
+        fireEvent.click(utils.getByRole('button', { name: 'Edit swap' }));
+
+        expect(await utils.findByText('This swap is no longer open. Refresh My swaps and try again.')).toBeTruthy();
+        expect(cancelReader).toHaveBeenCalledTimes(2);
+        expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('labels an expired offer in the past tense and removes its actions', async () => {

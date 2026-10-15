@@ -318,7 +318,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         fireEvent.change(mode, { target: { value: 'holders' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
         await flushTimers();
-        fireEvent.click(screen.getByLabelText(/^Select MiXeD!(?:\s|$)/));
+        fireEvent.click(screen.getByLabelText(/^Select MiXeD!(?:[\s,]|$)/));
 
         expect(screen.getByLabelText('Tokens (one per line)')).toHaveValue(SYMBOL_TICK);
     });

@@ -8,16 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ConfirmActionModal (§5.1-5.2). The wallet's single standardized
-// confirmation surface. Originally an overlay modal; per operator
-// direction 2026-07-22 it renders as a full PAGE in the same frame as the
-// action forms (the overlay didn't fit small/mobile viewports), shown in
-// place of the form the way picker screens are. The exported name stays
-// `ConfirmActionModal` so the slice wiring and its tests keep
-// their vocabulary. Built on the single-encode pipeline (the previewed
-// PSBT is the signed PSBT). Anatomy top-to-bottom (§5.2): "Confirm"
-// header, intent, balance deltas, fee and total section, pre-flight panel,
-// credentials + HW note, back/reject and approve footer.
+// ConfirmActionModal (§5.1-5.2) is the wallet's standardized full-screen
+// confirmation surface. It replaces the action form within the same Screen
+// frame and uses the single-encode pipeline, so the previewed PSBT is the
+// signed PSBT. Anatomy top-to-bottom (§5.2): "Confirm" header, intent,
+// balance deltas, fee and total section, pre-flight panel, credentials and
+// hardware note, then the pinned reject and approve footer.
 //
 // Interaction contract (§5.1, page form): exactly two exits, approve or
 // back/reject; the header back arrow rejects the request. Both exits stay
@@ -26,8 +22,8 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback, useContext, useEffect, useRef } from 'react';
-import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
+import { AddressText, Button, Icon, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
@@ -47,6 +43,7 @@ import { WalletIdentity } from './WalletIdentity.jsx';
 import { MessagingContext } from '../MessagingContext.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
+import { t } from '../../i18n/index.js';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 const chainRegistry = defaultRegistry();
@@ -97,6 +94,22 @@ function formatReviewDecoded(decoded) {
     return { ...decoded, summary, details };
 }
 
+function reportWithoutUnverifiedNativeFeeWarning(report) {
+    if (!Array.isArray(report?.findings)) return report;
+    const findings = report.findings.filter((finding) => (
+        finding?.code !== 'NATIVE_FEE_FORFEIT'
+    ));
+    if (findings.length === report.findings.length) return report;
+    const hasVisibleConcern = findings.some((finding) => (
+        finding?.severity === 'warning' || finding?.severity === 'error'
+    )) || report.restricted || (report.unverified?.length > 0);
+    return {
+        ...report,
+        findings,
+        verdict: report.verdict === 'warn' && !hasVisibleConcern ? 'pass' : report.verdict,
+    };
+}
+
 function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -138,7 +151,7 @@ function reviewActionLabel(decoded, fallback, chainLabel) {
         return [inlineAmount[1], inlineAmount[2], unit].filter(Boolean).join(' ');
     }
 
-    const withoutChain = chainLabel
+    const withoutChain = typeof chainLabel === 'string' && chainLabel
         ? summary.replace(new RegExp(`\\s+on\\s+${escapeRegExp(chainLabel)}(?=\\s|:|\\(|$)`, 'i'), '')
         : summary;
     const actionPhrase = withoutChain
@@ -188,6 +201,7 @@ function reviewActionLabel(decoded, fallback, chainLabel) {
  * @param {string} [props.sourceName] the address-record label, followed by the
  *   wallet name when more than one wallet exists
  * @param {{ id: string, name?: string } | null} [props.signingWallet] wallet that will approve the request
+ * @param {boolean} [props.hardwareSigner] whether approval happens on a hardware device
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  * @param {(amount: string) => string|null} [props.formatNativeFee]
@@ -202,7 +216,7 @@ export function ConfirmActionModal({
     screenVariant = 'small', feeText, totalText, error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
-    signingWallet = null,
+    signingWallet = null, hardwareSigner = false,
     formatNativeFee, formatProtocolFee,
 }) {
     const formattedDecoded = formatReviewDecoded(decoded);
@@ -218,6 +232,9 @@ export function ConfirmActionModal({
     const resolvedApproveLabel = approveLabel || (variant === 'action'
         ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
         : headlineText);
+    const actionHeaderLabel = variant === 'action' && formattedDecoded
+        ? resolvedApproveLabel
+        : headlineText;
     const isContractCall = variant === 'action'
         && /^(?:contract call|call contract\b)/i.test(headlineText);
     const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
@@ -282,6 +299,11 @@ export function ConfirmActionModal({
         && !protocolFee
         && !protocolFeeKnownFree
         && !paysProtocolFeeNatively;
+    // The SDK advisory is action-based and does not know whether these bytes
+    // contain a native-coin fee output. The exact fee row above is the one
+    // reliable disclosure: it renders once when an output is present and is
+    // absent when the fee uses XCHAIN or the action is free.
+    const displayedReport = reportWithoutUnverifiedNativeFeeWarning(report);
     // A Mode B dispenser's oracle usage fee: a coin output in these bytes that
     // neither fee line covers. Action variant only, for the reason above.
     const oracleFee = variant === 'action'
@@ -298,10 +320,18 @@ export function ConfirmActionModal({
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
     const pageRef = useRef(null);
-    useFocusTrap(pageRef, { active: open });
+    const titleRef = useRef(null);
+    useFocusTrap(pageRef, { active: open, initialFocusRef: titleRef });
     const previewReady = phase === 'ready' && !reportLoading;
     const approveDisabled = approvalAttempt !== null && approvalAttempt.request === composed;
     const signingTime = useLongOperationStatus(signaturePhase);
+
+    useLayoutEffect(() => {
+        if (!open) return;
+        const scroller = pageRef.current?.querySelector('main');
+        if (scroller) scroller.scrollTop = 0;
+        titleRef.current?.focus({ preventScroll: true });
+    }, [composed, open]);
 
     useEffect(() => {
         if (!open) return;
@@ -365,31 +395,62 @@ export function ConfirmActionModal({
     // signature is in flight (both exits locked).
     const header = (
         <PageHeader
+            nested
             onBack={handleReject}
             backDisabled={exitsLocked}
-            title="Confirm"
+            title={t('common.confirm')}
+            titleRef={titleRef}
         />
+    );
+    const footer = (
+        <div className={styles.footer}>
+            <Button
+                variant="secondary"
+                icon={<Icon.ThumbsDownIcon />}
+                onClick={handleReject}
+                disabled={exitsLocked}
+                data-testid="confirm-reject"
+            >
+                {t('extension.approval.reject')}
+            </Button>
+            <Button
+                variant="success"
+                icon={<Icon.ThumbsUpIcon />}
+                onClick={handleApprove}
+                disabled={approveDisabled || !previewReady || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
+                data-testid="confirm-approve"
+                aria-label={resolvedApproveLabel}
+            >
+                {resolvedApproveLabel}
+            </Button>
+        </div>
     );
 
     // The confirm page always opens at its top; it must not inherit how far
     // the form behind it was scrolled.
     return (
-        <Screen rootRef={pageRef} variant={screenVariant} header={header} restoreScroll={false}>
+        <Screen
+            rootRef={pageRef}
+            variant={screenVariant}
+            header={header}
+            footer={footer}
+            restoreScroll={false}
+        >
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
-                aria-label={`Confirm ${headlineText || 'action'}`}
+                aria-label={t('components.confirmActionModal.confirm', { value: headlineText || 'action' })}
             >
                 <div className={styles.header}>
-                    <span className={styles.actionLabel}>{headlineText}</span>
+                    <span className={styles.actionLabel}>{actionHeaderLabel}</span>
                     <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
                 </div>
 
                 <div className={styles.body}>
-                    <WalletIdentity wallet={resolvedSigningWallet} label="Signing with" />
+                    <WalletIdentity wallet={resolvedSigningWallet} label={t('components.confirmActionModal.signingWith')} />
                     <OriginIdentity
                         origin={requestOrigin}
-                        label="Requesting site"
+                        label={t('extension.approval.requestingSite')}
                         testId="confirm-request-origin"
                     />
 
@@ -405,8 +466,8 @@ export function ConfirmActionModal({
                     {/* §5.5 message variant: the full text, verbatim and
                         never truncated - it is the whole thing being signed. */}
                     {variant === 'message' && messageText !== undefined ? (
-                        <section className={styles.messageBox} aria-label="Message to sign">
-                            <p className={styles.messageLabel}>Message to sign</p>
+                        <section className={styles.messageBox} aria-label={t('components.confirmActionModal.messageToSign')}>
+                            <p className={styles.messageLabel}>{t('components.confirmActionModal.messageToSign')}</p>
                             <pre className={styles.messageText} data-testid="confirm-message-text">
                                 {messageText}
                             </pre>
@@ -429,7 +490,7 @@ export function ConfirmActionModal({
                     {(variant === 'action' || variant === 'message') && sourceAddress ? (
                         <dl className={styles.sourceRow} data-testid="confirm-source">
                             <dt className={styles.sourceLabel}>
-                                {variant === 'message' ? 'Signing address' : 'From'}
+                                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('send.fields.from')}
                             </dt>
                             <dd className={styles.sourceValue}>
                                 {sourceName ? (
@@ -456,7 +517,7 @@ export function ConfirmActionModal({
 
                     {envelopeLines ? (
                         <div className={styles.fee} data-testid="confirm-envelope-transactions">
-                            <div>Two transactions, both signed now and broadcast in order:</div>
+                            <div>{t('components.confirmActionModal.twoTransactionsBothSignedNow')}</div>
                             {envelopeLines.map((line) => (
                                 <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
                             ))}
@@ -474,15 +535,15 @@ export function ConfirmActionModal({
 
                     {nativeProtocolFeeAmount ? (
                         <div className={styles.fee} data-testid="confirm-native-protocol-fee">
-                            Protocol fee: {nativeProtocolFeeAmount} {nativeTicker}
+                            {t('components.confirmActionModal.protocolFee')} {nativeProtocolFeeAmount} {nativeTicker}
                             {nativeProtocolFeeFiat ? ` (${nativeProtocolFeeFiat})` : ''}
-                            {' (sent on-chain and not refunded if the action is rejected)'}
+                            {t('components.confirmActionModal.sentOnChainAndNot')}
                         </div>
                     ) : null}
 
                     {protocolFeeUnavailable ? (
                         <div className={styles.fee} data-testid="confirm-protocol-fee-unavailable">
-                            Protocol fee estimate unavailable.
+                            {t('components.confirmActionModal.protocolFeeEstimateUnavailable')}
                         </div>
                     ) : null}
 
@@ -496,7 +557,7 @@ export function ConfirmActionModal({
 
                     {(variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
                         <PreflightPanel
-                            report={report}
+                            report={displayedReport}
                             loading={reportLoading}
                             acknowledged={acknowledged}
                             onAcknowledge={onAcknowledge}
@@ -507,9 +568,9 @@ export function ConfirmActionModal({
                         no override. Rendered where the credentials would be so
                         the user sees WHY there is nothing to sign with. */}
                     {refusal ? (
-                        <p className={styles.refusal} role="alert" data-testid="confirm-refusal">
+                        <StatusMessage variant="error" role="alert" testId="confirm-refusal">
                             {refusal}
-                        </p>
+                        </StatusMessage>
                     ) : null}
 
                     {/* §5.3.4: a credential failure returns the page to `ready`
@@ -524,12 +585,12 @@ export function ConfirmActionModal({
                             )}
                         </div>
                     ) : error ? (
-                        <div className={styles.error} role="alert" data-testid="confirm-error">
+                        <StatusMessage variant="error" role="alert" testId="confirm-error">
                             {userFacingMessage(
                                 error,
                                 'The request stopped because the wallet service returned no explanation.',
                             )}
-                        </div>
+                        </StatusMessage>
                     ) : null}
 
                     {refusal ? null : (
@@ -541,60 +602,33 @@ export function ConfirmActionModal({
                     {/* Transaction-signing caveat only. Message signing moves no
                         coins and has no outputs, so this note would be nonsense
                         on that variant. */}
-                    {variant === 'message' ? null : (
+                    {variant !== 'message' && hardwareSigner ? (
                         <p className={styles.hwNote}>
-                            A hardware device verifies native outputs and destinations only; the action
-                            data is obfuscated on-chain, so this screen is where you verify the action intent.
+                            {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
                         </p>
-                    )}
+                    ) : null}
 
                     {phase === 'rechecking' ? (
-                        <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
+                        <p className={styles.recheck} data-testid="confirm-rechecking">{t('components.confirmActionModal.reChecking')}</p>
                     ) : null}
                     {signingTime.showElapsed ? (
                         <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
-                            Signing for {signingTime.elapsedSeconds} seconds. Check your hardware wallet screen if one is connected.
+                            {t('components.confirmActionModal.signingFor')} {signingTime.elapsedSeconds} {t('components.confirmActionModal.secondsCheckYourHardwareWallet')}
                         </p>
                     ) : null}
                     {signingTime.timedOut ? (
-                        <div className={styles.error} role="alert" data-testid="confirm-signing-timeout">
-                            Signing is taking longer than expected. Keep this screen open and check the device or wallet service. Before trying again, check History and the queued-transactions banner so you do not submit the same transaction twice.
-                        </div>
+                        <StatusMessage variant="error" role="alert" testId="confirm-signing-timeout">
+                            {t('components.confirmActionModal.signingIsTakingLongerThan')}
+                        </StatusMessage>
                     ) : null}
-                    {/* this line used to promise a retry, and nothing retries
-                        on its own. The queue holds the signed transaction until the
-                        user broadcasts it from the queued-transactions banner. */}
+                    {/* The queue holds the signed transaction until the user
+                        broadcasts it from the queued-transactions banner. */}
                     {phase === 'signed-not-broadcast' ? (
                         <p className={styles.queued} data-testid="confirm-queued">
-                            Signed - not broadcast yet.
+                            {t('components.confirmActionModal.signedNotBroadcastYet')}
                         </p>
                     ) : null}
                 </div>
-
-                {/* Both exits remain grouped at the end of the review (§5.2.7). */}
-                <footer className={styles.footer}>
-                    <Button
-                        variant="secondary"
-                        icon={<Icon.ThumbsDownIcon />}
-                        onClick={handleReject}
-                        disabled={exitsLocked}
-                        data-testid="confirm-reject"
-                    >
-                        Reject
-                    </Button>
-                    <Button
-                        variant="success"
-                        icon={<Icon.ThumbsUpIcon />}
-                        onClick={handleApprove}
-                        disabled={approveDisabled || !previewReady || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
-                        data-testid="confirm-approve"
-                        // The explicit accessible name stays identical to the
-                        // visible action and amount.
-                        aria-label={resolvedApproveLabel}
-                    >
-                        {resolvedApproveLabel}
-                    </Button>
-                </footer>
             </div>
         </Screen>
     );

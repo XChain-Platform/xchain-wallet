@@ -6,11 +6,52 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+
+const receiveCss = readFileSync(
+    'packages/core/src/shared/routes/Receive.module.css',
+    'utf8',
+);
 
 afterEach(() => cleanup());
 
 describe('PriceAlertForm', () => {
+    it('uses the shared medium control size across the alert row', () => {
+        render(<PriceAlertForm onCreate={vi.fn()} />);
+
+        const coin = screen.getByRole('combobox', { name: 'Coin' });
+        const direction = screen.getByRole('combobox', { name: 'Direction' });
+        const target = screen.getByRole('textbox', { name: 'Target price' });
+        const action = screen.getByRole('button', { name: 'Add alert' });
+        expect(coin.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(direction.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(target.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(action).toHaveClass(buttonStyles.md);
+    });
+
+    it('centres md actions beside the md target field', () => {
+        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} onCancel={vi.fn()} />);
+        const targetField = screen.getByRole('textbox', { name: 'Target price' })
+            .parentElement.parentElement;
+        const row = targetField.parentElement;
+
+        expect(targetField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(row.style.alignItems).toBe('center');
+        expect(screen.getByRole('button', { name: 'Add alert' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(screen.getByRole('button', { name: 'Cancel' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('bottom-aligns the Receive label action with its field and removes field-wrapper spacing', () => {
+        const labelEditor = receiveCss.match(/\.labelEditor\s*\{([^}]+)\}/)?.[1] || '';
+        const labelEditorChildren = receiveCss.match(/\.labelEditor\s*>\s*\*\s*\{([^}]+)\}/)?.[1] || '';
+
+        expect(labelEditor).toMatch(/align-items:\s*end/);
+        expect(labelEditorChildren).toMatch(/margin-bottom:\s*0/);
+    });
+
     it('explains why an empty target keeps the primary action disabled', () => {
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
         const action = screen.getByRole('button', { name: 'Add alert' });
@@ -104,7 +145,12 @@ describe('PriceAlertForm', () => {
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '0' } });
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Enter a price greater than zero.');
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('Enter a price greater than zero.');
+        // The bad price is the price field's own error, read with the field.
+        const target = screen.getByRole('textbox', { name: 'Target price' });
+        expect(target.getAttribute('aria-describedby')).toContain(alert.id);
+        expect(screen.queryByRole('status')).toBeNull();
         expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
         expect(onCreate).not.toHaveBeenCalled();
     });

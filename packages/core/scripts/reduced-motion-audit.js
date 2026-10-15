@@ -56,12 +56,46 @@ function motionDeclarations(source) {
     return declarations;
 }
 
+function hasPositiveRawDuration(value) {
+    const durations = value.matchAll(/(?:^|[\s,(])(\d*\.?\d+)(ms|s)\b/gi);
+    return Array.from(durations).some(([, amount]) => Number(amount) > 0);
+}
+
+/**
+ * Return transition declarations that embed a positive duration instead of a
+ * motion token. tokens.css owns the raw values and is excluded by path.
+ *
+ * @param {{file: string, source: string}[]} stylesheets
+ * @param {string} tokenFile
+ */
+export function findRawTransitionDurations(
+    stylesheets,
+    tokenFile = 'packages/core/src/ui/tokens.css',
+) {
+    const violations = [];
+    for (const { file, source } of stylesheets) {
+        if (file === tokenFile) continue;
+        for (const declaration of motionDeclarations(source)) {
+            if (declaration.kind !== 'transition' || !hasPositiveRawDuration(declaration.value)) continue;
+            violations.push({ file, value: declaration.value });
+        }
+    }
+    return violations;
+}
+
+export function hasReducedMotionMediaOverride(source, kind) {
+    const cancellation = kind === 'animation'
+        ? /\banimation(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i
+        : /\btransition(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i;
+    return mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
+        .some((body) => cancellation.test(body));
+}
+
 function hasLocalOverride(source, kind) {
     const cancellation = kind === 'animation'
         ? /\banimation(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i
         : /\btransition(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i;
-    const hasOsOverride = mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
-        .some((body) => cancellation.test(body));
+    const hasOsOverride = hasReducedMotionMediaOverride(source, kind);
     const hasAppOverride = Array.from(stripComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g))
         .some(([, selectorText, body]) => (
             selectorText.includes(':root[data-xc-reduced-motion="reduce"]')
@@ -145,11 +179,58 @@ export function findUncoveredMotionCss(
     return uncovered;
 }
 
+const JS_MOTION_CHECKS = [
+    {
+        kind: 'auto-advance',
+        detect: /\bsetInterval\s*\([\s\S]*?\bset(?:Index|Frame|Slide)\s*\(/,
+        guarded: /\bif\s*\([^)]*\breducedMotion\b[^)]*\)\s*return(?:\s+undefined)?\s*;[\s\S]{0,800}\bsetInterval\s*\(/,
+    },
+    {
+        kind: 'smooth-scroll',
+        detect: /\bbehavior\s*:\s*[^,}\n]*['"]smooth['"]/,
+        guarded: /\bbehavior\s*:\s*reducedMotion\s*\?\s*['"]auto['"]\s*:\s*['"]smooth['"]/,
+    },
+    {
+        kind: 'web-animation',
+        detect: /\.animate\s*\(/,
+        guarded: /(?:\bif\s*\([^)]*\breducedMotion\b[^)]*\)\s*return(?:\s+undefined)?\s*;[\s\S]{0,800}\.animate\s*\(|\bduration\s*:\s*reducedMotion\s*\?\s*0\s*:)/,
+    },
+];
+
+/**
+ * Return JavaScript motion drivers that do not resolve and honor the shared
+ * reduced-motion preference.
+ *
+ * @param {{file: string, source: string}[]} scripts
+ */
+export function findUncoveredMotionJs(scripts) {
+    const uncovered = [];
+    for (const { file, source } of scripts) {
+        const checks = JS_MOTION_CHECKS.filter(({ detect }) => detect.test(source));
+        if (checks.length === 0) continue;
+        const hasResolver = /\b(?:const|let)\s+reducedMotion\s*=\s*useReducedMotion\s*\(\s*\)/.test(source);
+        const kinds = checks
+            .filter(({ guarded }) => !hasResolver || !guarded.test(source))
+            .map(({ kind }) => kind);
+        if (kinds.length > 0) uncovered.push({ file, kinds });
+    }
+    return uncovered;
+}
+
 function listCss(dir, files = []) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const path = join(dir, entry.name);
         if (entry.isDirectory()) listCss(path, files);
         else if (entry.name.endsWith('.css')) files.push(path);
+    }
+    return files;
+}
+
+function listScripts(dir, files = []) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) listScripts(path, files);
+        else if (/\.jsx?$/.test(entry.name)) files.push(path);
     }
     return files;
 }
@@ -160,8 +241,17 @@ export function runReducedMotionAudit() {
         source: readFileSync(path, 'utf8'),
     }));
     const globalCss = readFileSync(tokensPath, 'utf8');
+    const scripts = listScripts(coreSourceRoot).map((path) => ({
+        file: relative(repoRoot, path).split(sep).join('/'),
+        source: readFileSync(path, 'utf8'),
+    }));
+    const motionScripts = scripts.filter(({ source }) => (
+        JS_MOTION_CHECKS.some(({ detect }) => detect.test(source))
+    ));
     return {
         motionStylesheetCount: stylesheets.filter(({ source }) => motionDeclarations(source).length > 0).length,
         uncovered: findUncoveredMotionCss(stylesheets, globalCss),
+        motionScriptCount: motionScripts.length,
+        uncoveredJs: findUncoveredMotionJs(scripts),
     };
 }

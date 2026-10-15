@@ -14,27 +14,18 @@
 .toolbar {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
+    /* The half-grid addition aligns the toolbar with its neighboring route controls. */
     margin-bottom: calc(var(--xc-space-1) + 2px);
 }
 
-.search {
-    flex: 1 1 0;
+.toolbar > * {
+    flex: 1 1 12rem;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.search::placeholder {
-    color: var(--xc-text-muted);
+    margin-bottom: 0;
 }
 
 /* Encrypted-session requests: counterparties who published their key to one of
@@ -82,12 +73,6 @@
     gap: var(--xc-space-2);
 }
 
-.requestSent {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-success, var(--xc-text-muted));
-}
-
 /* iMessage-style day separator: a centered, muted date header shown once
    above each day's run of messages in the thread view. */
 .daySeparator {
@@ -110,7 +95,7 @@
     font-size: var(--xc-text-xs);
     font-weight: 700;
     color: var(--xc-accent-text);
-    scroll-margin-top: 56px;
+    scroll-margin-top: calc(var(--xc-control-h-lg) + var(--xc-space-2));
 }
 
 .unreadDivider::before,
@@ -149,31 +134,41 @@
 
 .attachmentLink svg {
     flex: 0 0 auto;
-    width: 1rem;
-    height: 1rem;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 .messageMeta {
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
+    /* The half-grid top inset visually separates metadata from message copy. */
     margin: 2px 0.3rem 0;
     color: var(--xc-text-muted);
-    font-size: 0.65rem;
+    font-size: var(--xc-text-xs);
 }
 
 /* Docked thread composer: lives in the Screen footer, which flex-pins it to
    the bottom of the screen and supplies the top border + raised background.
-   We pull against the footer's default padding (space-3 vertical / space-4
-   horizontal) with negative margins so the bar reads as a tight, even space-2
-   gutter, without a global footer change. The input and the send button are
+   A negative block margin trims the footer's space-3 vertical padding to a
+   tight space-2; the footer's inline padding is the page gutter, so the bar
+   lines up with the thread above it. The input and the send button are
    joined into one continuous bar (shared border, radius only on the outer
    corners); Enter or the button opens the send-confirmation screen. */
 .composer {
     display: flex;
     flex-direction: row;
     align-items: stretch;
-    margin: calc(var(--xc-space-2) - var(--xc-space-3)) calc(var(--xc-space-2) - var(--xc-space-4));
+    margin-block: calc(var(--xc-space-2) - var(--xc-space-3));
+}
+
+/* Short landscape screens already shrink the footer to space-1 block padding
+   (Screen.module.css), so the pull would put the bar flush against the
+   footer border and the bottom edge. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .composer {
+        margin-block: 0;
+    }
 }
 
 .composer > div {
@@ -192,7 +187,9 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-inline-end: none;
-    border-radius: var(--xc-radius-md) 0 0 var(--xc-radius-md);
+    border-radius: 0;
+    border-start-start-radius: var(--xc-control-radius);
+    border-end-start-radius: var(--xc-control-radius);
 }
 
 /* Replace the browser focus ring (which outlines only the input half and
@@ -203,24 +200,6 @@
 }
 
 .composerInput::placeholder {
-    color: var(--xc-text-muted);
-}
-
-/* Send-confirmation review rows: label on the left, value on the right. */
-
-.confirmRow {
-    display: flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: var(--xc-space-3);
-}
-
-.confirmLabel {
-    flex: 0 0 auto;
-    min-width: 6.5rem;
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
     color: var(--xc-text-muted);
 }
 
@@ -235,12 +214,16 @@
 .convItem {
     display: flex;
     flex-direction: column;
+    /* Half-grid spacing keeps the two conversation lines visually connected. */
     gap: 2px;
     width: 100%;
     text-align: start;
     padding: var(--xc-space-3);
     border: none;
     border-bottom: 1px solid var(--xc-border);
+    /* Square: a row separator, not a button outline. The Button radius bent
+       each separator up at both ends. */
+    border-radius: 0;
     background: transparent;
     color: inherit;
     cursor: pointer;
@@ -257,11 +240,19 @@
     border-bottom: none;
 }
 
+/* The row is a ghost Button, whose hover fill is a dark slate meant for
+   white label text. This row keeps theme text, so hover uses the muted
+   surface through the Button's own hover tokens. */
+.convList .convItem {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: var(--xc-border);
+}
+
 .convItem:hover {
     background: var(--xc-bg-muted);
 }
 
-/* Line 1: name/address (left, ellipsized) + relative timestamp (right). */
+/* Line 1: name/address at the start + relative timestamp at the end. */
 .convTop {
     display: flex;
     align-items: baseline;
@@ -270,7 +261,7 @@
     min-width: 0;
 }
 
-/* Holds the unread dot + name on the left of line 1, taking the row's free
+/* Holds the unread dot + name at the start of line 1, taking the row's free
    width so the name still ellipsizes and the timestamp keeps its place. */
 .convNameWrap {
     display: flex;
@@ -281,12 +272,12 @@
     overflow: hidden;
 }
 
-/* Unread indicator: a small accent dot to the left of a conversation's name,
+/* Unread indicator: a small accent dot before a conversation's name,
    iOS-Messages style. Cleared once the thread is opened. */
 .unreadDot {
     flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
     border-radius: 50%;
     background: var(--xc-accent-primary);
     /* Nudge onto the text center so it reads as inline with the name. */
@@ -318,11 +309,9 @@
     color: var(--xc-text);
 }
 
+/* The timestamp keeps its full width ("20 seconds ago"); the name gives way. */
 .convTime {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: 0 0 auto;
     white-space: nowrap;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

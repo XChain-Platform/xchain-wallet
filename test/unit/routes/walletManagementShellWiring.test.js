@@ -32,4 +32,11 @@ describe.each(SHELLS)('%s wallet management routing', (_name, path) => {
     it('refreshes shell state after a demo wallet exits from details', () => {
         expect(source).toContain('onExited={refresh}');
     });
+
+    it('activates and names a wallet completed through the add-wallet lane', () => {
+        expect(source).toContain('onCreated={handleWalletAdded}');
+        expect(source.match(/onImported=\{handleWalletAdded\}/g)).toHaveLength(2);
+        expect(source).toContain("showToast({ message: `${wallet.name || 'New wallet'} is now active.`");
+        expect(source).toContain('handleSwitchWallet(wallet.id, wallet.name)');
+    });
 });

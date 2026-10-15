@@ -12,7 +12,6 @@
     justify-content: space-between;
     gap: var(--xc-space-2);
     min-width: 0;
-    margin-bottom: var(--xc-space-3);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
     font-weight: 600;
@@ -61,7 +60,7 @@
     min-height: 1.5rem;
     padding: 0 var(--xc-space-2);
     border: 1px solid var(--xc-border-strong);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     color: var(--xc-text-muted);
     background: var(--xc-surface);
     font-size: var(--xc-text-xs);

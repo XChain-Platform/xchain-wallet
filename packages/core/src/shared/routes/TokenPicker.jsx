@@ -20,6 +20,7 @@ import {
     coinFromChainId,
 } from '../components/BalanceList.jsx';
 import { NetworkFilter } from '../components/NetworkFilter.jsx';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -34,14 +35,16 @@ const PLATFORM_QUERY_DEBOUNCE_MS = 350;
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// Rows show the chain only as an icon overlay, and every chain lists the same
+// tickers, so the row's accessible name says which chain (without the network
+// kind) the asset is on.
 function tokenSelectionLabel(row) {
-    const networkSuffix = row.networkKind && row.networkKind !== 'mainnet'
-        ? ` · ${row.networkKind}`
-        : '';
-    const chain = row.chainDisplayName
-        ? ` on ${row.chainDisplayName}${networkSuffix}`
-        : '';
-    return `Select ${row.displayName || row.tick}${chain}`;
+    const chain = chainRegistry.get(row.chainId)?.displayName;
+    return `Select ${row.displayName || row.tick}${chain ? ` on ${chain}` : ''}`;
+}
+
+function withoutRenderedChainLabels(rows) {
+    return rows.map((row) => ({ ...row, chainDisplayName: '', networkKind: '' }));
 }
 
 function hasSpendableBalance(row) {
@@ -123,6 +126,7 @@ export function TokenPicker({
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
     const [balanceReload, setBalanceReload] = useState(0);
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const [balanceLoad, setBalanceLoad] = useState({
         walletId: null,
         accountId: null,
@@ -425,6 +429,7 @@ export function TokenPicker({
         || (!kindLocked && kindFilter !== 'all');
 
     const visibleOptionRows = rows.filter((row) => !hiddenSet.has(`${row.chainId}:${row.tick}`));
+    const hiddenOptionRows = rows.filter((row) => hiddenSet.has(`${row.chainId}:${row.tick}`));
     const sortedOptionRows = pinnedSet.size > 0
         ? [
             ...visibleOptionRows.filter((row) => pinnedSet.has(`${row.chainId}:${row.tick}`)),
@@ -433,8 +438,14 @@ export function TokenPicker({
         : visibleOptionRows;
     const optionRows = [
         ...sortedOptionRows,
+        ...hiddenOptionRows,
         ...platformResults,
     ];
+    const renderedRows = useMemo(() => withoutRenderedChainLabels(rows), [rows]);
+    const renderedPlatformResults = useMemo(
+        () => withoutRenderedChainLabels(platformResults),
+        [platformResults],
+    );
     const optionKeys = optionRows.map((row) => `${row.chainId}:${row.tick}`);
     const optionTabStop = rovingOption && optionKeys.includes(rovingOption)
         ? rovingOption
@@ -495,6 +506,7 @@ export function TokenPicker({
 
     const header = (
         <PageHeader
+            nested
             onBack={onBack}
             backLabel={headerBackLabel}
             title={headerTitle}
@@ -533,7 +545,7 @@ export function TokenPicker({
         ? `No balances match "${tokenQuery.trim()}".`
         : (networkFilter === 'all'
             ? (isReceive
-                ? 'Choose a chain to display a fresh receive address for it.'
+                ? 'Choose a network to display a fresh receive address for it.'
                 : 'Sendable coin and token balances appear here after funds are received.')
             : 'Balances on this network appear here after this wallet receives funds.');
 
@@ -614,7 +626,7 @@ export function TokenPicker({
                 <div id="xc-token-picker-results" ref={resultsRef} role="group" aria-label="Coins and tokens">
                     {rows.length > 0 ? (
                         <BalanceList
-                            rows={rows}
+                            rows={renderedRows}
                             onSelectToken={handleSelect}
                             getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
@@ -626,14 +638,16 @@ export function TokenPicker({
                             getRowTabIndex={(row) => (
                                 `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
                             )}
-                            // The held-balance list is cross-chain too
-                            // whenever the caller has not pinned a network, so
-                            // a user holding the same tick on two chains would
-                            // otherwise face the same indistinguishable rows the
-                            // platform section had. Pinned network = one chain =
-                            // naming it on every row is the noise the default
-                            // avoids.
-                            showChain={networkFilter === 'all'}
+                        />
+                    ) : (platformResults.length === 0 && !platformBusy && !platformError && balancesUnchecked && !tokenQueryTrim) ? (
+                        // An empty list while balances could not be checked is
+                        // not proof of an empty wallet: say that once instead.
+                        <BalancesUncheckedState
+                            plain={false}
+                            onRetry={() => {
+                                recheckBalances();
+                                setBalanceReload((value) => value + 1);
+                            }}
                         />
                     ) : (platformResults.length === 0 && !platformBusy && !platformError) ? (
                         <EmptyState
@@ -662,16 +676,9 @@ export function TokenPicker({
                             ) : null}
                             {platformResults.length > 0 ? (
                                 <BalanceList
-                                    rows={platformResults}
+                                    rows={renderedPlatformResults}
                                     onSelectToken={handleSelect}
                                     getRowActionLabel={tokenSelectionLabel}
-                                    // This section searches EVERY chain
-                                    // the wallet holds an address on, so the
-                                    // same tick legitimately appears once per
-                                    // chain. Without the chain named, those
-                                    // rows are identical, and picking one
-                                    // re-targets the calling form's network.
-                                    showChain
                                     allowRemoteImages={allowRemoteImages}
                                     getRowTabIndex={(row) => (
                                         `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1

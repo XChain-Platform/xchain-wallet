@@ -18,20 +18,17 @@
 }
 
 .successSummary {
+    composes: card from '../../ui/Card.module.css';
     margin: 0;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
     gap: var(--xc-space-2) var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
 }
 
 .successRow {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--xc-space-1);
     min-width: 0;
 }
 .successRow dt {
@@ -49,6 +46,13 @@
 
 .successMono {
     font-family: var(--xc-font-mono, monospace);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.machineText {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .successTxidBlock {

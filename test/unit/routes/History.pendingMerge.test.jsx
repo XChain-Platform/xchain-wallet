@@ -137,7 +137,7 @@ describe('History shows unconfirmed transactions', () => {
         // real one through it.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-        expect(view.container.textContent).toContain(THEIRS);
+        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeTruthy();
     });
 
     it('does not drop the row for lacking an action index, which no pending row has', async () => {
@@ -168,9 +168,9 @@ describe('History shows unconfirmed transactions', () => {
             }],
         });
         await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-        // The row identifies a transaction by its source, the same way it
-        // does for a confirmed one; on our own send that source is us.
-        expect(view.container.textContent).toContain(OURS);
+        // The row identifies a transaction by its counterparty, the same way it
+        // does for a confirmed one; on our own send that is the recipient.
+        expect(view.container.querySelector(`[title="${THEIRS}"]`)).toBeTruthy();
     });
 
     it('upgrades in place rather than showing the transaction twice once it confirms', async () => {
@@ -181,7 +181,7 @@ describe('History shows unconfirmed transactions', () => {
         });
         await waitFor(() => expect(screen.getByText('Confirmed')).toBeTruthy());
         expect(screen.queryByText('Pending')).toBeNull();
-        expect(view.container.textContent.match(/Send/g) || []).toHaveLength(1);
+        expect(view.container.querySelectorAll('[data-history-row]')).toHaveLength(1);
     });
 
     it('sorts the pending row above a confirmed one', async () => {
@@ -279,14 +279,16 @@ describe('History shows unconfirmed transactions', () => {
     it('refreshes confirmation counts from the advancing indexer watermark', async () => {
         const { messaging } = mountHistory({ history: [confirmedRow(CONFIRMED_HASH)] });
         messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7710 });
-        await waitFor(() => expect(screen.getByText('4 Confirmations')).toBeTruthy());
+        // Block and confirmation counts ride on the row's accessible description.
+        const description = () => document.querySelector('[data-history-row]')?.getAttribute('aria-description') || '';
+        await waitFor(() => expect(description()).toMatch(/4 Confirmations/));
 
         vi.useFakeTimers({ toFake: ['Date'] });
         messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7712 });
         vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getIndexerWatermark).toHaveBeenCalledTimes(2));
-        await waitFor(() => expect(screen.getByText('6 Confirmations')).toBeTruthy());
+        await waitFor(() => expect(description()).toMatch(/6 Confirmations/));
     });
 });
 
@@ -306,7 +308,7 @@ describe('History after confirmed PendingTx retention', () => {
 
         await waitFor(() => expect(screen.getByText('Confirmed')).toBeTruthy());
         expect(screen.queryByText('Pending')).toBeNull();
-        expect(view.container.textContent.match(/Send/g) || []).toHaveLength(1);
+        expect(view.container.querySelectorAll('[data-history-row]')).toHaveLength(1);
         await waitFor(async () => expect(await vault.pendingTxs.list()).toHaveLength(0));
     });
 });

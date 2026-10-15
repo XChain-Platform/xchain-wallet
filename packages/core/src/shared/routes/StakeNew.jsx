@@ -139,7 +139,6 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
 
     return wrap(
         <>
-            <p className={local.lede}>{t('stakeNew.prompt')}</p>
             {noStakingChain ? (
                 <p className={styles.entryDescription}>
                     {t('stakeNew.bitcoinOnly')}

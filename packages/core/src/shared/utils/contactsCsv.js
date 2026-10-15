@@ -60,6 +60,8 @@ export function contactsFromCsv(text, options = {}) {
             throw new Error(`Line ${header.line}: missing required "${required}" column.`);
         }
     }
+    const unknownHeader = names.find((name) => name && !CONTACT_CSV_COLUMNS.includes(name));
+    if (unknownHeader) throw new Error(`Line ${header.line}: unknown "${unknownHeader}" column.`);
 
     const now = options.now || new Date().toISOString();
     const makeId = options.makeId || randomUUID;

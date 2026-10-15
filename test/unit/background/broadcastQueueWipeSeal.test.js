@@ -18,7 +18,10 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
-import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
+import {
+    BROADCAST_QUEUE_STORAGE_VERSION,
+    createBroadcastQueueStorage,
+} from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
@@ -190,7 +193,11 @@ describe('a rehydrate still reading when the seal lands takes nothing back', () 
             expect(await reading).toBeNull();
             expect(await storage.loadSettlements()).toEqual([]);
             await storage.save({});
-            expect(fake.store[KEY]).toEqual({ queues: {}, settlements: [] });
+            expect(fake.store[KEY]).toEqual({
+                storageVersion: BROADCAST_QUEUE_STORAGE_VERSION,
+                queues: {},
+                settlements: [],
+            });
         } finally {
             if (prior === undefined) delete globalThis.chrome;
             else globalThis.chrome = prior;

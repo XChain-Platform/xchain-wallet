@@ -9,15 +9,13 @@
 // contact legal@dankest.llc.
 
 import {
-    dismissIntroCarousel,
     expect,
     test,
-    unlockedShell,
+    createWallet,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -166,7 +164,9 @@ async function createSigningSession(page) {
 test.describe('multisig flow', () => {
     test('creates a 2-of-3 setup and opens cosigner and signing views responsively', async ({ page }) => {
         await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets hide create and multisig commands, so this walk
+        // uses a real dev wallet.
+        await createWallet(page);
         await openCommand(page, 'Create multisig');
 
         const createForm = page.getByRole('form', { name: 'Create multisig' });
@@ -175,7 +175,10 @@ test.describe('multisig flow', () => {
         const share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
         await share.locator('summary').click();
         await share.getByLabel('Address to share').selectOption({ index: 1 });
-        await expect(share.getByLabel('Cosigner share payload', { exact: true })).toHaveValue(/xchain-multisig-cosigner/);
+        // The payload is offered as a QR code and a copy action; its raw text
+        // is no longer repeated in a textarea.
+        await expect(share.getByRole('img', { name: 'QR code for multisig cosigner share payload' })).toBeVisible();
+        await expect(share.getByRole('button', { name: /Copy cosigner share payload/ })).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: create and cosigner share`, async () => {

@@ -245,6 +245,13 @@ export function dirtySigningPath(root = WALLET_ROOT, files = SIGNING_SCRIPTS) {
 // unrecognised failure reports the step BEFORE the shallowest thing it could
 // be, never a deeper one.
 export function classify(output) {
+    // Match the pristine-clone and ceremony-record refusals first: they run after the GPG key is named and
+    // before the dev-mock gate, sign.sh exits right after each, and the free text they echo (absent-field
+    // 'missing', marker bodies, porcelain paths) is indented, so only sign.sh itself can start these lines.
+    if (/^sign\.sh: ceremony record refuses this signing: /m.test(output)) return 'gpg-key-named';
+    if (/^sign\.sh: .* has uncommitted changes; refusing to sign\.$/m.test(output)) return 'gpg-key-named';
+    if (/^sign\.sh: .* is not checked out at /m.test(output)) return 'gpg-key-named';
+    if (/^sign\.sh: tag '[^']*' does not exist in /m.test(output)) return 'gpg-key-named';
     if (/is not a lane declared in/.test(output)) return 'dev-mock-gate';
     if (/dev-mock gate exited 0 without saying it read anything/.test(output)) return 'gpg-key-named';
     // Match sign.sh's own dev-mock refusal before any vocabulary test: sign.sh exits right after it,
@@ -311,6 +318,30 @@ export function scopeMismatch({ output, lane }) {
 }
 
 /**
+ * Flag combinations sign.sh refuses, checked before any work so `pin` never records a run the ceremony rejects.
+ * (sign.sh refuses `--staging` with `--lane` only after its dev-mock gate, too late for the pin's own refusals.)
+ *
+ * @param {{ lane?: string | null, staging?: boolean }} args
+ * @returns {string[]} reasons, empty when the combination is one sign.sh accepts
+ */
+export function argConflicts({ lane, staging }) {
+    const reasons = [];
+    // Refuse --lane with --staging, mirroring sign.sh: the rehearsal set is defined by which formats auto-update.
+    if (lane && staging) {
+        reasons.push('--staging cannot be combined with --lane: the rehearsal set is defined by which formats '
+            + 'can auto-update, not by which store lane shipped, and sign.sh refuses the pair');
+    }
+    return reasons;
+}
+
+// Print each argument conflict and report whether any was found.
+function refuseConflicts(args) {
+    const reasons = argConflicts(args);
+    for (const reason of reasons) console.error(`[phase4-rehearsal] refusing: ${reason}`);
+    return reasons.length > 0;
+}
+
+/**
  * Drive sign.sh's preconditions and report how deep they got.
  * Never writes anything; `pin` is what records an observation.
  */
@@ -367,21 +398,24 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
 // gpg's own `gpg:` line counts as well: sign.sh runs gpg under set -e and prints
 // nothing after a gpg failure, so its last `sign.sh:` line there is the "signing manifest" progress line.
 export function firstRefusal(output) {
-    const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = output.split('\n').filter((l) => l.trim());
+    // Match the prefix on the untrimmed line: sign.sh indents the free text it echoes (marker bodies,
+    // porcelain paths), so an indented `gpg: ...` inside a ceremony record is never the blocker.
     for (let i = lines.length - 1; i >= 0; i -= 1) {
-        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe|gpg):/.test(lines[i])) return lines[i];
+        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe|gpg):/.test(lines[i])) return lines[i].trim();
     }
-    return lines[lines.length - 1] || null;
+    return lines.length ? lines[lines.length - 1].trim() : null;
 }
 
 function usage() {
     console.log(`usage: phase4-rehearsal.mjs <command> [args]
 
-  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>] [--staging]
+  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging]
       Drive ceremony Phase 4's signing preconditions and report the
-      deepest step reached. Writes nothing.
+      deepest step reached. Writes nothing. --lane and --staging are
+      mutually exclusive, as sign.sh makes them.
 
-  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>] [--staging]
+  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging]
       Run probe, then record what it observed in
       docs/phase4-rehearsal-pin.json. Refuses to write a pin for a run
       it did not just watch.
@@ -407,6 +441,7 @@ function cmdPin(argv) {
     const lane = arg(argv, '--lane');
     const staging = argv.includes('--staging');
     if (!repo || !tag || !input) { usage(); process.exit(2); }
+    if (refuseConflicts({ lane, staging })) return 2;
     // Decide before the dirty check, so a fallback gate with uncommitted edits blocks the pin.
     const gateFallback = gateFallbackFor(repo);
     const files = signingPathFiles(staging ? 'staging' : 'release', PIN_FORMAT, { gateFallback });
@@ -638,8 +673,10 @@ function main() {
         const tag = arg(argv, '--tag');
         const input = arg(argv, '--input');
         if (!repo || !tag || !input) { usage(); return 2; }
-        const r = probe({ repo, tag, input, lane: arg(argv, '--lane'),
-            staging: argv.includes('--staging') });
+        const lane = arg(argv, '--lane');
+        const staging = argv.includes('--staging');
+        if (refuseConflicts({ lane, staging })) return 2;
+        const r = probe({ repo, tag, input, lane, staging });
         console.log(`[phase4-rehearsal] reached: ${r.reached} (exit ${r.exitCode})`);
         if (r.blocker) console.log(`[phase4-rehearsal] blocker: ${r.blocker}`);
         return r.reached === 'signature' ? 0 : 1;

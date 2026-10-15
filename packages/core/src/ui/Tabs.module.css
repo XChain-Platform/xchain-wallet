@@ -7,7 +7,7 @@
     min-height: var(--xc-control-h-md);
     overflow-x: auto;
     overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-border);
+    border-bottom: 1px solid var(--xc-control-border);
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
@@ -41,21 +41,31 @@
     white-space: normal;
     text-align: center;
     cursor: pointer;
-    transition: color var(--xc-transition), border-color var(--xc-transition);
+    transition: background var(--xc-transition), color var(--xc-transition), border-color var(--xc-transition);
 }
 
-.tab:hover {
+@media (hover: hover) and (pointer: fine) {
+    .tab:hover:not([aria-selected='true']) {
+        background: var(--xc-control-bg-hover);
+        color: var(--xc-text);
+    }
+}
+
+.tab:active:not([aria-selected='true']) {
+    background: var(--xc-control-bg-hover);
+    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
     color: var(--xc-text);
 }
 
 .tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
+    outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: -2px;
 }
 
 .tab[aria-selected='true'] {
+    background: var(--xc-control-bg-hover);
     color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-control-selected);
 }
 
 .label {
@@ -74,6 +84,6 @@
 }
 
 .tab[aria-selected='true'] .count {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    background: var(--xc-control-selected);
+    color: var(--xc-control-selected-text);
 }

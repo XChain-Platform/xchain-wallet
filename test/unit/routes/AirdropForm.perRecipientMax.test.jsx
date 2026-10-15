@@ -365,3 +365,15 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await expectText(/Review address list/);
     });
 });
+
+describe('AirdropForm CSV upload control', () => {
+    it('opens the hidden file input from an outlined button', async () => {
+        mountAirdrop();
+        await flushTimers();
+        const input = screen.getByLabelText('Upload CSV of addresses');
+        expect(input.style.display).toBe('none');
+        const click = vi.spyOn(input, 'click');
+        fireEvent.click(screen.getByRole('button', { name: 'Upload a CSV or text file' }));
+        expect(click).toHaveBeenCalledTimes(1);
+    });
+});

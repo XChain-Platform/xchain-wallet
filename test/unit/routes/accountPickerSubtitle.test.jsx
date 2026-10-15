@@ -14,9 +14,13 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, act as domAct, fireEvent, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+
+const pickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
 
 afterEach(() => cleanup());
 
@@ -87,7 +91,7 @@ describe('AccountPicker row subtitle', () => {
         expect(onRenameAccount).toHaveBeenCalledWith(account);
     });
 
-    it('marks the current account and puts add and manage actions in the footer', async () => {
+    it('marks the current account and pins add and manage actions in the footer, as Wallets does', async () => {
         const account = { id: 'a3', index: 2, name: 'Savings' };
         const onAddAccount = vi.fn();
         const onRenameAccount = vi.fn();
@@ -99,14 +103,28 @@ describe('AccountPicker row subtitle', () => {
 
         expect(rowFor(account.name)).toHaveAttribute('aria-current', 'true');
         const add = screen.getByRole('button', { name: 'Add account' });
-        const manage = screen.getByRole('button', { name: 'Manage account' });
+        const manage = screen.getByRole('button', { name: 'Manage' });
         expect(add.closest('footer')).toBeTruthy();
         expect(manage.closest('footer')).toBeTruthy();
+        expect(add.closest('main')).toBeNull();
+        expect(pickerCss).toMatch(/\.footerActions button > span:last-child\s*{[^}]*white-space:\s*nowrap/);
 
         fireEvent.click(add);
         fireEvent.click(manage);
         expect(onAddAccount).toHaveBeenCalledOnce();
         expect(onRenameAccount).toHaveBeenCalledWith(account);
+    });
+
+    it('renders the row edit affordance as an icon-only kit button', async () => {
+        await mountWith(
+            [{ id: 'a1', index: 0, name: 'Savings' }],
+            { onRenameAccount: () => {} },
+        );
+
+        const rename = screen.getByRole('button', { name: 'Rename Savings' });
+        expect(rename).toHaveClass(buttonStyles.iconOnly);
+        expect(rename.querySelector('svg[data-xc-icon]')).toBeInTheDocument();
+        expect(rename.querySelectorAll(':scope > span')).toHaveLength(1);
     });
 
     it('switches an inactive account and returns through the supplied route', async () => {

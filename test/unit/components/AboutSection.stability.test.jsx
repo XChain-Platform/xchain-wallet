@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 import { WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
@@ -110,29 +110,24 @@ describe('AboutSection diagnostics', () => {
         expect(paragraphs.every((paragraph) => !paragraph.textContent.includes('\n'))).toBe(true);
     });
 
-    it('opens the repository issue form with redacted diagnostics only', async () => {
-        const location = { replace: vi.fn() };
-        const reportWindow = { location, opener: {}, close: vi.fn() };
-        const open = vi.spyOn(globalThis, 'open').mockReturnValue(reportWindow);
+    it('opens the repository issue form without wallet data in the URL', () => {
+        const open = vi.spyOn(globalThis, 'open').mockReturnValue(null);
         const diagnostics = {
             wallet: { version: 'test' },
+            balances: { BTC: '1.25' },
             recent_errors: [{ message: 'redacted:sha256:1234abcd' }],
         };
         try {
             mount(diagnostics);
             fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
 
-            await waitFor(() => expect(location.replace).toHaveBeenCalledOnce());
-            const reportUrl = new URL(location.replace.mock.calls[0][0]);
+            expect(open).toHaveBeenCalledOnce();
+            const [url, target, features] = open.mock.calls[0];
+            const reportUrl = new URL(url);
             expect(reportUrl.origin + reportUrl.pathname).toBe('https://github.com/XChain-Platform/xchain-wallet/issues/new');
-            expect(reportUrl.searchParams.get('body')).toContain(JSON.stringify({
-                ...diagnostics,
-                wallet: { ...diagnostics.wallet, platform: 'web' },
-                build: null,
-            }, null, 2));
-            expect(reportUrl.searchParams.get('body')).toContain('redacted:sha256:1234abcd');
-            expect(open).toHaveBeenCalledWith('about:blank', '_blank');
-            expect(reportWindow.opener).toBeNull();
+            expect(reportUrl.search).toBe('');
+            expect(target).toBe('_blank');
+            expect(features).toBe('noopener,noreferrer');
         } finally {
             open.mockRestore();
         }

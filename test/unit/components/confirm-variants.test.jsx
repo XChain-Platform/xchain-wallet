@@ -41,6 +41,7 @@ import {
     isUnreadableActionReason,
 } from '../../../packages/core/src/shared/components/psbtDecodeReasons.js';
 import { canApproveWithReport, toggleAcknowledged } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { messageText } from '../helpers/messageText.js';
 
 const OWN = 'bc1qownownownownownownownownownownownowno';
 const OTHER = 'bc1qotherotherotherotherotherotherotherx';
@@ -248,7 +249,7 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
             }));
             const alert = utils.getByTestId('psbt-action-undecoded');
             expect(alert.getAttribute('role')).toBe('alert');
-            expect(alert.textContent).toMatch(
+            expect(messageText(alert)).toMatch(
                 /^The XChain action inside this transaction could not be read\. Verify/,
             );
             expect(alert.textContent).not.toContain(decodeError);

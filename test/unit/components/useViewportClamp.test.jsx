@@ -125,12 +125,16 @@ describe('HeaderSettingsButton popover follows its trigger', () => {
 });
 
 describe('anchoredPopoverPlacement', () => {
-    it('computes right alignment and viewport clamping', () => {
-        expect(anchoredPopoverPlacement({ right: 399, bottom: 52 }, 320, 411)).toEqual({
+    it('computes alignment, flipping, and viewport clamping', () => {
+        expect(anchoredPopoverPlacement({ left: 361, right: 399, bottom: 52 }, 320, 411)).toEqual({
             left: 79,
             top: 58,
         });
-        expect(anchoredPopoverPlacement({ right: 170, bottom: 52 }, 320, 411)).toEqual({
+        expect(anchoredPopoverPlacement({ left: 12, right: 50, bottom: 52 }, 280, 360)).toEqual({
+            left: VIEWPORT_CLAMP_MARGIN,
+            top: 58,
+        });
+        expect(anchoredPopoverPlacement({ left: 120, right: 158, bottom: 52 }, 320, 360)).toEqual({
             left: VIEWPORT_CLAMP_MARGIN,
             top: 58,
         });

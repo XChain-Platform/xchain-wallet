@@ -172,7 +172,7 @@ assert.ok(/messaging\.getChainRegistryStatus\(\)/.test(sectionSrc),
     'row reads status via the messaging shim');
 assert.ok(/messaging\.refreshChainRegistry\(\)/.test(sectionSrc),
     'row triggers refresh via the messaging shim');
-assert.ok(/Last refreshed \$\{formatRelative/.test(sectionSrc),
+assert.ok(/when: formatRelative\(/.test(sectionSrc),
     'row formats the last-refreshed timestamp');
 assert.ok(/networks bundled with this wallet are active/.test(sectionSrc),
     'row honestly states the bundled-only fallback when no refresh has happened');
@@ -183,7 +183,7 @@ assert.ok(!/\$\{status\.descriptorCount\} descriptors/.test(sectionSrc),
     'the refresh count reads "networks", not the ChainDescriptor type name');
 assert.ok(!/bundled descriptors/.test(sectionSrc),
     'the bundled-only fallback reads "networks", not the ChainDescriptor type name');
-assert.ok(/network\$\{status\.descriptorCount === 1 \? '' : 's'\}/.test(sectionSrc),
+assert.ok(/settings\.endpoints\.refreshComplete'[\s\S]*count: status\.descriptorCount/.test(sectionSrc),
     'the refresh count guards its singular');
 
 console.log('OK: chain-registry refresh flow + host + 3 shims + Settings UI smoke');

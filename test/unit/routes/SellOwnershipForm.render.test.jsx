@@ -77,7 +77,7 @@ describe('SellOwnershipForm rendering', () => {
         expect(nativeCoin).toHaveAttribute('aria-selected', 'true');
         fireEvent.click(anotherToken);
         expect(anotherToken).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByText('Price token')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /price token/i })).toBeInTheDocument();
     });
 
     it('validates the price token, expiration, and memo before review', async () => {

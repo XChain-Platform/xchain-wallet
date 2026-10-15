@@ -17,12 +17,15 @@
 
 import { createRoot } from 'react-dom/client';
 import { registry } from '@xchain-wallet/core';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { installDesktopFiatRateSource } from './fiatRateSource.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { installShellErrorCapture } from './errorCapture.js';
+
+logConsole.attach();
 
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();

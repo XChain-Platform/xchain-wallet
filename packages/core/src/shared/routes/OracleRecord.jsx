@@ -192,7 +192,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                     Could not load this address&apos;s markets.
                 </StatusMessage>
             ) : markets && markets.length === 0 ? (
-                <EmptyState title="No markets yet" body="Markets created by this address on this chain appear here." titleAs="p" />
+                <EmptyState title="No markets yet" body="Markets created by this address on this network appear here." titleAs="p" />
             ) : null}
             {markets && markets.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
