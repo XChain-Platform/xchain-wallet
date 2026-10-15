@@ -116,6 +116,9 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     useEffect(() => {
         let cancelled = false;
         if (!chainId || !address) return undefined;
+        // The prefill read is skipped for a demo wallet, which cannot submit
+        // this form: a demo wallet's addresses never go to an explorer (issue #82).
+        if (demoGuard.blocked) return undefined;
         initialPrefillOpen.current = true;
         setCurrent(null);
         setCurrentError(null);
@@ -138,7 +141,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             })
             .catch((err) => { if (!cancelled) setCurrentError(err?.message || 'Could not load current preferences.'); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, address]);
+    }, [messaging, chainId, address, demoGuard.blocked]);
 
     // Network fee plumbing (mirrors DestroyForm).
     const [feePick, setFeePick] = useState(

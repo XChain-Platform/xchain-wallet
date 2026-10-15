@@ -101,6 +101,52 @@ describe('windowless idle auto-lock', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, (
         expect(runtime.host).toBe(null);
     });
 
+    it('blocks balance messaging while a failed session-key clear awaits retry', async () => {
+        const { runtime, vault } = await unlockedWindowlessRuntime();
+        const balanceHandler = runtime.host.handle;
+        const now = Date.now();
+        await runtime.autoLockStore.save({
+            armed: true,
+            idleMs: 15 * MINUTE,
+            lastActivity: now - 16 * MINUTE,
+        });
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(runtime.sessionBackend, 'clear')
+            .mockRejectedValueOnce(new Error('keychain unavailable'));
+        runtime.storageBackend.load = async () => new Uint8Array([9]);
+
+        expect(await enforceIdleAutoLock(runtime, now)).toEqual({
+            locked: true,
+            reason: 'session-clear-failed',
+        });
+        expect(vault.close).toHaveBeenCalled();
+        expect(runtime.autoLockCleanupPending).toBe(true);
+        expect(existsSync(sessionFile())).toBe(true);
+        expect(await runtime.autoLockStore.load()).not.toBe(null);
+
+        const statusReply = await handleIpcMessage(runtime, { type: 'session.status' });
+        expect(statusReply).toMatchObject({
+            ok: true,
+            result: { hasSession: false, state: 'locked' },
+        });
+
+        const balanceReply = await handleIpcMessage(runtime, {
+            type: 'balances.wallet',
+            request: { walletId: 'wallet-1' },
+        });
+        expect(balanceReply).toMatchObject({ ok: false, error: { name: 'WalletLockedError' } });
+        expect(balanceHandler).not.toHaveBeenCalled();
+        expect(runtime.host).toBe(null);
+
+        expect(await enforceIdleAutoLock(runtime, now)).toEqual({
+            locked: true,
+            reason: 'idle-window-elapsed',
+        });
+        expect(runtime.autoLockCleanupPending).toBe(false);
+        expect(existsSync(sessionFile())).toBe(false);
+        expect(await runtime.autoLockStore.load()).toBe(null);
+    });
+
     it('keeps the session inside the window', async () => {
         const { runtime } = await unlockedWindowlessRuntime();
         const now = Date.now();

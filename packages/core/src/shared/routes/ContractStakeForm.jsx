@@ -234,7 +234,9 @@ export function ContractStakeForm({
     const [stakedAvailable, setStakedAvailable] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         const address = fromAddress?.address;
-        if (mode !== 'unstake' || !address || !chainId) { setStakedAvailable(null); return undefined; }
+        // A demo wallet cannot unstake, and a demo wallet's addresses never go
+        // to an explorer (issue #82).
+        if (mode !== 'unstake' || !address || !chainId || demoGuard.blocked) { setStakedAvailable(null); return undefined; }
         let cancelled = false;
         Promise.all([
             messaging.getContractStakesForAddress({ chainId, address }),
@@ -256,7 +258,7 @@ export function ContractStakeForm({
             })
             .catch(() => { if (!cancelled) setStakedAvailable(null); });
         return () => { cancelled = true; };
-    }, [mode, chainId, fromAddress?.address, contractActionIndex, tick, signingPubkey, messaging]);
+    }, [mode, chainId, fromAddress?.address, contractActionIndex, tick, signingPubkey, messaging, demoGuard.blocked]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');

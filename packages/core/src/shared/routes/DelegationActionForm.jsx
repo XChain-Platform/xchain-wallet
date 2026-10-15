@@ -128,6 +128,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // override to revoke an older key.
     useEffect(() => {
         if (isDelegate) return;
+        // A demo wallet cannot revoke, and a demo wallet's addresses never go to
+        // an explorer (issue #82).
+        if (demoGuard.blocked) return;
         if (!fromAddressId || !addressesByChain) return;
         const addr = (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId);
         if (!addr) return;
@@ -165,7 +168,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 );
             });
         return () => { cancelled = true; };
-    }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging]);
+    }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging, demoGuard.blocked]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);

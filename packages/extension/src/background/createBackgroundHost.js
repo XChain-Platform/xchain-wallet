@@ -5438,8 +5438,10 @@ export function createBackgroundHost(deps) {
         return walletBalances({ ...req, vault, chainRegistry, sdkRegistry, activeNetwork });
     });
 
-    host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
-        return addressBalances({ ...req, sdkRegistry, chainRegistry });
+    host.register('balances.address', async (req, { vault, sdkRegistry, chainRegistry }) => {
+        // The vault lets the read answer a demo wallet's address from its
+        // fixture instead of the explorer (issue #82).
+        return addressBalances({ ...req, vault, sdkRegistry, chainRegistry });
     });
 
     host.register('utxos.address', async (req, { sdkRegistry }) => {

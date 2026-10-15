@@ -86,11 +86,6 @@
 
 /* ───── Account section ───── */
 
-.accountName {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-}
-
 .walletName {
     flex: 1 1 auto;
     overflow: hidden;

@@ -360,7 +360,7 @@ function normalizePastedRecipient(value) {
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, scopes source addresses to that account
  * @param {() => void} props.onBack
- * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast', feeSelection?: { mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }, assetSwitchNotice?: string }} [props.prefill]
+ * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string, feePriority?: 'low' | 'normal' | 'fast', feeSelection?: { mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }, assetSwitchNotice?: string }} [props.prefill]
  *        §47 Cluster L FOLLOWUP 1: initial form values from a deep-link
  *        intent (parseXchainUri). Each field is applied once on mount;
  *        the user can override before submitting. Address comes from
@@ -535,6 +535,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setMaxBusy(false);
     }, []);
     const [memo, setMemo] = useState(prefill?.memo || '');
+    const [requestMessage, setRequestMessage] = useState(
+        prefill?.requestMessage || prefill?.memo || '',
+    );
     const [assetSwitchNotice, setAssetSwitchNotice] = useState(prefill?.assetSwitchNotice || null);
     const [amountInputMode, setAmountInputMode] = useState(
         /** @type {'coin' | 'fiat'} */ ('coin'),
@@ -966,7 +969,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setTick(nextTick);
             }
             const memoParam = parts.message ?? parts.label;
-            if (memoParam) setMemo(neutralizeControlText(memoParam));
+            const safeMessage = memoParam ? neutralizeControlText(memoParam) : '';
+            setRequestMessage(safeMessage);
+            if (safeMessage) setMemo(safeMessage);
             if (chainChanged) {
                 setChainId(requestChainId);
             }
@@ -1006,6 +1011,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
                     : 'Token changed. The amount was cleared because the new token may use different decimal places.');
             }
+            const safeMessage = intent.message ?? intent.label ?? intent.memo ?? '';
+            setRequestMessage(safeMessage);
             if (intent.memo) setMemo(intent.memo);
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
@@ -1019,6 +1026,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             );
         } else {
             e.preventDefault();
+            setRequestMessage('');
             applyRecipient(trimmed);
             setPasteHint(null);
         }
@@ -3543,6 +3551,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               */}
             {!isWatcherMode ? <PanicFreezeNotice surface="send" /> : null}
             {draftBanner}
+            {requestMessage ? (
+                <StatusMessage variant="status">
+                    {t('send.paymentRequestMessage')} <span data-testid="payment-request-message">
+                        {requestMessage}
+                    </span>
+                </StatusMessage>
+            ) : null}
             {assetSwitchNotice ? (
                 <StatusMessage variant="status">{assetSwitchNotice}</StatusMessage>
             ) : null}

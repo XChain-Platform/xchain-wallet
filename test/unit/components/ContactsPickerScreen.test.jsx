@@ -121,6 +121,17 @@ describe('ContactsPickerScreen empty and listing states', () => {
         expect(screen.getAllByRole('listitem')).toHaveLength(2);
         expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
     });
+
+    it('renders contact names containing markup as text in the list', () => {
+        const name = '<img src=x onerror="globalThis.contactExecuted = true">';
+        const { container } = mount({
+            contacts: [{ id: 'markup', name, entries: [bitcoinEntry] }],
+        });
+
+        expect(screen.getByText(name)).toBeInTheDocument();
+        expect(container.querySelector('img')).toBeNull();
+        expect(globalThis.contactExecuted).toBeUndefined();
+    });
 });
 
 describe('ContactsPickerScreen filters', () => {

@@ -13,7 +13,7 @@
 // as-is: wrapping it again doubled the opener on screen.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, act } from '@testing-library/react';
+import { act, render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
@@ -63,16 +63,14 @@ function mountDividend(holders) {
 
 const hint = () => screen.queryByText(/load the holders/);
 
-async function advanceHolderRead() {
-    await act(async () => {
-        await vi.advanceTimersByTimeAsync(400);
-    });
-}
-
 afterEach(() => {
     cleanup();
     vi.useRealTimers();
 });
+
+async function advanceHolderLookup(ms) {
+    await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+}
 
 describe('the Dividend holder-count hint on a failed holder read', () => {
     it('shows one read sentence with no explorer URL for an explorer 502', async () => {
@@ -80,8 +78,9 @@ describe('the Dividend holder-count hint on a failed holder read', () => {
         const holders = mountDividend(async () => {
             throw explorerError(`Explorer returned HTTP 502 for /RBTC/api/holders/${TICK}`);
         });
-        await advanceHolderRead();
-
+        await advanceHolderLookup(399);
+        expect(holders).not.toHaveBeenCalled();
+        await advanceHolderLookup(1);
         expect(hint()).toBeTruthy();
         const text = hint().textContent;
         expect(text).toMatch(/^Couldn't load the holders\. /);
@@ -93,9 +92,10 @@ describe('the Dividend holder-count hint on a failed holder read', () => {
 
     it('keeps a plain person-written reason after a single opener', async () => {
         vi.useFakeTimers();
-        mountDividend(async () => { throw new Error('the token has no holders yet'); });
-        await advanceHolderRead();
+        const holders = mountDividend(async () => { throw new Error('the token has no holders yet'); });
 
+        await advanceHolderLookup(400);
+        expect(holders).toHaveBeenCalledOnce();
         expect(hint()).toBeTruthy();
         expect(hint().textContent)
             .toMatch(/^Couldn't load the holders\. the token has no holders yet/);

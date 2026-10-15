@@ -115,6 +115,7 @@ describe('web Trezor factory', () => {
     });
 
     it('binds the initialized browser client to the shared pairing flow', async () => {
+        class FakeWalletUtils {}
         const connect = {
             init: vi.fn(async () => {}),
             getFeatures: vi.fn(async () => ({
@@ -130,7 +131,10 @@ describe('web Trezor factory', () => {
             })),
         };
 
-        const result = await pairTrezorSigner({ loader: async () => connect });
+        const result = await pairTrezorSigner({
+            loader: async () => connect,
+            walletLoader: async () => ({ default: FakeWalletUtils }),
+        });
 
         expect(result.pairingInfo).toEqual({
             vendor: 'trezor',
@@ -139,6 +143,11 @@ describe('web Trezor factory', () => {
             firmwareVersion: '2.8.1',
         });
         expect(result.signer.displayName).toBe('Desk Trezor (T2T1)');
+        await expect(result.signer.signPsbt({
+            psbtHex: '',
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [],
+        })).rejects.toThrow('psbtHex is required');
     });
 
     it('loads the hosted script through the browser DOM', async () => {
