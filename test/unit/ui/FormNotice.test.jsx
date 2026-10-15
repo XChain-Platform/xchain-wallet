@@ -21,7 +21,7 @@ describe('<FormNotice>', () => {
         expect(screen.getByText('Heads up')).toBeInTheDocument();
     });
 
-    it('shows a notice written mid-form as the first item of the form', () => {
+    it('shows a notice written mid-form as the first item of the page, above the form', () => {
         const { container } = render(
             <FormPage actions={<button type="submit">Go</button>}>
                 <input aria-label="Amount" />
@@ -30,9 +30,8 @@ describe('<FormNotice>', () => {
             </FormPage>,
         );
         const form = container.querySelector('form');
-        expect(form.firstElementChild).toContainElement(screen.getByText('Heads up'));
-        const body = form.querySelector('[data-form-stack]');
-        expect(body).not.toContainElement(screen.getByText('Heads up'));
+        expect(form.previousElementSibling).toContainElement(screen.getByText('Heads up'));
+        expect(form).not.toContainElement(screen.getByText('Heads up'));
         expect(screen.getAllByText('Heads up')).toHaveLength(1);
     });
 

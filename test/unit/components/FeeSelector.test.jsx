@@ -198,7 +198,9 @@ describe('FeeSelector', () => {
 
         const note = screen.getByText(/Using safe default rates/);
         const form = container.querySelector('form');
-        expect(form.firstElementChild).toContainElement(note);
+        // It leads the page content just above the form, so a wide card never nests it.
+        expect(form.previousElementSibling).toContainElement(note);
+        expect(form).not.toContainElement(note);
         expect(note.closest('[role="status"]')).toBeTruthy();
     });
 });

@@ -2108,7 +2108,6 @@ export const en = {
         "This browser can't scan QR codes with the camera. Chrome, Edge and other Chromium browsers can; here, paste the code below instead.",
     'ui.qrScanner.cameraAccessIsNotAvailable':
         "Camera access isn't available in this browser. Paste the code below instead.",
-    'ui.qrScanner.unsupported': '{alt} (unsupported)',
     'ui.qrScanner.xchainWalletUsesTheCamera':
         'XChain Wallet uses the camera only to scan QR codes while this scanner is open. You can paste the code instead.',
     'ui.qrScanner.continueToCamera': 'Continue to camera',

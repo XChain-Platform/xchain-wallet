@@ -43,7 +43,7 @@ assert.ok(/requestAnimationFrame/.test(src),
     'QrScanner drives detection on a RAF loop');
 assert.ok(/stream\.getTracks\(\)\.forEach\(\(t\) => t\.stop\(\)\)/.test(src),
     'QrScanner stops every MediaStreamTrack on unmount (prevents dangling camera LED)');
-assert.ok(/data-testid="qr-scanner-unsupported"/.test(src),
+assert.ok(/testId="qr-scanner-unsupported"/.test(src),
     'QrScanner renders a fallback surface when BarcodeDetector is unavailable');
 assert.ok(/data-testid="qr-scanner"/.test(src),
     'QrScanner carries a stable test id on the supported render path');

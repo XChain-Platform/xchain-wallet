@@ -3,8 +3,9 @@
    exactly one place. Viewport media query, not a container query: the
    Android WebView 102 the app ships to has no container queries. */
 
-/* A plain form with a notice: the notice leads the page content at the full
-   content width and the form (a card when wide) follows it. */
+/* A plain form: its notices lead the page content at the full content width
+   and the form (a card when wide) follows them on the same gap the bare form
+   uses between its own rows, so a narrow screen looks as if they were inside. */
 .page {
     display: flex;
     flex-direction: column;
