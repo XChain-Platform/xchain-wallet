@@ -17,7 +17,7 @@
 // time, so they can't forget about a vulnerable firmware after the
 // initial pair.
 //
-// Severity-to-style mapping mirrors the pairing banner:
+// Severity-to-tone mapping (StatusMessage variants) mirrors the pairing banner:
 //   - 'unsupported' / 'vulnerable' → error variant. Sign path may still
 //     submit, but the form's parent should surface the banner in its
 //     submit-button copy ("Update firmware first").
@@ -30,6 +30,7 @@
 // readers announce; `role="note"` for outdated / unknown.
 
 import { signers as signersLib } from '@xchain-wallet/core';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import styles from './HwFirmwareBanner.module.css';
 
@@ -54,11 +55,11 @@ export function HwFirmwareBanner({ signerInfo }) {
 
     const severe = verdict.status === 'vulnerable' || verdict.status === 'unsupported';
     const role = severe ? 'alert' : 'note';
-    const className = severe
-        ? styles.errorBanner
+    const tone = severe
+        ? 'error'
         : verdict.status === 'outdated'
-        ? styles.warningBanner
-        : styles.neutralBanner;
+        ? 'warning'
+        : 'info';
 
     const headline = severe
         ? verdict.status === 'vulnerable'
@@ -76,7 +77,7 @@ export function HwFirmwareBanner({ signerInfo }) {
     const updateUrl = safeHttpUrl(verdict.updateUrl);
 
     return (
-        <div role={role} className={className}>
+        <StatusMessage variant={tone} role={role}>
             <strong className={styles.headline}>{headline}</strong>
             {verdict.detail ? (
                 <p className={styles.detail}>{verdict.detail}</p>
@@ -92,6 +93,6 @@ export function HwFirmwareBanner({ signerInfo }) {
                     Open vendor update tool <span aria-hidden="true">↗</span>
                 </a>
             ) : null}
-        </div>
+        </StatusMessage>
     );
 }

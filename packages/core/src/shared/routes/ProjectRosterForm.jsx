@@ -712,13 +712,13 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             This wallet isn't signing from the project's owner
                             address ({issuerAddress}). The link will only be
                             honoured if it's signed by the current owner.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <SignCredentials
                     unlocked={signerReady}
@@ -801,13 +801,13 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 autoComplete="off"
             />
             {ownerMismatch ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         This wallet doesn't hold the project's owner address.
                         the final link step will only be honoured if signed
                         by the current owner.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {feeTiers ? (
                 <FeeSelector

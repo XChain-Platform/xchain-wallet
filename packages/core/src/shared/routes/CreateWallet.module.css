@@ -129,18 +129,6 @@
     flex: 1;
 }
 
-.advancedWarning {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text);
-    background: var(--xc-warning-bg, var(--xc-bg-muted));
-    /* 1px keeps the warning boundary as a crisp hairline. */
-    border: 1px solid var(--xc-warning, var(--xc-border));
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    margin: 0;
-    line-height: 1.4;
-}
-
 .error {
     font-size: var(--xc-text-sm);
     color: var(--xc-on-danger);

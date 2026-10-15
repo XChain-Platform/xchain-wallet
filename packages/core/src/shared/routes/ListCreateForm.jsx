@@ -638,9 +638,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <ul>{items.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (<p key={i} className={styles.warning}>{w}</p>))}
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        {decoded.warnings.map((w, i) => (<p key={i}>{w}</p>))}
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
@@ -828,8 +828,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     {/* A real address for a different chain is not a typo;
                         say which chain this list is being published to. */}
                     {recipients.wrongNetwork.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
@@ -843,7 +843,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                     message: 'Does not belong to the selected chain.',
                                 }))}
                             />
-                        </div>
+                        </StatusMessage>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
                         public on-chain data once the list is broadcast. */}

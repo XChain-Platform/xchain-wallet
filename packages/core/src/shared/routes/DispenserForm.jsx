@@ -689,25 +689,25 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // Scope of the unused-address memory: one per wallet, account and chain.
     const dispenserAddressScope = { walletId, accountId: activeAccountId, chainId: chainId || '' };
     const allowListWarningNode = allowListSelfWarning ? (
-        <div role="alert" className={styles.warnings}>
-            <p className={styles.warning}>{allowListSelfWarning}</p>
-        </div>
+        <StatusMessage variant="warning" role="alert">
+            <p>{allowListSelfWarning}</p>
+        </StatusMessage>
     ) : null;
     // Confirm-time reminder for an outside dispenser address: buyers pay that
     // address, not SOURCE, and the escrow goes back to whichever of the two
     // closes the dispenser (dispenser.md Rules), which may not be this wallet.
     const outsideAddressNote = addressMode === 'other' && outsideTrimmed
         && outsideVerdict?.allowed && outsideVerdict.kind !== 'self' ? (
-            <div role="note" className={styles.warnings} data-testid="outside-address-note">
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="note" testId="outside-address-note">
+                <p>
                     Dispenser address: <AddressText address={outsideTrimmed} truncate={false} />
                 </p>
-                <p className={styles.warning}>
+                <p>
                     Buyers&apos; payments go to this address, not to your source. Either this
                     address or your source can close the dispenser, and the unsold escrow
                     returns to whichever one closes it.
                 </p>
-            </div>
+            </StatusMessage>
         ) : null;
 
     // Resolve the SOURCE address's balance of the entered ticker for the
@@ -1326,16 +1326,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {outsideAddressNote}
                 {allowListWarningNode}
@@ -1651,11 +1651,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             )}
             {gatedGiveNotice.gated ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {gatedTickWarningCopy(ticker, 'buyers dispensed this token')}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             <AmountField
                 id="dispenser-give"

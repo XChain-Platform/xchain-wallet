@@ -20,6 +20,7 @@ import { render, act as domAct, fireEvent, cleanup } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
+import { messageText } from '../helpers/messageText.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const CREATOR = 'bc1qownerownerownerownerownerownerownerown';
@@ -230,7 +231,7 @@ describe('a wallet holding only the dispenser address', () => {
         expect(utils.getByTestId('reopen-origin-note').textContent)
             .toBe('Only the address that opened this dispenser can open it again.');
         const notice = utils.getAllByRole('status').find((el) => /sold out/.test(el.textContent || ''));
-        expect(notice.textContent, 'no promise of reuse').toBe("This dispenser sold out. Sold-out dispensers can't be refilled.");
+        expect(messageText(notice), 'no promise of reuse').toBe("This dispenser sold out. Sold-out dispensers can't be refilled.");
     });
 });
 

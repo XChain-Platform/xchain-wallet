@@ -832,7 +832,7 @@ export function AddressList({
                     label="Import address"
                     onSubmit={handleImportWif}
                     status={wifError ? (
-                        <StatusMessage variant="error" className={wifStyles.wifErrorBox}>{wifError}</StatusMessage>
+                        <StatusMessage variant="error">{wifError}</StatusMessage>
                     ) : null}
                     actions={(
                         <Button
@@ -928,10 +928,10 @@ export function AddressList({
                             disabled={wifBusy}
                         />
                         )}
-                        <p className={wifStyles.wifWarning}>
+                        <StatusMessage variant="warning" role={null}>
                             <strong>Not covered by your recovery phrase.</strong>{' '}
                             Keep a copy of the WIF, or a current backup file (Settings &gt; Backup).
-                        </p>
+                        </StatusMessage>
                         <Checkbox
                             className={wifStyles.wifAck}
                             label="I understand this key is not backed up by my recovery phrase."

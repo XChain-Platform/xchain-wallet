@@ -23,7 +23,7 @@
 // click handler's tick, before any await.
 
 import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
-import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { AddressText, Button, Icon, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
@@ -567,9 +567,9 @@ export function ConfirmActionModal({
                         no override. Rendered where the credentials would be so
                         the user sees WHY there is nothing to sign with. */}
                     {refusal ? (
-                        <p className={styles.refusal} role="alert" data-testid="confirm-refusal">
+                        <StatusMessage variant="error" role="alert" testId="confirm-refusal">
                             {refusal}
-                        </p>
+                        </StatusMessage>
                     ) : null}
 
                     {/* §5.3.4: a credential failure returns the page to `ready`
@@ -584,12 +584,12 @@ export function ConfirmActionModal({
                             )}
                         </div>
                     ) : error ? (
-                        <div className={styles.error} role="alert" data-testid="confirm-error">
+                        <StatusMessage variant="error" role="alert" testId="confirm-error">
                             {userFacingMessage(
                                 error,
                                 'The request stopped because the wallet service returned no explanation.',
                             )}
-                        </div>
+                        </StatusMessage>
                     ) : null}
 
                     {refusal ? null : (
@@ -617,9 +617,9 @@ export function ConfirmActionModal({
                         </p>
                     ) : null}
                     {signingTime.timedOut ? (
-                        <div className={styles.error} role="alert" data-testid="confirm-signing-timeout">
+                        <StatusMessage variant="error" role="alert" testId="confirm-signing-timeout">
                             Signing is taking longer than expected. Keep this screen open and check the device or wallet service. Before trying again, check History and the queued-transactions banner so you do not submit the same transaction twice.
-                        </div>
+                        </StatusMessage>
                     ) : null}
                     {/* The queue holds the signed transaction until the user
                         broadcasts it from the queued-transactions banner. */}

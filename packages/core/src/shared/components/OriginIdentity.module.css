@@ -56,13 +56,3 @@
     font-size: var(--xc-text-xs);
 }
 
-.warning {
-    margin: var(--xc-space-1) 0 0;
-    padding: var(--xc-space-2);
-    /* The emphasis stripe has no border-width token equivalent. */
-    border-inline-start: 3px solid var(--xc-warning);
-    background: var(--xc-warning-bg);
-    color: var(--xc-warning-text);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-}

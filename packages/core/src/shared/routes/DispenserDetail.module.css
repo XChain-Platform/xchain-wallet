@@ -227,17 +227,6 @@
     color: var(--xc-danger-fg);
 }
 
-/* Close-window banner: shown while a dispenser sits in its 1-hour
-   "cancelling" window before escrow is released. */
-.closeWindowNote {
-    margin: 0 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md, 8px);
-    background: color-mix(in srgb, var(--xc-warning, #b8860b) 12%, transparent);
-    color: var(--xc-warning, #b8860b);
-    font-size: var(--xc-text-sm);
-}
-
 /* Buy panel: fill-count field with an inline Max, mirroring the
    AmountField layout the Send/refill forms use. The button aligns to
    the input's baseline rather than the label's. */

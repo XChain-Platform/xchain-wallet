@@ -18,7 +18,7 @@
 // back as change, and treats a failed decode as a LOUD state rather than
 // a missing line.
 //
-import { AddressText } from '@xchain-wallet/core/ui';
+import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { describeUnreadableReason, isUnreadableActionReason } from './psbtDecodeReasons.js';
 import {
     exactNetworkFeeSats,
@@ -83,14 +83,14 @@ export function PsbtIntentPanel({
         // Fail loud (§5.5): a transaction the wallet cannot even decompose is
         // exactly when the user most needs to be cautious.
         return (
-            <p className={styles.undecoded} role="alert" data-testid="psbt-undecodable">
+            <StatusMessage variant="warning" role="alert" testId="psbt-undecodable">
                 {unavailableMessage || (
                     <>
                         This transaction could not be decoded, so the wallet cannot show you
                         what it does. Only continue if you trust where it came from.
                     </>
                 )}
-            </p>
+            </StatusMessage>
         );
     }
 
@@ -120,10 +120,10 @@ export function PsbtIntentPanel({
                 // this is the case where the output set is the ONLY thing the
                 // user can verify.
                 <>
-                    <p className={styles.undecoded} role="alert" data-testid="psbt-action-undecoded">
+                    <StatusMessage variant="warning" role="alert" testId="psbt-action-undecoded">
                         {undecodedSentence(decodeError)}
                         {' '}Verify the amounts and destinations below before you sign.
-                    </p>
+                    </StatusMessage>
                     {/* The raw decoder code stays available for support, but
                         outside the alert so a signer reads only plain words. */}
                     <details className={styles.details} data-testid="psbt-action-undecoded-details">

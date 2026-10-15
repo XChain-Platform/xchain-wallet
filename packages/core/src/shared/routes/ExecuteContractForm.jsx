@@ -857,10 +857,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     PSBT leaves for a signer wallet, so the forfeiture terms are
                     stated here rather than only on the confirm page. */}
                 {nativeFee.payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                        <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                        <p>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>

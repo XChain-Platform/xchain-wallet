@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -324,24 +324,24 @@ export function TickItemsEditor({
             {/* The protocol records an unknown TICK as invalid and
                 leaves it out of the list without failing the LIST. */}
             {!coinQualified && !checking && missingTicks.length > 0 ? (
-                <div id={`${controlId}-missing`} role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage id={`${controlId}-missing`} variant="warning" role="alert">
+                    <p>
                         Not found on {chainLabel}: {missingTicks.join(', ')}.
                         The network leaves an unknown token out of the list, so {missingTicks.length === 1 ? 'it' : 'they'} will
                         not be a member.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {coinQualified && !checking && missingByChain.length > 0 ? (
-                <div id={`${controlId}-missing`} role="alert" className={styles.warnings}>
+                <StatusMessage id={`${controlId}-missing`} variant="warning" role="alert">
                     {missingByChain.map((entry) => (
-                        <p key={entry.chainId} className={styles.warning}>
+                        <p key={entry.chainId}>
                             Not found on {entry.label}: {entry.ticks.join(', ')}.
                             The network leaves an unknown token out of the list, so {entry.ticks.length === 1 ? 'it' : 'they'} will
                             not be a member.
                         </p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
             {!checking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
                 <p id={`${controlId}-unchecked`} className={styles.hint}>

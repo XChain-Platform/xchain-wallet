@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { OWNER_WITHDRAW_WARNING } from '../routes/contractResponseShape.js';
 import styles from './OwnerWithdrawWarning.module.css';
 
@@ -24,11 +25,11 @@ import styles from './OwnerWithdrawWarning.module.css';
 export function OwnerWithdrawWarning({ ownerWithdraw }) {
     if (ownerWithdraw !== true) return null;
     return (
-        <div role="note" className={styles.warningBanner} data-testid="owner-withdraw-warning">
+        <StatusMessage variant="warning" role="note" testId="owner-withdraw-warning">
             <strong className={styles.headline}>Deployer can withdraw</strong>
             <p className={styles.detail}>
                 {OWNER_WITHDRAW_WARNING} Only send tokens here if you trust the deployer.
             </p>
-        </div>
+        </StatusMessage>
     );
 }

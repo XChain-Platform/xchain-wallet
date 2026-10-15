@@ -733,9 +733,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     are not refunded.
                 </p>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -936,11 +936,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onOpenPicker={() => setGivePickerOpen(true)}
                 />
                 {gatedGiveNotice.gated && !giveOwnership ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {giveOwnership ? null : (
                     <AmountField

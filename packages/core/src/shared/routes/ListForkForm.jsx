@@ -801,13 +801,13 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                                 );
                             })}
                         </ul>
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {resolution === false
                                     ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
                                     : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
                             </p>
-                        </div>
+                        </StatusMessage>
                     </>
                 )}
 
@@ -1126,9 +1126,9 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 {toRemove.length + toAdd.length === 0 ? ' (no changes yet)' : ''}
             </p>
             {additions.invalid.length > 0 ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     Invalid {isTick ? 'token names' : 'addresses'}: {additions.invalid.join(', ')}
-                </p>
+                </StatusMessage>
             ) : null}
             {!isTick ? (
                 <p className={styles.hint}>

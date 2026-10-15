@@ -20,8 +20,6 @@ const viewPrivateKeyStylesPath = join(sharedRoot, 'routes/ViewPrivateKey.module.
 const cardModules = [
     'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
-    'HwFirmwareBanner.module.css',
-    'OwnerWithdrawWarning.module.css',
     'QueuedBroadcastBanner.module.css',
     'QueuedResultPanel.module.css',
     'TotalBalanceHero.module.css',
@@ -391,9 +389,7 @@ it('uses the shared padding and radius for explicit card modules', () => {
 
 it('tokenizes shared component dimensions except documented pixel exceptions', () => {
     const expectedPixelDeclarations = {
-        'ActionIntentSummary.module.css': [
-            'border-inline-start: 3px solid var(--xc-warning)',
-        ],
+        'ActionIntentSummary.module.css': [],
         'AlertsOverlay.module.css': [
             'max-width: min(380px, 100%)',
             'border-bottom: 1px solid var(--xc-border)',
@@ -457,7 +453,6 @@ it('keeps the audited component geometry on shared design tokens', () => {
         'calc(var(--xc-space-4) + env(safe-area-inset-right, 0))',
     );
     expect(cssByFile['NoticeModal.module.css']).toContain('padding: var(--xc-card-pad);');
-    expect(cssByFile['OwnerWithdrawWarning.module.css']).toContain('padding: var(--xc-card-pad);');
     expect(cssByFile['PlatformSwitcher.module.css']).toMatch(
         /\.trigger\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\);[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s,
     );

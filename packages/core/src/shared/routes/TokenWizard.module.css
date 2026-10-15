@@ -126,24 +126,6 @@
     unicode-bidi: isolate;
 }
 
-.warnings {
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
-    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
-}
-
-.warning {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-.warning + .warning {
-    margin-top: var(--xc-space-1);
-}
-
 .actions {
     display: flex;
     flex-wrap: wrap;

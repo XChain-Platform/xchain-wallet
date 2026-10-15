@@ -307,9 +307,9 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             </dl>
 
             {ownershipReason ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{ownershipReason}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{ownershipReason}</p>
+                </StatusMessage>
             ) : null}
 
             <Input
@@ -332,16 +332,16 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
-            <div className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role={null}>
+                <p>
                     From the block this transfer confirms, only the new owner can edit, share, or transfer the list.
                 </p>
-                <p className={styles.warning}>The sender cannot undo the transfer.</p>
-                <p className={styles.warning}>A transfer cannot rescue a list whose owner key is lost.</p>
-                <p className={styles.warning}>
+                <p>The sender cannot undo the transfer.</p>
+                <p>A transfer cannot rescue a list whose owner key is lost.</p>
+                <p>
                     A shared list keeps working on every chain because its versions carry members, never the owner.
                 </p>
-            </div>
+            </StatusMessage>
 
             <Input
                 label="Type TRANSFER to confirm"

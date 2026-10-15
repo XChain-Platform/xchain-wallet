@@ -945,11 +945,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <p className={styles.hint} data-testid="dividend-review-fee-hint">
                     Paying a dividend has a protocol fee that grows with the number
@@ -1142,11 +1142,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 autoComplete="off"
             />
             {gatedDividendNotice.gated ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {gatedTickWarningCopy(dividendTick, 'dividend recipients')}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
 
             {tick.trim() ? (

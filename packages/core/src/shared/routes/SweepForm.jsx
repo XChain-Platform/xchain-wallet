@@ -674,23 +674,23 @@ export function SweepForm({
     const sweepWarnings = (
         <>
             {thirdPartyDestination ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>This destination is not one of this wallet's addresses.</strong>{' '}
                         Everything selected - balances, ownerships, and released
                         escrow - will belong to that address's owner. Triple-check
                         it before signing.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {!migrateLane && gatedTicks.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <StatusMessage variant="warning" role="alert">
                     {gatedTicks.map((tick) => (
-                        <p key={tick} className={styles.warning}>
+                        <p key={tick}>
                             {gatedTickWarningCopy(tick, 'sweep recipients')}
                         </p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
         </>
     );
@@ -758,11 +758,11 @@ export function SweepForm({
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {sweepWarnings}
                 {isWatcherMode ? (
@@ -907,13 +907,13 @@ export function SweepForm({
                     recovery phrase until you have.
                 </p>
             ) : (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>Sweep moves everything selected at once.</strong>{' '}
                         The preview below is indicative; the chain settles whatever
                         the address holds when the sweep confirms.
                     </p>
-                </div>
+                </StatusMessage>
             )}
 
             {migrateLane ? (
@@ -977,13 +977,13 @@ export function SweepForm({
                 />
             )}
             {thirdPartyDestination ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>Not your address.</strong> This wallet does not own
                         the destination; everything swept will belong to whoever
                         controls it.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             </FormSection>
 
@@ -1029,11 +1029,17 @@ export function SweepForm({
                     {gateLoading ? <p className={styles.hint}>Checking vault keys…</p> : null}
                     {(gateRows || []).map((r) => (
                         <div key={r.tick}>
-                            <p className={r.missingCount > 0 ? styles.warning : styles.hint}>
-                                {r.tick}: {r.packCount - r.missingCount}/{r.packCount} unlock
-                                key{r.packCount === 1 ? '' : 's'} in the vault
-                                {r.missingCount > 0 ? ' - missing' : ''}
-                            </p>
+                            {r.missingCount > 0 ? (
+                                <StatusMessage variant="warning" role={null}>
+                                    {r.tick}: {r.packCount - r.missingCount}/{r.packCount} unlock
+                                    key{r.packCount === 1 ? '' : 's'} in the vault - missing
+                                </StatusMessage>
+                            ) : (
+                                <p className={styles.hint}>
+                                    {r.tick}: {r.packCount}/{r.packCount} unlock
+                                    key{r.packCount === 1 ? '' : 's'} in the vault
+                                </p>
+                            )}
                             {r.missingKeyHashes.length > 0 ? (
                                 <ul className={styles.detailsList}>
                                     {r.missingKeyHashes.map((hash) => (
@@ -1080,12 +1086,12 @@ export function SweepForm({
                         </>
                     ) : null}
                     {(isHwSource || isWatcherMode) && gateMissingTicks.length > 0 ? (
-                        <p className={styles.warning}>
+                        <StatusMessage variant="warning" role={null}>
                             This signer cannot run the key recovery scan
                             ({isWatcherMode ? 'watch-only' : 'hardware'} addresses
                             hold no exportable key). Unlock keys for{' '}
                             {gateMissingTicks.join(', ')} may be lost after migration.
-                        </p>
+                        </StatusMessage>
                     ) : null}
                     {gateMissingTicks.length > 0 ? (
                         <Checkbox
@@ -1108,13 +1114,13 @@ export function SweepForm({
 
             <FormSection title="Transaction details">
             {!migrateLane && gatedTicks.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <StatusMessage variant="warning" role="alert">
                     {gatedTicks.map((tick) => (
-                        <p key={tick} className={styles.warning}>
+                        <p key={tick}>
                             {gatedTickWarningCopy(tick, 'sweep recipients')}
                         </p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
 
             <Input

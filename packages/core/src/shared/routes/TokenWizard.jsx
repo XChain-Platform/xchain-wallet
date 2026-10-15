@@ -858,16 +858,16 @@ export function TokenWizard({ walletId, onBack }) {
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
             </FormPage>
         </>,
@@ -1633,11 +1633,11 @@ function AdvancedIssuePanel({
                     </FormSection>
 
                     {warnings.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
+                        <StatusMessage variant="warning" role="alert">
                             {warnings.map((w) => (
-                                <p key={w} className={styles.warning}>{w}</p>
+                                <p key={w}>{w}</p>
                             ))}
-                        </div>
+                        </StatusMessage>
                     ) : null}
                 </div>
             )}

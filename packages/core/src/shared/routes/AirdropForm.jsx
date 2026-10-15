@@ -1472,11 +1472,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     />
                 </dl>
                 {listDecoded && listDecoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {listDecoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <p className={styles.hint}>
                     Airdrop is a two-transaction flow. Step 1 broadcasts the
@@ -1625,19 +1625,19 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     </Button>
                 ) : null}
                 {airdropDecoded && airdropDecoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {airdropDecoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {/* The chain kept fewer items than the wallet published.
                     Say so here, on the screen that prices step 2, because the
                     LIST was already paid for at the larger count and the AIRDROP
                     will only pay (and only be charged for) what survived. */}
                 {listReconcile && listReconcile.missing.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             The published list holds {listReconcile.storedCount} of the
                             {' '}{listReconcile.expectedCount} addresses you submitted:
                             {' '}{listReconcile.missing.length} {listReconcile.missing.length === 1 ? 'was' : 'were'}
@@ -1648,7 +1648,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             {' '}{listReconcile.missing.length === 1 ? 'address' : 'addresses'}:
                             {' '}{listReconcile.missing.join(', ')}.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {/* PC-11 holder-snapshot honesty: a TICK list's holder set
                     binds at AIRDROP execution (when it confirms on-chain),
@@ -1657,8 +1657,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     settlement (e.g. by splitting a balance across more
                     addresses to collect more than one payout). */}
                 {recipientPreview.volatile ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             This airdrop pays every current holder of the underlying
                             token(s), not a fixed list of addresses. That holder set is
                             only locked in when the airdrop transaction confirms
@@ -1666,7 +1666,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             change (and be inflated) before then. It is an estimate, not
                             a guarantee of who gets paid or the final cost.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <p className={styles.hint}>
                     Airdrops have a protocol fee that grows with the number of
@@ -1856,11 +1856,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 />
             )}
             {gatedDropNotice.gated ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {gatedTickWarningCopy(token, 'airdrop recipients')}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             <AmountField
                 label="Per-recipient amount"
@@ -1976,8 +1976,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         typo, and calling it "invalid" hides what went wrong. Name
                         it, and name the chain this airdrop pays on. */}
                     {recipients.wrongNetwork.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for
                                 another network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'}
@@ -1992,7 +1992,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                     message: 'Does not belong to the active network.',
                                 }))}
                             />
-                        </div>
+                        </StatusMessage>
                     ) : null}
                 </>
             ) : null}

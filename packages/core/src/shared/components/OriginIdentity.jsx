@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './OriginIdentity.module.css';
 
@@ -133,14 +134,14 @@ export function OriginIdentity({
                 </code>
             </div>
             {details.hasPunycode ? (
-                <p className={styles.warning} role="alert">
+                <StatusMessage variant="warning" role="alert">
                     Punycode domain. Verify the site address carefully before approving.
-                </p>
+                </StatusMessage>
             ) : null}
             {details.possibleLookalike ? (
-                <p className={styles.warning} role="alert">
+                <StatusMessage variant="warning" role="alert">
                     Possible lookalike domain. Confirm that the highlighted site domain is the one you expect.
-                </p>
+                </StatusMessage>
             ) : null}
             {children}
         </Root>

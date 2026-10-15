@@ -540,39 +540,38 @@ export function DeployContractForm({ walletId, onBack }) {
     function renderDiagnostics(entries, kind) {
         if (entries.length === 0) return null;
         return (
-            <ul
-                className={kind === 'error' ? styles.validationErrors : styles.validationWarnings}
-                aria-label={`Validation ${kind}s`}
-            >
-                {entries.map((entry, index) => {
-                    const meta = [
-                        entry.line ? `Line ${entry.line}` : null,
-                        entry.column !== null ? `Column ${entry.column}` : null,
-                        entry.identifier ? `${entry.identifierLabel} ${entry.identifier}` : null,
-                    ].filter(Boolean).join(', ');
-                    const content = (
-                        <>
-                            <span className={styles.validationMessage}>{entry.message}</span>
-                            {meta ? <span className={styles.validationMeta}>{meta}</span> : null}
-                        </>
-                    );
-                    return (
-                        <li key={`${entry.message}-${index}`} className={styles.validationItem}>
-                            {entry.line ? (
-                                <Button
-                                    type="button"
-                                    className={styles.validationLink}
-                                    onClick={() => moveToCodeLine(entry.line)}
-                                >
-                                    {content}
-                                </Button>
-                            ) : (
-                                <div className={styles.validationText}>{content}</div>
-                            )}
-                        </li>
-                    );
-                })}
-            </ul>
+            <StatusMessage variant={kind === 'error' ? 'error' : 'warning'} role={null}>
+                <ul aria-label={`Validation ${kind}s`}>
+                    {entries.map((entry, index) => {
+                        const meta = [
+                            entry.line ? `Line ${entry.line}` : null,
+                            entry.column !== null ? `Column ${entry.column}` : null,
+                            entry.identifier ? `${entry.identifierLabel} ${entry.identifier}` : null,
+                        ].filter(Boolean).join(', ');
+                        const content = (
+                            <>
+                                <span className={styles.validationMessage}>{entry.message}</span>
+                                {meta ? <span className={styles.validationMeta}>{meta}</span> : null}
+                            </>
+                        );
+                        return (
+                            <li key={`${entry.message}-${index}`} className={styles.validationItem}>
+                                {entry.line ? (
+                                    <Button
+                                        type="button"
+                                        className={styles.validationLink}
+                                        onClick={() => moveToCodeLine(entry.line)}
+                                    >
+                                        {content}
+                                    </Button>
+                                ) : (
+                                    <div className={styles.validationText}>{content}</div>
+                                )}
+                            </li>
+                        );
+                    })}
+                </ul>
+            </StatusMessage>
         );
     }
 
@@ -1088,21 +1087,21 @@ export function DeployContractForm({ walletId, onBack }) {
                     PSBT leaves for a signer wallet, so the forfeiture terms are
                     stated here rather than only on the confirm page. */}
                 {nativeFee.payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                        <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                        <p>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
+                    </StatusMessage>
                 ) : null}
                 {/* Lint advisories are already written for a contract author
                     (line number, symbol, prescribed fix), so deployDiagnostic
                     passes them through and rewrites only the ones stated in SDK
                     internals. */}
                 {validation?.warnings && validation.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {validation.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{humanizeDeployDiagnostic(w).message}</p>
+                            <p key={i}>{humanizeDeployDiagnostic(w).message}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1269,7 +1268,7 @@ export function DeployContractForm({ walletId, onBack }) {
             {/* PC-38: resume an interrupted chunked deploy. Those chunks are
                 already on chain and already paid for; restarting re-pays. */}
             {resumable.length > 0 ? (
-                <div className={styles.warnings}>
+                <StatusMessage variant="warning" role={null}>
                     {resumable.map((r) => {
                         // Count a chunk as SENT on its txid, not only on
                         // its action_index. The index is written after the
@@ -1284,7 +1283,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         // whatever is genuinely missing.
                         const done = (r.chunks || []).filter((c) => c.actionIndex || c.txid).length;
                         return (
-                            <div key={r.id} className={styles.warning}>
+                            <div key={r.id}>
                                 <p>
                                     Unfinished publish{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
                                     {r.totalChunks} chunk transactions have already been sent. Finishing
@@ -1324,7 +1323,7 @@ export function DeployContractForm({ walletId, onBack }) {
                             </div>
                         );
                     })}
-                </div>
+                </StatusMessage>
             ) : null}
 
             {/* PC-38: the SDK ships audited scaffolds; the wallet had no path to them. */}
@@ -1410,16 +1409,16 @@ export function DeployContractForm({ walletId, onBack }) {
             {/* PC-38: how many transactions this deploy actually costs. */}
             {planError ? (
                 <StatusMessage variant="error" className={styles.error}>{planError}</StatusMessage>
+            ) : plan && plan.single ? (
+                <p className={styles.summary}>Fits in a single transaction.</p>
             ) : plan ? (
-                <p className={plan.single ? styles.summary : styles.warning}>
-                    {plan.single
-                        ? 'Fits in a single transaction.'
-                        : `Too large for one transaction: publishing requires ${plan.totalChunks} chunk `
-                          + `transactions plus 1 assembling transaction (${plan.totalChunks + 1} total, `
-                          + 'each paying its own network fee). They are signed one at a time, and each '
-                          + 'must confirm before the next is built, so keep the wallet open until it finishes. '
-                          + 'If it is interrupted you can resume without re-paying for the chunks already sent.'}
-                </p>
+                <StatusMessage variant="warning" role={null}>
+                    {`Too large for one transaction: publishing requires ${plan.totalChunks} chunk `
+                        + `transactions plus 1 assembling transaction (${plan.totalChunks + 1} total, `
+                        + 'each paying its own network fee). They are signed one at a time, and each '
+                        + 'must confirm before the next is built, so keep the wallet open until it finishes. '
+                        + 'If it is interrupted you can resume without re-paying for the chunks already sent.'}
+                </StatusMessage>
             ) : null}
 
             {/* PC-38: the run is host-side and does not stream per-leg events

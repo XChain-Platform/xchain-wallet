@@ -179,20 +179,6 @@
     transition: width 0.2s ease-out;
 }
 
-/* Owner-mismatch banner above the action grid. Yellow / warning tone
-   so it reads as informational rather than error; sits flush above the
-   action buttons whose disabled-state it explains. */
-.ownerWarning {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: color-mix(in srgb, var(--xc-warning, #d99000) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #d99000) 40%, transparent);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-}
-
 /* ───── Manage action grid (carried over). ───── */
 
 .manageGrid {

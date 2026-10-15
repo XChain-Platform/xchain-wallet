@@ -1113,19 +1113,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {mode === 'transfer' ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             Transferring ownership cannot be undone. After confirmation,
                             only the new owner can administer this token.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1182,12 +1182,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
                 extraCredentials={mode === 'transfer' ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             Transferring ownership cannot be undone. After confirmation,
                             only the new owner can administer this token.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
@@ -1398,13 +1398,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'lock' ? (
                 <>
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             <strong>Locking is permanent.</strong> Each flag below is a
                             one-way switch: once checked and submitted, it can never be
                             unlocked or reversed.
                         </p>
-                    </div>
+                    </StatusMessage>
                     {allLocksSet ? (
                         <p className={styles.hint}>
                             Every lock is already permanently set for {ticker}.
@@ -1437,43 +1437,43 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             {mode === 'mint-settings' ? (
                 <>
                     {nothingMintEditable ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 Every mint setting for {ticker} is permanently locked.
                                 There is nothing left to edit here.
                             </p>
-                        </div>
+                        </StatusMessage>
                     ) : (
                         <>
                             {mintDeadLocked ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Minting is permanently locked for {ticker}.
                                         The mint window, max mint per transaction, and per-address
                                         cap below can no longer take effect.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : maxMintLocked ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Max mint per transaction is permanently locked for {ticker}.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : null}
                             {mintSupplyLocked ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Minting supply now is permanently locked for {ticker}.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : null}
                             {maxSupplyLockedInfo ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Max supply is also permanently locked for {ticker}.
                                         That is a separate token setting, not part of Mint settings.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : null}
                         </>
                     )}
@@ -1554,21 +1554,21 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         before any supply is distributed.
                     </p>
                     {callbackLocked ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 Callback settings are permanently locked for {ticker}.
                                 They can no longer be changed.
                             </p>
-                        </div>
+                        </StatusMessage>
                     ) : callbackDistributed ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {ticker} already has holders
                                 {distribution?.holderCount ? ` (${distribution.holderCount.toLocaleString('en-US')})` : ''},
                                 so its callback settings are frozen. They can only be set before any
                                 supply leaves your address.
                             </p>
-                        </div>
+                        </StatusMessage>
                     ) : null}
                     <Input
                         label="Callback token"

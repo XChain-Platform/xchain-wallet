@@ -425,12 +425,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     </p>
                 </div>
             ) : null}
-            <div className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role={null}>
+                <p>
                     A union follows each member's edits, including a shared list's new versions.
                 </p>
-                <p className={styles.warning}>A union cannot itself be shared in this release.</p>
-            </div>
+                <p>A union cannot itself be shared in this release.</p>
+            </StatusMessage>
             </FormSection>
 
         </FormPage>,

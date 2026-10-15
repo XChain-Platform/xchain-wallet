@@ -123,16 +123,6 @@
     gap: var(--xc-space-2);
 }
 
-.wipeWarning {
-    margin: 0;
-    padding: var(--xc-space-3);
-    background: var(--xc-danger-bg, var(--xc-surface));
-    color: var(--xc-danger-text, var(--xc-text));
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-}
-
 .wipeNote {
     margin: 0;
     font-size: var(--xc-text-xs);

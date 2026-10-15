@@ -741,12 +741,12 @@ export function ManageToken({
                     the on-chain creator. Issuer-only actions are
                     auto-hidden below; the banner explains why. */}
                 {isOwner === false ? (
-                    <p className={styles.ownerWarning} role="status">
+                    <StatusMessage variant="warning" role="status">
                         This wallet doesn't hold the token's issuer address.
                         Mint, Mint settings, Lock, Description, Artwork,
                         Transfer, Broadcast, and Dividend require signing
                         from <AddressText address={owner} />.
-                    </p>
+                    </StatusMessage>
                 ) : null}
 
                 {/* Action buttons: same 3-primary + More pattern as Home. */}

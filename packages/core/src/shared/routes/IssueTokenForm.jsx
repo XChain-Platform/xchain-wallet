@@ -814,16 +814,16 @@ export function IssueTokenForm({ walletId, onBack }) {
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1055,14 +1055,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                 on THIS screen is the one decision that is irreversible from
                 here: binding an address list to the token shuts the bridge door
                 for good in milestone 1. */}
-            <div className={styles.warnings}>
-                <p className={styles.hint}>
+            <StatusMessage variant="warning" role={null}>
+                <p>
                     {t('issue.bridgingHint')}
                 </p>
-                <p className={styles.hint}>
+                <p>
                     {t('issue.boundListHint')}
                 </p>
-            </div>
+            </StatusMessage>
             <AddressField
                 id="issue-transfer-owner"
                 label={t('issue.transferOwnershipOptional')}

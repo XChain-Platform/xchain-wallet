@@ -663,9 +663,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </p>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => <p key={i} className={styles.warning}>{w}</p>)}
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        {decoded.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -793,9 +793,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 />
 
                 {giveType === 'coin' && getType === 'coin' ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>At least one side must be a token. Coin-for-coin is a regular payment, not an order.</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>At least one side must be a token. Coin-for-coin is a regular payment, not an order.</p>
+                    </StatusMessage>
                 ) : null}
 
                 <AddressField

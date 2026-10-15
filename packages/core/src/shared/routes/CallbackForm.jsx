@@ -765,11 +765,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 {previewBlock}
                 {dustNote}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -886,13 +886,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 </Button>
             )}
         >
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="alert">
+                <p>
                     <strong>Callback recalls everything.</strong> Every unit of {ticker || 'this token'}
                     {' '}returns to your address, and each holder is paid the configured amount. This
                     cannot be undone.
                 </p>
-            </div>
+            </StatusMessage>
 
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
@@ -918,20 +918,20 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             {previewBlock}
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
             {!configComplete ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {ticker} has no callback configured. Set the callback token, payout, and
                         block in Callback settings before you can recall.
                     </p>
-                </div>
+                </StatusMessage>
             ) : !blockReached ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         Callback is not allowed yet. It becomes available at block{' '}
                         {cbBlock?.toLocaleString('en-US')}
                         {currentHeight != null ? ` (chain is at ${currentHeight.toLocaleString('en-US')})` : ''}.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {dustNote}
 

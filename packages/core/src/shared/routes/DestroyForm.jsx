@@ -516,11 +516,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -652,11 +652,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 </Button>
             )}
         >
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="alert">
+                <p>
                     <strong>Destroy is irreversible.</strong> The burned amount cannot be recovered.
                 </p>
-            </div>
+            </StatusMessage>
 
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />

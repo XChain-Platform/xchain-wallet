@@ -635,13 +635,13 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 </div>
                 {showPassphrase ? (
                     <>
-                        <p className={styles.advancedWarning}>
+                        <StatusMessage variant="warning" role={null}>
                             Save this passphrase separately from your recovery phrase.
                             You need both to restore this wallet. It cannot be reset or
                             recovered, and a missing or mistyped passphrase opens a
                             different wallet without warning. Capitalization and spaces
                             matter.
-                        </p>
+                        </StatusMessage>
                         <Input
                             id="create-bip39-passphrase"
                             type="password"

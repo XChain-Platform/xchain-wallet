@@ -20,6 +20,7 @@ import { render, act as domAct, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
+import { messageText } from '../helpers/messageText.js';
 
 const CHAIN = 'litecoin-regtest';
 const CREATOR = 'rltc1qcreatorcreatorcreatorcreatorcreatorcrea';
@@ -132,7 +133,7 @@ async function mount({
     return { utils, lifecycleCalls, tipReads };
 }
 
-const banner = (utils) => utils.getByTestId('close-window-banner').textContent;
+const banner = (utils) => messageText(utils.getByTestId('close-window-banner'));
 const clockOf = (unixSeconds) => new Date(unixSeconds * 1000)
     .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 

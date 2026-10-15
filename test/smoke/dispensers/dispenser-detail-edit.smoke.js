@@ -89,7 +89,7 @@ assert.ok(
     'the refill form no longer quotes the cap as policy with no count beside it (D-147)',
 );
 assert.match(src, /const isClosing = liveStatus === 'cancelling';/, 'derives the cancelling close-window state');
-assert.match(src, /closeWindowNote/, 'renders the close-window banner');
+assert.match(src, /testId="close-window-banner"/, 'renders the close-window banner');
 assert.match(src, /of 1,000 this fill/, 'labels dispenses as per-fill against the 1000 cap');
 assert.match(src, /formatUnixDate\(currentExpiration\)/, 'shows the expiration date');
 assert.match(src, /Allow list<\/dt>/, 'shows the current allow list');

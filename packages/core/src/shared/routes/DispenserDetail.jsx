@@ -1120,11 +1120,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <div data-testid="buy-dispenser-notice">
                     <StatusMessage variant="status">{buyDestinationNotice.summary}</StatusMessage>
                     {buyDestinationNotice.warnings.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
+                        <StatusMessage variant="warning" role="alert">
                             {buyDestinationNotice.warnings.map((warning) => (
-                                <p key={warning} className={styles.warning}>{warning}</p>
+                                <p key={warning}>{warning}</p>
                             ))}
-                        </div>
+                        </StatusMessage>
                     ) : null}
                 </div>
             ) : null}
@@ -1752,9 +1752,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     dispenser's own address too, so a list without it refuses
                     every buyer. Same check and copy as the create form. */}
                 {editAllowSelfWarning ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{editAllowSelfWarning}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{editAllowSelfWarning}</p>
+                    </StatusMessage>
                 ) : null}
                 {editListConflictText && editListConflictText !== editError ? (
                     <StatusMessage variant="error" className={styles.error}>{editListConflictText}</StatusMessage>
@@ -1842,11 +1842,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     ))}
                 </dl>
                 {decodedCancel && decodedCancel.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decodedCancel.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {closeEscrowNote}
                 {feeSelector}
@@ -1918,7 +1918,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * 5,005,460 sats for a refused fill, unrecoverable.
               */}
             {currentAllowList || currentBlockList || tokenPolicyDescriptions.length > 0 ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     <strong>This dispenser is restricted.</strong>{' '}
                     {currentAllowList
                         ? `Only addresses on list #${currentAllowList} can trigger a fill.`
@@ -1933,7 +1933,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {' '}A payment from an address it refuses is <strong>not returned</strong>:
                     the {payTick || getCoin} is spent, the dispense is recorded invalid, and nothing
                     comes back.
-                </p>
+                </StatusMessage>
             ) : null}
             {/*
               * Show the specific eligibility verdict the wallet can resolve
@@ -1948,7 +1948,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * since the generic restriction warning still stands on its own.
               */}
             {buyerListNotice ? (
-                <p role="alert" className={styles.warning}>{buyerListNotice}</p>
+                <StatusMessage variant="warning" role="alert">{buyerListNotice}</StatusMessage>
             ) : null}
         </>
     );
@@ -1956,7 +1956,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     return wrap(
         <>
             {isClosing ? (
-                <p className={local.closeWindowNote} role="status" data-testid="close-window-banner">
+                <StatusMessage variant="warning" role="status" testId="close-window-banner">
                     {closeWindowNotice({
                         eta: closeEta,
                         escrowRemaining,
@@ -1964,12 +1964,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         cancelledBy: dispenser?.cancelled_by ?? dispenser?.state?.cancelled_by ?? null,
                         heldAddresses,
                     })}
-                </p>
+                </StatusMessage>
             ) : null}
             {isTerminal ? (
-                <p className={local.closeWindowNote} role="status">
+                <StatusMessage variant="warning" role="status">
                     {terminalDispenserNotice(liveStatus, { canReopen: canOpenAgain })}
-                </p>
+                </StatusMessage>
             ) : null}
             {isTerminal && ownsOnlyDispenserAddress ? (
                 <p className={styles.hint} data-testid="reopen-origin-note">
@@ -1977,15 +1977,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </p>
             ) : null}
             {priceStale ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     <strong>{DISPENSER_PRICE_STALE_MESSAGE}</strong>
                     <span>. A payment made now would be refused and kept.</span>
-                </p>
+                </StatusMessage>
             ) : null}
             {!ownerAddress && isOpen && !hasCompleteFill ? (
-                <p role="status" className={local.closeWindowNote}>
+                <StatusMessage variant="warning" role="status">
                     This dispenser has no complete fills left to buy.
-                </p>
+                </StatusMessage>
             ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
@@ -2328,16 +2328,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             </dl>
                         ) : null}
                         {fillsError ? (
-                            <p role="alert" className={styles.warning}>{fillsError}</p>
+                            <StatusMessage variant="warning" role="alert">{fillsError}</StatusMessage>
                         ) : null}
                         {inventoryError ? (
-                            <p role="alert" className={styles.warning}>{inventoryError}</p>
+                            <StatusMessage variant="warning" role="alert">{inventoryError}</StatusMessage>
                         ) : null}
                         {minFillsNotice ? (
                             <p className={styles.hintLeft} data-testid="min-fills-notice">{minFillsNotice}</p>
                         ) : null}
                         {buyDustBlock ? (
-                            <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
+                            <StatusMessage variant="warning" role="alert" testId="buy-dust-block">{buyDustBlock}</StatusMessage>
                         ) : null}
                         <p className={styles.hintLeft} data-testid="buy-balance">
                             {buyBalance == null
@@ -2635,9 +2635,9 @@ function OwnerConfirmNotes({
                 ) : null}
             </dl>
             {allowListWarning ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{allowListWarning}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{allowListWarning}</p>
+                </StatusMessage>
             ) : null}
             {listsChanged ? (
                 <p className={styles.hint}>

@@ -51,7 +51,9 @@ describe('shared route dark-mode colors', () => {
     it('keeps warning, send-gate, and official-region borders visible in dark mode', () => {
         const send = routeCss('Send');
         const detail = routeCss('TokenDetail');
-        expect(send).toMatch(/\.warnings\s*\{[^}]*border:\s*1px solid var\(--xc-warning\)/s);
+        expect(send).not.toMatch(/^\.warnings\s*\{/m);
+        expect(readFileSync('packages/core/src/ui/StatusMessage.module.css', 'utf8'))
+            .toMatch(/\.row\.warning\s*\{[^}]*border:\s*1px solid var\(--xc-warning\)/s);
         expect(send).toMatch(/\.testSendGate\s*\{[^}]*border:\s*1px solid var\(--xc-accent-primary\)/s);
         expect(detail).toMatch(/\.officialBanner\s*\{[^}]*border:\s*1px solid var\(--xc-success\)/s);
         expect(detail).toMatch(/\.officialBanner\s*\{[^}]*background:\s*var\(--xc-success-bg\)/s);

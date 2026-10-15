@@ -564,14 +564,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     {new Set(rows.map((r) => r.chainId)).size} chain{new Set(rows.map((r) => r.chainId)).size === 1 ? '' : 's'}
                 </p>
                 <SummaryList rows={rows} addressesByChain={addressesByChain} showDetails />
-                <div className={styles.warnings}>
-                    <p className={styles.warning} id="parallel-no-rollback-warning">
+                <StatusMessage variant="warning" role={null}>
+                    <p id="parallel-no-rollback-warning">
                         <strong>No rollback:</strong> each action signs and broadcasts independently.
                         If a later row fails, successful earlier rows remain broadcast.
                         Actions on different chains are not settled as one unit;
                         only an individual swap completes together.
                     </p>
-                </div>
+                </StatusMessage>
                 <Checkbox
                     className={parallelStyles.acknowledgement}
                     label="I understand successful actions cannot be rolled back if a later action fails."
