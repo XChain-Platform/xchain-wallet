@@ -18,18 +18,24 @@ const VIEWPORTS = [
 
 const ROUTES = [
     { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
-    { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
-    { paletteName: 'My lists', heading: 'My lists', actionName: 'Create list' },
-    { paletteName: 'Dispensers', heading: 'My dispensers', actionName: 'Create dispenser' },
     { paletteName: 'Staking', heading: 'Staking', actionName: 'New stake' },
-    { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New conversation' },
-    { paletteName: 'History', heading: 'History', actionName: 'Refresh history' },
     { paletteName: 'My orders', heading: 'My orders', actionName: 'New order' },
     { paletteName: 'My swaps', heading: 'My swaps', actionName: 'New swap' },
     { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Issue new token' },
     { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh payments' },
     { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Save' },
     { open: 'account-rename', heading: 'Rename account', actionName: 'Save' },
+];
+
+// The page header holds only the title and Back on these screens: their
+// create or refresh action sits in the content, in the ListPage actions row,
+// or in the EmptyState when the list is empty (the demo wallet has no lists).
+const CONTENT_ACTION_ROUTES = [
+    { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
+    { paletteName: 'My lists', heading: 'My lists', actionName: 'Create list' },
+    { paletteName: 'Dispensers', heading: 'My dispensers', actionName: 'Create dispenser' },
+    { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New conversation' },
+    { paletteName: 'History', heading: 'History', actionName: 'Refresh history' },
 ];
 
 async function openPaletteRoute(page, route) {
@@ -95,6 +101,31 @@ async function expectHeaderActionIcon(page, route, viewport) {
     ).toBe(true);
 }
 
+async function expectContentActionIcon(page, route, viewport) {
+    const heading = page.getByRole('heading', {
+        level: 1,
+        name: route.heading,
+        exact: true,
+    });
+    await expect(heading).toBeVisible();
+
+    const pageHeader = heading.locator('..').locator('..');
+    await expect(pageHeader.locator(':scope > span:last-child button')).toHaveCount(0);
+
+    const action = page.getByRole('main').getByRole('button', { name: route.actionName, exact: true });
+    await expect(action).toHaveCount(1);
+    await expect(action).toBeVisible();
+
+    const iconSizes = await action.locator('svg').evaluateAll((icons) => icons.map((icon) => {
+        const box = icon.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+    }));
+    expect(
+        iconSizes.some(({ width, height }) => width >= 14 && height >= 14),
+        `${viewport.name} / ${route.heading}: content action needs an SVG at least 14px square`,
+    ).toBe(true);
+}
+
 test('page header actions have visible icons and accessible names', async ({ page }) => {
     test.slow();
     await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
@@ -107,6 +138,13 @@ test('page header actions have visible icons and accessible names', async ({ pag
             await test.step(`${viewport.name} / ${route.heading}`, async () => {
                 await openRoute(page, route);
                 await expectHeaderActionIcon(page, route, viewport);
+            });
+        }
+
+        for (const route of CONTENT_ACTION_ROUTES) {
+            await test.step(`${viewport.name} / ${route.heading} (content action)`, async () => {
+                await openRoute(page, route);
+                await expectContentActionIcon(page, route, viewport);
             });
         }
     }

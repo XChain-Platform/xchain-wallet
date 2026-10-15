@@ -30,6 +30,22 @@
     color: var(--xc-text-muted);
 }
 
+/* The screen's own actions, in one row that wraps on a narrow screen. Each
+   button keeps its natural width and the row starts at the content edge,
+   so every list screen puts its actions in the same place. */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.actions > * {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
 /* First control (usually search) takes the spare room; the rest keep
    their natural width and wrap below it when the row runs out. A leading
    button keeps its own width, so a lone "New" action is not stretched. */

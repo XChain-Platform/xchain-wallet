@@ -326,19 +326,21 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             backLabel="Back to home"
             titleIcon={<Icon.TokenIcon />}
             title="My dispensers"
-            trailing={onCreateDispenser ? (
-                <Button
-                    type="button"
-                    className={local.addBtn}
-                    onClick={() => onCreateDispenser()}
-                    aria-label="Create dispenser"
-                    title="Create dispenser"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : undefined}
         />
     );
+    // The page header holds only the title and Back, so Create dispenser
+    // sits in the content's actions row. An empty list offers it from its
+    // EmptyState instead, so the screen never shows it twice.
+    const actionsFor = (emptyOffersCreate = false) => (onCreateDispenser && !emptyOffersCreate ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            onClick={() => onCreateDispenser()}
+        >
+            Create dispenser
+        </Button>
+    ) : null);
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -347,7 +349,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     if (addressesError) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
@@ -367,7 +369,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     }
     if (!addressesByChain) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
@@ -376,7 +378,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     }
     if (chainsWithAddresses.length === 0) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <EmptyState
                     title="No supported address"
                     body="A supported address is required before dispensers can be created or viewed."
@@ -385,8 +387,25 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         );
     }
 
+    const emptyOffersCreate = !anyLoading && !hasLoadErrors && allRows.length === 0;
     return wrap(
         <ListPage
+            notices={hasLoadErrors ? (
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setDispensersByChain({});
+                            setDispensersReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    Couldn't load some dispensers. Try again.
+                </StatusMessage>
+            ) : null}
+            actions={actionsFor(emptyOffersCreate)}
             toolbar={(
                 <div className={local.toolbar} style={{ flexWrap: 'wrap' }}>
                     <div className={local.searchField}>
@@ -415,21 +434,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 </div>
             )}
         >
-            {hasLoadErrors ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setDispensersByChain({});
-                            setDispensersReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    Couldn't load some dispensers. Try again.
-                </StatusMessage>
-            ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />

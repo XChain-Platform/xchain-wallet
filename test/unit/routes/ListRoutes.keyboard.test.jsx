@@ -90,7 +90,7 @@ describe('list route keyboard flows', () => {
         });
     });
 
-    it('reaches New conversation and leaves Messaging with Back', async () => {
+    it('reaches New message on an empty inbox and leaves Messaging with Back', async () => {
         await exerciseRoute({
             Component: MessagingInbox,
             messaging: {
@@ -103,7 +103,7 @@ describe('list route keyboard flows', () => {
                     messages: [], addresses: [], errors: [],
                 }),
             },
-            primaryName: 'New conversation',
+            primaryName: 'New message',
             props: (onPrimary) => ({ activeAccountId: 'account-1', onCompose: onPrimary }),
         });
     });

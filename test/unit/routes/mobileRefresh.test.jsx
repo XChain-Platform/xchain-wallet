@@ -186,9 +186,12 @@ describe('mobile refresh', () => {
 
         await waitFor(() => expect(document.querySelector('[data-history-key]')).not.toBeNull());
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
-        expect(refresh).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
-        expect(refresh).not.toHaveClass(buttonStyles.sm);
-        expect(refresh.textContent).toBe('');
+        // A labelled kit button in the content actions row, not an icon in
+        // the page header.
+        expect(refresh).toHaveClass(buttonStyles.md);
+        expect(refresh).not.toHaveClass(buttonStyles.iconOnly);
+        expect(refresh.textContent).toBe('Refresh history');
+        expect(refresh.closest('[data-xc-page-actions]')).not.toBeNull();
         fireEvent.click(refresh);
 
         const refreshing = screen.getByRole('button', { name: 'Refreshing history' });

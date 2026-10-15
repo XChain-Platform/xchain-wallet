@@ -565,21 +565,21 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             onBack={onBack}
             title="Messaging"
             titleIcon={<Icon.MessageIcon />}
-            trailing={onCompose ? (
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    icon={null}
-                    onClick={() => onCompose()}
-                    aria-label="New conversation"
-                    title="New conversation"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : undefined}
         />
     );
+    // The page header holds only the title and Back, so New conversation
+    // sits in the content's actions row. An empty inbox offers New message
+    // from its EmptyState instead, so the screen never shows the action twice.
+    const actionsFor = (emptyOffersCompose = false) => (onCompose && !emptyOffersCompose ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            onClick={() => onCompose()}
+        >
+            New conversation
+        </Button>
+    ) : null);
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -589,28 +589,31 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (loadError) {
         return wrap(
-            <ListPage>
-                <StatusMessage
-                    variant="error"
-                    className={styles.error}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setLoadError(null);
-                            setAddressesByChain(null);
-                            setAddressesReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    {loadError}
-                </StatusMessage>
-            </ListPage>,
+            <ListPage
+                notices={(
+                    <StatusMessage
+                        variant="error"
+                        className={styles.error}
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setLoadError(null);
+                                setAddressesByChain(null);
+                                setAddressesReload((value) => value + 1);
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                )}
+                actions={actionsFor()}
+            />,
         );
     }
 
     if (!addressesByChain) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -620,7 +623,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (sweepAddrs.length === 0) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
             </ListPage>,
         );
@@ -631,7 +634,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -641,7 +644,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (stage === 'submitting') {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -830,6 +833,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     return wrap(
         <ListPage
+            notices={inboxWarning ? (
+                <StatusMessage variant="warning">{inboxWarning}</StatusMessage>
+            ) : null}
+            actions={actionsFor(conversations.length === 0)}
             toolbar={(
                 <div className={local.toolbar}>
                     <Input
@@ -849,9 +856,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 </div>
             )}
         >
-            {inboxWarning ? (
-                <StatusMessage variant="warning">{inboxWarning}</StatusMessage>
-            ) : null}
             {handshakeRequesters.length > 0 ? (
                 <section aria-label="Encrypted-session requests" className={local.requestSection}>
                     <SectionHeader
