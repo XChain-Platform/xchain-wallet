@@ -52,6 +52,8 @@ import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
 
+import { networkGuardRefusal } from './networkGuard.js';
+
 /** Tor's default SOCKS port on localhost. */
 export const DEFAULT_SOCKS = Object.freeze({ host: '127.0.0.1', port: 9050 });
 
@@ -120,6 +122,10 @@ export function parseSocksAddress(value) {
 export function socksConnect({
     proxyHost, proxyPort, host, port, timeoutMs = HANDSHAKE_TIMEOUT_MS,
 }) {
+    // The proxy is on loopback, so the socket guard would let the tunnel
+    // through; a test run under the network guard checks the destination.
+    const refusal = networkGuardRefusal(host, port);
+    if (refusal) return Promise.reject(refusal);
     return new Promise((resolve, reject) => {
         let settled = false;
         const socket = net.connect(proxyPort, proxyHost);
