@@ -63,6 +63,7 @@ import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
 import {
     SettingsFieldRow,
+    SettingsInlineForm,
     SettingsLoadError,
     Status,
     ToggleRow,
@@ -361,6 +362,7 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
     };
 
     return (
+        <SettingsInlineForm error={errorText}>
         <section className={styles.entry}>
             <SectionHeader
                 as="h3"
@@ -428,8 +430,8 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
                 summary={t('settings.developer.accountsNotChanged', { length: skippedAccounts.length })}
                 items={skippedAccounts}
             />
-            {errorText ? <Status text={errorText} tone="error" /> : null}
         </section>
+        </SettingsInlineForm>
     );
 }
 
@@ -518,6 +520,7 @@ function RegtestFaucetForm({
                 </>
             )}
         >
+            <SettingsInlineForm error={errorText}>
             <form onSubmit={onGetFunds} className={styles.form}>
                 <Input
                     type="text"
@@ -564,8 +567,8 @@ function RegtestFaucetForm({
                     ) : null}
                 </div>
             </form>
+            </SettingsInlineForm>
             {statusText ? <Status text={statusText} /> : null}
-            {errorText ? <Status text={errorText} tone="error" /> : null}
         </FormSection>
     );
 }
@@ -718,6 +721,7 @@ function CustomChainsRow({ developerMode }) {
                 </>
             )}
         >
+            <SettingsInlineForm error={errorText}>
             {loadError ? <Status text={loadError} tone="error" /> : null}
             {!loading && chains.length === 0 && !loadError ? (
                 <EmptyState title={t('settings.developer.noCustomChainsYet')} titleAs="h3" body={t('settings.developer.chainsYouAddHereAppear')} />
@@ -799,7 +803,7 @@ function CustomChainsRow({ developerMode }) {
                 </Button>
             )}
             {statusText ? <Status text={statusText} /> : null}
-            {errorText ? <Status text={errorText} tone="error" /> : null}
+            </SettingsInlineForm>
         </FormSection>
     );
 }
