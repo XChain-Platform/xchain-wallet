@@ -60,4 +60,20 @@ describe('FormPage onboarding layout', () => {
         expect(children[1]).toContainElement(screen.getByLabelText('To'));
         expect(children[2]).toContainElement(screen.getByRole('button', { name: 'Send' }));
     });
+
+    it('lifts the demo-wallet note above the form card', () => {
+        render(
+            <FormPage
+                label="Send"
+                demoGuard={{ blocked: true, note: <p>Demo wallets cannot move funds.</p>, dialog: null }}
+                actions={<button type="submit">Send</button>}
+            >
+                <input aria-label="To" />
+            </FormPage>,
+        );
+
+        const form = screen.getByRole('form', { name: 'Send' });
+        expect(form.previousElementSibling).toHaveTextContent('Demo wallets cannot move funds.');
+        expect(form).not.toHaveTextContent('Demo wallets cannot move funds.');
+    });
 });

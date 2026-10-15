@@ -53,6 +53,7 @@
 }
 
 .input:not(textarea) {
+    text-overflow: ellipsis;
     height: var(--xc-control-height);
     padding-block: 0;
     padding-inline: var(--xc-control-padding-x, 12px);

@@ -881,9 +881,19 @@ export function SweepForm({
             label={migrateLane ? 'Sweep to new wallet' : 'Sweep address'}
             onSubmit={handleReview}
             sectioned
+            // The standing warning is the first notice of the page; a form error
+            // takes its place, so one message shows at a time.
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
+            ) : (migrateLane ? null : (
+                <StatusMessage variant="warning" role="alert">
+                    <p>
+                        <strong>Sweep moves everything selected at once.</strong>{' '}
+                        The preview below is indicative; the chain settles whatever
+                        the address holds when the sweep confirms.
+                    </p>
+                </StatusMessage>
+            ))}
             actions={(
                 <Button
                     type="submit"
@@ -907,15 +917,7 @@ export function SweepForm({
                     address; send it across separately, and keep the legacy
                     recovery phrase until you have.
                 </p>
-            ) : (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        <strong>Sweep moves everything selected at once.</strong>{' '}
-                        The preview below is indicative; the chain settles whatever
-                        the address holds when the sweep confirms.
-                    </p>
-                </StatusMessage>
-            )}
+            ) : null}
 
             {migrateLane ? (
                 <dl className={styles.detailsList}>
