@@ -125,4 +125,8 @@ for (const cls of ['wrap', 'label', 'sliderBlock', 'slider', 'sliderTicks', 'sli
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
 
+// The full-width slider drops the browser's range-input side margin so it
+// ends at the page gutter, not 2px past it.
+assert.match(css, /\.slider \{[^}]*margin-inline: 0;/, 'slider has no side margin');
+
 console.log('fee-selector smoke OK');

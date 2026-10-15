@@ -1203,7 +1203,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
-                    : 'Create Dispenser'}
+                    : 'Create dispenser'}
         />
     );
     const wrap = (children) => (
@@ -1763,12 +1763,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             {payWith === 'coin' ? (
                 <Button
-                    variant="ghost"
+                    variant="link"
                     size="sm"
                     icon={null}
+                    className={styles.advancedToggle}
+                    aria-expanded={showAdvanced}
                     onClick={() => setShowAdvanced((v) => !v)}
                 >
-                    {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
+                    {showAdvanced ? 'Advanced options' : 'Advanced options (fiat pricing, oracle)'}
+                    <Icon.ChevronDownIcon
+                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                    />
                 </Button>
             ) : null}
 
@@ -1834,16 +1839,18 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             ) : null}
 
-            <p className={styles.pickerLabel}>Restrict who can buy (optional)</p>
-            <div className={styles.actions}>
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                    {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                </Button>
-                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                    {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                </Button>
-                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+            <div className={styles.choiceGroup}>
+                <p className={styles.choiceGroupLabel}>Restrict who can buy (optional)</p>
+                <div className={styles.choiceButtons}>
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                        {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                    </Button>
+                    {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                        {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                    </Button>
+                    {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                </div>
             </div>
 
             {/* D-161: "Restrict who can buy" is the reading that causes the

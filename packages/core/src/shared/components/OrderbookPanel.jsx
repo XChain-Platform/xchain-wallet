@@ -163,7 +163,7 @@ function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, 
             tabIndex={0}
         >
             <div className={styles.levelsTable}>
-                <table className={tableStyles.table}>
+                <table className={`${tableStyles.table} ${tableStyles.keepColumns}`}>
                     <caption className={`${tableStyles.caption} ${tableStyles.compactCaption}`}>{title}</caption>
                     <thead>
                         <tr>

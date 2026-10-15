@@ -85,11 +85,11 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             }}
         >
             <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                <table className={tableStyles.table}>
+                <table className={`${tableStyles.table} ${tableStyles.keepColumns}`}>
                     <caption className={tableStyles.caption}>{t('components.recentTradesPanel.recentTrades')}</caption>
                     <thead>
                         <tr>
-                            <th className={tableStyles.headerCell} scope="col">{t('components.tradeHistoryPanel.time')}</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.tradeHistoryPanel.time')}</th>
                             <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.placeOrderPanel.price')}</th>
                             <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.openOrdersPanel.size')}{tick1})</th>
                             <th className={tableStyles.headerCell} scope="col">{t('components.placeOrderPanel.side')}</th>
