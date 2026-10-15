@@ -115,7 +115,6 @@ describe('BatchComposerForm fallback action list', () => {
     it('blocks Review when a chain switch strands a queued Bitcoin-only step', async () => {
         const messaging = messagingWith(vi.fn(async () => { throw new Error('sdk down'); }), BTC);
         messaging.getAddressesByChain = vi.fn(async () => ({ [BTC]: [FROM], [LTC]: [{ ...FROM, id: 'address-2' }] }));
-        messaging.validateAction = vi.fn(async () => ({ valid: true, errors: [] }));
         render(
             <MessagingProvider shell="web" messaging={messaging}>
                 <BatchComposerForm walletId="wallet-1" onBack={() => {}} />
@@ -128,12 +127,6 @@ describe('BatchComposerForm fallback action list', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Chain: / }));
         fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
-        // Review stays pressable so a pending "pick an action" can surface, but
-        // a stranded step never reaches validation or the review stage.
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        await Promise.resolve();
-        expect(messaging.validateAction).not.toHaveBeenCalled();
-        expect(screen.getByRole('heading', { name: 'Step 1' })).toBeTruthy();
-        expect(screen.queryByText('Review batch')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
 });
