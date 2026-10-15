@@ -208,7 +208,7 @@ describe('protocol detail route accessibility', () => {
             messaging(),
         );
 
-        await screen.findByRole('button', { name: 'Give and get chain: Bitcoin' });
+        await screen.findByRole('button', { name: 'Give and get network: Bitcoin' });
         await expectNoSeriousAxeViolations(container);
     });
 

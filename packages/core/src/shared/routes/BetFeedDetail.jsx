@@ -325,7 +325,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     // stakes are literal: a place-bet and a resolve differ on the wire only by
     // AMOUNT (that rule, sharper here).
     async function placeBet() {
-        if (!fromAddress) { setFormError('No address on this chain to bet from.'); return; }
+        if (!fromAddress) { setFormError('No address on this network to bet from.'); return; }
         if (outcome === null) { setFormError('Choose an outcome.'); return; }
         const amountProblem = betAmountError(amount, feed?.min_amount);
         if (amountProblem) { setFormError(amountProblem); return; }
@@ -511,7 +511,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     <p className={styles.hint}>
                         {resolveWindowOpen
                             ? 'The market oracle must publish the winning outcome before the refund window ends. Payouts settle automatically when the result is recorded; bettors do not submit a claim.'
-                            : 'The resolution window has ended. The protocol refunds every bet automatically when the chain records the expiry; bettors do not submit a claim.'}
+                            : 'The resolution window has ended. The protocol refunds every bet automatically when the network records the expiry; bettors do not submit a claim.'}
                     </p>
                     {resolveWindowOpen && ownsMarket && onSettleMarket ? (
                         <Button variant="primary" onClick={onSettleMarket}>Settle this market</Button>

@@ -189,7 +189,8 @@ describe('<TxStatusTimeline>', () => {
         expect(timelineCss).toContain('width: var(--xc-icon-md);');
         expect(timelineCss).toContain('font-size: var(--xc-text-lg);');
         expect(timelineCss).not.toMatch(/(?:width|height):\s*18px/);
-        expect(undoToastCss).toContain('transform: translateY(var(--xc-space-2));');
+        // The undo countdown composes the host toast, so it carries no motion of its own.
+        expect(undoToastCss).toMatch(/composes:\s*toast variant_info from '\.\/ToastHost\.module\.css'/);
         expect(undoToastCss).not.toContain('translateY(8px)');
     });
 });

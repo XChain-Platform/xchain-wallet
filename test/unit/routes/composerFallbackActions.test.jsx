@@ -105,14 +105,14 @@ describe('BatchComposerForm fallback action list', () => {
         expect(await actionOptions()).toEqual(expected);
     });
 
-    it('drops the Bitcoin-only actions on a Litecoin chain, as the Parallel composer does', async () => {
+    it('drops the Bitcoin-only actions on a Litecoin network, as the Parallel composer does', async () => {
         mountBatch(vi.fn(async () => { throw new Error('sdk down'); }), LTC);
         const options = await actionOptions();
         for (const btcOnly of BTC_EXCLUSIVE_ACTIONS) expect(options).not.toContain(btcOnly);
         expect(options).toEqual([...COMMON_ACTIONS].filter((a) => a !== 'BATCH' && a !== 'FILE').sort());
     });
 
-    it('blocks Review when a chain switch strands a queued Bitcoin-only step', async () => {
+    it('blocks Review when a network switch strands a queued Bitcoin-only step', async () => {
         const messaging = messagingWith(vi.fn(async () => { throw new Error('sdk down'); }), BTC);
         messaging.getAddressesByChain = vi.fn(async () => ({ [BTC]: [FROM], [LTC]: [{ ...FROM, id: 'address-2' }] }));
         render(
@@ -124,7 +124,7 @@ describe('BatchComposerForm fallback action list', () => {
         const pick = (name) => screen.getByRole('combobox', { name });
         fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
         // The chain is a ChainPicker: open it and choose Litecoin.
-        fireEvent.click(screen.getByRole('button', { name: /^Chain: / }));
+        fireEvent.click(screen.getByRole('button', { name: /^Network: / }));
         fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);

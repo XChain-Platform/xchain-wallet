@@ -89,7 +89,7 @@ describe('BackupSection label publication confirmation', () => {
         const messaging = mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
-        await screen.findByLabelText('Publish chain');
+        await screen.findByLabelText('Publish network');
         expect(screen.getByText(/labels \+ contacts are encrypted/i).textContent)
             .toMatch(/stored on the blockchain[\s\S]*seed can decrypt them/);
         const action = screen.getByRole('button', { name: 'Publish' });
@@ -282,7 +282,8 @@ describe('AboutSection copy confirmation', () => {
             const button = screen.getByRole('button', { name: 'Copy diagnostics' });
             fireEvent.click(button);
 
-            expect(await screen.findByRole('status')).toHaveTextContent(/^Copied/);
+            // The message row leads with its (aria-hidden) tone icon.
+            expect(await screen.findByRole('status')).toHaveTextContent(/^\W*Copied/);
             expect(writeText).toHaveBeenCalledOnce();
             expect(button).toHaveTextContent('Copied');
             act(() => vi.advanceTimersByTime(1501));

@@ -107,8 +107,8 @@ assert.ok(
     'callback updates a status message after the run',
 );
 assert.ok(
-    /role="status"\s+aria-live="polite"/.test(section),
-    'reset confirmation uses an aria-live status region',
+    /<StatusMessage variant=\{resetMessage\.variant\}>/.test(section),
+    'reset confirmation uses the shared StatusMessage (a polite status region)',
 );
 
 console.log('chain-filter-reset smoke OK');

@@ -54,7 +54,7 @@ describe('Settings search', () => {
 
         expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
         expect(screen.getByText('Choose the interface language and fiat currency.')).toBeTruthy();
-        expect(screen.getByText('Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
+        expect(screen.getByText('Choose Mainnet or Testnet to control which networks the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
         expect(screen.getByText('Choose which wallet events trigger notifications, sounds, or price alerts.')).toBeTruthy();
         expect(screen.getByText('Export or import the address book.')).toBeTruthy();
     });
@@ -80,7 +80,7 @@ describe('Settings search', () => {
         ['network endpoint', 'Network & endpoints'],
         ['connected site', 'Connected sites'],
         ['donation', 'Automatic donation system'],
-        ['saved chain filters', 'Display'],
+        ['saved network filters', 'Display'],
         ['quiet hours', 'Notifications'],
         ['localhost auto sign', 'Developer mode'],
         ['Primary Vault', 'This wallet'],
@@ -178,12 +178,14 @@ describe('Settings search', () => {
         mount();
         searchFor('no setting has these words');
 
-        expect(screen.getByRole('status')).toHaveTextContent('No settings match "no setting has these words".');
+        // A section still loading shows its own status row, so find the search one by its words.
+        expect(screen.getAllByRole('status').find((el) => /No settings match/.test(el.textContent)))
+            .toHaveTextContent('No settings match "no setting has these words".');
         expect(screen.queryByText('Backup')).toBeNull();
 
         searchFor('');
 
-        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.queryByText(/No settings match/)).toBeNull();
         expect(screen.getByText('Backup')).toBeTruthy();
         expect(screen.getByText('About')).toBeTruthy();
     });
@@ -192,6 +194,7 @@ describe('Settings search', () => {
         mount({ activeWallet: null, onOpenAccountPicker: undefined });
         searchFor('signer pairing');
 
-        expect(screen.getByRole('status')).toHaveTextContent('No settings match "signer pairing".');
+        expect(screen.getAllByRole('status').find((el) => /No settings match/.test(el.textContent)))
+            .toHaveTextContent('No settings match "signer pairing".');
     });
 });

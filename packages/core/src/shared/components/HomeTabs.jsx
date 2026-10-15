@@ -29,6 +29,7 @@ import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
 import { BalancesUncheckedState } from './BalancesUncheckedState.jsx';
+import { activityRowAmount } from '../utils/activityAmount.js';
 import { ActivityRow as SharedActivityRow } from './ActivityRow.jsx';
 import {
     isDemoWallet,
@@ -52,7 +53,7 @@ import {
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
-import { compareDecimalStrings, formatHistoryAmount } from '../utils/amountFormat.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 
@@ -928,20 +929,6 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-// Format a satoshi-string amount using the tick's divisibility. Plain
-// string math, no BigInt; these are demo values and stay small.
-function formatAmount(raw, divisibility) {
-    const s = String(raw ?? '').trim();
-    if (!s) return '';
-    const div = Number.isFinite(divisibility) ? divisibility : 8;
-    if (div === 0) return s;
-    if (!/^\d+$/.test(s)) return s;
-    const padded = s.padStart(div + 1, '0');
-    const whole = padded.slice(0, -div);
-    const frac = padded.slice(-div).replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : whole;
-}
-
 const ACTION_ICON = {
     send:       (k) => <Icon.SendIcon key={k} />,
     receive:    (k) => <Icon.ReceiveIcon key={k} />,
@@ -976,12 +963,16 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('LITECOIN', 'LTC')
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
-    const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
-    const amount = rawAmount ? formatAmount(rawAmount, tokenInfo?.divisibility ?? 8) : '';
     const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
+    // One formatter with History: a SEND carries whole units, every other
+    // action base units.
+    const amount = activityRowAmount(entry, {
+        divisibility: tokenInfo?.divisibility ?? 8,
+        direction,
+    });
     const primary = amount
-        ? `${formatHistoryAmount(amount, direction)}${tick ? ` ${tick}` : ''}`
+        ? `${amount}${tick ? ` ${tick}` : ''}`
         : (tick || nativeTicker);
     const displayPrimary = balancesHidden && primary ? '•••••' : primary;
     return (
@@ -1059,7 +1050,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
     }, [entries]);
 
     if (entries.length === 0) {
-        return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any chains active." />;
+        return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any networks active." />;
     }
     return (
         <ul className={styles.demoList}>

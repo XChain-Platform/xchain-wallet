@@ -56,7 +56,7 @@ export function NetworkEndpointsSection() {
         });
 
     if (descriptors.length === 0) {
-        return <EmptyState title="No chains registered" titleAs="p" body="Registered chains and their endpoints appear here." />;
+        return <EmptyState title="No networks registered" titleAs="p" body="Registered networks and their endpoints appear here." />;
     }
 
     return (
@@ -111,7 +111,7 @@ function ChainRegistryRefreshRow() {
             if (request !== requestRef.current) return;
             setStatus({
                 ok: false,
-                error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
+                error: userFacingMessage(err, 'Could not refresh the network registry. Try again.'),
             });
             setManualResult(true);
         } finally {
@@ -122,7 +122,7 @@ function ChainRegistryRefreshRow() {
     return (
         <FormSection
             headingLevel="h3"
-            title="Chain registry refresh"
+            title="Network registry refresh"
             description={registryStatusText(status, manualResult)}
             className={styles.endpointCard}
         >
@@ -348,11 +348,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 placeholder={defaults.hubUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
-            {saveError ? (
-                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg, #c33)' }}>
-                    {saveError}
-                </div>
-            ) : null}
+            {saveError ? <Status text={saveError} tone="error" /> : null}
             {dirty ? (
                 <div style={ROW_HINT}>
                     Saving points this chain&apos;s balances, history and broadcasts at these

@@ -38,7 +38,7 @@ describe('explorer toolbar control alignment', () => {
         );
 
         const row = container.querySelector(`.${dispenserStyles.filterRow}`);
-        const select = within(row).getByRole('combobox', { name: 'Chain' });
+        const select = within(row).getByRole('combobox', { name: 'Network' });
         const search = within(row).getByRole('textbox', { name: 'Token ticker' });
         const action = within(row).getByRole('button', { name: 'Search' });
 

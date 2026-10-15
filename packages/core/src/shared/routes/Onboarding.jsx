@@ -51,13 +51,13 @@ const EXPLAINER_FRAMES = [
         id: 'transactions',
         icon: <Icon.SendIcon />,
         title: 'Review before you send',
-        body: 'A confirmed blockchain transaction cannot be reversed. Check the chain, address, and amount before you approve a send.',
+        body: 'A confirmed blockchain transaction cannot be reversed. Check the network, address, and amount before you approve a send.',
     },
     {
         id: 'multi-chain',
         icon: <Icon.TokenIcon />,
         title: 'Built for the XChain Platform',
-        body: 'Use the XChain Platform on Bitcoin, Litecoin, and Dogecoin, the chains supported today. Each chain has its own addresses here, kept separate so you always know where you are acting.',
+        body: 'Use the XChain Platform on Bitcoin, Litecoin, and Dogecoin, the networks supported today. Each network has its own addresses here, kept separate so you always know where you are acting.',
     },
 ];
 

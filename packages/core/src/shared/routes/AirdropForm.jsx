@@ -269,7 +269,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before airdropping.',
+                        'No addresses on any network yet. Use Receive to generate one before airdropping.',
                     );
                     return;
                 }
@@ -1914,7 +1914,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     {/* The browser's own file control sat in a grey box of
                         its own; it now opens from an outlined button, the
                         same pattern Publish file uses. */}
-                    <div style={{ marginBottom: 'var(--xc-space-3)' }}>
+                    <div>
                         <Input
                             ref={fileInputRef}
                             type="file"
@@ -2206,7 +2206,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         return wrap(
             <EmptyState
                 title="No published lists yet"
-                body="Address and token lists published from this chain appear here."
+                body="Address and token lists published from this network appear here."
             />,
         );
     }
