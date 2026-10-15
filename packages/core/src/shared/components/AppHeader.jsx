@@ -16,12 +16,14 @@
 // copy. `onMenuOpen` fires from the overflow menu's More row; the parent
 // layout owns the full menu mount so it can span the viewport.
 //
+import { useContext } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Button, Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import { HeaderActionMenu } from './HeaderActionMenu.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { WalletIdentity } from './WalletIdentity.jsx';
+import { NavSurfaceContext } from './navSurface.js';
 import styles from './AppHeader.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -80,6 +82,11 @@ export function AppHeader({
     platformCurrent,
     onPopOut,
 }) {
+    // Lock lives once: the sidebar or rail carries its own Lock row, so the
+    // header keeps the button only where the bottom tab bar (or no shell
+    // chrome at all, as in a bare popup) leaves Lock inside the More sheet.
+    const navSurface = useContext(NavSurfaceContext);
+    const showLock = Boolean(onLock) && navSurface !== 'sidebar';
     const networkWired = showNetworkFilter
         && Boolean(chainRegistry)
         && Array.isArray(coinFamilies)
@@ -109,7 +116,7 @@ export function AppHeader({
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
-                {onLock ? (
+                {showLock ? (
                     <Button
                         variant="secondary"
                         icon={<Icon.LockIcon />}
