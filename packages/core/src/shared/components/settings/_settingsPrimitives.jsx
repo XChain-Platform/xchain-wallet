@@ -17,7 +17,7 @@
 
 import { cloneElement, useId } from 'react';
 import { Switch } from '@xchain-wallet/core/ui';
-import { StatusMessage } from '../../../ui/StatusMessage.jsx';
+import { StatusMessage } from '../../../ui/index.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import cardStyles from '../../../ui/Card.module.css';
 
