@@ -341,3 +341,36 @@ test('the Locked screen and its forgot-password panel share the card rules at ev
     expect(measured).toBeGreaterThan(1);
     expect(faults).toEqual([]);
 });
+
+test('every card in the confirm stack is the same width at every size', async ({ page }) => {
+    test.setTimeout(10 * 60 * 1000);
+    await createWallet(page);
+    await palette(page, 'Prove address ownership');
+    await page.getByLabel(/^Message/).first().fill('Card width check');
+    await page.getByRole('button', { name: /^(Review|Sign|Continue)/ }).filter({ visible: true }).first().click();
+    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    for (const viewport of VIEWPORTS) {
+        await page.setViewportSize(viewport);
+        await settle(page, { escape: false });
+        const widths = await page.getByTestId('confirm-modal').evaluate((root) => {
+            const probe = document.createElement('div');
+            probe.style.border = '1px solid var(--xc-border)';
+            document.body.append(probe);
+            const borderColor = getComputedStyle(probe).borderTopColor;
+            probe.remove();
+            const body = root.querySelector('[data-testid="confirm-modal"] > div:nth-child(2)') || root;
+            return [...body.children]
+                .filter((el) => {
+                    const cs = getComputedStyle(el);
+                    return cs.borderTopStyle === 'solid' && cs.borderTopWidth === '1px' && cs.borderTopColor === borderColor
+                        && cs.borderLeftWidth === '1px';
+                })
+                .map((el) => Math.round(el.getBoundingClientRect().width));
+        });
+        const size = `${viewport.width}x${viewport.height}`;
+        expect(widths.length, `${size}: the confirm stack shows its Signing with card`).toBeGreaterThan(0);
+        expect(new Set(widths).size, `${size}: card widths ${widths.join(', ')}`).toBe(1);
+        const stack = await page.getByTestId('confirm-modal').evaluate((root) => Math.round(root.getBoundingClientRect().width));
+        expect(widths[0], `${size}: cards fill the stack`).toBe(stack);
+    }
+});
