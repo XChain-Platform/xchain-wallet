@@ -93,10 +93,10 @@ export function NetworkFilter({
     }, [entries, query]);
 
     const triggerLabel = value === 'all'
-        ? 'All networks'
+        ? t('common.allNetworks')
         : (entries.find((e) => e.coin === value)?.label || value);
     const triggerCount = value === 'all'
-        ? `${entries.length} ${entries.length === 1 ? 'network' : 'networks'}`
+        ? t('components.networkFilter.networkCount', { count: entries.length })
         : null;
     const triggerAriaLabel = ariaLabel
         || [triggerLabel, triggerCount].filter(Boolean).join(', ');
