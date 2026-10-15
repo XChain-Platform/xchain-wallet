@@ -191,7 +191,32 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 sits in the content's actions row. An empty list offers Issue
                 token from its EmptyState instead, so the screen never shows
                 it twice. */}
-            <ListPage actions={isEmpty ? null : (
+            <ListPage notices={loadError || tokensError ? (
+                <>
+                    {loadError ? (
+                        <StatusMessage
+                            variant="error"
+                            recovery={{
+                                label: 'Try again',
+                                onAction: () => setAddressesReload((value) => value + 1),
+                            }}
+                        >
+                            {loadError}
+                        </StatusMessage>
+                    ) : null}
+                    {tokensError ? (
+                        <StatusMessage
+                            variant="error"
+                            recovery={{
+                                label: 'Try again',
+                                onAction: () => setTokensReload((value) => value + 1),
+                            }}
+                        >
+                            {tokensError}
+                        </StatusMessage>
+                    ) : null}
+                </>
+            ) : null} actions={isEmpty ? null : (
                 <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onIssue}>
                     Issue new token
                 </Button>
@@ -230,30 +255,6 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     </div>
                 </>
             )}>
-
-                {loadError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={{
-                            label: 'Try again',
-                            onAction: () => setAddressesReload((value) => value + 1),
-                        }}
-                    >
-                        {loadError}
-                    </StatusMessage>
-                ) : null}
-
-                {tokensError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={{
-                            label: 'Try again',
-                            onAction: () => setTokensReload((value) => value + 1),
-                        }}
-                    >
-                        {tokensError}
-                    </StatusMessage>
-                ) : null}
 
                 {isLoading ? (
                     <div className={styles.list} role="status" aria-label="Loading owned tokens">

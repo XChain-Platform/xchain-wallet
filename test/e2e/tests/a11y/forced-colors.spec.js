@@ -197,6 +197,9 @@ test.describe('forced-colors: license gate', () => {
 test.describe('forced-colors: onboarding', () => {
     test('intro carousel', async ({ page }) => {
         await page.goto('/');
+        // Wait for the carousel itself: the first paint is the loading splash,
+        // which has nothing focusable, and walking it checks no control.
+        await expect(page.getByRole('button', { name: 'Skip' })).toBeVisible({ timeout: 60_000 });
         // The carousel's pips ring an inner pseudo-element rather than the
         // 24px hit box, which is the shape most likely to be lost in this mode.
         await inspect(page, 'Intro carousel');

@@ -279,7 +279,17 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={marketSelector}>
+            <ListPage
+                notices={loadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+                    >
+                        Some marketplace activity could not be loaded.
+                    </StatusMessage>
+                ) : null}
+                toolbar={marketSelector}
+            >
                 <div role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
                     {loading && offers === null ? (
                         <div className={styles.list} role="status" aria-label="Loading marketplace activity">
@@ -288,15 +298,6 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             <Skeleton height={56} />
                         </div>
                     ) : null}
-
-                {loadError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
-                    >
-                        Some marketplace activity could not be loaded.
-                    </StatusMessage>
-                ) : null}
 
                 {offers !== null ? (
                     <section className={styles.section} aria-label="Open dispensers">

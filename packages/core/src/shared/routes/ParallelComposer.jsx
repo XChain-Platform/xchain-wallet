@@ -649,7 +649,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
 
     return (
-        <FormSection title={`Row ${index + 1}`} className={parallelStyles.rowEditor}>
+        <FormSection title={`Row ${index + 1}`}>
 
             <div className={parallelStyles.rowStatus}>
                 <span>Row state</span>

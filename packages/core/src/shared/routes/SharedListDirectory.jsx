@@ -162,9 +162,9 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             title={mode === 'pick' ? 'Choose a shared list' : 'Shared lists'}
         />
     );
-    const wrap = (children, toolbar) => (
+    const wrap = (children, toolbar, notices) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>{children}</ListPage>
+            <ListPage notices={notices} toolbar={toolbar}>{children}</ListPage>
         </Screen>
     );
 
@@ -201,24 +201,24 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         </div>
     );
 
+    // One notice for every chain that did not answer, not one per chain.
+    const unavailableNotice = directory.unavailable.length > 0 ? (
+        <StatusMessage variant="error">
+            Shared lists unavailable
+            {unavailableDescriptors.length > 0 ? ' from ' : null}
+            {unavailableDescriptors.map((descriptor, index) => (
+                <Fragment key={descriptor.id || index}>
+                    {index === 0 ? null : ' '}
+                    <ChainBadge descriptor={descriptor} size="sm" />
+                </Fragment>
+            ))}
+            . Try again in a moment.
+        </StatusMessage>
+    ) : null;
+
     const filteredType = listType(filterType);
     return wrap(
         <>
-            {/* One notice for every chain that did not answer, not one per chain. */}
-            {directory.unavailable.length > 0 ? (
-                <StatusMessage variant="error">
-                    Shared lists unavailable
-                    {unavailableDescriptors.length > 0 ? ' from ' : null}
-                    {unavailableDescriptors.map((descriptor, index) => (
-                        <Fragment key={descriptor.id || index}>
-                            {index === 0 ? null : ' '}
-                            <ChainBadge descriptor={descriptor} size="sm" />
-                        </Fragment>
-                    ))}
-                    . Try again in a moment.
-                </StatusMessage>
-            ) : null}
-
             {/* With that notice up and no search typed, an empty state would be a
                 second message for the same state. */}
             {matchingLists.length === 0 && directory.unavailable.length > 0 && !query.trim() ? null : matchingLists.length === 0 ? (
@@ -261,6 +261,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             )}
         </>,
         toolbar,
+        unavailableNotice,
     );
 }
 

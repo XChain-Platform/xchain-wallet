@@ -151,6 +151,8 @@ export function PriceAlertForm({
                     <option value="above">{t('settings.notifications.risesAbove')}</option>
                     <option value="below">{t('settings.notifications.fallsBelow')}</option>
                 </Select>
+                {/* The currency symbol and its field wrap as one unit, so a narrow row never strands the symbol. */}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-1)', flexWrap: 'nowrap' }}>
                 <span aria-hidden="true">{symbol}</span>
                 <Input
                     size="md"
@@ -172,6 +174,7 @@ export function PriceAlertForm({
                     style={{ width: 110 }}
                 />
                 {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
+                </span>
                 <Button
                     type="button"
                     onClick={submit}
