@@ -15,7 +15,9 @@
 // landscape phone and a portrait phone, submit each one empty so its
 // validation summary or form error shows, and measure every notice in the
 // page content: at 600px and wider none of them may sit inside a bordered
-// card. Set FORM_NOTICE_SHOTS to a directory to keep a screenshot per form
+// card. Failures that need the host to refuse (a load, a generate, a hardware
+// check, a password change) are forced through the web messaging seam, the
+// same route-and-patch the async boundary spec uses. Set FORM_NOTICE_SHOTS to a directory to keep a screenshot per form
 // and size.
 
 import { mkdirSync } from 'node:fs';
@@ -37,9 +39,33 @@ const VIEWPORTS = [
 // The form template's own breakpoint (FormPage.module.css).
 const WIDE_MIN = 600;
 
-const FORMS = [
+const ONLY = process.env.FORM_NOTICE_ONLY ? new RegExp(process.env.FORM_NOTICE_ONLY, 'i') : null;
+
+const ALL_FORMS = [
     { label: 'Send', open: (page) => gotoSection(page, 'Send') },
-    { label: 'Receive', open: (page) => gotoSection(page, 'Receive'), trigger: receiveAmountError },
+    { label: 'Receive', open: (page) => gotoSection(page, 'Receive'), trigger: receiveAmountError, fieldError: true },
+    {
+        label: 'Receive load error',
+        fault: { fail: { 'addresses.newest': 'The address service is unavailable.' } },
+        open: openReceiveFresh,
+        trigger: async () => {},
+    },
+    {
+        label: 'Receive generate error',
+        fault: { fail: { 'receive.getAddress': 'The address service is unavailable.' } },
+        open: openReceiveFresh,
+        trigger: async (page) => {
+            await page.getByRole('main').getByRole('button', { name: /new address/i }).first().click();
+        },
+    },
+    {
+        label: 'Receive hardware verify error',
+        fault: { hw: true, fail: { 'receive.verifyAddress': 'The device is not connected.' } },
+        open: openReceiveFresh,
+        trigger: async (page) => {
+            await page.getByRole('main').getByRole('button', { name: /^Verify on your/ }).first().click();
+        },
+    },
     { label: 'Issue token', open: (page) => palette(page, 'Issue token') },
     { label: 'Create dispenser', open: (page) => palette(page, 'Create dispenser') },
     { label: 'Airdrop', open: (page) => palette(page, 'Airdrop') },
@@ -53,9 +79,94 @@ const FORMS = [
         // The open inline form keeps the palette shortcut in its password field.
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
+    {
+        label: 'Settings change password refused',
+        fault: { fail: { 'wallet.changePassword': 'The vault service is unavailable.' } },
+        open: (page) => settingsForm(page, 'This wallet', 'Change…'),
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            await main.getByLabel('Current wallet password').fill('e2epassword1234');
+            await main.getByLabel('New wallet password', { exact: true }).fill('e2enewpassword5678');
+            await main.getByLabel('Confirm new wallet password').fill('e2enewpassword5678');
+            await main.locator('form button[type="submit"]').filter({ visible: true }).last().click();
+        },
+        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+    },
+    {
+        label: 'Settings public keys refused',
+        fault: { fail: { 'pairing.payload': 'The vault service is unavailable.' } },
+        open: async (page) => {
+            await openSettings(page);
+            const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
+            if (await back.count()) await back.click();
+            await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).first().click();
+            await page.getByRole('main').getByRole('button', { name: 'Export…', exact: true }).first().click();
+        },
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            await main.getByLabel('Confirm wallet password').fill('e2epassword1234');
+            await main.locator('form button[type="submit"]').filter({ visible: true }).last().click();
+        },
+        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+    },
+    {
+        label: 'Settings remove wallet refused',
+        fault: { fail: { 'wallet.remove': 'The vault service is unavailable.' } },
+        open: async (page) => {
+            await openSettings(page);
+            const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
+            if (await back.count()) await back.click();
+            await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).first().click();
+            await page.getByRole('main').getByRole('button', { name: 'Remove…', exact: true }).first().click();
+        },
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            const name = await main.getByLabel('Confirm wallet name').getAttribute('placeholder');
+            await main.getByLabel('Confirm wallet name').fill(name);
+            await main.getByRole('button', { name: 'Remove wallet', exact: true }).click();
+        },
+        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+    },
     // Last: an edited multisig form holds the page until its changes are dealt with.
     { label: 'Create multisig', open: (page) => palette(page, 'Create multisig'), trigger: multisigComposeError },
 ];
+
+/**
+ * Routes the web messaging module through a fault hook. A spec sets
+ * globalThis.__xcFault = { fail: { '<message type>': '<error text>' }, hw }:
+ * a listed message type rejects with that text, and hw marks the newest
+ * receive address as a hardware-signer address so its verify control shows.
+ */
+async function installFaultSeam(page) {
+    await page.route('**/src/messaging.js*', async (route) => {
+        const response = await route.fetch();
+        const source = await response.text();
+        const original = `    const { sendMessage: sendToHost } = await loadHostBridge();
+    return sendToHost(type, request);`;
+        if (!source.includes(original)) throw new Error('The web messaging seam changed; update the fault seam.');
+        const replacement = `    const { sendMessage: sendToHost } = await loadHostBridge();
+    const fault = globalThis.__xcFault;
+    if (fault?.fail?.[type]) throw new Error(fault.fail[type]);
+    const result = await sendToHost(type, request);
+    const asLedger = (address) => ({ ...address, source: 'ledger', signerId: 'e2e-ledger' });
+    if (fault?.hw && type === 'addresses.newest' && result) return asLedger(result);
+    if (fault?.hw && type === 'addresses.byChain' && result) {
+        return Object.fromEntries(Object.entries(result).map(([chain, list]) => [chain, Array.isArray(list) ? list.map(asLedger) : list]));
+    }
+    return result;`;
+        await route.fulfill({ response, body: source.replace(original, replacement) });
+    });
+}
+
+const setFault = (page, fault) => page.evaluate((value) => { globalThis.__xcFault = value; }, fault || null);
+
+/** Receive keeps its address and any error while mounted, so leave it first and let the fault meet a fresh load. */
+async function openReceiveFresh(page) {
+    await gotoSection(page, 'Send');
+    await gotoSection(page, 'Receive');
+}
+
+const FORMS = ONLY ? ALL_FORMS.filter((form) => ONLY.test(form.label)) : ALL_FORMS;
 
 async function palette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -92,7 +203,7 @@ async function submitEmpty(page) {
 async function receiveAmountError(page) {
     const amount = page.getByRole('main').getByLabel(/amount/i).first();
     if (await amount.count() === 0) return;
-    await amount.fill('1.2.3');
+    await amount.fill('0.123456789012345');
     await amount.press('Tab');
 }
 
@@ -160,16 +271,18 @@ if (shots) mkdirSync(shots, { recursive: true });
 for (const viewport of VIEWPORTS) {
     const size = `${viewport.width}x${viewport.height}`;
     test.describe(`form notices at ${size}`, () => {
-        test.use({ viewport });
+        test.use({ viewport, actionTimeout: 45_000 });
 
         test('no notice sits inside a form card', async ({ page }, testInfo) => {
             test.setTimeout(testInfo.timeout * 3);
+            await installFaultSeam(page);
             await createWallet(page);
             const faults = [];
             const seen = [];
             let formsWithNotices = 0;
             for (const form of FORMS) {
                 try {
+                    await setFault(page, form.fault);
                     await form.open(page);
                     await page.waitForTimeout(800);
                     await (form.trigger || submitEmpty)(page);
@@ -184,7 +297,11 @@ for (const viewport of VIEWPORTS) {
                     await page.screenshot({ path: `${shots}/${form.label.replace(/\W+/g, '-').toLowerCase()}-${size}.png` });
                 }
                 await form.close?.(page);
+                await setFault(page, null);
                 if (notices.length > 0) formsWithNotices += 1;
+                if (form.fieldError && notices.length > 0) {
+                    faults.push(`${form.label}: a field error is drawn as a notice ("${notices[0].text}")`);
+                }
                 if (viewport.width < WIDE_MIN) continue;
                 for (const notice of notices) {
                     if (notice.card) faults.push(`${form.label}: notice "${notice.text}" sits inside ${notice.card}`);
@@ -197,7 +314,7 @@ for (const viewport of VIEWPORTS) {
             console.log(`[${size}]\n${seen.join('\n')}`);
             expect(faults, faults.join('\n')).toEqual([]);
             // Guard against a walk that measured nothing: most forms raise a notice.
-            expect(formsWithNotices, 'forms that showed a notice').toBeGreaterThanOrEqual(8);
+            if (!ONLY) expect(formsWithNotices, 'forms that showed a notice').toBeGreaterThanOrEqual(8);
         });
     });
 }
