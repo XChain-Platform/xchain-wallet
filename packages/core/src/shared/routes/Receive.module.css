@@ -165,15 +165,6 @@
     cursor: pointer;
 }
 
-.amountEditor button {
-    --xc-button-height: var(--xc-control-h-md);
-    --xc-button-font-size: var(--xc-control-font-md, 14px);
-    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
-    --xc-icon-size: var(--xc-control-icon-md, 20px);
-
-    min-height: var(--xc-control-h-md);
-}
-
 .generateAddressAction {
     display: flex;
     justify-content: flex-end;

@@ -63,14 +63,14 @@ describe('Receive action layout', () => {
         );
     });
 
-    it('keeps field actions attached at the medium kit size', () => {
+    it('keeps field actions attached', () => {
         expect(css).toMatch(
             /\.labelEditor\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;[^}]*align-items:\s*end;/,
         );
         expect(css).not.toMatch(/@media[^}]+\{[\s\S]*?\.labelEditor\s*\{[^}]*grid-template-columns:\s*1fr;/);
-        expect(css).toMatch(
-            /\.amountEditor button\s*\{[^}]*--xc-button-height:\s*var\(--xc-control-h-md\);[^}]*min-height:\s*var\(--xc-control-h-md\);/,
-        );
+        // Paste and Max inside the amount field keep the shared compact size, as on
+        // every other form; a local rule here once resized them to the medium kit.
+        expect(css).not.toMatch(/\.amountEditor/);
     });
 
     it('caps the complete QR column to the visible height on landscape phones', () => {

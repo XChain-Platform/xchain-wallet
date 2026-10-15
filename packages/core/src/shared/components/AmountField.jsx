@@ -259,7 +259,8 @@ export function AmountField({
                 {onMax ? (
                     <Button
                         variant="primary"
-                        size={size}
+                        // Max is an in-field action like Paste, so it takes the compact size.
+                        size="sm"
                         ref={maxRef}
                         className={styles.maxAction}
                         icon={null}
