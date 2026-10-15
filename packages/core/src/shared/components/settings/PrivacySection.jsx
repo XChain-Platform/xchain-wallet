@@ -109,9 +109,9 @@ export function PrivacySection() {
             {!shellCapabilities().socksProxy && (
                 <ToggleRow
                     label={t('settings.privacy.torRouting')}
-                    hint={t(isNativeShell()
-                        ? 'settings.privacy.notAvailableInNativeApp'
-                        : 'settings.privacy.notAvailableOnThisPlatform')}
+                    hint={isNativeShell()
+                        ? t('settings.privacy.notAvailableInNativeApp')
+                        : t('settings.privacy.notAvailableOnThisPlatform')}
                     checked={false}
                     disabled
                     onChange={() => {}}
