@@ -15,7 +15,6 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import styles from './IssueTokenForm.module.css';
 import { AssetMark } from '../../ui/AssetMark.jsx';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
@@ -397,8 +396,7 @@ export function MarketsList({
                             <div role="status" aria-label="Loading markets">
                                 <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
                             </div>
-                        ) : loadError ? null
-                        ) : displayMarkets.length === 0 ? (
+                        ) : loadError ? null : displayMarkets.length === 0 ? (
                             <EmptyState
                                 title={filtersHideAllMarkets
                                     ? 'No results for these filters'
