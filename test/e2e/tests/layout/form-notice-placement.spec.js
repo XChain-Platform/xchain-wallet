@@ -127,14 +127,106 @@ const ALL_FORMS = [
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
+    {
+        label: 'Settings sign throttle refused',
+        fault: { fail: { 'settings.update': 'The settings service is unavailable.' } },
+        open: (page) => settingsSubpage(page, 'Connected sites'),
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            await main.getByLabel('Sign-throttle burst (max requests per window)').fill('5');
+            await main.getByRole('button', { name: 'Apply', exact: true }).click();
+        },
+    },
+    {
+        label: 'Settings block history clear refused',
+        fault: {
+            reply: { 'sites.auditLog.list': [{ at: 1700000000000, action: 'add', entry: 'https://e2e-blocked.example' }] },
+            fail: { 'sites.auditLog.clear': 'The site list service is unavailable.' },
+        },
+        open: async (page) => {
+            await settingsSubpage(page, 'Connected sites');
+            await expect(page.getByRole('main').getByRole('button', { name: 'Clear history', exact: true })).toBeEnabled();
+        },
+        trigger: async (page) => {
+            await page.getByRole('main').getByRole('button', { name: 'Clear history', exact: true }).click();
+            await page.getByRole('dialog').getByRole('button', { name: 'Clear history', exact: true }).click();
+        },
+    },
+    {
+        label: 'Settings publish labels without a password',
+        open: async (page) => {
+            await settingsSubpage(page, 'Backup');
+            await page.getByRole('main').getByRole('button', { name: 'Publish now…', exact: true }).click();
+            await expect(page.getByRole('main').getByLabel('Wallet password', { exact: true })).toBeVisible();
+        },
+        trigger: async (page) => {
+            await page.getByRole('main').getByRole('button', { name: 'Publish', exact: true }).last().click();
+        },
+        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+    },
+    {
+        label: 'Settings restore labels refused',
+        fault: { fail: { 'wallet.restoreLabels': 'The label service is unavailable.' } },
+        open: async (page) => {
+            await settingsSubpage(page, 'Backup');
+            await page.getByRole('main').getByRole('button', { name: 'Check…', exact: true }).click();
+            await expect(page.getByRole('main').getByLabel('Wallet password', { exact: true })).toBeVisible();
+        },
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            await main.getByLabel('Wallet password', { exact: true }).fill('e2epassword1234');
+            await main.getByRole('button', { name: 'Check', exact: true }).click();
+        },
+        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+    },
+    {
+        label: 'Developer mode faucet amount missing',
+        fault: { merge: { 'settings.get': { fees: { 'bitcoin-regtest': {} } }, 'settings.update': { fees: { 'bitcoin-regtest': {} } } } },
+        open: openDeveloperFaucet,
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            const amount = main.getByLabel(/^Amount \(/);
+            await amount.fill('');
+            // Enter submits the form from the field, the same route on a phone and a desktop.
+            await amount.press('Enter');
+        },
+    },
+    {
+        label: 'Developer mode custom network unreadable',
+        open: async (page) => {
+            await openDeveloperMode(page);
+            await page.getByRole('main').getByRole('button', { name: 'Add custom network…', exact: true }).click();
+        },
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            await main.getByLabel('Custom network descriptor JSON').fill('{ not json');
+            await main.getByRole('button', { name: 'Add network', exact: true }).click();
+        },
+        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).last().click(),
+    },
+    {
+        label: 'Developer mode regtest activation refused',
+        fault: { fail: { 'wallet.activateChain': 'The vault service is unavailable.' } },
+        open: async (page) => {
+            await openDeveloperMode(page);
+            await page.getByRole('main').getByRole('button', { name: 'Activate…', exact: true }).first().click();
+        },
+        trigger: async (page) => {
+            const main = page.getByRole('main');
+            await main.getByLabel(/activation password$/).first().fill('e2epassword1234');
+            await main.getByRole('button', { name: 'Activate', exact: true }).click();
+        },
+    },
     // Last: an edited multisig form holds the page until its changes are dealt with.
     { label: 'Create multisig', open: (page) => palette(page, 'Create multisig'), trigger: multisigComposeError },
 ];
 
 /**
  * Routes the web messaging module through a fault hook. A spec sets
- * globalThis.__xcFault = { fail: { '<message type>': '<error text>' }, hw }:
- * a listed message type rejects with that text, and hw marks the newest
+ * globalThis.__xcFault = { fail: { '<message type>': '<error text>' }, reply, merge, hw }:
+ * a listed message type rejects with that text, a type in reply answers with
+ * the given value instead of asking the host, a type in merge has its fields
+ * laid over the host's answer, and hw marks the newest
  * receive address as a hardware-signer address so its verify control shows.
  */
 async function installFaultSeam(page) {
@@ -147,7 +239,9 @@ async function installFaultSeam(page) {
         const replacement = `    const { sendMessage: sendToHost } = await loadHostBridge();
     const fault = globalThis.__xcFault;
     if (fault?.fail?.[type]) throw new Error(fault.fail[type]);
+    if (fault?.reply && type in fault.reply) return fault.reply[type];
     const result = await sendToHost(type, request);
+    if (fault?.merge?.[type] && result) return { ...result, ...fault.merge[type] };
     const asLedger = (address) => ({ ...address, source: 'ledger', signerId: 'e2e-ledger' });
     if (fault?.hw && type === 'addresses.newest' && result) return asLedger(result);
     if (fault?.hw && type === 'addresses.byChain' && result) {
@@ -180,6 +274,28 @@ async function palette(page, title) {
 async function openFromList(page, title, action) {
     await palette(page, title);
     await page.getByRole('main').getByRole('button', { name: action }).first().click();
+}
+
+/** Opens a Settings sub-page by its row title. */
+async function settingsSubpage(page, section) {
+    await openSettings(page);
+    const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
+    if (await back.count()) await back.click();
+    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${section}`) }).first().click();
+}
+
+/** Developer mode opens with its switch off; turn it on so the regtest forms show. */
+async function openDeveloperMode(page) {
+    await settingsSubpage(page, 'Developer mode');
+    const developerSwitch = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    if (!(await developerSwitch.isChecked())) await developerSwitch.click();
+    await expect(page.getByRole('main').getByText('Regtest networks')).toBeVisible();
+}
+
+/** The faucet shows once a regtest network has a fee entry; the fault gives settings one. */
+async function openDeveloperFaucet(page) {
+    await openDeveloperMode(page);
+    await expect(page.getByRole('main').getByText('Regtest faucet')).toBeVisible();
 }
 
 async function settingsForm(page, section, action) {
@@ -288,7 +404,7 @@ for (const viewport of VIEWPORTS) {
                     await (form.trigger || submitEmpty)(page);
                     await settle(page);
                 } catch (error) {
-                    faults.push(`${form.label}: could not open or submit (${String(error.message).split('\n')[0]})`);
+                    faults.push(`${form.label}: could not open or submit (${String(error.message).split('\n').slice(0, 4).join(' | ')})`);
                     continue;
                 }
                 const notices = await page.evaluate(measureNotices);
