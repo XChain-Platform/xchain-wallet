@@ -196,6 +196,31 @@ describe('detail page loading and empty states', () => {
         expect(screen.queryByText('No lifecycle events yet.')).toBeNull();
     });
 
+    it('shows empty dispenser activity as a bare empty state, not inside the list card', async () => {
+        const messaging = messagingWith({
+            getDispenserByActionIndex: vi.fn().mockResolvedValue({
+                action_index: '7',
+                source: LONG_ADDRESS,
+                give_tick: 'WRAP',
+                give_amount: '1',
+                get_tick: 'PAY',
+                get_amount: '2',
+                status: 'open',
+                current_status: 'open',
+            }),
+            getDispenses: vi.fn().mockResolvedValue([]),
+            getDispenserLifecycle: vi.fn().mockResolvedValue([]),
+        });
+        mount(<DispenserDetail walletId="wallet" chainId={CHAIN} actionIndex="7" onBack={() => {}} />, messaging);
+
+        const dispenses = await screen.findByText('No dispenses yet');
+        expect(dispenses.closest('ul')).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Dispenses' })).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Lifecycle' }));
+        const lifecycle = await screen.findByText('No lifecycle events yet');
+        expect(lifecycle.closest('ul')).toBeNull();
+    });
+
     it.each([
         [
             'contract',

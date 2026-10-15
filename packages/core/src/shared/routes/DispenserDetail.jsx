@@ -2219,11 +2219,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {tab === 'lifecycle' ? (
                 !lifecycleLoaded ? (
                     <StatusMessage variant="status">Loading lifecycle…</StatusMessage>
+                ) : lifecycleTimeline.length === 0 ? (
+                    // An empty list shows the bare empty state, never a box around it.
+                    <EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" />
                 ) : (
                     <ul className={local.dispenseList} aria-label="Dispenser lifecycle">
-                        {lifecycleTimeline.length === 0 ? (
-                            <li><EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" /></li>
-                        ) : lifecycleTimeline.slice(0, 40).map((e) => {
+                        {lifecycleTimeline.slice(0, 40).map((e) => {
                             const refused = e.kind === 'dispense' && !e.row.valid;
                             return (
                                 <li key={`${e.kind}-${e.row.action_index}`}>
@@ -2249,11 +2250,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )
             ) : !dispensesLoaded ? (
                 <StatusMessage variant="status">Loading dispenses…</StatusMessage>
+            ) : matchingDispenses.length === 0 ? (
+                // An empty list shows the bare empty state, never a box around it.
+                <EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" />
             ) : (
                 <ul className={local.dispenseList} aria-label="Dispenses">
-                    {matchingDispenses.length === 0 ? (
-                        <li><EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" /></li>
-                    ) : matchingDispenses.slice(0, 25).map((d) => {
+                    {matchingDispenses.slice(0, 25).map((d) => {
                         const paidAmount = d.get_amount ?? getAmount;
                         const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
                         return (
