@@ -116,6 +116,22 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
     const tick = (selected.tick || '').toUpperCase();
 
+    // Return every feed to its first page when the market changes. This is
+    // done while rendering rather than in the load effect: an effect runs
+    // after paint, so a Load more click made in that gap queued its update
+    // first and the late reset then overwrote it with the first page.
+    const marketScope = `${walletId || ''}:${tick}:${chains.join(',')}`;
+    const [pageScope, setPageScope] = useState(marketScope);
+    if (pageScope !== marketScope) {
+        setPageScope(marketScope);
+        setVisibleCounts({
+            offers: ACTIVITY_PAGE_SIZE,
+            orders: ACTIVITY_PAGE_SIZE,
+            sales: ACTIVITY_PAGE_SIZE,
+            swaps: ACTIVITY_PAGE_SIZE,
+        });
+    }
+
     // Load the selected market on landing and whenever the user picks a
     // different coin/token. Demo wallets are served fabricated feeds; real
     // wallets fan out across every supported chain in parallel.
@@ -132,12 +148,6 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             setDexOrders(null);
             setDexSwaps(null);
         }
-        setVisibleCounts({
-            offers: ACTIVITY_PAGE_SIZE,
-            orders: ACTIVITY_PAGE_SIZE,
-            sales: ACTIVITY_PAGE_SIZE,
-            swaps: ACTIVITY_PAGE_SIZE,
-        });
 
         if (walletId && flowsLib.isDemoWallet(walletId)) {
             const demo = flowsLib.synthesizeDemoMarketActivity(tick, { chainIds: chains });
