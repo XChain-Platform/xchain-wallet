@@ -134,8 +134,8 @@ describe('signature verification inputs and results', () => {
             message: 'exact message\nsecond line',
             signature: 'c2lnbmF0dXJl',
         }));
-        expect(screen.getByRole('status').textContent)
-            .toBe('Valid signature. Signature matches this message and address.');
+        expect(screen.getByRole('status'))
+            .toHaveTextContent('Valid signature. Signature matches this message and address.');
     });
 
     it('rejects malformed base64 before calling the verifier', async () => {
@@ -147,8 +147,8 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'not base64!' } });
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
-        expect(screen.getByRole('status').textContent)
-            .toBe('Malformed signature. Enter a base64-encoded signature.');
+        expect(screen.getByRole('status'))
+            .toHaveTextContent('Malformed signature. Enter a base64-encoded signature.');
         expect(verifyMessageRequest).not.toHaveBeenCalled();
     });
 
@@ -162,8 +162,11 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
-        await waitFor(() => expect(screen.getByRole('status').textContent)
-            .toBe("Invalid signature. Signature doesn't match this message and address."));
+        await waitFor(() => expect(screen.getByRole('status'))
+            .toHaveTextContent("Invalid signature. Signature doesn't match this message and address."));
+        // A failed check takes the error tone but stays a polite status.
+        expect(screen.getByRole('status')).toHaveAttribute('data-variant', 'error');
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('does not show a pending result after an input changes', async () => {
@@ -185,8 +188,8 @@ describe('signature verification inputs and results', () => {
         expect(screen.queryByText(/Valid signature/)).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
-        await waitFor(() => expect(screen.getByRole('status').textContent)
-            .toBe("Invalid signature. Signature doesn't match this message and address."));
+        await waitFor(() => expect(screen.getByRole('status'))
+            .toHaveTextContent("Invalid signature. Signature doesn't match this message and address."));
         expect(verifyMessageRequest).toHaveBeenLastCalledWith(expect.objectContaining({
             message: 'newer message',
         }));

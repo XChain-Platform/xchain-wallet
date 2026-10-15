@@ -17,6 +17,28 @@ describe('<StatusMessage>', () => {
         expect(screen.getByRole(role)).toHaveAttribute('aria-live', live);
     });
 
+    it.each([
+        ['warning', 'alert', 'assertive'],
+        ['error', 'status', 'polite'],
+    ])('lets a %s message announce as %s while keeping its tone', (variant, role, live) => {
+        render(<StatusMessage variant={variant} role={role}>Check this</StatusMessage>);
+        const message = screen.getByRole(role);
+        expect(message).toHaveAttribute('aria-live', live);
+        expect(message).toHaveAttribute('data-variant', variant);
+    });
+
+    it('renders a note as static context, not a live region', () => {
+        render(<StatusMessage variant="warning" role="note">Watch-only</StatusMessage>);
+        const message = screen.getByRole('note');
+        expect(message).not.toHaveAttribute('aria-live');
+        expect(message).not.toHaveAttribute('aria-atomic');
+    });
+
+    it('ignores an unknown role and keeps the variant semantics', () => {
+        render(<StatusMessage variant="error" role="banner">Failed</StatusMessage>);
+        expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive');
+    });
+
     it('renders IDs, custom classes, and collapsed technical details', () => {
         render(
             <StatusMessage id="save-state" className="spaced" details="RPC 503">

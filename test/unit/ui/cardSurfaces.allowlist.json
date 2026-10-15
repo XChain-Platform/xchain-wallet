@@ -85,7 +85,6 @@
         "packages/core/src/shared/routes/TokenDetail.module.css | .fileLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .galleryMediaCard": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .heroImageFallback": "Artwork or a camera or QR frame, not a card.",
-        "packages/core/src/shared/routes/TokenDetail.module.css | .officialBanner": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .pgpsigBlock": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/TokenPicker.module.css | .search": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/TokenWizard.module.css | .error": "A layout class passed to the shared StatusMessage, which draws the notice surface over this fill.",
@@ -156,10 +155,6 @@
         "packages/core/src/shared/routes/BridgeOriginBadge.jsx": {
             "count": 1,
             "reason": "A small origin badge."
-        },
-        "packages/core/src/shared/routes/ComposeMessage.jsx": {
-            "count": 1,
-            "reason": "A warning notice."
         },
         "packages/core/src/shared/routes/History.jsx": {
             "count": 2,

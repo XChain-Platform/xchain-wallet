@@ -235,16 +235,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             {t('walletDetails.exitDemo')}
                         </Button>
                         {exitError && !exitConfirmOpen ? (
-                            <p
-                                role="alert"
-                                style={{
-                                    marginTop: 'var(--xc-space-2)',
-                                    fontSize: 'var(--xc-text-xs)',
-                                    color: 'var(--xc-danger-fg)',
-                                }}
-                            >
-                                {exitError}
-                            </p>
+                            <StatusMessage variant="error">{exitError}</StatusMessage>
                         ) : null}
                         {exitConfirmOpen ? (
                             <DemoExitConfirm

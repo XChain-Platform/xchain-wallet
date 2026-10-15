@@ -164,7 +164,7 @@ async function signAndVerify(page, viewportName) {
     await expectScreen(page, 'Verify signature', `${viewportName} verify form`);
 
     await verifyForm.getByRole('button', { name: 'Verify signature', exact: true }).click();
-    await expect(verifyForm.getByRole('status')).toHaveText(
+    await expect(verifyForm.getByRole('status')).toContainText(
         'Valid signature. Signature matches this message and address.',
         { timeout: 30_000 },
     );

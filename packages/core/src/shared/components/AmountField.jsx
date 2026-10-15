@@ -240,6 +240,7 @@ export function AmountField({
                 />
                 <span className={styles.pasteAction} ref={pasteSlotRef}>
                     <ClipboardPasteButton
+                        onMessage={(message) => { if (message) setInputError(message); }}
                         onPaste={(text) => {
                             const inspected = inspectFieldPaste(text);
                             if (!inspected.ok) {

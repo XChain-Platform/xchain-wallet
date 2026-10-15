@@ -401,7 +401,11 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>{t('components.leftNav.skipToMainContent')}</a>
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
-                {header ? <div className={styles.header}>{header}</div> : null}
+                {header ? (
+                    <NavSurfaceContext.Provider value={navSurface}>
+                        <div className={styles.header}>{header}</div>
+                    </NavSurfaceContext.Provider>
+                ) : null}
                 {hasNotices ? createPortal(
                     <NoticesRouteContext.Provider value={routeKey ?? null}>
                         <ReachabilityNoticeHiddenContext.Provider value={reachabilityHidden > 0}>

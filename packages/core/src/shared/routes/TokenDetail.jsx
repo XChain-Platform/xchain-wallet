@@ -53,7 +53,6 @@ import { safeHttpUrl } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
-import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const HOLDERS_PAGE_SIZE = 25;
@@ -578,7 +577,7 @@ function TokenDetailContent({
                         {metadataLoading ? (
                             <Skeleton height={38} ariaLabel="Loading token verification" />
                         ) : Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                            <p className={styles.officialBanner} role="status">
+                            <StatusMessage variant="success">
                                 This token is an official token in the{' '}
                                 {assetInfo.projects.map((p, i) => (
                                     <span key={p} className={styles.officialBannerProject}>
@@ -586,7 +585,7 @@ function TokenDetailContent({
                                     </span>
                                 ))}
                                 {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
-                            </p>
+                            </StatusMessage>
                         ) : null}
                     </div>
                 ) : null}
@@ -1988,7 +1987,6 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
-    const unlockErrorId = `${useId()}-unlock-error`;
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -2298,20 +2296,7 @@ function GatedGroupCard({
                     );
                 })}
             </ul>
-            {accessError ? (
-                <p
-                    role="alert"
-                    className={cardStyles.card}
-                    style={{
-                        marginTop: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                        color: 'var(--xc-text)',
-                        lineHeight: 1.5,
-                    }}
-                >
-                    {accessError}
-                </p>
-            ) : null}
+            <StatusMessage variant="error">{accessError}</StatusMessage>
             {passwordOpen ? (
                 <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-3)' }}>
                     {addressesLoading ? (
@@ -2329,19 +2314,8 @@ function GatedGroupCard({
                             if (unlockError) setUnlockError(null);
                         }}
                         autoComplete="current-password"
-                        aria-invalid={unlockError ? true : undefined}
-                        aria-describedby={unlockError ? unlockErrorId : undefined}
+                        error={unlockError || undefined}
                     />
-                    {unlockError ? (
-                        <p
-                            id={unlockErrorId}
-                            role="alert"
-                            className={styles.error}
-                            style={{ marginTop: 'var(--xc-space-1)' }}
-                        >
-                            {unlockError}
-                        </p>
-                    ) : null}
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: 'var(--xc-space-2)' }}>
                         <Button
                             type="submit"

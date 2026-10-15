@@ -854,19 +854,9 @@
     font-size: var(--xc-text-sm);
 }
 
-/* ───── "Official token" banner - shown when the token is on a project
-   registry's current roster (assetInfo.projects). Green = attested. ───── */
+/* Project names inside the "Official token" success message, shown when the
+   token is on a project registry's current roster (assetInfo.projects). */
 
-.officialBanner {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-success-bg);
-    border: 1px solid var(--xc-success);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-}
 .officialBannerProject {
     font-weight: 600;
 }

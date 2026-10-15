@@ -35,7 +35,7 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
-import { FormPage, FormSection, InfoTip, RadioGroup } from '@xchain-wallet/core/ui';
+import { FormPage, FormSection, InfoTip, RadioGroup, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -104,7 +104,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         // Either still loading (we don't render a placeholder; the
         // overall form does its own loading), or no HW signers exist
         // (auto-resolved above).
-        return error ? <p style={ERROR_STYLE} role="alert">{error}</p> : null;
+        return <StatusMessage variant="error">{error}</StatusMessage>;
     }
 
     /** @type {Array<{ id: string | null, label: string, sub: string, kind: string }>} */
@@ -128,9 +128,9 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
             <FormSection title={t('signerSelect.choose')}>
                 <InfoTip label={t('signerSelect.intro')} />
                 {isWatcherMode ? (
-                    <p role="note" style={WATCH_ONLY_STYLE}>
+                    <StatusMessage variant="warning" role="note">
                         {t('signerSelect.watcherNote')}
-                    </p>
+                    </StatusMessage>
                 ) : null}
                 <RadioGroup
                     legend={t('signerSelect.title')}
@@ -149,16 +149,3 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         </FormPage>
     );
 }
-
-const WATCH_ONLY_STYLE = {
-    color: 'var(--xc-warning-fg, var(--xc-text))',
-    fontSize: 'var(--xc-text-xs)',
-    margin: '0 0 var(--xc-space-2)',
-};
-
-
-const ERROR_STYLE = {
-    color: 'var(--xc-danger-fg)',
-    fontSize: 'var(--xc-text-sm)',
-    margin: '0 0 var(--xc-space-3) 0',
-};

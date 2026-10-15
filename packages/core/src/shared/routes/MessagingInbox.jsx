@@ -1105,9 +1105,9 @@ function SessionRequestRow({
                 {contactName || <AddressText address={request.from} truncate={false} />}
             </div>
             {stage === 'sent' ? (
-                <p className={local.requestSent} role="status">
-                    ✓ Key shared. They can now send you encrypted messages.
-                </p>
+                <StatusMessage variant="success">
+                    Key shared. They can now send you encrypted messages.
+                </StatusMessage>
             ) : (
                 <div className={local.requestActions}>
                     <Button variant="secondary" onClick={onDecline} disabled={stage === 'sending'}>
@@ -1125,9 +1125,7 @@ function SessionRequestRow({
             )}
             {demoGuard.note}
             {demoGuard.dialog}
-            {error ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{error}</p>
-            ) : null}
+            <StatusMessage variant="error">{error}</StatusMessage>
         </li>
     );
 }

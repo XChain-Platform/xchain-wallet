@@ -20,16 +20,10 @@
 // fire on the next check.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Input, Select } from '../../ui/index.js';
+import { Button, Input, Select, StatusMessage } from '../../ui/index.js';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
-
-const HINT = {
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-xs)',
-    lineHeight: 1.3,
-};
 
 /** Native mainnet coins that have a price source. */
 const MAINNET_PRICE_CHAINS = COINGECKO_SUPPORTED_CHAINS.filter((c) => c.endsWith('-mainnet'));
@@ -81,13 +75,14 @@ export function PriceAlertForm({
     const targetFiat = Number(targetStr);
     const valid = Boolean(chainId) && Number.isFinite(targetFiat) && targetFiat > 0;
     const invalidTarget = targetStr !== '' && !valid;
+    // A bad price belongs to the price field, so it shows as that field's
+    // error; the other reasons explain the disabled button below the row.
+    const priceError = chainId && invalidTarget ? 'Enter a price greater than zero.' : null;
     const disabledReason = !chainId
         ? 'Choose a coin to continue.'
         : targetStr === ''
             ? 'Enter a target price to continue.'
-            : invalidTarget
-                ? 'Enter a price greater than zero.'
-                : null;
+            : null;
 
     const alreadyMet = useMemo(() => {
         if (currentPrice == null || !Number.isFinite(currentPrice) || !valid) return false;
@@ -159,6 +154,7 @@ export function PriceAlertForm({
                     value={targetStr}
                     aria-invalid={invalidTarget}
                     aria-describedby={disabledReason ? disabledReasonId : undefined}
+                    error={priceError || undefined}
                     onChange={(e) => updateInput(
                         setTargetStr,
                         normalizeDecimalEntry(e.target.value, targetStr),
@@ -189,21 +185,13 @@ export function PriceAlertForm({
                     </Button>
                 ) : null}
             </div>
-            {disabledReason ? (
-                <span
-                    id={disabledReasonId}
-                    role={invalidTarget ? 'alert' : 'status'}
-                    style={invalidTarget ? { ...HINT, color: 'var(--xc-danger-fg)' } : HINT}
-                >
-                    {disabledReason}
-                </span>
-            ) : null}
+            <StatusMessage id={disabledReasonId} variant="info">{disabledReason}</StatusMessage>
             {alreadyMet ? (
-                <span style={HINT}>
+                <StatusMessage variant="info">
                     {coinLabelForChain(chainId)} {t('components.priceAlertForm.isAlready')} {direction === 'above' ? t('components.priceAlertForm.above') : t('components.priceAlertForm.below')} {t('components.priceAlertForm.thatPriceThisAlertWill')}
-                </span>
+                </StatusMessage>
             ) : null}
-            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger-fg)' }}>{err}</span> : null}
+            <StatusMessage variant="error">{err}</StatusMessage>
         </div>
     );
 }

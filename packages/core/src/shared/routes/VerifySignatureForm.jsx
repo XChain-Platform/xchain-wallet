@@ -140,31 +140,15 @@ export function VerifySignatureForm({ onBack }) {
     // Shown just above the Verify button by FormPage's status slot.
     const status = (error || result) ? (
         <>
-            {error ? (
-                <div role="alert" style={{
-                    color: 'var(--xc-danger-fg)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}>
-                    {error}
-                </div>
-            ) : null}
+            <StatusMessage variant="error">{error}</StatusMessage>
             {result ? (
-                <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                        padding: 'var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        background: 'var(--xc-surface)',
-                        border: `1px solid ${result === 'valid' ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
-                        color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger-fg)',
-                        fontWeight: 600,
-                    }}
-                >
+                // A verdict is a result, not a failure, so a failed check keeps
+                // the polite status role while it takes the error tone.
+                <StatusMessage variant={result === 'valid' ? 'success' : 'error'} role="status">
                     {result === 'valid' ? t('verifySignature.valid') : null}
                     {result === 'invalid' ? t('verifySignature.invalid') : null}
                     {result === 'malformed' ? t('verifySignature.malformed') : null}
-                </div>
+                </StatusMessage>
             ) : null}
         </>
     ) : disabledReason ? (

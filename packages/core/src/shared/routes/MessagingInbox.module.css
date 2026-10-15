@@ -73,12 +73,6 @@
     gap: var(--xc-space-2);
 }
 
-.requestSent {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-success, var(--xc-text-muted));
-}
-
 /* iMessage-style day separator: a centered, muted date header shown once
    above each day's run of messages in the thread view. */
 .daySeparator {
