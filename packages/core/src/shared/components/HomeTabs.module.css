@@ -197,6 +197,12 @@
     overflow: hidden;
 }
 
+/* The Activity tab's rows carry no border of their own; a divider runs
+   between them, as in History. */
+.activityList > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
 /* Small action-type glyph rendered next to the action label on both
    Activity and DeFi rows. Accent-coloured 16px square that aligns
    with the row's first-line text. */

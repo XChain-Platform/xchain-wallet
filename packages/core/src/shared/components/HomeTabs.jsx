@@ -1067,7 +1067,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
         return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any chains active." />;
     }
     return (
-        <ul className={styles.demoList}>
+        <ul className={`${styles.demoList} ${styles.activityList}`}>
             {entries.map((e) => (
                 <ActivityEntryRow
                     key={e.key}

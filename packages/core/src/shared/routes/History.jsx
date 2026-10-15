@@ -512,6 +512,27 @@ function settledAmountAnnotation(entry) {
 }
 
 /**
+ * Splits the timeline into its day headings and the runs of rows between
+ * them, so each run renders as one flush card list.
+ *
+ * @param {Array<{ kind: string, key: string, label?: string }>} items
+ * @returns {Array<{ kind: 'day', key: string, label: string } | { kind: 'rows', key: string, items: Array<object> }>}
+ */
+export function timelineRuns(items) {
+    const runs = [];
+    for (const item of items) {
+        if (item.kind === 'day') {
+            runs.push(item);
+            continue;
+        }
+        const last = runs[runs.length - 1];
+        if (last && last.kind === 'rows') last.items.push(item);
+        else runs.push({ kind: 'rows', key: `rows:${item.key ?? item.entry?.key ?? runs.length}`, items: [item] });
+    }
+    return runs;
+}
+
+/**
  * History route: §23 unified timeline + §23.5 cross-chain thread
  * rendering.
  *
@@ -2223,10 +2244,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 aria-label={t('history.title')}
                 onKeyDown={onTimelineKeyDown}
             >
-                {renderedTimelineItems.map((item) => {
-                    if (item.kind === 'day') {
-                        return <li key={item.key}><SectionHeader as="h2" title={item.label} /></li>;
-                    }
+                {timelineRuns(renderedTimelineItems).map((run) => (run.kind === 'day' ? (
+                    <li key={run.key}><SectionHeader as="h2" title={run.label} /></li>
+                ) : (
+                    // The rows under one heading are one flush card with dividers.
+                    <li key={run.key}>
+                        <ul className={styles.rowList}>
+                {run.items.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
                         const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
@@ -2314,6 +2338,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         />
                     );
                 })}
+                        </ul>
+                    </li>
+                )))}
             </ul>
             {visibleItemCount < groupedItems.length ? (
                 <div className={styles.pagination} aria-live="polite">

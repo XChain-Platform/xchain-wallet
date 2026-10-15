@@ -138,7 +138,6 @@
         "packages/web/src/style-guide/sections/templateExamples.module.css | .search, .select": "Development-only or style-guide chrome, not product UI."
     },
     "overrides": {
-        "packages/core/src/shared/components/ActivityRow.module.css | .row | padding": "A narrower inset on activity rows below 400px; whether phones keep the card inset here is a design call left open.",
         "packages/core/src/shared/components/HwSignBlock.module.css | .statusRow[data-status=\"available\"] | background, border-color": "The hardware signer status row tints by device state, like a tone notice; moving it to the notice pattern is a design call left open.",
         "packages/core/src/shared/components/HwSignBlock.module.css | .statusRow[data-status=\"wrong-app\"], .statusRow[data-status=\"locked\"] | background, border-color": "The hardware signer status row tints by device state, like a tone notice; moving it to the notice pattern is a design call left open.",
         "packages/core/src/shared/components/HwSignBlock.module.css | .statusRow[data-status=\"disconnected\"], .statusRow[data-status=\"error\"] | background, border-color": "The hardware signer status row tints by device state, like a tone notice; moving it to the notice pattern is a design call left open.",
