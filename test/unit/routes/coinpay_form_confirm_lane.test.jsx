@@ -19,8 +19,8 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { CoinpayForm } from '../../../packages/core/src/shared/routes/CoinpayForm.jsx';
 
 const CHAIN = 'dogecoin-testnet';
-const PAYER = 'nPayerAddressFixture00000000000000';
-const PAYEE = 'nPayeeAddressFixture00000000000000';
+const PAYER = 'ndevmockaaaaaaaaaaaaaaaaaaaaaaaa';
+const PAYEE = 'ndevmockbbbbbbbbbbbbbbbbbbbbbbbb';
 const OWNER = Object.freeze({
     id: 'address-1',
     address: PAYER,
@@ -93,7 +93,7 @@ function makeMessaging(settings = { walletMode: 'full' }, overrides = {}) {
     };
 }
 
-async function mount(settings, overrides) {
+async function mount(settings, overrides, formProps = {}) {
     const { messaging, calls } = makeMessaging(settings, overrides);
     let utils;
     await domAct(async () => {
@@ -106,6 +106,7 @@ async function mount(settings, overrides) {
                 address: PAYER,
                 orderMatchActionIndex: '648',
                 onBack() {},
+                ...formProps,
             }),
         ));
         await drain();
@@ -121,6 +122,192 @@ async function step(fn) {
 }
 
 describe('CoinpayForm shared confirmation', () => {
+    it.each([
+        {
+            name: 'unknown network',
+            row: OBLIGATION,
+            owner: OWNER,
+            chainId: 'unknown-testnet',
+            message: 'This payment uses a network the wallet does not recognize. Return to Payments due and refresh.',
+        },
+        {
+            name: 'paying address',
+            row: { ...OBLIGATION, payer_address: 'not-an-address' },
+            owner: { ...OWNER, address: 'not-an-address' },
+            message: 'The paying address is not valid for this network. Return to Payments due and refresh.',
+        },
+        {
+            name: 'matched order number',
+            row: { ...OBLIGATION, action_index: '   ' },
+            owner: OWNER,
+            actionIndex: '   ',
+            message: 'This payment has no matched order number. Return to Payments due and refresh.',
+        },
+        {
+            name: 'recipient address',
+            row: { ...OBLIGATION, payee_address: '' },
+            owner: OWNER,
+            message: 'This payment has no recipient address. Return to Payments due and refresh.',
+        },
+        {
+            name: 'malformed recipient address',
+            row: { ...OBLIGATION, payee_address: 'not-an-address' },
+            owner: OWNER,
+            message: 'This address has a typo. Check it and try again.',
+        },
+        {
+            name: 'amount',
+            row: { ...OBLIGATION, coin_amount: '1e3' },
+            owner: OWNER,
+            message: 'This payment amount is missing, invalid, or too large to pay safely. Return to Payments due and refresh.',
+        },
+        {
+            name: 'deadline',
+            row: { ...OBLIGATION, expiration: null },
+            owner: OWNER,
+            message: 'This payment has no valid deadline. Return to Payments due and refresh.',
+        },
+    ])('validates the $name before review with plain guidance', async ({
+        row, owner, chainId = CHAIN, actionIndex = '648', message,
+    }) => {
+        const { utils, calls } = await mount(undefined, {
+            getAddressesByChain: () => Promise.resolve({ [chainId]: [owner] }),
+            getCoinpayObligationsForAddress: () => Promise.resolve([row]),
+        }, {
+            chainId,
+            address: owner.address,
+            orderMatchActionIndex: actionIndex,
+        });
+
+        expect(utils.getByText(message)).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('blocks an invalid custom fee, then keeps the valid fee and selection across Back', async () => {
+        const { utils, calls } = await mount();
+        await step(() => fireEvent.change(
+            utils.getByRole('slider', { name: 'Network fee' }),
+            { target: { value: '3' } },
+        ));
+        const customRate = utils.getByRole('textbox', { name: 'Custom fee rate (DOGE/kB)' });
+
+        await step(() => fireEvent.change(customRate, { target: { value: '' } }));
+        expect(utils.getByText('Choose a valid network fee before continuing.')).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+
+        await step(() => fireEvent.change(customRate, { target: { value: '2' } }));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        expect(utils.getByText('Network fee rate').nextElementSibling.textContent)
+            .toBe('2 DOGE/kB');
+
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
+        expect(utils.getByRole('textbox', { name: 'Custom fee rate (DOGE/kB)' }).value).toBe('2');
+        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(false);
+        expect(utils.getByText('Amount').nextElementSibling.textContent).toBe('10 DOGE');
+
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })));
+        const compose = calls.find((call) => call.method === 'composeForConfirm');
+        expect(compose.args.encoderOpts.feePerKb).toBe(200_000_000);
+    });
+
+    it('shows loading and empty scan states without technical detail', async () => {
+        let finishScan;
+        const heldScan = new Promise((resolve) => { finishScan = resolve; });
+        const { utils } = await mount(undefined, {
+            getCoinpayObligationsForAddress: () => heldScan,
+        });
+
+        expect(utils.getByText('Scanning for payments due…')).toBeTruthy();
+        expect(utils.queryByText('No payments due')).toBeNull();
+
+        await domAct(async () => {
+            finishScan([]);
+            await drain();
+        });
+        expect(utils.getByText('No payments due')).toBeTruthy();
+        expect(utils.queryByText('Scanning for payments due…')).toBeNull();
+    });
+
+    it('turns a failed obligation scan into plain copy instead of an empty result', async () => {
+        const { utils } = await mount(undefined, {
+            getCoinpayObligationsForAddress: () => Promise.reject(
+                new Error('Explorer returned HTTP 502 for /private/wire/path'),
+            ),
+        });
+
+        expect(utils.getByText(/temporarily unavailable \(error 502\)/i)).toBeTruthy();
+        expect(utils.queryByText(/private\/wire\/path/)).toBeNull();
+        expect(utils.queryByText('No payments due')).toBeNull();
+    });
+
+    it('turns a failed wallet-address load into plain copy', async () => {
+        const { utils } = await mount(undefined, {
+            getAddressesByChain: () => Promise.reject(
+                new Error('database adapter failed at /private/wire/path'),
+            ),
+        });
+
+        expect(utils.getByText(
+            "Couldn't load this wallet's addresses. Check your connection and try again.",
+        )).toBeTruthy();
+        expect(utils.queryByText(/database adapter|private\/wire\/path/i)).toBeNull();
+    });
+
+    it('turns an unclassified compose failure into plain copy', async () => {
+        const { utils } = await mount(undefined, {
+            composeForConfirm: () => Promise.reject(
+                new Error('internal encoder failure at /private/wire/path'),
+            ),
+        });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(
+            utils.getByRole('button', { name: 'Continue to confirmation' }),
+        ));
+
+        expect(utils.getByText(
+            "Couldn't prepare this payment. Check your connection and try again.",
+        )).toBeTruthy();
+        expect(utils.queryByText(/internal encoder|private\/wire\/path/i)).toBeNull();
+    });
+
+    it('removes the previous wallet selection while the next wallet loads', async () => {
+        let finishWalletTwo;
+        const walletTwoAddresses = new Promise((resolve) => { finishWalletTwo = resolve; });
+        const payerTwo = 'ndevmockcccccccccccccccccccccccc';
+        const { utils, messaging } = await mount(undefined, {
+            getAddressesByChain: (walletId) => (walletId === 'wallet-2'
+                ? walletTwoAddresses
+                : Promise.resolve({ [CHAIN]: [OWNER] })),
+        });
+        expect(utils.getByText('Amount').nextElementSibling.textContent).toBe('10 DOGE');
+
+        await domAct(async () => {
+            utils.rerender(React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(CoinpayForm, {
+                    walletId: 'wallet-2',
+                    chainId: CHAIN,
+                    address: payerTwo,
+                    orderMatchActionIndex: '999',
+                    onBack() {},
+                }),
+            ));
+            await drain();
+        });
+
+        expect(utils.getByText('Loading wallet addresses…')).toBeTruthy();
+        expect(utils.queryByText('10 DOGE')).toBeNull();
+        expect(utils.queryByText(PAYEE.slice(0, 6))).toBeNull();
+
+        await domAct(async () => {
+            finishWalletTwo({ [CHAIN]: [{ ...OWNER, address: payerTwo }] });
+            await drain();
+        });
+    });
+
     it('shows the payer, recipient, amount, timestamp deadline, and expiry loss warning', async () => {
         const { utils } = await mount();
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
