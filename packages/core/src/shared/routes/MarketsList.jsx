@@ -537,6 +537,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 aria-label={`Open ${otherName || otherTick} market`}
                 tooltip={openDisabled ? 'Opening a market needs a network connection' : undefined}
                 data-market-result="true"
+                trailingClassName={marketsStyles.marketTrailing}
                 leading={<TickerIcon chainId={chainId} tick={otherTick} />}
                 title={(
                     <span

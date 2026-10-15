@@ -13,8 +13,8 @@ import { StatusMessage } from './StatusMessage.jsx';
 import { FormNotices } from './formNoticeSlot.js';
 
 /**
- * A StatusMessage written in the middle of a form body that is shown at the top
- * of the form instead, with the form's other notices. Every notice is the first
+ * A StatusMessage written in the middle of a form body that is shown first in
+ * the page content instead (above the card when wide), with the form's other notices. Every notice is the first
  * item of the page content; a line wedged between fields is easy to miss.
  *
  * The text is a plain string so the form can hold it by value. Outside a

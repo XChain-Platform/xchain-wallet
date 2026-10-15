@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
+import { StatusMessage } from './StatusMessage.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
 import styles from './QrScanner.module.css';
 import { t } from '../i18n/index.js';
@@ -292,20 +293,7 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
                 {t('ui.qrScanner.scanWithCamera')}
             </Button>
             {error ? (
-                <p
-                    role="alert"
-                    style={{
-                        margin: 0,
-                        padding: 'var(--xc-space-3)',
-                        fontSize: 'var(--xc-text-sm)',
-                        lineHeight: 1.4,
-                        color: 'var(--xc-text)',
-                        background: 'var(--xc-bg-muted)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                    }}
-                >
-                    {error}
-                </p>
+                <StatusMessage variant="error">{error}</StatusMessage>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {phase === 'open'
@@ -536,21 +524,7 @@ export function QrScanner({
             );
         }
         return (
-            <div
-                role="status"
-                aria-label={t('ui.qrScanner.unsupported', { alt })}
-                data-testid="qr-scanner-unsupported"
-                style={{
-                    padding: 'var(--xc-space-3)',
-                    fontSize: 'var(--xc-text-sm)',
-                    color: 'var(--xc-text)',
-                    lineHeight: 1.4,
-                    background: 'var(--xc-bg-muted)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                }}
-            >
-                {reason}
-            </div>
+            <StatusMessage variant="warning" role="status" testId="qr-scanner-unsupported">{reason}</StatusMessage>
         );
     }
 
@@ -607,20 +581,7 @@ export function QrScanner({
                 }}
             />
             {error ? (
-                <p
-                    role="alert"
-                    style={{
-                        margin: 0,
-                        padding: 'var(--xc-space-3)',
-                        fontSize: 'var(--xc-text-sm)',
-                        lineHeight: 1.4,
-                        color: 'var(--xc-text)',
-                        background: 'var(--xc-bg-muted)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                    }}
-                >
-                    {error}
-                </p>
+                <StatusMessage variant="error">{error}</StatusMessage>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {running ? t('ui.qrScanner.scanningPointTheCameraAt') : t('ui.qrScanner.startingCamera')}

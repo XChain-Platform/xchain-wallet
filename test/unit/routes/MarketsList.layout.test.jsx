@@ -142,6 +142,11 @@ describe('MarketsList narrow layout', () => {
         expect(css).toMatch(/\.pairTick\s*\{[^}]*text-overflow:\s*ellipsis/s);
         // The depth pill stays on one line however long the pair name is.
         expect(screen.getByText('depth 3')).toHaveStyle({ whiteSpace: 'nowrap' });
+        // The figures slot is not capped at half the row, so at larger text the
+        // depth pill stays inside the row padding instead of spilling past it.
+        const trailing = screen.getByText('depth 3').closest(`.${marketsStyles.marketTrailing}`);
+        expect(trailing).not.toBeNull();
+        expect(css).toMatch(/\.marketButton \.marketTrailing\s*\{[^}]*max-width:\s*none/s);
     });
 
     it('matches market-row height and marks the results region busy on first load', () => {

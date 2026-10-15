@@ -253,10 +253,54 @@ describe('<FormPage>', () => {
             </FormPage>,
         );
         const form = container.querySelector('form');
+        // The notice leads the page just above the form (its card, when wide).
+        const page = [...form.parentElement.children];
+        expect(page).toHaveLength(2);
+        expect(page[0]).toHaveTextContent('Problem');
+        expect(page[1]).toBe(form);
         const kids = [...form.children];
         expect(kids.at(-1)).toContainElement(screen.getByRole('button', { name: 'Go' }));
         expect(kids.at(-2)).toContainElement(screen.getByLabelText('Amount'));
-        expect(kids.at(-3)).toHaveTextContent('Problem');
+        expect(form).not.toHaveTextContent('Problem');
+    });
+
+    it('keeps the same form and the focused field when a notice comes and goes', () => {
+        const page = (status) => (
+            <FormPage label="Pay" status={status} actions={<button type="submit">Go</button>}>
+                <input aria-label="Amount" />
+            </FormPage>
+        );
+        const { rerender } = render(page(null));
+        const form = screen.getByRole('form', { name: 'Pay' });
+        const amount = screen.getByLabelText('Amount');
+        amount.focus();
+
+        rerender(page(<p role="alert">Problem</p>));
+        expect(screen.getByRole('form', { name: 'Pay' })).toBe(form);
+        expect(screen.getByLabelText('Amount')).toBe(amount);
+        expect(document.activeElement).toBe(amount);
+
+        rerender(page(null));
+        expect(screen.getByRole('form', { name: 'Pay' })).toBe(form);
+        expect(document.activeElement).toBe(amount);
+    });
+
+    it('lets an error summary above the form take focus and lead to its field', () => {
+        render(
+            <FormPage
+                label="Pay"
+                status={<FormErrorSummary errors={[{ id: 'pay-amount', label: 'Amount', message: 'Enter an amount.' }]} focusKey={1} />}
+                actions={<button type="submit">Go</button>}
+            >
+                <input id="pay-amount" aria-label="Amount" />
+            </FormPage>,
+        );
+        const summary = screen.getByRole('alert');
+        const form = screen.getByRole('form', { name: 'Pay' });
+        expect(form).not.toContainElement(summary);
+        expect(document.activeElement).toBe(summary);
+        fireEvent.click(within(summary).getByRole('link'));
+        expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
     });
 
     it('calls onSubmit when the form is submitted, and skips browser validation by default', () => {
