@@ -32,6 +32,7 @@ import {
     Icon,
     Input,
     Select,
+    StatusMessage,
     Switch,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -89,12 +90,12 @@ export function DisplaySection() {
     const confirmDialog = useConfirmModal();
     // Cluster O FOLLOWUP 3: show a brief confirmation after a
     // filter-reset run so the click doesn't feel inert.
-    const [resetMessage, setResetMessage] = useState(/** @type {string | null} */ (null));
+    const [resetMessage, setResetMessage] = useState(/** @type {{ text: string, variant: 'info' | 'success' } | null} */ (null));
     const [displayMessage, setDisplayMessage] = useState(/** @type {string | null} */ (null));
     const [saveError, setSaveError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
     const [watchChainId, setWatchChainId] = useState(() => chains[0]?.id || '');
     const [watchTicker, setWatchTicker] = useState('');
-    const [watchMessage, setWatchMessage] = useState(/** @type {string | null} */ (null));
+    const [watchMessage, setWatchMessage] = useState(/** @type {{ text: string, variant: 'info' | 'success' | 'error' } | null} */ (null));
     const [watching, setWatching] = useState(false);
     const [tokenQuery, setTokenQuery] = useState('');
     const [debouncedTokenQuery, setDebouncedTokenQuery] = useState('');
@@ -194,22 +195,22 @@ export function DisplaySection() {
         const tick = watchTicker.trim();
         const grammarError = tickerReferenceError(tick, { allowRef: true });
         if (grammarError) {
-            setWatchMessage(grammarError);
+            setWatchMessage({ text: grammarError, variant: 'error' });
             return;
         }
         if (!watchChainId) {
-            setWatchMessage('Choose a network.');
+            setWatchMessage({ text: 'Choose a network.', variant: 'error' });
             return;
         }
         const chain = chains.find((candidate) => candidate.id === watchChainId);
         const chainLabel = chain?.displayName || watchChainId;
         const enteredKey = `${watchChainId}:${tick}`;
         if (watched.includes(enteredKey)) {
-            setWatchMessage(`${tick} is already watched on ${chainLabel}.`);
+            setWatchMessage({ text: `${tick} is already watched on ${chainLabel}.`, variant: 'info' });
             return;
         }
         if (typeof messaging?.getTokenInfo !== 'function') {
-            setWatchMessage('Token lookup is unavailable in this app.');
+            setWatchMessage({ text: 'Token lookup is unavailable in this app.', variant: 'error' });
             return;
         }
         setWatching(true);
@@ -220,12 +221,12 @@ export function DisplaySection() {
                 ? info.canonicalTick.trim()
                 : '';
             if (!canonicalTick) {
-                setWatchMessage(`Token "${tick}" was not found on ${chainLabel}.`);
+                setWatchMessage({ text: `Token "${tick}" was not found on ${chainLabel}.`, variant: 'error' });
                 return;
             }
             const key = `${watchChainId}:${canonicalTick}`;
             if (watched.includes(key)) {
-                setWatchMessage(`${canonicalTick} is already watched on ${chainLabel}.`);
+                setWatchMessage({ text: `${canonicalTick} is already watched on ${chainLabel}.`, variant: 'info' });
                 return;
             }
             await update({
@@ -234,10 +235,10 @@ export function DisplaySection() {
             });
             if (request !== watchRequestRef.current) return;
             setWatchTicker('');
-            setWatchMessage(`${canonicalTick} is now shown in balances.`);
+            setWatchMessage({ text: `${canonicalTick} is now shown in balances.`, variant: 'success' });
         } catch {
             if (request === watchRequestRef.current) {
-                setWatchMessage(`Could not look up ${tick} on ${chainLabel}. Try again.`);
+                setWatchMessage({ text: `Could not look up ${tick} on ${chainLabel}. Try again.`, variant: 'error' });
             }
         } finally {
             if (request === watchRequestRef.current) setWatching(false);
@@ -247,7 +248,7 @@ export function DisplaySection() {
     const removeWatchedToken = useCallback((key) => {
         setWatchMessage(null);
         update({ watchedTokens: watched.filter((candidate) => candidate !== key) })
-            .catch(() => setWatchMessage('Could not remove the watched token. Try again.'));
+            .catch(() => setWatchMessage({ text: 'Could not remove the watched token. Try again.', variant: 'error' }));
     }, [update, watched]);
 
     // Cluster O FOLLOWUP 3: reset all per-list chain-filter memory
@@ -259,8 +260,8 @@ export function DisplaySection() {
         const count = clearAllChainFilters();
         setResetMessage(
             count === 0
-                ? 'No saved list filters to reset.'
-                : `Reset ${count} saved list filter${count === 1 ? '' : 's'}. New filters apply on next visit.`,
+                ? { text: 'No saved list filters to reset.', variant: 'info' }
+                : { text: `Reset ${count} saved list filter${count === 1 ? '' : 's'}. New filters apply on next visit.`, variant: 'success' },
         );
     }, []);
 
@@ -453,7 +454,7 @@ export function DisplaySection() {
                     </Button>
                 </div>
             </form>
-            {watchMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{watchMessage}</span> : null}
+            {watchMessage ? <StatusMessage variant={watchMessage.variant}>{watchMessage.text}</StatusMessage> : null}
             {watched.map((storedKey) => {
                 const key = tokenDisplayName(storedKey, chains);
                 return (
@@ -614,14 +615,16 @@ export function DisplaySection() {
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Saved network filters</span>
-                    {resetMessage ? (
-                        <span role="status" aria-live="polite" style={ROW_HINT}>{resetMessage}</span>
-                    ) : null}
                 </div>
                 <Button size="sm" variant="secondary" icon={null} onClick={resetChainFilters}>
                     Reset list preferences
                 </Button>
             </div>
+            {/* Row results sit under the row at full width, like the other
+                settings messages, not squeezed into the label column. */}
+            {resetMessage ? (
+                <StatusMessage variant={resetMessage.variant}>{resetMessage.text}</StatusMessage>
+            ) : null}
             </FormSection>
 
             <FormSection title="Defaults">
@@ -629,13 +632,13 @@ export function DisplaySection() {
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>
                     <span style={ROW_HINT}>Restores balance display options and clears watched, pinned, hidden, and saved list preferences.</span>
-                    {displayMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{displayMessage}</span> : null}
-                    <DisplaySaveError error={saveError} controlKey="reset" />
                 </div>
                 <Button size="sm" variant="secondary" icon={null} onClick={resetDisplay}>
                     Reset to defaults
                 </Button>
             </div>
+            {displayMessage ? <StatusMessage variant="success">{displayMessage}</StatusMessage> : null}
+            <DisplaySaveError error={saveError} controlKey="reset" />
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}
@@ -650,6 +653,6 @@ export function DisplaySection() {
 
 function DisplaySaveError({ error, controlKey }) {
     return error?.key === controlKey ? (
-        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{error.message}</span>
+        <StatusMessage variant="error">{error.message}</StatusMessage>
     ) : null;
 }
