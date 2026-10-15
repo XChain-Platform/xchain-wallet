@@ -125,6 +125,25 @@ const HISTORY_PAGE_SIZE = 100;
 const EMPTY_PEER_CACHE = Object.freeze({});
 const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
+// A third-party explorer favicon is blocked by the page's img-src policy and
+// fails to load; the broken-image glyph is worse than a letter badge, so a
+// failed load falls back to the explorer's initial.
+function ExplorerFavicon({ src, label }) {
+    const [failed, setFailed] = useState(false);
+    if (failed) {
+        return <span className={styles.detailActionIcon} aria-hidden="true">{String(label).charAt(0)}</span>;
+    }
+    return (
+        <img
+            src={src}
+            alt=""
+            aria-hidden="true"
+            className={styles.detailActionFavicon}
+            onError={() => setFailed(true)}
+        />
+    );
+}
+
 function historyEntryPageAliases(entry) {
     const aliases = [entry?.key].filter(Boolean);
     const chainId = String(entry?.chainId || '');
@@ -2787,12 +2806,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             className={styles.detailAction}
                         >
                             {link.iconImg ? (
-                                <img
-                                    src={link.iconImg}
-                                    alt=""
-                                    aria-hidden="true"
-                                    className={styles.detailActionFavicon}
-                                />
+                                <ExplorerFavicon src={link.iconImg} label={link.label} />
                             ) : (
                                 <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
                             )}
@@ -2804,12 +2818,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             variant="secondary"
                             block
                             icon={link.iconImg ? (
-                                <img
-                                    src={link.iconImg}
-                                    alt=""
-                                    aria-hidden="true"
-                                    className={styles.detailActionFavicon}
-                                />
+                                <ExplorerFavicon src={link.iconImg} label={link.label} />
                             ) : link.icon}
                             disabled
                             title={OFFLINE_ACTION_REASON}
