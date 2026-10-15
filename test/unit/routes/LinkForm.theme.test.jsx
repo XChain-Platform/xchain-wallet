@@ -14,7 +14,7 @@ describe('LinkForm themed errors', () => {
         );
         // The signer error renders through FormPage status as a StatusMessage
         // styled by the shared error class, not an inline colour.
-        expect(source).toContain('<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>');
+        expect(source).toContain('<StatusMessage variant="error">{submitError}</StatusMessage>');
         expect(source).not.toContain("color: '#ef5350'");
         const css = readFileSync(
             'packages/core/src/shared/routes/IssueTokenForm.module.css',

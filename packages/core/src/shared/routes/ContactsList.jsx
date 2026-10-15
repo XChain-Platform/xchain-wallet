@@ -32,7 +32,6 @@ import {
     findContactByName,
     mergeContactGroup,
 } from '../utils/contactMerge.js';
-import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
