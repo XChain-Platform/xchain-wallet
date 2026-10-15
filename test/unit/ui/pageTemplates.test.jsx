@@ -162,6 +162,7 @@ describe('<FormErrorSummary>', () => {
 
         const summary = screen.getByRole('alert', { name: 'Form errors' });
         expect(document.activeElement).toBe(summary);
+        expect(within(summary).getByText('Fix these 2 fields:')).toBeInTheDocument();
         const links = within(summary).getAllByRole('link');
         expect(links.map((link) => link.getAttribute('href'))).toEqual(['#ticker', '#amount']);
 
@@ -216,6 +217,19 @@ describe('<FormErrorSummary>', () => {
         );
 
         expect(document.activeElement).toBe(screen.getByRole('alert', { name: 'Form errors' }));
+    });
+
+    it('does not describe a submit failure as a field error', () => {
+        render(
+            <FormErrorSummary errors={[
+                { message: "Couldn't send. Something went wrong. Try again." },
+            ]} focusKey={1} />,
+        );
+
+        const summary = screen.getByRole('alert', { name: 'Form errors' });
+        expect(within(summary).getByText("Couldn't send. Something went wrong. Try again.")).toBeInTheDocument();
+        expect(within(summary).queryByText(/Fix (?:this|these).*field/)).not.toBeInTheDocument();
+        expect(within(summary).queryByRole('link')).not.toBeInTheDocument();
     });
 });
 

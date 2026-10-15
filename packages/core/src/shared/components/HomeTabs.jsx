@@ -212,9 +212,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     // Real balance reads carry no price, so native rows get the coin's live
     // §45 rate here; without it the hero and the chart count every coin as
     // unpriced. A demo wallet asks for nothing (its fixtures price
-    // themselves), and nothing is fetched until the settings read finishes,
+    // themselves), and nothing is fetched until a settings snapshot loads,
     // so an opted-out user does not reach the CoinGecko fallback before
-    // their choice is known.
+    // their choice is known, or at all when the settings read fails.
     const { settings, loading: settingsLoading } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const watchedRows = useMemo(
@@ -237,7 +237,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         chainCoins: nativeCoins,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        refreshEnabled: !settingsLoading,
+        refreshEnabled: Boolean(settings) && !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const spamKeys = useMemo(
@@ -268,7 +268,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         tokens: tokenRequests,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        refreshEnabled: !settingsLoading && active === 'tokens',
+        refreshEnabled: Boolean(settings) && !settingsLoading && active === 'tokens',
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(

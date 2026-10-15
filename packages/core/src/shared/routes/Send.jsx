@@ -33,6 +33,7 @@ import {
 import {
     registry as registryLib,
     decoder as decoderLib,
+    flows as flowsLib,
     uri as uriLib,
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
@@ -381,7 +382,10 @@ function normalizePastedRecipient(value) {
  */
 export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive }) {
     const { messaging, shell } = useMessaging();
-    const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({});
+    // A demo wallet probes nothing; its fixtures never touch a network.
+    const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({
+        chainIds: isDemoWallet(walletId) ? [] : undefined,
+    });
     const networkOffline = reachabilityOverall === 'offline';
     // The verdict behind the shell's "Some balances may be out of date".
     const balancesUnchecked = reachabilityOverall === 'degraded' || networkOffline;
@@ -708,6 +712,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setHistoryRows([]);
             return undefined;
         }
+        if (isDemo) {
+            setHistoryRows(ownAddrs.flatMap((address) => (
+                flowsLib.synthesizeDemoHistory(chainId, address)
+            )));
+            return undefined;
+        }
         let cancelled = false;
         Promise.all(
             ownAddrs.map((addr) =>
@@ -725,7 +735,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setHistoryRows(results.flat());
         });
         return () => { cancelled = true; };
-    }, [chainId, addressesByChain, messaging]);
+    }, [chainId, addressesByChain, messaging, isDemo]);
 
     const suggestions = useMemo(() => {
         const descriptor = chainId ? chainRegistry.get(chainId) : null;
@@ -1020,7 +1030,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const fiatRate = useFiatRate({
-        chainCoin: chainId ? chainRegistry.get(chainId)?.coin : null,
+        chainCoin: !isDemo && chainId ? chainRegistry.get(chainId)?.coin : null,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
         enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
@@ -1153,7 +1163,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // fiat preview, while a token with its own oracle or DEX rate uses that
     // rate and retains its source label in AmountField.
     const amountFiatRate = useTickFiatRate({
-        chainCoin: chainId ? chainRegistry.get(chainId)?.coin : null,
+        chainCoin: !isDemo && chainId ? chainRegistry.get(chainId)?.coin : null,
         tick,
         nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
         fiatCurrency,
@@ -1348,7 +1358,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setCoinControlEnabled(false);
         setSelectedUtxoKeys(new Set());
         setChangeAddressId('');
-        if (!chainId || !fromAddress || typeof messaging.getAddressUtxos !== 'function') {
+        if (isDemo || !chainId || !fromAddress || typeof messaging.getAddressUtxos !== 'function') {
             setAvailableUtxos([]);
             setUtxoLoadState('idle');
             return undefined;
@@ -1370,7 +1380,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setUtxoLoadState('error');
             });
         return () => { cancelled = true; };
-    }, [chainId, fromAddress?.id, fromAddress?.address, messaging]);
+    }, [chainId, fromAddress?.id, fromAddress?.address, messaging, isDemo]);
 
     const selectedUtxos = useMemo(
         () => availableUtxos.filter((utxo) => selectedUtxoKeys.has(utxoKey(utxo))),
@@ -1441,6 +1451,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         let cancelled = false;
         setPreviewBalances({ loading: true, error: null, sdkShape: null });
+        if (isDemo) {
+            const entry = (flowsLib.synthesizeDemoBalances(addressesByChain)[chainId] || [])
+                .find((row) => row.address === fromAddress.address);
+            setPreviewBalances({ loading: false, error: null, sdkShape: entry?.balances || null });
+            return undefined;
+        }
         messaging.getAddressBalances(chainId, fromAddress.address)
             .then((sdkShape) => {
                 if (cancelled) return;
@@ -1455,7 +1471,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 });
             });
         return () => { cancelled = true; };
-    }, [stage, chainId, fromAddress, messaging]);
+    }, [stage, chainId, fromAddress, messaging, isDemo, addressesByChain]);
 
     // Set once the first balance check settles; see the loading gate below.
     const balanceGateSettledRef = useRef(false);
@@ -1532,7 +1548,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setGatedScanPassword('');
         setGatedInfo(null);
         setGatedScanError(null);
-        if (!walletId || !chainId || !tick.trim()) return undefined;
+        if (isDemo || !walletId || !chainId || !tick.trim()) return undefined;
         if (typeof messaging.gatedSendReadiness !== 'function') return undefined; // older host build
         // Debounced: `tick` changes per keystroke when typed by hand.
         const timer = setTimeout(() => {
@@ -1559,7 +1575,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             clearTimeout(timer);
             if (gatedProbeSeq.current === seq) gatedProbeSeq.current += 1;
         };
-    }, [walletId, chainId, tick, toAddress, amount, fromAddress?.address, messaging]);
+    }, [walletId, chainId, tick, toAddress, amount, fromAddress?.address, messaging, isDemo]);
 
     // PC-52 + PC-26: a gated tick's SEND is only valid inside
     // BATCH(SEND, MESSAGE) carrying an unlock key encrypted to the RECIPIENT,
@@ -1581,7 +1597,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         to: toAddress,
         paymentTick: tick,
         isNativePayment: isNativeSend,
-        enabled: !isMultiSend,
+        enabled: !isDemo && !isMultiSend,
     });
     const dispenserNotice = useMemo(() => dispenserDestinationNotice({
         dispensers: dispensersAtDestination, payer: fromAddress?.address, amount: String(amount).trim(),
@@ -1721,7 +1737,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // when the SDK responds.
     const [feeTiers, setFeeTiers] = useState(/** @type {any} */ (null));
     useEffect(() => {
-        if (!chainId) {
+        if (!chainId || isDemo) {
             setFeeTiers(null);
             return undefined;
         }
@@ -1732,7 +1748,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             .then((tiers) => { if (!cancelled && tiers) setFeeTiers(tiers); })
             .catch(() => { /* keep the placeholder seed */ });
         return () => { cancelled = true; };
-    }, [chainId, messaging]);
+    }, [chainId, messaging, isDemo]);
 
     const feeEstimate = useMemo(() => {
         if (!chainId) return null;
@@ -1854,6 +1870,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
         let cancelled = false;
         setOtherAddressHasTick(null);
+        if (isDemo) {
+            const demoRows = flowsLib.synthesizeDemoBalances(addressesByChain)[chainId] || [];
+            const hasTick = demoRows.some((entry) => {
+                if (entry.address === fromAddress.address) return false;
+                const balance = decoderLib.balancesFromSdk(entry.balances)
+                    .find((row) => String(row.tick || '').toUpperCase() === tickUpper);
+                return compareDecimalStrings(String(balance?.amount || '0'), '0') === 1;
+            });
+            setOtherAddressHasTick(hasTick);
+            return undefined;
+        }
         Promise.all(others.map((address) =>
             messaging.getAddressBalances(chainId, address.address)))
             .then((balancesByAddress) => {
@@ -1871,7 +1898,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!cancelled) setOtherAddressHasTick(null);
             });
         return () => { cancelled = true; };
-    }, [chainId, fromAddress, addressesByChain, tick, previewBalances, sourceBalance, messaging]);
+    }, [chainId, fromAddress, addressesByChain, tick, previewBalances, sourceBalance, messaging, isDemo]);
 
     // The asset picker is wallet-scoped, the funding is address-scoped, and this
     // is where they disagree. A WARNING rather than a refusal, deliberately: the only
@@ -2093,7 +2120,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     function handleReview(event) {
         event.preventDefault();
-        if (networkOffline || maxUnavailable) return;
+        if (isDemo || networkOffline || maxUnavailable) return;
         setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
             setFormError('Choose the address to send from.');

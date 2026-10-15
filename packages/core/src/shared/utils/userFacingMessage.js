@@ -33,7 +33,7 @@ export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
 
 // Library / runtime internals that carry no meaning for the person reading
 // them, whether or not they arrive with a function prefix.
-const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token/i;
+const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token|a listener indicated an asynchronous response|the message port closed before a response was received/i;
 const ERROR_CODE = /\b(?:ERR_[A-Z0-9_]+|E_[A-Z0-9_]+|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b/;
 const INTERNAL_NAME = /\b[A-Z][A-Za-z0-9]+(?:Error|Exception)\b/;
 const WIRE_TEXT = /https?:\/\/|(?:\/[A-Za-z0-9_-]+)?\/api(?:\/|\b)|(?:^|\n)\s*at\s+\S+|\b[A-Za-z0-9_.-]+\.(?:[cm]?js|jsx|ts|tsx):\d+:\d+\b|request failed with status code\s+\d{3}|^(?:rpc|http)\s+(?:error|code)\b/i;
