@@ -26,6 +26,13 @@
 // function`. The form surfaces it as the submit error and stays on the
 // review screen.
 
+import { memoLengthError } from '../shared/utils/memoLimit.js';
+import { tickerReferenceError } from '../shared/utils/tickerGrammar.js';
+
+const ACTION_CLASSES = Object.freeze(['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all']);
+const MAX_ACTION_INDEX = 18446744073709551615n;
+const MAX_COOLDOWN_BLOCKS = 4294967295n;
+
 /**
  * @typedef {Object} ControllerBindOpts
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -33,11 +40,63 @@
  * @property {'token' | 'address'} target
  * @property {boolean} unbind
  * @property {string} [tick]            required when target === 'token'
- * @property {string} controller        action_index of the guard contract
+ * @property {string} [controller]      action_index of the guard contract; bind only
  * @property {string} actionClass       transfer | trade | burn | mint | stake | ownership | all
  * @property {string|number} [cooldownBlocks]  bind only; ignored on unbind
  * @property {string} [memo]
  */
+
+/**
+ * Return the first plain-language reason the form values cannot be built.
+ *
+ * @param {Partial<ControllerBindOpts>} opts
+ * @returns {string|null}
+ */
+export function controllerBindValidationError(opts = {}) {
+    const target = opts.target;
+    const unbind = Boolean(opts.unbind);
+    if (target !== 'token' && target !== 'address') {
+        return 'Choose whether to protect a token or this address.';
+    }
+
+    if (target === 'token') {
+        const tickError = tickerReferenceError(opts.tick, { noun: 'Token' });
+        if (tickError) return tickError;
+    }
+
+    if (!unbind) {
+        const controller = String(opts.controller ?? '').trim();
+        if (!controller) {
+            return 'Guard contract is required. Enter the action number of a deployed contract.';
+        }
+        if (!/^\d+$/.test(controller) || controller === '0') {
+            return 'Guard contract must be a positive whole action number.';
+        }
+        if (BigInt(controller) > MAX_ACTION_INDEX) {
+            return `Guard contract is too large. Enter an action number no greater than ${MAX_ACTION_INDEX}.`;
+        }
+    }
+
+    const actionClass = String(opts.actionClass ?? '').trim().toLowerCase();
+    if (!actionClass) return 'Pick an action class to gate.';
+    if (!ACTION_CLASSES.includes(actionClass)) {
+        return 'The selected action class is not available. Refresh the form and choose another.';
+    }
+
+    if (!unbind && opts.cooldownBlocks !== undefined && String(opts.cooldownBlocks).trim() !== '') {
+        const cooldown = String(opts.cooldownBlocks).trim();
+        if (!/^\d+$/.test(cooldown)) {
+            return 'Cooldown blocks must be a non-negative whole number.';
+        }
+        if (BigInt(cooldown) > MAX_COOLDOWN_BLOCKS) {
+            return `Cooldown blocks cannot be greater than ${MAX_COOLDOWN_BLOCKS}.`;
+        }
+    }
+
+    const memo = String(opts.memo ?? '').trim();
+    if (/[|;]/.test(memo)) return 'Memo cannot contain | or ; characters.';
+    return memoLengthError(memo);
+}
 
 /**
  * Build the `{ action, params }` for a controller bind/unbind via the
@@ -51,9 +110,8 @@ export function controllerBindParams(opts) {
     const { sdkRegistry, chainId, target } = opts;
     if (!sdkRegistry) throw new Error('controllerBindParams: sdkRegistry is required');
     if (!chainId) throw new Error('controllerBindParams: chainId is required');
-    if (target !== 'token' && target !== 'address') {
-        throw new Error('controllerBindParams: target must be "token" or "address"');
-    }
+    const validationError = controllerBindValidationError(opts);
+    if (validationError) throw new Error(validationError);
 
     const sdk = sdkRegistry.get(chainId);
     const controller = sdk && sdk.controller;
@@ -64,6 +122,7 @@ export function controllerBindParams(opts) {
     }
 
     const unbind = Boolean(opts.unbind);
+    const actionClass = String(opts.actionClass).trim().toLowerCase();
     /** @type {'ISSUE' | 'ADDRESS'} */
     const action = target === 'token' ? 'ISSUE' : 'ADDRESS';
 
@@ -76,7 +135,7 @@ export function controllerBindParams(opts) {
         const base = {
             tick: opts.tick.trim(),
             controller: opts.controller,
-            actionClass: opts.actionClass,
+            actionClass,
             ...(opts.memo ? { memo: opts.memo } : {}),
         };
         if (unbind) {
@@ -98,7 +157,7 @@ export function controllerBindParams(opts) {
     } else {
         const base = {
             controller: opts.controller,
-            actionClass: opts.actionClass,
+            actionClass,
             ...(opts.memo ? { memo: opts.memo } : {}),
         };
         if (unbind) {
@@ -135,7 +194,6 @@ export function controllerBindParams(opts) {
 export function controllerActionClasses(sdkRegistry, chainId) {
     // Mirrors the indexer's CONTROLLER_BINDABLE_CLASSES (bindable, not routable:
     // a bind may target the 'all' catch-all, which no incoming action routes to).
-    const FALLBACK = ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'];
     try {
         const sdk = sdkRegistry.get(chainId);
         const fn = sdk && sdk.controller && sdk.controller.actionClasses;
@@ -146,5 +204,5 @@ export function controllerActionClasses(sdkRegistry, chainId) {
     } catch {
         // fall through to the locked-fact list
     }
-    return FALLBACK;
+    return [...ACTION_CLASSES];
 }

@@ -91,7 +91,7 @@ export function normalizeRouteParams(view, params) {
     if (view === 'token-detail') {
         if (!isText(params.tick)) return null;
         return copyOptional({ chainId: params.chainId, tick: params.tick }, params, [
-            'kind', 'displayName', 'divisibility', 'fiatRate', 'quantity', 'imageUrl', 'issuer',
+            'kind', 'displayName', 'divisibility', 'fiatRate', 'imageUrl', 'issuer',
         ]);
     }
     if (view === 'market') {

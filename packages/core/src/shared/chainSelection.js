@@ -54,6 +54,32 @@ export function pickDefaultChainId(byChain, { explicitChainId = null, settings =
 }
 
 /**
+ * The native Bitcoin asset that opens the DEX on the selected network.
+ *
+ * @param {string | null | undefined} network
+ * @returns {{ chainId: string, tick: 'BTC', kind: 'native' }}
+ */
+export function defaultDexAssetForNetwork(network) {
+    const activeNetwork = getActiveNetwork({ activeNetwork: network });
+    return { chainId: `bitcoin-${activeNetwork}`, tick: 'BTC', kind: 'native' };
+}
+
+/**
+ * Keep an explicit market asset when it belongs to the selected network,
+ * otherwise return that network's native Bitcoin asset.
+ *
+ * @param {{ chainId?: string } | null | undefined} asset
+ * @param {string | null | undefined} network
+ * @param {{ get(id: string): { networkKind?: string } | undefined }} [registry]
+ * @returns {object}
+ */
+export function syncDexAssetToNetwork(asset, network, registry = defaultRegistry()) {
+    const activeNetwork = getActiveNetwork({ activeNetwork: network });
+    if (asset?.chainId && registry?.get(asset.chainId)?.networkKind === activeNetwork) return asset;
+    return defaultDexAssetForNetwork(activeNetwork);
+}
+
+/**
  * The Settings patch that records `chainId` as the last-used chain of
  * its own network, or null when the registry does not know the chain.
  *

@@ -19,10 +19,126 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildRows } from '../../../packages/core/src/shared/routes/StakingList.jsx';
+import {
+    cooldownStatus,
+    cooldownText,
+    stakingLockStatus,
+    stakingLockText,
+    stakingRowState,
+} from '../../../packages/core/src/flows/stakingDashboard.js';
 
 const OWNER = 'DTestOwnerAddressExampleExampleExample';
+const LOCKED_STAKE = {
+    action_index: 1,
+    amount: '25',
+    status: 'valid',
+    activation_block: 106,
+    signing_pubkey: 'a'.repeat(64),
+    _ownerAddress: OWNER,
+};
 
 describe('buildRows: contract-stake cooldown vs. completed release', () => {
+    it('counts locked blocks and estimates the activation time', () => {
+        const status = stakingLockStatus({
+            stake: { activation_block: 1_120 },
+            height: 1_000,
+            coin: 'bitcoin',
+        });
+
+        expect(status).toMatchObject({
+            state: 'locked',
+            blocksRemaining: 120,
+            endBlock: 1_120,
+        });
+        expect(status.maturityEstimate).toBeInstanceOf(Date);
+        expect(stakingLockText(status)).toMatch(/^Locked: 120 blocks to go \(~/);
+    });
+
+    it('uses singular block copy and omits a time when the chain is unknown', () => {
+        const status = stakingLockStatus({
+            stake: { ACTIVATION_BLOCK: 1_001 },
+            height: 1_000,
+            coin: 'unknown',
+        });
+        expect(stakingLockText(status)).toBe('Locked: 1 block to go');
+    });
+
+    it('counts unbonding blocks and estimates the release time', () => {
+        const status = cooldownStatus({
+            unstake: { cooldown_end_block: 1_250 },
+            height: 1_000,
+            coin: 'bitcoin',
+        });
+
+        expect(status).toMatchObject({
+            state: 'releasing',
+            blocksRemaining: 250,
+            endBlock: 1_250,
+        });
+        expect(status.maturityEstimate).toBeInstanceOf(Date);
+        expect(cooldownText(status)).toMatch(/^Releasing: 250 blocks to go \(~/);
+    });
+
+    it('keeps a pending stake visible with its chain-stamped unlock height', () => {
+        const rows = buildRows({
+            chainId: 'bitcoin-mainnet',
+            height: 100,
+            stakes: [LOCKED_STAKE],
+            delegations: [],
+            rewards: [],
+            rewardClaims: [],
+            contractStakes: [],
+            contractUnstakes: [],
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+            status: 'locked',
+            lockEndBlock: 106,
+            amountLabel: '25 XCHAIN',
+        });
+    });
+
+    it('renders an unexpected stake state as plain status text', () => {
+        const rows = buildRows({
+            chainId: 'bitcoin-mainnet',
+            height: 100,
+            stakes: [{
+                action_index: 1,
+                amount: '25',
+                status: 'paused-by-governance',
+                _ownerAddress: OWNER,
+            }],
+            delegations: [],
+            rewards: [],
+            rewardClaims: [],
+            contractStakes: [],
+            contractUnstakes: [],
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].status).toBe('paused-by-governance');
+        expect(stakingRowState(rows[0], 100)).toBe('unexpected');
+    });
+
+    it('adds reward fixture amounts exactly beyond floating-point precision', () => {
+        const rows = buildRows({
+            chainId: 'bitcoin-mainnet',
+            height: 100,
+            stakes: [{ ...LOCKED_STAKE, activation_block: 90 }],
+            delegations: [],
+            rewards: [
+                { amount: '90071992.00000001' },
+                { amount: '0.00000002' },
+            ],
+            rewardClaims: [],
+            contractStakes: [],
+            contractUnstakes: [],
+        });
+
+        expect(rows[0].rewardLabel).toBe('+90,071,992.00000003 XCHAIN reward');
+    });
+
     it('omits validator stake rows outside their activation window', () => {
         const rows = buildRows({
             chainId: 'bitcoin-mainnet',

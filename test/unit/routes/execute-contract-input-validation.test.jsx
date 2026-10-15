@@ -31,7 +31,11 @@ const contractCss = readFileSync(
 
 function rule(selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return contractCss.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
+    // A selector can appear in a shared group (the RTL isolation rule) and in
+    // its own rule, so collect the declarations of every block it heads.
+    return [...contractCss.matchAll(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`, 'g'))]
+        .map((match) => match[1])
+        .join('\n');
 }
 
 function mount(walletMode = 'full', abiParamName = 'config', overrides = {}, props = {}) {
@@ -196,7 +200,7 @@ describe('ExecuteContractForm argument validation', () => {
     it('shows blank positional arguments in manual mode', async () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
-        fireEvent.change(screen.getByLabelText('Params (optional)'), { target: { value: 'first||third' } });
+        fireEvent.change(screen.getByLabelText('Arguments (optional)'), { target: { value: 'first||third' } });
         fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
 
         await waitFor(() => {

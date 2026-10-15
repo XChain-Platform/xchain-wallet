@@ -20,7 +20,11 @@
 // worst a bad feed achieves is a wrong version number in a sentence the app
 // wrote itself.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import {
+    __setNativeShellForTests,
+    __setNativeVaultForTests,
+} from '../../../packages/web/src/storage/nativeVault.js';
 import {
     checkWebViewFloor,
     detectChromiumMajor,
@@ -39,6 +43,12 @@ import {
     UPDATE_FEED_URL,
     UPDATE_CHECK_INTERVAL_MS,
 } from '../../../packages/web/src/update/directUpdateCheck.js';
+
+afterEach(() => {
+    __setNativeShellForTests(undefined);
+    __setNativeVaultForTests(undefined);
+    vi.restoreAllMocks();
+});
 
 function capableEnv(overrides = {}) {
     return {
@@ -183,7 +193,9 @@ describe('update feed validation', () => {
 describe('checkForDirectUpdate', () => {
     const currentVersion = '0.333.1';
 
-    it('reports a newer version', async () => {
+    it('uses fetch in the browser and reports a newer version', async () => {
+        __setNativeShellForTests(false);
+        __setNativeVaultForTests(null);
         const fetchImpl = vi.fn(async () => ({ ok: true, text: async () => '{"version":"0.334.0"}' }));
         const result = await checkForDirectUpdate({ currentVersion, fetchImpl, storage: memStorage() });
         expect(result).toEqual({ version: '0.334.0', notice: updateNoticeText('0.334.0') });
@@ -191,6 +203,47 @@ describe('checkForDirectUpdate', () => {
             credentials: 'omit',
             redirect: 'error',
         }));
+    });
+
+    it('uses the native bridge in the Android shell instead of fetch', async () => {
+        const fetchDirectUpdateFeed = vi.fn(async () => ({
+            status: 'OK',
+            body: '{"version":"0.334.0"}',
+        }));
+        __setNativeShellForTests(true);
+        __setNativeVaultForTests({
+            loadVault: vi.fn(),
+            fetchDirectUpdateFeed,
+        });
+        const fetchImpl = vi.fn();
+
+        const result = await checkForDirectUpdate({
+            currentVersion,
+            fetchImpl,
+            storage: memStorage(),
+        });
+
+        expect(result).toEqual({ version: '0.334.0', notice: updateNoticeText('0.334.0') });
+        expect(fetchDirectUpdateFeed).toHaveBeenCalledWith({});
+        expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('stays quiet when the native update request is offline', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        __setNativeShellForTests(true);
+        __setNativeVaultForTests({
+            loadVault: vi.fn(),
+            fetchDirectUpdateFeed: vi.fn(async () => ({ status: 'UNAVAILABLE' })),
+        });
+        const fetchImpl = vi.fn();
+
+        expect(await checkForDirectUpdate({
+            currentVersion,
+            fetchImpl,
+            storage: memStorage(),
+        })).toBeNull();
+        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(consoleError).not.toHaveBeenCalled();
     });
 
     it('says nothing when the feed is not ahead', async () => {

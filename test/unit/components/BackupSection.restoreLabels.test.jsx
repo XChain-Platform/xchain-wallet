@@ -23,7 +23,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
 
-const CHAIN_ID = 'dogecoin-mainnet';
+const CHAIN_ID = 'dogecoin-testnet';
 const ADDRESS = {
     id: 'address-1',
     address: 'D9restorelabelsaddress0000000000000',
@@ -48,12 +48,12 @@ function mount(restoreLabelsRequest) {
 /** Opens the restore form, waits for the chain picker, types the password. */
 async function openRestoreForm() {
     fireEvent.click(screen.getByRole('button', { name: 'Check…' }));
-    await screen.findByLabelText('Restore chain');
+    await screen.findByLabelText('Restore network');
     fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'secret' } });
 }
 
 describe('BackupSection: check chain for backed-up contacts', () => {
-    it('calls the restore path with the selected chain and reports what it merged', async () => {
+    it('calls the restore path with the selected network and reports what it merged', async () => {
         const restoreLabelsRequest = vi.fn(async () => ({
             restored: true,
             skipped: null,
@@ -71,6 +71,8 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         const messaging = mount(restoreLabelsRequest);
 
         await openRestoreForm();
+        expect(screen.getByRole('option', { name: 'Dogecoin' })).toBeTruthy();
+        expect(screen.queryByText(/testnet/i)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Check' }));
 
         await waitFor(() => expect(messaging.restoreLabelsRequest).toHaveBeenCalledWith({
@@ -83,7 +85,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         expect(await screen.findByText('Restored 2 contacts and 3 labels.')).toBeTruthy();
     });
 
-    it('reports no backed-up labels found when nothing authenticates on the chosen chain', async () => {
+    it('reports no backed-up labels found when nothing authenticates on the chosen network', async () => {
         const restoreLabelsRequest = vi.fn(async () => ({
             restored: false,
             skipped: null,
@@ -103,7 +105,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         await openRestoreForm();
         fireEvent.click(screen.getByRole('button', { name: 'Check' }));
 
-        expect(await screen.findByText(`No backed-up labels found on ${CHAIN_ID}.`)).toBeTruthy();
+        expect(await screen.findByText('No backed-up labels found on Dogecoin.')).toBeTruthy();
     });
 
     it('surfaces a thrown error (e.g. a wrong password) without losing the typed password field', async () => {

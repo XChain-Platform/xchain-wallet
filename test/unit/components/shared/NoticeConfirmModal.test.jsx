@@ -6,9 +6,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
-vi.mock('@xchain-wallet/core/ui', async () => {
+vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     const React = await import('react');
+    const actual = await importOriginal();
     return {
+        StatusMessage: actual.StatusMessage,
         Button: ({ variant, onClick, children, disabled, loading }) =>
             React.createElement('button', {
                 'data-variant': variant,

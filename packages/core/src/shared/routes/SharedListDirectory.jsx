@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
     Button,
     ChainBadge,
@@ -31,7 +31,7 @@ import {
     shortOwner,
 } from '../utils/sharedListRows.js';
 import styles from './IssueTokenForm.module.css';
-import listStyles from './MyLists.module.css';
+import local from './SharedListDirectory.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const PAGE_SIZE = 20;
@@ -144,6 +144,11 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     }, [filterType, mode, directory]);
 
     const pagedLists = matchingLists.slice(0, visibleLimit);
+    // Chains that did not answer, as badges for the single notice. An unknown
+    // chain id has no badge, so it is counted by the notice but not named.
+    const unavailableDescriptors = (directory?.unavailable || [])
+        .map((id) => chainRegistry.get(id))
+        .filter(Boolean);
 
     const header = (
         <PageHeader
@@ -171,35 +176,47 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     if (!directory) return wrap(<p className={styles.hint}>Loading shared lists…</p>);
 
     const toolbar = (
-        <Input
-            type="search"
-            className={listStyles.search}
-            placeholder="Search"
-            value={query}
-            onChange={(event) => {
-                setQuery(event.target.value);
-                setVisibleLimit(PAGE_SIZE);
-            }}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            aria-label="Search shared lists"
-        />
+        <div className={local.filterRow}>
+            <div className={local.searchControl}>
+                <Input
+                    type="search"
+                    size="md"
+                    placeholder="Search"
+                    value={query}
+                    onChange={(event) => {
+                        setQuery(event.target.value);
+                        setVisibleLimit(PAGE_SIZE);
+                    }}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search shared lists"
+                />
+            </div>
+        </div>
     );
 
     const filteredType = listType(filterType);
     return wrap(
         <>
-            {directory.unavailable.map((unavailableChain) => {
-                const descriptor = chainRegistry.get(unavailableChain);
-                return (
-                    <p className={styles.error} key={unavailableChain}>
-                        Shared lists unavailable from {descriptor?.displayName || unavailableChain}.
-                    </p>
-                );
-            })}
+            {/* One notice for every chain that did not answer, not one per chain. */}
+            {directory.unavailable.length > 0 ? (
+                <StatusMessage variant="error">
+                    Shared lists unavailable
+                    {unavailableDescriptors.length > 0 ? ' from ' : null}
+                    {unavailableDescriptors.map((descriptor, index) => (
+                        <Fragment key={descriptor.id || index}>
+                            {index === 0 ? null : ' '}
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </Fragment>
+                    ))}
+                    . Try again in a moment.
+                </StatusMessage>
+            ) : null}
 
-            {matchingLists.length === 0 ? (
+            {/* With that notice up and no search typed, an empty state would be a
+                second message for the same state. */}
+            {matchingLists.length === 0 && directory.unavailable.length > 0 && !query.trim() ? null : matchingLists.length === 0 ? (
                 <EmptyState
                     title={query.trim()
                         ? "No matching shared lists"
@@ -207,7 +224,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                     body={query.trim()
                         ? "Matching shared lists appear here after you change or clear the search."
                         : mode === "pick"
-                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a chain where one is published.`
+                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a network where one is published.`
                             : "Published shared lists appear here after you or someone else publishes one."}
                 />
             ) : (
@@ -265,7 +282,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
         <dl
             role="listitem"
             className={styles.detailsList}
-            aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)} on ${valueOrUnknown(entry.homeChain)}`}
+            aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)}`}
         >
             {entry.name ? (
                 <>
@@ -273,9 +290,9 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
                     <dd className={styles.detailsValue}>{neutralizeControlText(entry.name)}</dd>
                 </>
             ) : null}
-            <dt className={styles.detailsLabel}>Home chain</dt>
+            <dt className={styles.detailsLabel}>Home network</dt>
             <dd className={styles.detailsValue}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : valueOrUnknown(entry.homeChain)}
+                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : '?'}
             </dd>
             <dt className={styles.detailsLabel}>Home list index</dt>
             <dd className={styles.detailsValue}>{valueOrUnknown(entry.homeListIndex)}</dd>
@@ -287,7 +304,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
             <dd className={styles.detailsValue}>{shortOwner(entry.owner) || '?'}</dd>
             <dt className={styles.detailsLabel}>Share block</dt>
             <dd className={styles.detailsValue}>{valueOrUnknown(entry.shareBlock)}</dd>
-            <dt className={styles.detailsLabel}>On this chain</dt>
+            <dt className={styles.detailsLabel}>On this network</dt>
             <dd className={styles.detailsValue}>{bindLabel(entry)}</dd>
             {badge ? (
                 <>

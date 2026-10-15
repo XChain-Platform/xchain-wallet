@@ -58,8 +58,8 @@ assert.ok(
     'SignerSelectForm renders the explicit "Software wallet" card label',
 );
 assert.ok(
-    /type="radio"/.test(formSrc),
-    'SignerSelectForm uses radio-input cards (single-select)',
+    /<RadioGroup\b/.test(formSrc),
+    'SignerSelectForm uses the shared RadioGroup for its single-select choices',
 );
 
 // --- 2. AddAccountForm + Receive consume the picker -----------------------

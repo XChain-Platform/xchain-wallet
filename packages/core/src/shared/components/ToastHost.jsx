@@ -8,11 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '../../ui/Button.jsx';
 import styles from './ToastHost.module.css';
 import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
+import { clearToastRoom, placeToastStack } from './toastPlacement.js';
+import { t } from '../../i18n/index.js';
 
 const VISIBLE_LIMIT = 3;
+// One duration for every toast, set here rather than per call: 8 s to read a
+// message, and 12 s when it carries an action (Undo, Review), so the action
+// can still be reached. Callers do not pass durationMs; specs pass 0 to keep a
+// toast until it is dismissed.
 const DEFAULT_DURATION_MS = 8000;
 const ACTION_MIN_DURATION_MS = 12000;
 
@@ -23,7 +30,7 @@ const ACTION_MIN_DURATION_MS = 12000;
  *   actionLabel?: string,
  *   onAction?: () => void | Promise<void>,
  *   durationMs?: number,
- *   variant?: 'default' | 'success' | 'error',
+ *   variant?: 'default' | 'info' | 'warning' | 'success' | 'error',
  * }} ToastInput
  */
 
@@ -48,6 +55,7 @@ export function ToastHost({ children }) {
     const [toasts, setToasts] = useState(/** @type {ToastInput[]} */ ([]));
     const [announcement, setAnnouncement] = useState({ id: 0, message: '' });
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
+    const viewportRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const haptic = useHaptic();
 
     const announce = useCallback((message) => {
@@ -84,6 +92,7 @@ export function ToastHost({ children }) {
             return prev.map((toast, index) => (index === existingIndex ? record : toast));
         });
         if (record.variant === 'error') haptic.error();
+        else if (record.variant === 'warning') haptic.warn();
         else if (record.variant === 'success') haptic.success();
         else haptic.tap();
         return id;
@@ -125,14 +134,50 @@ export function ToastHost({ children }) {
         }
     }, [visibleToasts]);
 
+    // Place the stack before paint whenever its toasts change, so a new
+    // toast never flashes over the control that was just pressed.
+    useLayoutEffect(() => {
+        placeToastStack(viewportRef.current);
+    }, [visibleToasts, hiddenCount]);
+
+    // Re-place it while the page moves under it: focus moving to a control
+    // the stack covers, the content scrolling, the window resizing (which
+    // can swap the tab bar for the side rail), or the stack changing size.
+    useEffect(() => {
+        const viewport = viewportRef.current;
+        if (!viewport || typeof window === 'undefined') return undefined;
+        let frame = null;
+        const schedule = () => {
+            if (frame !== null) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = null;
+                placeToastStack(viewport);
+            });
+        };
+        document.addEventListener('focusin', schedule);
+        document.addEventListener('scroll', schedule, true);
+        window.addEventListener('resize', schedule);
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+        observer?.observe(viewport);
+        return () => {
+            document.removeEventListener('focusin', schedule);
+            document.removeEventListener('scroll', schedule, true);
+            window.removeEventListener('resize', schedule);
+            observer?.disconnect();
+            if (frame !== null) window.cancelAnimationFrame(frame);
+            clearToastRoom();
+        };
+    }, []);
+
     return (
         <HapticProvider value={haptic}>
             <ToastContext.Provider value={api}>
                 {children}
                 <div
+                    ref={viewportRef}
                     className={styles.viewport}
                     role="status"
-                    aria-label="Notifications"
+                    aria-label={t('alerts.notificationsTitle')}
                     aria-live="polite"
                     aria-atomic="false"
                     aria-relevant="additions text"
@@ -142,7 +187,7 @@ export function ToastHost({ children }) {
                     </span>
                     {hiddenCount > 0 ? (
                         <div className={styles.overflowBadge} aria-hidden="true">
-                            {`+${hiddenCount} more`}
+                            {t('components.toastHost.more', { hiddenCount })}
                         </div>
                     ) : null}
                     {visibleToasts.map((t) => (
@@ -171,10 +216,11 @@ export function ToastHost({ children }) {
 }
 
 function ToastItem({ toast, onAction, onDismiss }) {
-    const variant = toast.variant || 'default';
+    const presentation = TOAST_PRESENTATION[toast.variant || 'default'] || TOAST_PRESENTATION.default;
     return (
         <div
-            className={`${styles.toast} ${styles[`variant_${variant}`] || ''}`}
+            className={`${styles.toast} ${styles[`variant_${presentation.tone}`]}`}
+            data-variant={presentation.tone}
             onKeyDown={(event) => {
                 if (event.key !== 'Escape') return;
                 event.preventDefault();
@@ -182,6 +228,7 @@ function ToastItem({ toast, onAction, onDismiss }) {
                 onDismiss();
             }}
         >
+            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <span className={styles.message}>{toast.message}</span>
             <div className={styles.controls}>
                 {toast.actionLabel && toast.onAction ? (
@@ -193,18 +240,26 @@ function ToastItem({ toast, onAction, onDismiss }) {
                         {toast.actionLabel}
                     </button>
                 ) : null}
-                <button
-                    type="button"
+                <Button
+                    size="sm"
+                    variant="secondary"
                     className={styles.dismissBtn}
+                    icon={<span aria-hidden="true">×</span>}
                     onClick={onDismiss}
-                    aria-label="Dismiss notification"
-                >
-                    ×
-                </button>
+                    aria-label={t('components.toastHost.dismissNotification')}
+                />
             </div>
         </div>
     );
 }
+
+const TOAST_PRESENTATION = {
+    default: { tone: 'info', icon: 'ℹ' },
+    info: { tone: 'info', icon: 'ℹ' },
+    warning: { tone: 'warning', icon: '⚠' },
+    success: { tone: 'success', icon: '✓' },
+    error: { tone: 'error', icon: '✕' },
+};
 
 /**
  * Hook for routes / components that want to surface a toast. Falls back

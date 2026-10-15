@@ -33,7 +33,7 @@ export function ListPageSection() {
     intro="Coin payments your matched DEX orders are waiting on."
     toolbar={<>
         <input type="search" aria-label="Search payments" ... />
-        <select aria-label="Filter by chain">...</select>
+        <select aria-label="Filter by network">...</select>
         <Button size="sm" variant="secondary" onClick={refresh}>Refresh</Button>
     </>}
 >

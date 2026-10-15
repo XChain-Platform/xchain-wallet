@@ -23,6 +23,14 @@ const historyCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/History.module.css'),
     'utf8',
 ).replace(/\/\*[\s\S]*?\*\//g, '');
+const tokenDetailCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/TokenDetail.module.css'),
+    'utf8',
+).replace(/\/\*[\s\S]*?\*\//g, '');
+const tokenDetailSource = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/TokenDetail.jsx'),
+    'utf8',
+);
 
 function ruleBody(text, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
@@ -177,6 +185,10 @@ describe('History filters', () => {
             entries: [{ chain: 'litecoin', address: clientAddress }],
         }]);
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
+        // The row keeps both ends of the counterparty on screen and the
+        // whole address in its title.
+        expect(screen.getByTitle(clientAddress)).toHaveTextContent('mClien…111111');
+        expect(screen.queryByTitle(LTC_ADDRESS)).toBeNull();
 
         const search = screen.getByLabelText('Search history');
         const expectToday = async (query) => {
@@ -217,6 +229,31 @@ describe('History filters', () => {
         expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
     });
 
+    it('offers one control to clear the search', async () => {
+        mountHistory({
+            [LTC]: [historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: LTC_ADDRESS })],
+        }, { [LTC]: [{ address: LTC_ADDRESS }] });
+        const search = await screen.findByRole('searchbox', { name: 'Search history' });
+        fireEvent.change(search, { target: { value: 'zzz' } });
+        expect(await screen.findByRole('button', { name: 'Clear history search' })).toBeInTheDocument();
+        // A type="search" field also draws the engine's own cancel mark
+        // inside it; with the Clear button beside it that made two.
+        expect(ruleBody(historyCss, '.searchInput::-webkit-search-cancel-button')).toMatch(/display:\s*none/);
+    });
+
+    it('leaves a generated address name off the row, since it only repeats the coin', async () => {
+        const sender = 'mtkxExternalSender1111111111111111111111';
+        const view = mountHistory({
+            [LTC]: [historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: sender })],
+        }, {
+            [LTC]: [{ address: LTC_ADDRESS, label: 'LTC Address #1' }],
+        }).view;
+
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+        expect(screen.queryByText(/Received at/)).toBeNull();
+        expect(view.container.textContent).not.toContain('LTC Address #1');
+    });
+
     it('combines every filter dimension and preserves the controls across a refresh poll', async () => {
         const rows = {
             [LTC]: [
@@ -242,10 +279,14 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
 
         fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
-        chooseOption(/^All chains$/, 'Litecoin');
+        expect(screen.getByRole('button', { name: 'All action types' }))
+            .toHaveAttribute('aria-pressed', 'false');
+        chooseOption(/^All networks$/, 'Litecoin');
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
         chooseOption(/^All action types$/, 'Send');
+        expect(screen.getByRole('button', { name: 'Send' }))
+            .toHaveAttribute('aria-pressed', 'true');
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
 
         chooseOption(/^All statuses$/, 'Confirmed');
@@ -253,7 +294,7 @@ describe('History filters', () => {
 
         expect(screen.getByRole('radio', { name: 'Grouped' })).toHaveAttribute('aria-checked', 'true');
         fireEvent.click(screen.getByRole('radio', { name: 'Flat' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show fiat' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show fiat: Off' }));
         await screen.findByRole('button', { name: 'Fiat: USD' });
 
         const callsBeforeRefresh = messaging.getAddressHistory.mock.calls.length;
@@ -321,13 +362,13 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
         expect(screen.getByText('Day boundaries use local time.')).toBeInTheDocument();
-        expect(screen.getByText('Active range: 2026-09-14 to 2026-10-13')).toBeInTheDocument();
+        expect(screen.getByText('Active range: 09/14/2026 to 10/13/2026')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
 
         fireEvent.click(screen.getByRole('button', { name: '7 days' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:30:${LTC_ADDRESS}`]));
         expect(screen.getByLabelText('From date')).toHaveValue('2026-10-07');
-        expect(screen.getByText('Active range: 2026-10-07 to 2026-10-13')).toBeInTheDocument();
+        expect(screen.getByText('Active range: 10/07/2026 to 10/13/2026')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'All' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
@@ -340,6 +381,30 @@ describe('History filters', () => {
         expect(screen.queryByText(/^Active range:/)).not.toBeInTheDocument();
     });
 
+    it('renders pending, local calendar days, future dates, and missing dates in stable sections', async () => {
+        const { view } = mountHistory({
+            [LTC]: [
+                historyRow({ actionIndex: 1, blockIndex: 0, timestamp: secondsAt(0), tick: 'PENDING', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 2, timestamp: secondsAt(0), tick: 'TODAY', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 3, timestamp: secondsAt(-1), tick: 'YESTERDAY', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 4, timestamp: secondsAt(1), tick: 'FUTURE', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 5, timestamp: undefined, tick: 'UNDATED', source: LTC_ADDRESS }),
+            ],
+        }, { [LTC]: [{ address: LTC_ADDRESS }] });
+        fireEvent.click(await screen.findByRole('button', { name: 'All' }));
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(5));
+
+        const headings = [...view.container.querySelectorAll('[data-xc-section-header] h2')]
+            .map((heading) => heading.textContent);
+        expect(headings).toEqual([
+            'Pending activity',
+            expect.stringMatching(/Oct 14/),
+            'Today',
+            'Yesterday',
+            'Date unavailable',
+        ]);
+    });
+
     it('reports network and special-filter misses, and Reset filters resets and can undo them', async () => {
         const { view } = mountHistory({
             [LTC]: [
@@ -350,14 +415,14 @@ describe('History filters', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
         chooseOption(/^No special filters$/, 'Cross-chain only');
-        chooseOption(/^All chains$/, 'Dogecoin');
+        chooseOption(/^All networks$/, 'Dogecoin');
 
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:20:${LTC_ADDRESS}`]));
-        expect(screen.getByRole('button', { name: 'All chains' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'All networks' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'No special filters' })).toBeInTheDocument();
         expect(screen.getByLabelText('From date')).toHaveValue('');
         expect(screen.getByLabelText('To date')).toHaveValue('');
@@ -372,7 +437,7 @@ describe('History filters', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
-        chooseOption(/^All chains$/, 'Dogecoin');
+        chooseOption(/^All networks$/, 'Dogecoin');
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
@@ -404,14 +469,15 @@ describe('History filters', () => {
             expect(filterToggle).toHaveAttribute('aria-expanded', 'true');
             const search = screen.getByRole('searchbox', { name: 'Search history' });
             expect(search).toHaveAttribute('placeholder', 'Search history');
-            expect(search).toHaveAccessibleDescription('Search action, address, token, txid, memo…');
+            expect(search).toHaveAccessibleDescription('Search action, address, token, transaction ID, memo…');
             expect(screen.getByLabelText('From date')).toBeInTheDocument();
             expect(screen.getByLabelText('To date')).toBeInTheDocument();
 
             fireEvent.click(screen.getByRole('button', { name: 'All' }));
             expect(screen.getByRole('button', { name: 'Filters (0)' })).toBeInTheDocument();
 
-            fireEvent.click(screen.getByRole('button', { name: /Litecoin.*Send.*Confirmed/i }));
+            // Rows show the chain through the asset icon overlay, so the name starts at the action.
+            fireEvent.click(screen.getByRole('button', { name: /(?:Send|Receive).*Confirmed/i }));
             expect(screen.getByRole('rowheader', { name: 'Time' })).toBeInTheDocument();
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
@@ -426,13 +492,19 @@ describe('History filters', () => {
             // The two date fields stack into one full-width column on phones.
             expect(ruleBody(narrow, '.dateRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
             expect(ruleBody(narrow, '.dateSep')).toMatch(/display:\s*none/);
-            expect(ruleBody(narrow, '.filterFooter > :first-child'))
-                .toMatch(/flex:\s*1 1 100%[\s\S]*box-sizing:\s*border-box/);
+            expect(ruleBody(historyCss, '.filterFooter')).toMatch(/flex-wrap:\s*wrap/);
+            expect(ruleBody(historyCss, '.toolbarControl')).toMatch(/flex:\s*0 0 auto/);
             expect(ruleBody(narrow, '.rowMeta')).toMatch(/flex-wrap:\s*wrap/);
             expect(ruleBody(narrow, '.pendingAmount')).toMatch(/flex:\s*1 1 100%/);
             expect(ruleBody(narrow, '.detailsTable tbody'))
                 .toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
             expect(ruleBody(narrow, '.detailsTable tr + tr > td')).toMatch(/border-top:\s*0/);
+            expect(ruleBody(tokenDetailCss, '.headerIcon'))
+                .toMatch(/width:\s*var\(--xc-avatar-size-header\)[\s\S]*height:\s*var\(--xc-avatar-size-header\)/);
+            expect(tokenDetailSource)
+                .toMatch(/useNativePrice\(isNative && fiatSupported && fiatAllowed && !isDemo \? chainId : null/);
+            expect(tokenDetailSource)
+                .toMatch(/entry: synthesizeDemoNativePrices\(\[chainId\]\)\[chainId\]/);
         } finally {
             if (widthDescriptor) {
                 Object.defineProperty(window, 'innerWidth', widthDescriptor);

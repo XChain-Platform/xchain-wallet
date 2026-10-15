@@ -84,7 +84,7 @@ assert.ok(
 );
 assert.ok(
     /messaging\.getAddressesByChain/.test(listSrc),
-    'ContractsList loads wallet addresses before querying per chain',
+    'ContractsList loads wallet addresses before querying per network',
 );
 assert.ok(
     /contract_action_index/.test(listSrc),
@@ -110,18 +110,18 @@ assert.ok(
 // at module scope, so a synced descriptor reaches it without a restart.
 assert.ok(
     !/VM_COIN\s*=/.test(listSrc) && !/byCoin\(/.test(listSrc),
-    'ContractsList must not re-pin a hard-coded VM_COIN or select chains byCoin; ask the registry',
+    'ContractsList must not re-pin a hard-coded VM_COIN or select networks byCoin; ask the registry',
 );
 assert.ok(
     /useChainIdsWithAction\('DEPLOY'\)/.test(listSrc),
-    'ContractsList derives its chain list from descriptors advertising DEPLOY',
+    'ContractsList derives its network list from descriptors advertising DEPLOY',
 );
 assert.ok(
     !/^const\s+\w+\s*=\s*chainRegistry\s*\.?\s*supportedChains\(\)/m.test(listSrc),
-    'ContractsList must not freeze the chain list at module scope; the registry hot-swaps after import',
+    'ContractsList must not freeze the network list at module scope; the registry hot-swaps after import',
 );
 assert.ok(
-    /Contracts require an address on a chain that supports them/.test(listSrc),
+    /Contracts require an address on a network that supports them/.test(listSrc),
     'ContractsList explains the no-address state without naming a single coin',
 );
 // Action labels are names, not sentence parts: a parenthesised list of them or
@@ -136,20 +136,20 @@ assert.ok(
     'ContractsList says in plain words that fund-neutral calls are not listed yet',
 );
 assert.ok(
-    /Published contracts appear here after you publish one from an address on this chain/.test(listSrc),
-    'ContractsList surfaces the empty "My contracts" state per chain',
+    /Published contracts appear here after you publish one\./.test(listSrc),
+    'ContractsList surfaces the empty "My contracts" state once for the section',
 );
 assert.ok(
     /actionDisplayLabel\('DEPOSIT'\)[\s\S]{0,60}?actionDisplayLabel\('WITHDRAW'\)[\s\S]{0,60}?actions appear here/.test(listSrc),
-    'ContractsList surfaces the empty "My interactions" state per chain',
+    'ContractsList surfaces the empty "My interactions" state once for the section',
 );
 assert.ok(
-    /Indexed contracts appear here after this chain's contract data loads/.test(listSrc),
-    'ContractsList surfaces the empty "Browse all" state per chain',
+    /Indexed contracts appear here after contract data loads/.test(listSrc),
+    'ContractsList surfaces the empty "Browse all" state once for the section',
 );
 assert.ok(
     /Couldn't load contracts/.test(listSrc),
-    'ContractsList surfaces per-chain load errors without blocking other chains',
+    'ContractsList surfaces per-chain load errors without blocking other networks',
 );
 
 // --- 4b. useBtcAddressesPresent hook ----------------------------------
@@ -157,7 +157,7 @@ assert.ok(
 assert.ok(/export function useBtcAddressesPresent/.test(hookSrc),
     'useBtcAddressesPresent is a named export');
 assert.ok(/byCoin\(['"]bitcoin['"]\)/.test(hookSrc),
-    'hook resolves BTC chain IDs from the registry');
+    'hook resolves BTC network IDs from the registry');
 assert.ok(/messaging\.getAddressesByChain/.test(hookSrc),
     'hook loads addresses via messaging.getAddressesByChain');
 assert.ok(/return present|setPresent/.test(hookSrc),

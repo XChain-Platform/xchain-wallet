@@ -89,9 +89,10 @@ export function BackupReminderCard({
                     {t('backupReminder.backupNow')}
                 </Button>
                 {state.dismissable ? (
-                    <button
-                        type="button"
-                        className={styles.dismissBtn}
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={null}
                         onClick={() => {
                             flowsLib.dismissBackupReminder(walletId);
                             setState(flowsLib.computeBackupReminderState({
@@ -100,7 +101,7 @@ export function BackupReminderCard({
                         }}
                     >
                         {t('backupReminder.remindTomorrow')}
-                    </button>
+                    </Button>
                 ) : null}
             </div>
         </div>

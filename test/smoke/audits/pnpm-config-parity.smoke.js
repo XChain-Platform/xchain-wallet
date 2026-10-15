@@ -8,16 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// pnpm settings live in THREE homes, and which one is read flips on a pnpm
-// major. (§8.)
-//
-// pnpm 9 read `pnpm.*` from the root package.json and ignored
-// pnpm-workspace.yaml's equivalents. pnpm 10 reversed it: it reads the
-// workspace file and warns that the package.json field "is no longer read".
-// pnpm 11, pinned here since the 2026-08-06 raise, went further and stopped
-// reading `.npmrc` for `shamefully-hoist`, `strict-ssl` and
-// `supportedArchitectures` as well, and renamed `onlyBuiltDependencies` to an
-// `allowBuilds` MAP. NONE of them errors on the copy it ignores.
+// pnpm 11 reads dependency overrides and install-script policy from
+// pnpm-workspace.yaml. Keeping those settings in package.json is misleading
+// because pnpm warns that it ignores them.
 //
 // The `.npmrc` half is not a hypothetical either: the raise dropped all four
 // of that file's settings at once, and the only symptom was six root-level
@@ -27,23 +20,8 @@
 // all, which is the input to this lane's two-arch matrix and to reproducibility
 // being the same toolchain twice.
 //
-// So any disagreement between the two is a configuration change scheduled
-// to fire, unannounced, on whatever day someone bumps pnpm. When this was
-// found the two had really drifted:
-//
-//   - `axios` was pinned in package.json only, so an upgrade would have
-//     dropped that override entirely.
-//   - four pins (tar, ws, protobufjs, form-data) read `^X` in package.json
-//     but uncapped `>=X` in the workspace file, so an upgrade would have
-//     WIDENED four security pins into ranges that admit a future major.
-//
-// Neither would have failed a build or printed a warning. Hence this file:
-// the two copies must be identical, and drift is a test failure, not a
-// discovery someone makes later.
-//
-// Which copy is live today is not a matter of opinion: pnpm-lock.yaml
-// records the overrides it actually resolved with, so it is checked here
-// as the third witness.
+// pnpm-lock.yaml records the overrides it resolved with, so it remains a
+// second witness for the authoritative workspace configuration.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -131,39 +109,35 @@ const npmrc = parseNpmrc(read('.npmrc'));
 // ------------------------------------------------------------ overrides
 
 {
-    const a = pkg.pnpm?.overrides ?? {};
-    const b = ws.overrides ?? {};
+    const configured = ws.overrides ?? {};
 
-    assert.deepEqual(Object.keys(a).sort(), Object.keys(b).sort(),
-        'package.json and pnpm-workspace.yaml pin the SAME set of overrides');
-
-    for (const k of Object.keys(a)) {
-        assert.equal(a[k], b[k],
-            `override "${k}" has the same spec in both files `
-            + `(package.json="${a[k]}", pnpm-workspace.yaml="${b[k]}")`);
-    }
+    assert.equal(pkg.pnpm?.overrides, undefined,
+        'dependency overrides belong only in pnpm-workspace.yaml because pnpm 11 ignores '
+        + 'package.json pnpm.overrides');
+    assert.ok(Object.keys(configured).length > 0,
+        'pnpm-workspace.yaml declares dependency overrides');
 
     // A security pin with no upper bound admits the next major, which is
     // the opposite of pinning. `vite` is the deliberate exception: it
     // carries its own explicit `<7` ceiling.
-    for (const [k, spec] of Object.entries(a)) {
+    for (const [k, spec] of Object.entries(configured)) {
         if (spec.includes('<')) continue;
         assert.ok(!spec.trim().startsWith('>='),
             `override "${k}" is "${spec}": an uncapped >= lets a future major in silently`);
     }
 
-    assert.equal(a['ip-address'], '^10.5.1',
+    assert.equal(configured['ip-address'], '^10.5.1',
         'ip-address is pinned at the first release that fixes the advisory');
 
-    // Third witness: what pnpm actually resolved with.
+    // Second witness: what pnpm actually resolved with.
     const live = lock.overrides ?? {};
-    assert.deepEqual(Object.keys(live).sort(), Object.keys(a).sort(),
+    assert.deepEqual(Object.keys(live).sort(), Object.keys(configured).sort(),
         'pnpm-lock.yaml resolved with exactly this override set '
         + '(if this fails, the lockfile predates the config change: re-run pnpm install)');
 
-    assert.equal(a['undici@7'], '^7.29.1',
+    assert.equal(configured['undici@7'], '^7.29.1',
         'undici 7.x is floored at the first release containing the security fix');
-    assert.equal(live['undici@7'], a['undici@7'],
+    assert.equal(live['undici@7'], configured['undici@7'],
         'pnpm-lock.yaml resolved with the undici 7.x security override');
 
     const undici7 = [...read('pnpm-lock.yaml').matchAll(/^  undici@(7\.\d+\.\d+):$/gm)]
@@ -179,21 +153,17 @@ const npmrc = parseNpmrc(read('.npmrc'));
 // ------------------------------------------------- onlyBuiltDependencies
 
 {
-    const a = pkg.pnpm?.onlyBuiltDependencies;
-    const b = ws.onlyBuiltDependencies;
+    const configured = ws.onlyBuiltDependencies;
 
-    assert.ok(Array.isArray(a) && a.length,
-        'package.json declares an install-script allowlist (§8: scripts disabled or allowlisted)');
-    assert.ok(Array.isArray(b) && b.length,
-        'pnpm-workspace.yaml declares the same allowlist, so a pnpm 10 bump does not silently '
-        + 're-enable install scripts for every dependency');
-
-    assert.deepEqual([...a].sort(), [...b].sort(),
-        'the allowlist is identical in both files');
+    assert.equal(pkg.pnpm?.onlyBuiltDependencies, undefined,
+        'the install-script allowlist belongs only in pnpm-workspace.yaml because pnpm 11 ignores '
+        + 'package.json pnpm.onlyBuiltDependencies');
+    assert.ok(Array.isArray(configured) && configured.length,
+        'pnpm-workspace.yaml declares the install-script allowlist');
 
     // Named explicitly rather than counted: adding an entry is a
     // supply-chain decision and should show up in a diff as one.
-    assert.deepEqual([...a].sort(), [
+    assert.deepEqual([...configured].sort(), [
         'electron',
         'electron-winstaller',
         'esbuild',
@@ -216,7 +186,7 @@ const npmrc = parseNpmrc(read('.npmrc'));
 // writing config for a question pnpm never asks.
 {
     const NOT_ASKED_BY_PNPM11 = ['electron'];
-    const pnpm9 = [...(pkg.pnpm?.onlyBuiltDependencies ?? [])].sort();
+    const allowlist = [...(ws.onlyBuiltDependencies ?? [])].sort();
     const map = ws.allowBuilds;
 
     assert.ok(map && typeof map === 'object' && !Array.isArray(map),
@@ -232,13 +202,13 @@ const npmrc = parseNpmrc(read('.npmrc'));
     const allowed = Object.entries(map).filter(([, v]) => v === 'true').map(([k]) => k).sort();
     const denied = Object.entries(map).filter(([, v]) => v === 'false').map(([k]) => k);
 
-    assert.deepEqual(allowed, pnpm9.filter((n) => !NOT_ASKED_BY_PNPM11.includes(n)),
-        'the packages allowed to run install scripts are the SAME under pnpm 11 as under pnpm 9 '
+    assert.deepEqual(allowed, allowlist.filter((n) => !NOT_ASKED_BY_PNPM11.includes(n)),
+        'allowBuilds and onlyBuiltDependencies allow the SAME install scripts '
         + `(allowBuilds:true = ${JSON.stringify(allowed)}, onlyBuiltDependencies = `
-        + `${JSON.stringify(pnpm9)} less ${JSON.stringify(NOT_ASKED_BY_PNPM11)})`);
+        + `${JSON.stringify(allowlist)} less ${JSON.stringify(NOT_ASKED_BY_PNPM11)})`);
 
     for (const name of denied) {
-        assert.ok(!pnpm9.includes(name),
+        assert.ok(!allowlist.includes(name),
             `"${name}" is denied in allowBuilds and allowed in onlyBuiltDependencies: the two homes `
             + 'disagree about whether its install scripts may run, and which one wins is a pnpm version');
     }

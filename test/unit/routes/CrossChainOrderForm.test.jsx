@@ -13,8 +13,8 @@
 // wallet's own address on the get chain, and the whole thing rides the
 // same single-encode confirm lane as CreateOrderForm.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, act as domAct, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
@@ -54,6 +54,12 @@ beforeEach(() => {
             'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
         ],
     });
+});
+
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
 });
 
 // Recording messaging mock: a wallet with one address on DOGE and one on
@@ -186,12 +192,13 @@ describe('CrossChainOrderForm', () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
         // The get chain defaulted to the other coin, and the receiver was
         // resolved on THAT chain, not on the chain being signed.
-        expect(pickerName(utils, 'Give chain')).toBe('Give chain: Dogecoin');
-        expect(pickerName(utils, 'Get chain')).toBe('Get chain: Bitcoin');
+        expect(pickerName(utils, 'Give network')).toBe('Give network: Dogecoin');
+        expect(pickerName(utils, 'Get network')).toBe('Get network: Bitcoin');
         expect(utils.getByLabelText('Receive at').value).toBe(BTC_ADDRESS.address);
         expect(calls.filter((c) => c.method === 'getNewestAddress').map((c) => c.args.chainId)).toEqual([BTC]);
-        // Matching is described in plain words, not by the mechanism.
-        expect(utils.container.textContent).toMatch(/order book and fills automatically/);
+        const disclosure = utils.getByText('How orders fill').closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent(/order book and fills automatically/);
         expect(utils.container.textContent).not.toMatch(/federation|price-time/i);
 
         await fillPair(utils);
@@ -225,7 +232,7 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'swapAction')).toBe(false);
     });
 
-    it('re-resolves the receiver when the get chain changes, and keeps a typed one', async () => {
+    it('re-resolves the receiver when the get network changes, and keeps a typed one', async () => {
         const { utils } = await mount({ initialChainId: DOGE }, {
             getAddressesByChain: () => Promise.resolve({
                 [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
@@ -239,12 +246,12 @@ describe('CrossChainOrderForm', () => {
             await drainMicrotasks();
         });
         expect(utils.getByLabelText('Receive at').value).toBe('typed-by-user');
-        await pickChain(utils, 'Get chain', 'Litecoin');
-        expect(pickerName(utils, 'Get chain')).toBe('Get chain: Litecoin');
+        await pickChain(utils, 'Get network', 'Litecoin');
+        expect(pickerName(utils, 'Get network')).toBe('Get network: Litecoin');
         expect(utils.getByLabelText('Receive at').value).toBe('newest-on-litecoin-mainnet');
     });
 
-    it('clears amounts when either token or chain changes the represented asset', async () => {
+    it('clears amounts when either token or network changes the represented asset', async () => {
         const { utils } = await mount({ initialChainId: DOGE }, {
             getAddressesByChain: () => Promise.resolve({
                 [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
@@ -262,13 +269,13 @@ describe('CrossChainOrderForm', () => {
         expect(utils.getByLabelText(/^Get amount/).value).toBe('');
 
         await fillPair(utils);
-        await pickChain(utils, 'Get chain', 'Litecoin');
+        await pickChain(utils, 'Get network', 'Litecoin');
         expect(utils.getByLabelText('Get token').value).toBe('');
         expect(utils.getByLabelText(/^Get amount/).value).toBe('');
         expect(utils.getByLabelText('Give token').value).toBe('JDOG');
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
 
-        await pickChain(utils, 'Give chain', 'Bitcoin');
+        await pickChain(utils, 'Give network', 'Bitcoin');
         expect(utils.getByLabelText('Give token').value).toBe('');
         expect(utils.getByLabelText(/^Give amount/).value).toBe('');
     });
@@ -331,9 +338,9 @@ describe('CrossChainOrderForm', () => {
 
     it('refuses a same-coin pair and points at Create order', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
-        await pickChain(utils, 'Get chain', 'Dogecoin');
+        await pickChain(utils, 'Get network', 'Dogecoin');
         await fillPair(utils);
-        expect(utils.container.textContent).toMatch(/Give and get chains must differ/);
+        expect(utils.container.textContent).toMatch(/Give and get networks must differ/);
         expect(utils.getByRole('button', { name: 'Place order' }).disabled).toBe(true);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
@@ -350,7 +357,7 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('will not compose without a receive address on the get chain', async () => {
+    it('will not compose without a receive address on the get network', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE }, {
             getNewestAddress: () => Promise.resolve(null),
         });
@@ -422,8 +429,9 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('watcher review matches built normalized values and Edit keeps the form values', async () => {
-        const { utils } = await mount({ initialChainId: DOGE }, {
+    it('watcher review matches built normalized values and Back keeps the form values', async () => {
+        const onBack = vi.fn();
+        const { utils } = await mount({ initialChainId: DOGE, onBack }, {
             getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
         });
         await fillPair(utils);
@@ -441,11 +449,66 @@ describe('CrossChainOrderForm', () => {
         expect(utils.getByText('Protocol fee')).toBeTruthy();
         expect(utils.getByText(/paid in DOGE; the network fee is separate/i)).toBeTruthy();
 
-        fireEvent.click(utils.getByRole('button', { name: 'Edit' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
+        expect(onBack).not.toHaveBeenCalled();
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
         expect(utils.getByLabelText(/^Get amount/).value).toBe('20');
         expect(utils.getByLabelText('Receive at').value).toBe(`  ${BTC_ADDRESS.address}  `);
         expect(utils.getByLabelText('Memo (optional)').value).toBe('  exact memo  ');
+    });
+
+    it('refuses a custom expiration that passes while editing but expires on watcher review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest,
+        });
+        await fillPair(utils);
+        const start = Date.now();
+        const expiration = new Date(start + 60_000);
+        const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
+            .toISOString().slice(0, 16);
+        await domAct(async () => {
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            setValue(utils, 'Expires', localExpiration);
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+        expect(utils.getByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+
+        vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('Expiration must be a future date and time.')).toBeTruthy();
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses a custom expiration that expires on the full-wallet confirmation', async () => {
+        const start = Date.now();
+        const expiration = new Date(start + 60_000);
+        const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
+            .toISOString().slice(0, 16);
+        const { utils, calls } = await mount({ initialChainId: DOGE });
+        await fillPair(utils);
+        await domAct(async () => {
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            setValue(utils, 'Expires', localExpiration);
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+
+        vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('Expiration must be a future date and time.')).toBeTruthy();
+        expect(calls.some((call) => call.method === 'orderAction')).toBe(false);
     });
 
     it('shows encoder failures as plain copy on the form', async () => {
@@ -467,11 +530,11 @@ describe('CrossChainOrderForm', () => {
         expect(utils.container.textContent).not.toMatch(/UTXO/i);
     });
 
-    it('explains itself on a wallet with addresses on one chain only', async () => {
+    it('explains itself on a wallet with addresses on one network only', async () => {
         const { utils } = await mount({}, {
             getAddressesByChain: () => Promise.resolve({ [DOGE]: [DOGE_ADDRESS] }),
         });
-        expect(utils.container.textContent).toMatch(/addresses on two different chains/);
+        expect(utils.container.textContent).toMatch(/addresses on two different networks/);
         expect(utils.queryByRole('button', { name: 'Place order' })).toBeNull();
     });
 });

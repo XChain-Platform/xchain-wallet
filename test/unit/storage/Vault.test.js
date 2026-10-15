@@ -46,6 +46,7 @@ describe('storage/Vault concurrency and consistency', () => {
             name: 'Second',
             entries: [{ chain: 'bitcoin', address: 'second', label: '' }],
         }));
+        expect(saveCalls).toBe(1);
 
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(saveCalls).toBe(1);

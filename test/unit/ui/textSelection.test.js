@@ -40,8 +40,9 @@ describe('text selection contract', () => {
         expectSelection(read('packages/core/src/ui/AddressText.module.css'), '.addr', 'text');
         expectSelection(read('packages/core/src/shared/components/BalanceList.module.css'), '.amounts', 'text');
         expectSelection(read('packages/core/src/shared/routes/AddressList.module.css'), '.addrLine2', 'text');
-        expectSelection(read('packages/core/src/shared/routes/History.module.css'), '.rowSummary', 'text');
-        expectSelection(read('packages/core/src/shared/routes/History.module.css'), '.rowSourceAddress', 'text');
+        // History and Home rows share ActivityRow: its context (source address) and amount stay selectable.
+        expectSelection(read('packages/core/src/shared/components/ActivityRow.module.css'), '.context', 'text');
+        expectSelection(read('packages/core/src/shared/components/ActivityRow.module.css'), '.primary', 'text');
         expectSelection(read('packages/core/src/shared/routes/History.module.css'), '.pendingAmount', 'text');
     });
 

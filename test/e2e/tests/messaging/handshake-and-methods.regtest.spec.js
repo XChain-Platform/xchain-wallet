@@ -262,6 +262,11 @@ function missingPubkeyBanner(scope) {
     return scope.getByRole('alert').filter({ hasText: "don't know the recipient's public key" });
 }
 
+/** The banner's block: the banner message plus the key-request button below it. */
+function keyRequestBlock(scope) {
+    return missingPubkeyBanner(scope).locator('xpath=..');
+}
+
 const sendButton = (scope) => scope.getByRole('button', { name: 'Send message', exact: true });
 
 /** Fills the recipient, and the body when one is given. */
@@ -417,7 +422,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(missingPubkeyBanner(main),
                 'the refusal banner does not tell the user what to do instead')
                 .toContainText('pick "Plain text" above');
-            await expect(missingPubkeyBanner(main)
+            await expect(keyRequestBlock(main)
                 .getByRole('button', { name: 'Request encrypted session (publish your key)' }),
             'the refusal banner offers no handshake, so the only way forward it leaves is plaintext')
                 .toBeVisible();
@@ -571,7 +576,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(banner, 'no missing-key banner, so the handshake offer is not on screen')
                 .toBeVisible({ timeout: 60_000 });
 
-            const request = banner
+            const request = keyRequestBlock(main)
                 .getByRole('button', { name: 'Request encrypted session (publish your key)' });
             await expect(request, 'no handshake offer for a recipient the chain has no key for')
                 .toBeVisible({ timeout: 30_000 });

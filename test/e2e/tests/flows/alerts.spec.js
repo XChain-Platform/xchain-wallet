@@ -98,6 +98,15 @@ function priceAlertFormControls(page) {
 for (const viewport of VIEWPORTS) {
     test(`alerts and price alerts render and update at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        // Notification toggles stay disabled until the browser grants delivery;
+        // headless Chromium reports notifications as blocked even after a grant,
+        // so the page also sees a granted permission from the start.
+        await page.context().grantPermissions(['notifications']);
+        await page.addInitScript(() => {
+            try {
+                Object.defineProperty(window.Notification, 'permission', { get: () => 'granted' });
+            } catch { /* keep the browser's own value */ }
+        });
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
 
         await test.step('publish a wallet alert from the seeded demo inbox', async () => {
@@ -107,7 +116,10 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('render and dismiss the alerts route list', async () => {
+            // The condensed header opens its action menu; the full wallet Menu
+            // page is its "More wallet actions" row.
             await page.getByRole('button', { name: 'Open menu' }).click();
+            await page.getByRole('menuitem', { name: 'More wallet actions' }).click();
             await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
             await page.getByRole('main').getByRole('button', { name: 'Alerts', exact: true }).click();
 

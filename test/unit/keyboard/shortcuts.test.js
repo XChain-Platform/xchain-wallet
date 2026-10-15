@@ -75,4 +75,14 @@ describe('isEditableTarget', () => {
         expect(isEditableTarget(div)).toBe(false);
         expect(isEditableTarget(null)).toBe(false);
     });
+
+    it('is true for text-entry inputs and false for inputs that take no typing', () => {
+        const ofType = (type) => Object.assign(document.createElement('input'), { type });
+        for (const type of ['text', 'search', 'password', 'email', 'number', 'url', 'tel']) {
+            expect(isEditableTarget(ofType(type)), type).toBe(true);
+        }
+        for (const type of ['radio', 'checkbox', 'button', 'submit', 'range', 'color', 'file']) {
+            expect(isEditableTarget(ofType(type)), type).toBe(false);
+        }
+    });
 });

@@ -580,9 +580,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             );
         }
         return wrap(
-            <>
-                <p className={styles.hint}>Pick a session to inspect its contribution state.</p>
-                <ul className={styles.list} aria-label="Multisig sessions">
+            <ul className={styles.list} aria-label="Multisig sessions">
                     {/* Session entries stay native buttons because each control is the complete clickable row. */}
                     {sessions.map((s) => {
                         const summary = signingProgressSummary(s);
@@ -612,10 +610,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                             </li>
                         );
                     })}
-                </ul>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            </ul>,
         );
     }
 

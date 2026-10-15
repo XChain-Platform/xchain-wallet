@@ -26,6 +26,7 @@ describe('shared link semantics', () => {
             for (const anchor of anchorsIn(readFileSync(file, 'utf8'))) {
                 if (!anchor.includes('target="_blank"')) continue;
                 if (!/rel="[^"]*noopener/.test(anchor)) faults.push(`${file}: missing noopener`);
+                if (!/rel="[^"]*noreferrer/.test(anchor)) faults.push(`${file}: missing noreferrer`);
                 if (!/(↗|ExternalLinkIcon|opens? (in )?(a )?new tab)/i.test(anchor)) {
                     faults.push(`${file}: missing external-link cue`);
                 }

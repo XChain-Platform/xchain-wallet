@@ -64,14 +64,13 @@ export function AlertsOverlay({ alerts, onClose }) {
                             <span className={styles.count}>{alerts.length}</span>
                         ) : null}
                     </span>
-                    <button
-                        type="button"
-                        className={styles.close}
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<Icon.XIcon />}
                         onClick={onClose}
                         aria-label={t('alerts.close')}
-                    >
-                        <Icon.XIcon />
-                    </button>
+                    />
                 </header>
                 <div id="xc-alerts-body" className={styles.body}>
                     {alerts.length === 0 ? (

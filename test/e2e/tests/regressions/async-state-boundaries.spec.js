@@ -86,10 +86,10 @@ async function installRaceProbe(page) {
     await page.route('**/src/App.jsx*', async (route) => {
         const response = await route.fetch();
         const source = await response.text();
-        const original = `    const handleSwitchWallet = (id) => {
+        const original = `    const handleSwitchWallet = (id, name) => {
         setActiveAccountId(null);
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id, walletList.find((wallet) => wallet.id === id)?.name);
+        if (id) writeActiveWallet(id, name || walletList.find((wallet) => wallet.id === id)?.name);
     };`;
         // Vite serves a .jsx module re-printed by esbuild, so its indentation
         // differs from the file on disk; match the statements, not the spacing.
@@ -184,6 +184,14 @@ test('switching wallets while balances load never paints the previous wallet bal
     const firstBtc = page.locator('[data-balance-key="bitcoin-mainnet:BTC"]');
     await expect(firstBtc).toContainText(FIRST_WALLET_BALANCE);
     await addSecondWallet(page);
+    // Adding a wallet makes it active, so return to the first wallet before
+    // racing the switch to the second one.
+    const firstWalletId = await page.evaluate(() => (
+        window.__xchainRaceProbe.wallets.find(({ name }) => name === 'First Wallet')?.id
+    ));
+    expect(firstWalletId).toBeTruthy();
+    await page.evaluate((walletId) => window.__xchainE2ESwitchWallet(walletId), firstWalletId);
+    await expect(page.getByRole('region', { name: 'App header' })).toContainText('First Wallet');
     await expect(firstBtc).toContainText(FIRST_WALLET_BALANCE);
 
     const secondWalletId = await page.evaluate(() => (

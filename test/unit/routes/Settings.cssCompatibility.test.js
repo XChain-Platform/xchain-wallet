@@ -13,36 +13,17 @@ import { describe, expect, it } from 'vitest';
 
 const css = readFileSync('packages/core/src/shared/routes/Settings.module.css', 'utf8');
 
-function extractBlock(source, header) {
-    const start = source.indexOf(header);
-    const open = source.indexOf('{', start);
-    let depth = 1;
-    let cursor = open + 1;
-
-    while (depth > 0 && cursor < source.length) {
-        if (source[cursor] === '{') depth += 1;
-        if (source[cursor] === '}') depth -= 1;
-        cursor += 1;
-    }
-
-    return { start, end: cursor, body: source.slice(open + 1, cursor - 1) };
-}
-
 describe('Settings CSS compatibility', () => {
-    it('keeps every relational selector inside its feature query', () => {
-        const guarded = extractBlock(css, '@supports selector(:has(a))');
-
-        expect(guarded.start).toBeGreaterThan(-1);
-        expect(guarded.body).toContain(':has(');
-        expect(css.slice(0, guarded.start) + css.slice(guarded.end)).not.toContain(':has(');
+    it('does not require relational-selector support for narrow rows', () => {
+        expect(css).not.toContain(':has(');
+        expect(css).not.toContain('@supports selector');
+        expect(css).toMatch(/\.page div\s*\{[\s\S]*?flex-wrap:\s*wrap !important;/);
     });
 
-    it('keeps the narrow-screen control layout outside the feature query', () => {
-        const guarded = extractBlock(css, '@supports selector(:has(a))');
-        const fallback = css.slice(0, guarded.start);
-
-        expect(fallback).toMatch(/\.page :is\([\s\S]*?select,[\s\S]*?input:not/);
-        expect(fallback).toContain('flex: 1 1 100% !important;');
-        expect(fallback).toContain('width: 100% !important;');
+    it('keeps controls fluid inside the narrow-screen fallback', () => {
+        expect(css).toMatch(/\.page :is\([\s\S]*?select,[\s\S]*?input:not/);
+        expect(css).toContain('flex: 1 1 100% !important;');
+        expect(css).toContain('width: 100% !important;');
+        expect(css).toMatch(/\.page div\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;/);
     });
 });

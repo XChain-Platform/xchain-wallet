@@ -75,16 +75,24 @@ describe('preflightFindingKey', () => {
 describe('PreflightPanel: repeated error codes in one batch report', () => {
     it('renders one row per rejected sub-command', () => {
         mount(reportWith([subCommandError(1), subCommandError(4)]));
-        const rows = screen.getAllByText(/The network refused batch command/);
+        const rows = screen.getAllByText(/Batch command \d+ would be refused because/);
         expect(rows).toHaveLength(2);
-        expect(rows[0].textContent).toContain('batch command 2');
-        expect(rows[1].textContent).toContain('batch command 5');
+        expect(rows[0].textContent).toContain('Batch command 2');
+        expect(rows[1].textContent).toContain('Batch command 5');
     });
 
     it('gives each sub-command its own override checkbox', () => {
         mount(reportWith([subCommandError(1), subCommandError(4)]));
-        expect(screen.getByTestId('ack-DRYRUN_SUBCOMMAND_INVALID#1')).toBeTruthy();
-        expect(screen.getByTestId('ack-DRYRUN_SUBCOMMAND_INVALID#4')).toBeTruthy();
+        const checkboxes = screen.getAllByRole('checkbox', { name: 'Sign anyway' });
+        expect(checkboxes).toHaveLength(2);
+        expect(checkboxes[0]).toHaveAttribute(
+            'data-testid',
+            'ack-DRYRUN_SUBCOMMAND_INVALID#1',
+        );
+        expect(checkboxes[1]).toHaveAttribute(
+            'data-testid',
+            'ack-DRYRUN_SUBCOMMAND_INVALID#4',
+        );
     });
 
     // The bug in its visible form: acknowledging one command left the other
@@ -92,8 +100,9 @@ describe('PreflightPanel: repeated error codes in one batch report', () => {
     it('does not tick the other sub-command when one is acknowledged', () => {
         mount(reportWith([subCommandError(1), subCommandError(4)]),
             new Set(['DRYRUN_SUBCOMMAND_INVALID#1']));
-        expect(screen.getByTestId('ack-DRYRUN_SUBCOMMAND_INVALID#1').checked).toBe(true);
-        expect(screen.getByTestId('ack-DRYRUN_SUBCOMMAND_INVALID#4').checked).toBe(false);
+        const checkboxes = screen.getAllByRole('checkbox', { name: 'Sign anyway' });
+        expect(checkboxes[0]).toBeChecked();
+        expect(checkboxes[1]).not.toBeChecked();
     });
 
     // A single-code report keeps the identity it always had, so every existing
@@ -103,7 +112,8 @@ describe('PreflightPanel: repeated error codes in one batch report', () => {
             code: 'DRYRUN_INVALID', severity: 'error', source: 'dryrun', overridable: true,
             message: 'The network reports this will fail: rejected.', data: {},
         }]));
-        expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
+        expect(screen.getByRole('checkbox', { name: 'Sign anyway' }))
+            .toHaveAttribute('data-testid', 'ack-DRYRUN_INVALID');
     });
 });
 
@@ -173,8 +183,9 @@ describe('definite consensus refusals', () => {
 
     it('shows the refusal reason in plain words without a Sign anyway control', () => {
         mount(reportWith([refusal]));
-        expect(screen.getByText('The network refused this action: Gated token transfer requires key handoff message.'))
+        expect(screen.getByText('This action would be refused because gated token transfer requires key handoff message.'))
             .toBeTruthy();
+        expect(screen.queryByText(/The network refused/i)).toBeNull();
         expect(screen.queryByTestId('ack-DRYRUN_INVALID')).toBeNull();
         expect(screen.queryByText(/invalid:/i)).toBeNull();
     });
@@ -202,7 +213,7 @@ describe('uncertain and advisory pre-flight results', () => {
         };
         const report = reportWith([finding]);
         mount(report);
-        expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
+        expect(screen.getByRole('checkbox', { name: 'Sign anyway' })).toBeTruthy();
         expect(canApproveWithReport(report, new Set())).toBe(false);
         expect(canApproveWithReport(report, new Set(['DRYRUN_INVALID']))).toBe(true);
     });
@@ -221,7 +232,7 @@ describe('uncertain and advisory pre-flight results', () => {
         };
         const report = reportWith([finding]);
         mount(report);
-        expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
+        expect(screen.getByRole('checkbox', { name: 'Sign anyway' })).toBeTruthy();
         expect(canApproveWithReport(report, new Set())).toBe(false);
         expect(canApproveWithReport(report, new Set(['DRYRUN_INVALID']))).toBe(true);
     });
@@ -241,7 +252,7 @@ describe('uncertain and advisory pre-flight results', () => {
         };
         const report = reportWith([finding]);
         mount(report);
-        expect(screen.getByTestId(`ack-${code}`)).toBeTruthy();
+        expect(screen.getByRole('checkbox', { name: 'Sign anyway' })).toBeTruthy();
         expect(canApproveWithReport(report, new Set())).toBe(false);
         expect(canApproveWithReport(report, new Set([code]))).toBe(true);
     });

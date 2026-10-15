@@ -64,8 +64,10 @@ assert.ok(/from '\.\.\/hooks\/useFormDraft\.js'/.test(sendSrc),
     'Send.jsx imports useFormDraft');
 assert.ok(/useFormDraft\(\{ view: 'send', walletId\b/.test(sendSrc),
     'Send.jsx initialises useFormDraft with view=send and walletId');
-assert.ok(/draft\.save\(\{ chainId, toAddress, tick, amount, memo \}\)/.test(sendSrc),
+assert.ok(/const values = \{ chainId, toAddress, tick, amount, memo \};[\s\S]{0,120}hasMeaningfulSendDraft\(values\)[\s\S]{0,80}draft\.save\(values\)/.test(sendSrc),
     'Send.jsx auto-saves the user-visible composition fields');
+assert.ok(/hasMeaningfulSendDraft\(draft\.load\(\)\)[\s\S]{0,80}!draftPending/.test(sendSrc),
+    'Send.jsx offers restore only for a draft with user-entered payment fields');
 assert.ok(!/draft\.save[\s\S]{0,200}password/.test(sendSrc),
     'Send.jsx never persists password into the draft');
 assert.ok(/draft\.clear\(\);[\s\S]{0,80}setStage\('done'\)/.test(sendSrc),

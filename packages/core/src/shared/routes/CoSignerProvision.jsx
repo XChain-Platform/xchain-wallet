@@ -31,7 +31,6 @@ import {
     Input,
     Select,
     ChainPicker,
-    ChainBadge,
     CopyButton,
     AddressText,
     FormPage,
@@ -44,6 +43,9 @@ import {
     emptyPolicyDraft,
     buildPolicyDraft,
 } from './CoSignerPolicyEditor.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { addressValidationError } from '../utils/addressValidation.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -53,6 +55,22 @@ const COSIGNER_COIN = 'bitcoin';
 
 // A compressed secp256k1 pubkey is 33 bytes = 66 hex chars.
 const PUBKEY_RE = /^(02|03)[0-9a-fA-F]{64}$/;
+
+function policyAddressError(built, descriptor) {
+    for (const [index, address] of (built.policy.allowedDestinations || []).entries()) {
+        const error = addressValidationError(address, descriptor);
+        if (error) return `Allowed recipient ${index + 1}: ${error}`;
+    }
+    for (const [index, output] of built.allowedOutputs.entries()) {
+        const error = addressValidationError(output.address, descriptor);
+        if (error) return `Allowed output ${index + 1}: ${error}`;
+    }
+    return null;
+}
+
+function exactValue(value) {
+    return JSON.stringify(value);
+}
 
 /**
  * @param {object} props
@@ -75,8 +93,9 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const [name, setName] = useState('Agent account');
     const [policyDraft, setPolicyDraft] = useState(emptyPolicyDraft());
 
-    const [stage, setStage] = useState(/** @type {'compose' | 'submitting' | 'done'} */ ('compose'));
+    const [stage, setStage] = useState(/** @type {'compose' | 'review' | 'submitting' | 'done'} */ ('compose'));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [reviewPayload, setReviewPayload] = useState(/** @type {any | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const requestRef = useRef(0);
     const submittingRef = useRef(false);
@@ -95,6 +114,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         setPolicyDraft(emptyPolicyDraft());
         setStage('compose');
         setSubmitError(null);
+        setReviewPayload(null);
         setResult(null);
         Promise.resolve()
             .then(() => messaging.getAddressesByChain(walletId))
@@ -114,7 +134,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             })
             .catch((err) => {
                 if (!cancelled && requestRef.current === request) {
-                    setLoadError(err?.message || 'Failed to load addresses.');
+                    setLoadError(userFacingMessage(err, 'Failed to load your addresses.'));
                 }
             });
         return () => {
@@ -132,9 +152,11 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
 
     const chainAddresses = (chainId && addressesByChain?.[chainId]) || [];
     const daemonAddress = chainAddresses.find((a) => a.id === daemonAddressId) || null;
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
     const composeError = useMemo(() => {
         if (!chainId) return 'Pick a Bitcoin network.';
+        if (!btcChainIds.includes(chainId) || !descriptor) return 'Pick a supported Bitcoin network.';
         if (!daemonAddress) return 'Pick one of your addresses to be this wallet\'s key.';
         if (!PUBKEY_RE.test(String(daemonAddress.publicKey || ''))) {
             return 'The selected address has no valid compressed public key on record.';
@@ -146,47 +168,72 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         if (agentPubkey.trim().toLowerCase() === String(daemonAddress.publicKey).toLowerCase()) {
             return 'The agent key must differ from this wallet\'s key.';
         }
+        const sourceAddressError = addressValidationError(daemonAddress.address, descriptor);
+        if (sourceAddressError) return `This wallet's address: ${sourceAddressError}`;
         const built = buildPolicyDraft(policyDraft);
         if (built.error) return built.error;
+        const addressError = policyAddressError(built, descriptor);
+        if (addressError) return addressError;
         return null;
-    }, [chainId, daemonAddress, agentPubkey, policyDraft]);
+    }, [chainId, daemonAddress, agentPubkey, policyDraft, btcChainIds, descriptor]);
+
+    function handleReview(event) {
+        event?.preventDefault();
+        if (composeError || !chainId || !daemonAddress) return;
+        const built = buildPolicyDraft(policyDraft);
+        if (built.error) { setSubmitError(built.error); return; }
+        const addressError = policyAddressError(built, descriptor);
+        if (addressError) { setSubmitError(addressError); return; }
+        setReviewPayload({
+            walletId,
+            chainId,
+            agentPubkey: agentPubkey.trim().toLowerCase(),
+            daemonPubkey: String(daemonAddress.publicKey).toLowerCase(),
+            daemonDerivationPath: daemonAddress.derivationPath,
+            policy: built.policy,
+            allowedOutputs: built.allowedOutputs,
+            name: name.trim() || 'Agent account',
+        });
+        setSubmitError(null);
+        setStage('review');
+    }
 
     async function handleSubmit(event) {
         event?.preventDefault();
-        if (composeError || !chainId || !daemonAddress || submittingRef.current) return;
-        const built = buildPolicyDraft(policyDraft);
-        if (built.error) { setSubmitError(built.error); return; }
+        if (!reviewPayload || submittingRef.current) return;
 
         const request = requestRef.current;
+        const payload = reviewPayload;
         submittingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
-            const r = await messaging.provisionCoSignerAccount({
-                walletId,
-                chainId,
-                agentPubkey: agentPubkey.trim().toLowerCase(),
-                daemonPubkey: String(daemonAddress.publicKey).toLowerCase(),
-                daemonDerivationPath: daemonAddress.derivationPath,
-                policy: built.policy,
-                allowedOutputs: built.allowedOutputs,
-                name: name.trim() || 'Agent account',
-            });
+            const r = await messaging.provisionCoSignerAccount(payload);
             if (requestRef.current === request) {
+                if (!r || r.walletId !== walletId || r.chainId !== payload.chainId) {
+                    throw new Error('The created agent account could not be loaded for this wallet and network.');
+                }
                 setResult(r);
                 setStage('done');
             }
         } catch (err) {
             if (requestRef.current === request) {
-                setSubmitError(err?.message || 'Failed to create the agent account.');
-                setStage('compose');
+                setSubmitError(userFacingMessage(err, 'Failed to create the agent account.'));
+                setStage('review');
             }
         } finally {
             if (requestRef.current === request) submittingRef.current = false;
         }
     }
 
-    const header = <PageHeader onBack={onBack} title="New agent account" />;
+    const header = (
+        <PageHeader
+            onBack={stage === 'review' ? () => setStage('compose') : onBack}
+            backLabel={stage === 'review' ? 'Back to form' : undefined}
+            backDisabled={stage === 'submitting'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review agent account' : 'New agent account'}
+        />
+    );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -229,20 +276,57 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         );
     }
 
-    const descriptor = chainRegistry.get(chainId);
+    if ((stage === 'review' || stage === 'submitting') && reviewPayload) {
+        const reviewedPolicy = reviewPayload.policy;
+        return wrap(
+            <FormPage
+                label="Review agent account"
+                onSubmit={handleSubmit}
+                status={submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
+                actions={(
+                    <Button type="submit" variant="primary" loading={stage === 'submitting'} disabled={stage === 'submitting'}>
+                        Create agent account
+                    </Button>
+                )}
+            >
+                <p className={styles.hint}>Check every value before creating this account.</p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Account name</dt>
+                    <dd className={styles.detailsValue}>{reviewPayload.name}</dd>
+                    <dt className={styles.detailsLabel}>Wallet</dt>
+                    <dd className={styles.detailsValue}><code>{reviewPayload.walletId}</code></dd>
+                    <dt className={styles.detailsLabel}>This wallet's address</dt>
+                    <dd className={styles.detailsValue}><AddressText address={daemonAddress?.address || ''} /></dd>
+                    <dt className={styles.detailsLabel}>This wallet's public key</dt>
+                    <dd className={styles.detailsValue}><code>{reviewPayload.daemonPubkey}</code></dd>
+                    <dt className={styles.detailsLabel}>This wallet's derivation path</dt>
+                    <dd className={styles.detailsValue}><code>{reviewPayload.daemonDerivationPath}</code></dd>
+                    <dt className={styles.detailsLabel}>Agent public key</dt>
+                    <dd className={styles.detailsValue}><code>{reviewPayload.agentPubkey}</code></dd>
+                    <dt className={styles.detailsLabel}>Allowed actions</dt>
+                    <dd className={styles.detailsValue}>
+                        {reviewedPolicy.allowedActions.map(actionDisplayLabel).join(', ')}
+                        {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
+                    </dd>
+                    <dt className={styles.detailsLabel}>Allowed recipients</dt>
+                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.allowedDestinations)}</code></dd>
+                    <dt className={styles.detailsLabel}>Per-action limits</dt>
+                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.maxPerAction)}</code></dd>
+                    <dt className={styles.detailsLabel}>Rolling limit</dt>
+                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.maxPerWindow)}</code></dd>
+                    <dt className={styles.detailsLabel}>Confirmation thresholds</dt>
+                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.confirmAbove)}</code></dd>
+                    <dt className={styles.detailsLabel}>Allowed transaction outputs</dt>
+                    <dd className={styles.detailsValue}><code>{exactValue(reviewPayload.allowedOutputs)}</code></dd>
+                </dl>
+            </FormPage>,
+        );
+    }
 
     return wrap(
         <FormPage
             label="Create agent account"
-            onSubmit={handleSubmit}
-            intro={(
-                <>
-                An agent account is a 2-of-2 shared address between an automated
-                agent and this wallet. This wallet acts as the policy co-signer:
-                it signs a request automatically when it fits the rules you set
-                below, and refuses anything out of policy. Bitcoin-only at launch.
-                </>
-            )}
+            onSubmit={handleReview}
             status={(
                 <>
                     {submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
@@ -253,14 +337,19 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={Boolean(composeError) || stage === 'submitting'}
-                    loading={stage === 'submitting'}
+                    disabled={Boolean(composeError)}
                 >
-                    Create agent account
+                    Review agent account
                 </Button>
             )}
         >
-
+            <details>
+                <summary>How agent accounts work</summary>
+                <p className={styles.hint}>
+                    An automated agent shares a 2-of-2 address with this wallet. This wallet signs requests that
+                    fit the policy and refuses requests outside it. Agent accounts support Bitcoin networks.
+                </p>
+            </details>
             <ChainPicker
                 label="Network"
                 value={chainId}
@@ -298,13 +387,6 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             />
 
             <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
-
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                </dd>
-            </dl>
 
         </FormPage>,
     );

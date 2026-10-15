@@ -32,7 +32,9 @@ function renderFilled(importMnemonic) {
     fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
-    fireEvent.click(screen.getByLabelText(/This wallet uses a BIP39 passphrase/));
+    fireEvent.click(screen.getByRole('switch', {
+        name: /This wallet uses a BIP39 passphrase/,
+    }));
 }
 
 describe('a ticked passphrase box with an empty field refuses to import', () => {
@@ -60,7 +62,9 @@ describe('a ticked passphrase box with an empty field refuses to import', () => 
     it('imports without a passphrase when the box is left unticked', async () => {
         const importMnemonic = vi.fn().mockResolvedValue({});
         renderFilled(importMnemonic);
-        fireEvent.click(screen.getByLabelText(/This wallet uses a BIP39 passphrase/));
+        fireEvent.click(screen.getByRole('switch', {
+            name: /This wallet uses a BIP39 passphrase/,
+        }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 

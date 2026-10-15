@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { ChainPicker } from './ChainPicker.jsx';
+import { t } from '../i18n/index.js';
 
 /**
  * NetworkField: the standard "which network is this action on" form
@@ -42,7 +43,7 @@ export function NetworkField({
     onChange,
     chainIds,
     chainRegistry,
-    label = 'Network',
+    label = t('settings.network.label'),
     disabled,
     size = 'md',
 }) {

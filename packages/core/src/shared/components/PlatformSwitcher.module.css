@@ -12,9 +12,10 @@
     appearance: none;
     background: transparent;
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    width: 38px;
-    height: 38px;
+    border-radius: var(--xc-control-radius);
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -29,17 +30,19 @@
 
 .trigger:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The compact focus gap has no spacing-token equivalent. */
     outline-offset: 2px;
 }
 
 .menu {
     position: absolute;
     box-sizing: border-box;
-    top: calc(100% + 4px);
+    top: calc(100% + var(--xc-space-1));
     inset-inline-end: 0;
     z-index: 20;
+    /* The menu's label-driven minimum has no layout-token equivalent. */
     min-width: 208px;
-    max-width: calc(100vw - (2 * var(--xc-space-2)));
+    max-width: calc(100vw - var(--xc-space-3) - var(--xc-space-3));
     padding: var(--xc-space-1);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
@@ -47,6 +50,7 @@
     box-shadow: var(--xc-shadow-header-menu);
     display: flex;
     flex-direction: column;
+    /* The compact menu-row separation has no spacing-token equivalent. */
     gap: 2px;
 }
 
@@ -62,7 +66,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) 10px;
+    padding: var(--xc-space-2) var(--xc-control-pad-x);
     border-radius: var(--xc-radius-sm);
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
@@ -75,6 +79,7 @@
 
 .item:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The inset focus ring has no spacing-token equivalent. */
     outline-offset: -2px;
 }
 
@@ -85,6 +90,17 @@
     color: var(--xc-text-muted);
 }
 
+.trigger svg,
+.itemIcon svg {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+:global([dir='rtl']) .trigger svg,
+:global([dir='rtl']) .itemIcon svg {
+    transform: scaleX(-1);
+}
+
 /* The surface the user is already on: present for orientation, not a link. */
 .here {
     width: 100%;
@@ -92,7 +108,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) 10px;
+    padding: var(--xc-space-2) var(--xc-control-pad-x);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);

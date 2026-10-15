@@ -23,16 +23,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const sourceRoot = join(wsRoot, 'packages');
 const sourceExtensions = new Set(['.css', '.js', '.jsx', '.ts', '.tsx']);
-const BUILD_OUTPUT_DIRS = new Set(['dist', 'www']);
+const BUILD_OUTPUT_DIRS = new Set(['dist', 'www', 'build', 'node_modules']);
+// Capacitor copies the staged web bundle into the native projects on sync.
+const NATIVE_STAGED_ASSETS = [join('android', 'app', 'src', 'main', 'assets'), join('ios', 'App', 'App', 'public')];
 const positionedBlock = /([^{}]+)\{([^{}]*\bposition\s*:\s*(?:fixed|sticky|['"]fixed['"]|['"]sticky['"])\s*[,;][^{}]*)\}/g;
 
 function sourceFiles(dir) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         const path = join(dir, entry.name);
-        // Build output (each package's dist, the mobile www staging copy) is
+        // Build output (each package's dist, the mobile www staging copy and
+        // the native projects' synced and built copies of it) is
         // minified with the marker comments stripped; the source blocks it
         // came from are what this audit judges.
-        if (entry.isDirectory()) return BUILD_OUTPUT_DIRS.has(entry.name) ? [] : sourceFiles(path);
+        if (entry.isDirectory()) {
+            if (BUILD_OUTPUT_DIRS.has(entry.name)) return [];
+            if (NATIVE_STAGED_ASSETS.some((staged) => path.endsWith(staged))) return [];
+            return sourceFiles(path);
+        }
         return sourceExtensions.has(extname(entry.name)) ? [path] : [];
     });
 }

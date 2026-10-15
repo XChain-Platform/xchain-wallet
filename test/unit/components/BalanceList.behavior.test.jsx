@@ -10,6 +10,7 @@ import {
     buildBalanceRows,
     isSmallBalanceRow,
 } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import balanceStyles from '../../../packages/core/src/shared/components/BalanceList.module.css';
 
 afterEach(() => cleanup());
 
@@ -70,6 +71,18 @@ describe('BalanceList ordering and visibility', () => {
         expect(onSelectToken).not.toHaveBeenCalled();
     });
 
+    it('pluralizes the hidden-token toggle through translated copy', () => {
+        render(
+            <BalanceList
+                rows={[row('ONE'), row('TWO')]}
+                hiddenKeys={new Set(['bitcoin-mainnet:ONE', 'bitcoin-mainnet:TWO'])}
+                onToggleHide={() => {}}
+            />,
+        );
+
+        expect(screen.getByRole('button', { name: 'Show 2 hidden tokens' })).toBeInTheDocument();
+    });
+
     it('hides and unhides rows without opening token details', () => {
         const onSelectToken = vi.fn();
         const onToggleHide = vi.fn();
@@ -123,18 +136,18 @@ describe('BalanceList ordering and visibility', () => {
         );
     });
 
-    it('keeps a decorative avatar under slow or broken token artwork', () => {
+    it('shows artwork without a backing monogram and restores the neutral fallback on error', () => {
         const imageUrl = 'https://issuer.example/slow.png';
         render(<BalanceList rows={[row('ART', { imageUrl })]} />);
 
         const image = document.querySelector(`img[src="${imageUrl}"]`);
         expect(image).toHaveAttribute('alt', '');
         expect(image).toHaveAttribute('aria-hidden', 'true');
-        expect(image).toHaveStyle({ position: 'absolute', inset: '0' });
-        expect(screen.getByText('A')).toBeInTheDocument();
+        expect(image.closest('[data-asset-mark]')).not.toBeNull();
+        expect(screen.queryByText('A')).toBeNull();
 
         fireEvent.error(image);
-        expect(image).toHaveStyle({ display: 'none' });
+        expect(document.querySelector(`img[src="${imageUrl}"]`)).toBeNull();
         expect(screen.getByText('A')).toBeInTheDocument();
     });
 
@@ -154,21 +167,76 @@ describe('BalanceList ordering and visibility', () => {
         expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: null }));
     });
 
-    it('names each chain when rows from more than one chain share the list', () => {
+    it('tells the same ticker on two chains apart by overlay badge, not chain text', () => {
+        render(
+            <BalanceList
+                rows={[
+                    row('XCHAIN', { chainDisplayName: 'Bitcoin', networkKind: 'mainnet' }),
+                    row('XCHAIN', {
+                        chainId: 'litecoin-regtest',
+                        coin: 'litecoin',
+                        chainDisplayName: 'Litecoin',
+                        networkKind: 'regtest',
+                    }),
+                    row('XCHAIN', {
+                        chainId: 'examplecoin-regtest',
+                        coin: 'examplecoin',
+                        chainDisplayName: 'Examplecoin',
+                    }),
+                ]}
+                onSelectToken={() => {}}
+            />,
+        );
+
+        expect(screen.queryByText(/·/)).toBeNull();
+        expect(screen.queryByText(/Bitcoin|Litecoin|Examplecoin/)).toBeNull();
+        expect(screen.queryByText(/regtest/i)).toBeNull();
+        expect(screen.getAllByText('XCHAIN', { selector: '[title="XCHAIN"]' })).toHaveLength(3);
+        for (const item of screen.getAllByRole('listitem')) {
+            expect(item.querySelectorAll('[data-chain-overlay]')).toHaveLength(1);
+        }
+        // A chain with no bundled icon still gets a badge, lettered from its id.
+        const unmapped = document.querySelector('[data-balance-key="examplecoin-regtest:XCHAIN"] [data-chain-overlay]');
+        expect(unmapped.tagName).toBe('SPAN');
+        expect(unmapped).toHaveTextContent('E');
+        // The badge is decorative, so screen readers hear the chain in the row name.
+        expect(screen.getByRole('button', { name: /^Open XCHAIN token details, on Litecoin, / })).toBeInTheDocument();
+    });
+
+    it('does not repeat a native coin name its row title already shows', () => {
         render(
             <BalanceList rows={[
-                row('XCHAIN', { chainDisplayName: 'Bitcoin', networkKind: 'mainnet' }),
-                row('XCHAIN', {
-                    chainId: 'litecoin-regtest',
+                row('BTC', { kind: 'native', displayName: 'Bitcoin', chainDisplayName: 'Bitcoin' }),
+                row('LTC', {
+                    kind: 'native',
+                    chainId: 'litecoin-mainnet',
                     coin: 'litecoin',
+                    displayName: 'Litecoin',
                     chainDisplayName: 'Litecoin',
-                    networkKind: 'regtest',
                 }),
+                row('XCHAIN', { chainDisplayName: 'Bitcoin' }),
             ]} />,
         );
 
-        expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
-        expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
+        expect(screen.queryByText('BTC · Bitcoin')).toBeNull();
+        expect(screen.queryByText('LTC · Litecoin')).toBeNull();
+        expect(screen.getByText('BTC', { selector: '[title="BTC"]' })).toBeInTheDocument();
+        expect(screen.getByText('XCHAIN', { selector: '[title="XCHAIN"]' })).toBeInTheDocument();
+    });
+
+    it('keeps a long balance whole and lets the name give way', () => {
+        render(
+            <BalanceList rows={[
+                row('BIG', { displayName: 'A token with a long display name', quantity: '100000000000000000', divisibility: 8 }),
+                row('SMALL', { quantity: '100000000', divisibility: 8 }),
+            ]} />,
+        );
+
+        const big = screen.getByText('1,000,000,000.00000000', { exact: false }).closest(`.${balanceStyles.qty}`);
+        expect(big).toHaveClass(balanceStyles.qtyLong);
+        expect(big.closest(`.${balanceStyles.amountsSlot}`)).not.toBeNull();
+        const small = screen.getByText('1.00000000', { exact: false }).closest(`.${balanceStyles.qty}`);
+        expect(small).not.toHaveClass(balanceStyles.qtyLong);
     });
 
     it('keeps identical tickers keyed and selectable by chain', () => {
@@ -196,7 +264,7 @@ describe('BalanceList ordering and visibility', () => {
         }));
     });
 
-    it('keeps testnet and regtest labels beside their displayed amounts', () => {
+    it('shows testnet and regtest rows by ticker alone beside their amounts', () => {
         render(
             <BalanceList rows={[
                 row('TBTC', {
@@ -210,10 +278,11 @@ describe('BalanceList ordering and visibility', () => {
             ]} />,
         );
 
-        expect(screen.getByText('TBTC · testnet').closest('[role="listitem"]'))
+        expect(screen.getByText('TBTC', { selector: '[title]' }).closest('[role="listitem"]'))
             .toHaveTextContent('1.00000000');
-        expect(screen.getByText('RBTC · regtest').closest('[role="listitem"]'))
+        expect(screen.getByText('RBTC', { selector: '[title]' }).closest('[role="listitem"]'))
             .toHaveTextContent('1.00000000');
+        expect(screen.queryByText(/testnet|regtest/i)).toBeNull();
     });
 
     it('labels confirmed and pending amounts separately', () => {

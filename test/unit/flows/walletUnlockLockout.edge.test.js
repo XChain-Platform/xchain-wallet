@@ -92,7 +92,7 @@ afterEach(() => {
 describe('unlockWallet cleanup and callback edges', () => {
     it.each([
         [{ wallet: null }, 'wallet is required'],
-        [{ password: '' }, 'password is required'],
+        [{ password: '' }, 'password or masterKey is required'],
         [{ chainRegistry: null }, 'chainRegistry is required'],
     ])('validates unlockWalletRecord before constructing a signer %#', async (override, message) => {
         await expect(unlockWalletRecord(recordArgs(override))).rejects.toThrow(message);

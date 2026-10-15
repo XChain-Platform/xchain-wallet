@@ -16,12 +16,19 @@
     min-width: 0;
     max-width: 100%;
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .side + .side::before {
     content: '→';
     margin-inline-end: var(--xc-space-2);
     color: var(--xc-text-muted);
+    display: inline-block;
+}
+
+:global([dir='rtl']) .side + .side::before {
+    transform: scaleX(-1);
 }
 
 .sideLabel {

@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -79,6 +80,7 @@ const COIN_DISPLAY_TICKER = {
  */
 export function LinkForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -144,7 +146,7 @@ export function LinkForm({ walletId, onBack }) {
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before creating a link.',
+                        'No addresses on any network yet. Use Receive to generate one before creating a link.',
                     );
                     return;
                 }
@@ -261,15 +263,15 @@ export function LinkForm({ walletId, onBack }) {
         if (memoTooLong) return memoTooLong;
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
-        if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
-        if (!/^\d+$/.test(actionIndex2)) return 'The action number on chain B must be a whole number.';
+        if (!/^\d+$/.test(actionIndex1)) return 'The action number on the network A must be a whole number.';
+        if (!/^\d+$/.test(actionIndex2)) return 'The action number on the network B must be a whole number.';
         if (ticker1 === ticker2 && BigInt(actionIndex1) === BigInt(actionIndex2)) {
             return 'Cannot link an action to itself.';
         }
-        if (preview1?.error) return 'Could not verify the action on chain A. Check the number and try again.';
-        if (preview2?.error) return 'Could not verify the action on chain B. Check the number and try again.';
-        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found on chain A at that number.';
-        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found on chain B at that number.';
+        if (preview1?.error) return 'Could not verify the action on the network A. Check the number and try again.';
+        if (preview2?.error) return 'Could not verify the action on the network B. Check the number and try again.';
+        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found on the network A at that number.';
+        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found on the network B at that number.';
         return null;
     }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong, preview1, preview2]);
 
@@ -391,7 +393,7 @@ export function LinkForm({ walletId, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!chain1Id || !chain2Id) {
-            setFormError('Pick both chains before reviewing.');
+            setFormError('Pick both networks before reviewing.');
             return;
         }
         if (!fromAddress || !submitChainId) {
@@ -491,7 +493,7 @@ export function LinkForm({ walletId, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            title={isReviewOrSubmitting ? 'Review link' : 'Link two actions across chains'}
+            title={isReviewOrSubmitting ? 'Review link' : 'Link two actions across networks'}
         />
     );
     const wrap = (children) => (
@@ -499,7 +501,7 @@ export function LinkForm({ walletId, onBack }) {
             <ListPage>{children}</ListPage>
         </Screen>
     );
-    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
+    const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!isReviewOrSubmitting}>{form}</Screen>;
 
     if (loadError) {
         return wrap(
@@ -560,7 +562,7 @@ export function LinkForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={submitDescriptor?.displayName || submitChainId}
+                chainLabel={null}
                 feeText={feeEstimate?.coinAmount && feeCoinTicker
                     ? `Network fee: ${feeEstimate.coinAmount} ${feeCoinTicker}`
                     : undefined}
@@ -589,6 +591,7 @@ export function LinkForm({ walletId, onBack }) {
 
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review link"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -600,7 +603,10 @@ export function LinkForm({ walletId, onBack }) {
                             type="button"
                             variant="secondary"
                             disabled={stage === 'submitting'}
-                            onClick={() => setStage('form')}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('form');
+                            }}
                         >
                             Back
                         </Button>
@@ -622,15 +628,15 @@ export function LinkForm({ walletId, onBack }) {
                 )}
             >
                 <p className={styles.summary}>
-                    Link {ticker1} #{actionIndex1} to {ticker2} #{actionIndex2}
+                    Link action #{actionIndex1} to action #{actionIndex2}
                     {memo.trim() ? `, memo: "${memo.trim()}"` : ''}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
                         {submitDescriptor
-                            ? <ChainBadge descriptor={submitDescriptor} size="sm" />
-                            : submitChainId}
+                            ? <ChainBadge descriptor={submitDescriptor} size="sm" showName={false} />
+                            : 'Selected network'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -638,7 +644,7 @@ export function LinkForm({ walletId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>Linking</dt>
                     <dd className={styles.detailsValue}>
-                        {ticker1} #{actionIndex1} {'↔'} {ticker2} #{actionIndex2}
+                        Action #{actionIndex1} {'↔'} action #{actionIndex2}
                     </dd>
                     <dt className={styles.detailsLabel}>Side A decoded</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
@@ -701,7 +707,8 @@ export function LinkForm({ walletId, onBack }) {
 
     return wrapForm(
         <FormPage
-            label="Link two actions across chains"
+            demoGuard={demoGuard}
+            label="Link two actions across networks"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
@@ -736,7 +743,7 @@ export function LinkForm({ walletId, onBack }) {
                 gap: 'var(--xc-space-3)',
             }}>
                 <SidePanel
-                    title="Chain A"
+                    title="Network A"
                     chainIds={chainIds}
                     chainId={chain1Id}
                     onChainChange={(value) => { setChain1Id(value); setFormError(null); }}
@@ -745,7 +752,7 @@ export function LinkForm({ walletId, onBack }) {
                     previewCache={previewCache}
                 />
                 <SidePanel
-                    title="Chain B"
+                    title="Network B"
                     chainIds={chainIds}
                     chainId={chain2Id}
                     onChainChange={(value) => { setChain2Id(value); setFormError(null); }}
@@ -763,38 +770,32 @@ export function LinkForm({ walletId, onBack }) {
                 onChange={(e) => setMemo(e.target.value)}
             />
 
-            <div role="group" aria-label="Submit the link on" className={styles.checkRow}>
-                <span style={{ marginRight: 'var(--xc-space-2)' }}>Submit the link on:</span>
-                <label className={styles.checkRow}>
-                    <input
-                        type="radio"
-                        name="submitOn"
-                        value="chain1"
-                        checked={submitOn === 'chain1'}
-                        onChange={() => setSubmitOn('chain1')}
-                    />
-                    <span>{descriptor1?.displayName || 'Chain A'}</span>
-                </label>
-                <label className={styles.checkRow}>
-                    <input
-                        type="radio"
-                        name="submitOn"
-                        value="chain2"
-                        checked={submitOn === 'chain2'}
-                        onChange={() => setSubmitOn('chain2')}
-                        disabled={!chain2Id || chain2Id === chain1Id}
-                    />
-                    <span>{descriptor2?.displayName || 'Chain B'}</span>
-                </label>
-            </div>
+            <RadioGroup
+                legend="Submit the link on:"
+                aria-label="Submit the link on"
+                name="submitOn"
+                value={submitOn}
+                onChange={(nextValue) => setSubmitOn(nextValue)}
+                options={[
+                    {
+                        value: 'chain1',
+                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" showName /> : 'Network A',
+                    },
+                    {
+                        value: 'chain2',
+                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" showName /> : 'Network B',
+                        disabled: !chain2Id || chain2Id === chain1Id,
+                    },
+                ]}
+            />
 
             {fromAddress && submitChainId ? (
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Submit on</dt>
                     <dd className={styles.detailsValue}>
                         {chainRegistry.get(submitChainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" />
-                            : submitChainId}
+                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" showName={false} />
+                            : 'Selected network'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -835,22 +836,23 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
 
     return (
         <fieldset style={{
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-3)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
+            padding: 'var(--xc-card-pad)',
             margin: 0,
-            background: 'var(--xc-bg-muted)',
+            background: 'var(--xc-card-bg)',
         }}>
             <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>
                 {title}
             </legend>
 
             <ChainPicker
-                label="Chain"
+                label="Network"
                 value={chainId}
                 onChange={onChainChange}
                 chainIds={chainIds}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
 
             <Input

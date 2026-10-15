@@ -42,7 +42,7 @@ assert.ok(/getAddressTouched/.test(src),
     'CrossChainSwapForm preserves the user-entered receiver address when touched');
 
 // Cross-chain SWAP requires GIVE_COIN ≠ GET_COIN.
-assert.ok(/Give and get chains must differ/.test(src),
+assert.ok(/Give and get networks must differ/.test(src),
     'CrossChainSwapForm rejects same-chain swaps and points users to Swap tokens');
 
 // Native-coin rule still enforced (DISPENSER lane, humanized copy).

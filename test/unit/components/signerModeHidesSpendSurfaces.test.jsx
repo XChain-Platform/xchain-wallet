@@ -189,7 +189,7 @@ describe('Receive: the route refuses in signer mode', () => {
 
     it('refuses in signer mode', async () => {
         mount(Receive, 'signer');
-        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it does not have an address for receiving funds/i))
+        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it doesn't have an address for receiving funds/i))
             .toBeInTheDocument();
     });
 });

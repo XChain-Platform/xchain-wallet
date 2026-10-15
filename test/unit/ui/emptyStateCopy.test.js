@@ -108,8 +108,8 @@ function localeCopy() {
         .map(([key, value]) => ({
             file: 'English locale',
             line: key,
-            titles: /(?:Title|Found)$/.test(key) ? [value] : [],
-            bodies: /Body$/.test(key) ? [value] : [],
+            titles: /(?:Title|Found|\.title)$/.test(key) ? [value] : [],
+            bodies: /(?:Body|\.body)$/.test(key) ? [value] : [],
         }));
 }
 
@@ -188,7 +188,7 @@ describe('EmptyState copy', () => {
             noAddresses: 'History appears here after you generate an address and send or receive funds.',
             noMatches: 'Matching history appears here after you reset or change the filters.',
             noCrossChain: 'Cross-chain transfers appear here after you send or receive one.',
-            noActivity: 'Activity appears here after you send or receive on a selected chain.',
+            noActivity: 'Activity appears here after you send or receive on a selected network.',
         });
     });
 });

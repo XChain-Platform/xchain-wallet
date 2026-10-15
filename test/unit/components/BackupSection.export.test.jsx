@@ -93,7 +93,7 @@ describe('BackupSection encrypted export', () => {
         expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
 
         fillPasswords('long-enough', 'long-enougH');
-        expect(screen.getByText('Backup passwords do not match.')).toBeTruthy();
+        expect(screen.getByText('Backup passwords don\'t match.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
         expect(messaging.exportBackupFile).not.toHaveBeenCalled();
 

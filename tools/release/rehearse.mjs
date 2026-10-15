@@ -29,10 +29,11 @@
 //
 //   2. Install and swap.  Whether the downloaded artifact actually
 //      replaces the running app. That needs the OS and the arch, so it
-//      is attested by a human on a named device (`attest`), and DD4 is
-//      the open question of which devices those are.
+//      is attested by a human on the lane's named device (`attest`).
+//      DD4 named a device for every desktop lane (rehearsal-matrix.mjs);
+//      what a lane still owes is the witnessed swap, listed by `coverage`.
 //
-// Splitting them is what makes this useful before DD4 lands: the half
+// Splitting them still puts the risk in the right place: the half
 // that historically breaks - a pointer name nothing fetches, an arch
 // resolving to the wrong installer, a manifest lookup aimed at the wrong
 // feed - is the half that needs no hardware at all.

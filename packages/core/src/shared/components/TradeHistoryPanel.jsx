@@ -27,7 +27,9 @@ import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { RelativeTime } from './RelativeTime.jsx';
 import tableStyles from './DataTable.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -128,12 +130,13 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
 
     return (
         <section
-            aria-label="Trade history"
+            aria-label={t('components.tradeHistoryPanel.tradeHistory')}
             aria-busy={addressesLoading || loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
                 marginTop: '0.75rem',
             }}
         >
@@ -145,7 +148,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 gap: '0.5rem',
                 marginBottom: '0.25rem',
             }}>
-                <p style={{ margin: 0, fontWeight: 600 }}>Trade history</p>
+                <p style={{ margin: 0, fontWeight: 600 }}>{t('components.tradeHistoryPanel.tradeHistory')}</p>
                 <button
                     type="button"
                     onClick={reload}
@@ -161,12 +164,12 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         color: 'inherit',
                     }}
                 >
-                    {addressesLoading || loading ? 'Loading…' : 'Refresh'}
+                    {addressesLoading || loading ? t('common.loading') : t('components.tradeHistoryPanel.refresh')}
                 </button>
             </div>
 
             {addressesLoading || loading ? (
-                <StatusMessage variant="status">Loading trade history…</StatusMessage>
+                <StatusMessage variant="status">{t('components.tradeHistoryPanel.loadingTradeHistory')}</StatusMessage>
             ) : null}
             {loadError ? (
                 <StatusMessage variant="error">{loadError}</StatusMessage>
@@ -179,25 +182,25 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         fontSize: '0.75rem',
                     }}
                 >
-                    No trades on this market yet.
+                    {t('components.tradeHistoryPanel.noTradesOnThisMarket')}
                 </p>
             ) : null}
             {summaries.length > 0 ? (
                 <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
                     <table className={tableStyles.table}>
-                        <caption className={tableStyles.caption}>Trade history</caption>
+                        <caption className={tableStyles.caption}>{t('components.tradeHistoryPanel.tradeHistory')}</caption>
                         <thead>
                             <tr>
-                                <th className={tableStyles.headerCell} scope="col">Time</th>
-                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
-                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
-                                <th className={tableStyles.headerCell} scope="col">Side</th>
-                                <th className={tableStyles.headerCell} scope="col">Address</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.tradeHistoryPanel.time')}</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.placeOrderPanel.price')}</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.openOrdersPanel.size')}{tick1})</th>
+                                <th className={tableStyles.headerCell} scope="col">{t('components.placeOrderPanel.side')}</th>
+                                <th className={tableStyles.headerCell} scope="col">{t('verifySignature.address')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {summaries.map((summary, idx) => {
-                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
+                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)';
                                 const key = `${summary.ownerAddress || 'unknown'}-${summary.key || 'row'}-${idx}`;
                                 return (
                                     <tr key={key}>
@@ -206,12 +209,12 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                                 <button
                                                     type="button"
                                                     onClick={() => onOpenTx(summary.txHash)}
-                                                    aria-label={`Open transaction ${summary.txHash}`}
+                                                    aria-label={t('components.tradeHistoryPanel.openTransaction', { txHash: summary.txHash })}
                                                     className={tableStyles.cellButton}
                                                 >
-                                                    {summary.timeLabel}
+                                                    <RelativeTime timestamp={summary.timestamp} />
                                                 </button>
-                                            ) : summary.timeLabel}
+                                            ) : <RelativeTime timestamp={summary.timestamp} />}
                                         </td>
                                         <td
                                             className={`${tableStyles.cell} ${tableStyles.numeric}`}
@@ -224,7 +227,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                             {summary.size}
                                         </td>
                                         <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
-                                            {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                            {summary.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
                                         </td>
                                         <td className={tableStyles.cell} data-label="Address">
                                             {summary.ownerAddress ? (
@@ -249,7 +252,7 @@ function summarizeRow(row, tick1, tick2) {
         price: String(parsed.price),
         size: String(parsed.amount),
         side: parsed.side,
-        timeLabel: formatTime(parsed.timestamp),
+        timestamp: parsed.timestamp,
         ownerAddress: row.__owner?.address || null,
         txHash: parsed.txHash ? String(parsed.txHash) : null,
         key: String(parsed.actionIndex ?? parsed.txHash
@@ -260,20 +263,6 @@ function summarizeRow(row, tick1, tick2) {
 function rowTime(row) {
     const ts = historyTimestamp(row);
     return Number.isFinite(ts) ? ts : 0;
-}
-
-function formatTime(unixSeconds) {
-    try {
-        const d = new Date(unixSeconds * 1000);
-        return d.toLocaleString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    } catch {
-        return '--';
-    }
 }
 
 function extractRows(resp) {

@@ -20,6 +20,7 @@ import { render, act as domAct, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
+import { messageText } from '../helpers/messageText.js';
 
 const CHAIN = 'litecoin-regtest';
 const CREATOR = 'rltc1qcreatorcreatorcreatorcreatorcreatorcrea';
@@ -132,7 +133,7 @@ async function mount({
     return { utils, lifecycleCalls, tipReads };
 }
 
-const banner = (utils) => utils.getByTestId('close-window-banner').textContent;
+const banner = (utils) => messageText(utils.getByTestId('close-window-banner'));
 const clockOf = (unixSeconds) => new Date(unixSeconds * 1000)
     .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -157,18 +158,18 @@ describe('DispenserDetail close-window banner', () => {
         clearSpy.mockRestore();
     });
 
-    it('says "any block now" once the device clock passes the window and no chain time is readable', async () => {
+    it('says "any block now" once the device clock passes the window and no network time is readable', async () => {
         vi.setSystemTime((CANCEL_AT + 3600 + 90) * 1000);
         const { utils } = await mount();
         expect(banner(utils)).toBe(
             "Closing any block now: the 1-hour close window has passed by this device's clock, and the close "
-            + "lands with the first block after the chain's time passes it too. "
+            + "lands with the first block after the network's time passes it too. "
             + 'The remaining 12 BEER in escrow returns to this wallet. '
             + 'Dispenses that confirm before the close are still honored.',
         );
     });
 
-    it('counts down on chain time when the chain trails the wall clock by 29 minutes', async () => {
+    it('counts down on the network time when the network trails the wall clock by 29 minutes', async () => {
         const wallNow = CANCEL_AT + 3600 + 5 * 60;
         vi.setSystemTime(wallNow * 1000);
         const { utils, tipReads } = await mount({ chainTime: wallNow - 29 * 60 });
@@ -181,17 +182,17 @@ describe('DispenserDetail close-window banner', () => {
         );
     });
 
-    it('says "at the next block" once the chain has passed the window', async () => {
+    it('says "at the next block" once the network has passed the window', async () => {
         vi.setSystemTime((CANCEL_AT + 3600 + 90) * 1000);
         const { utils } = await mount({ chainTime: CANCEL_AT + 3600 + 1 });
         expect(banner(utils)).toBe(
-            'Closing at the next block: the chain has passed the end of the 1-hour close window. '
+            'Closing at the next block: the network has passed the end of the 1-hour close window. '
             + 'The remaining 12 BEER in escrow returns to this wallet. '
             + 'Dispenses that confirm before the close are still honored.',
         );
     });
 
-    it('re-reads chain time on the minute timer at most every five minutes, advancing it in between', async () => {
+    it('re-reads network time on the minute timer at most every five minutes, advancing it in between', async () => {
         const wallNow = CANCEL_AT + 3600;
         vi.setSystemTime(wallNow * 1000);
         // The chain stands still (no new block) across the first reads.

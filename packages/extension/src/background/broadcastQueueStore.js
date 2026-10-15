@@ -41,9 +41,12 @@ import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/
  * @property {Set<string>} inFlight  `walletId:entryId` claims of broadcasts on the network,
  *   plus the web shell's claims for routes that can queue signed bytes
  * @property {Set<string>} prunedWallets  walletIds removed before `loaded` latched,
+ *   or after it while their save has not landed,
  *   which the rehydrate merge skips and its write-back drops from the blob;
  *   each add is also written to a durable ledger so a worker evicted before
  *   the read recovers still drops the wallet on the next boot
+ * @property {number} bootedAt  wall-clock ms this store was built; the vault restore
+ *   reads a 'broadcasting' PendingTx created after it as this process's own live call
  */
 
 /**
@@ -333,6 +336,7 @@ export function createBroadcastQueueStore({ storage = null, prunedLedger } = {})
         loadPromise: null,
         inFlight: new Set(),
         prunedWallets,
+        bootedAt: Date.now(),
     };
 }
 

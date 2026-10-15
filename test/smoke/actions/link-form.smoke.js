@@ -36,13 +36,13 @@ assert.ok(/export function LinkForm\b/.test(src),
     'LinkForm is a named export');
 
 // Two-panel composer: side panels carry chain picker + action_index.
-assert.ok(/Chain A/.test(src), 'LinkForm renders the Chain A panel');
-assert.ok(/Chain B/.test(src), 'LinkForm renders the Chain B panel');
+assert.ok(/Network A/.test(src), 'LinkForm renders the Network A panel');
+assert.ok(/Network B/.test(src), 'LinkForm renders the Network B panel');
 assert.ok(/SidePanel/.test(src), 'LinkForm uses a SidePanel sub-component');
 
 // Submit-on selector: defaults to chain A, can switch to chain B.
 assert.ok(/submitOn/.test(src),
-    'LinkForm tracks which chain the LINK is submitted on');
+    'LinkForm tracks which network the LINK is submitted on');
 assert.ok(/Submit the link on/.test(src),
     'LinkForm exposes a "Submit the link on" selector');
 

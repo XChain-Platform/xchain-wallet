@@ -97,3 +97,32 @@ describe('ManageToken holders', () => {
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(OWNER));
     });
 });
+
+describe('ManageToken identity badges', () => {
+    it('shows a paused, locked token with both badges in the title row', async () => {
+        const messaging = {
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: OWNER, divisibility: 8, locked: true }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: OWNER }] }),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getHistoryForToken: vi.fn().mockResolvedValue({ data: [] }),
+            getDispensersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            sleepState: vi.fn().mockResolvedValue({ resumeBlock: 900000 }),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ManageToken walletId="wallet" chainId={CHAIN} tick="MANAGEPROBE" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const paused = await screen.findByText('Paused');
+        const locked = screen.getByText('Locked');
+        const heading = screen.getByRole('heading', { name: 'MANAGEPROBE' });
+        // Both badges share the heading's row, in flow, rather than being
+        // pinned to the same corner of the card on top of each other.
+        expect(heading.parentElement.contains(paused)).toBe(true);
+        expect(heading.parentElement.contains(locked)).toBe(true);
+        expect(paused.parentElement).toBe(locked.parentElement);
+    });
+});

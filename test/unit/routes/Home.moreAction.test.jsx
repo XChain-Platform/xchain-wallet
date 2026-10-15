@@ -15,6 +15,8 @@ import React from 'react';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import homeModuleStyles from '../../../packages/core/src/shared/routes/Home.module.css';
 
 const homeStyles = readFileSync(join(
     process.cwd(),
@@ -97,6 +99,49 @@ describe('Home desktop actions', () => {
         expect(screen.getAllByRole('button', { name: 'Receive' })).toHaveLength(1);
         expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
     });
+
+    it.each([
+        [360, 4],
+        [844, 4],
+        [1280, 8],
+    ])('uses matching buttons in an even grid at %ipx (%i columns)', async (viewportWidth, expectedColumns) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        mount({
+            onCreateToken: vi.fn(),
+            onMarkets: vi.fn(),
+            onMessaging: vi.fn(),
+            onHistory: vi.fn(),
+            onAddresses: vi.fn(),
+            onContracts: vi.fn(),
+            onStaking: vi.fn(),
+            onActions: vi.fn(),
+        }, 'desktop');
+
+        const more = await screen.findByRole('button', { name: 'More actions' });
+        const actionGrid = more.parentElement;
+        const actions = within(actionGrid).getAllByRole('button');
+
+        expect(actionGrid).toHaveClass(homeModuleStyles.actionsFull);
+        expect(actions).toHaveLength(8);
+        actions.forEach((action) => {
+            expect(action).toHaveClass(buttonStyles.secondary, buttonStyles.md);
+        });
+        if (expectedColumns === 4) {
+            expect(homeStyles).toMatch(
+                /\.actionsFull\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/,
+            );
+            expect(viewportWidth).toBeLessThan(1024);
+        } else {
+            expect(homeStyles).toMatch(
+                /@media \(min-width: 1024px\)[\s\S]*\.actionsFull\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/,
+            );
+            // Labels stay on one line; a full row wraps whole tiles instead.
+            expect(homeStyles).toMatch(
+                /@media \(min-width: 1024px\)[\s\S]*\.actionsFull > button\s*\{[^}]*white-space:\s*nowrap;/,
+            );
+            expect(viewportWidth).toBeGreaterThanOrEqual(1024);
+        }
+    });
 });
 
 describe('Home quick-action policy', () => {
@@ -119,15 +164,24 @@ describe('Home quick-action policy', () => {
             .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
     });
 
-    it('hides fund-handling actions from demo wallets and explains why', async () => {
+    it('explains the send restriction only after a demo user presses Send', async () => {
         markDemoWallet(WALLET.id);
         mount(handlers);
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Exchange']);
-        const reason = screen.getByText(/Demo wallets are read-only/);
-        expect(row.getAttribute('aria-describedby')).toBe(reason.id);
+            .toEqual(['Send', 'Exchange']);
+        expect(screen.queryByText("Demo wallets can't send. Create a real wallet to send."))
+            .toBeNull();
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Send' }));
+
+        expect(handlers.onSend).not.toHaveBeenCalled();
+        expect(screen.getByText("Demo wallets can't send. Create a real wallet to send."))
+            .toBeVisible();
+        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
+        expect(screen.getByRole('dialog', { name: 'Exit demo and delete its data?' }))
+            .toBeTruthy();
     });
 
     it('keeps watcher-supported actions and explains their unsigned behavior', async () => {

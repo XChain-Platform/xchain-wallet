@@ -122,12 +122,12 @@ describe('badge presentation', () => {
 });
 
 describe('TickerIcon', () => {
-    it('names a native asset and keeps its default size stable', () => {
+    it('names a native asset and uses the list-row avatar size by default', () => {
         render(<TickerIcon chainId="bitcoin-mainnet" tick="BTC" />);
 
         const icon = screen.getByRole('img', { name: /BTC on /i });
-        expect(icon.style.width).toBe('28px');
-        expect(icon.style.height).toBe('28px');
+        expect(icon.style.width).toBe('var(--xc-avatar-size-list)');
+        expect(icon.style.height).toBe('var(--xc-avatar-size-list)');
         expect(icon.querySelector('img')).toHaveAttribute('alt', '');
     });
 
@@ -138,8 +138,8 @@ describe('TickerIcon', () => {
         const fallback = icon.firstElementChild;
         const pip = icon.querySelector('img');
 
-        expect(icon.style.width).toBe('32px');
-        expect(fallback.style.color).toBe('var(--xc-text-inverted)');
+        expect(icon.style.width).toBe('var(--xc-avatar-size-list)');
+        expect(fallback.style.color).toBe('var(--xc-avatar-ink, var(--xc-on-accent))');
         expect(pip.style.background).toBe('var(--xc-surface-raised)');
     });
 });

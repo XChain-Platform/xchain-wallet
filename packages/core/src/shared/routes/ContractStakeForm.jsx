@@ -9,10 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -103,6 +104,7 @@ export function ContractStakeForm({
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -158,7 +160,7 @@ export function ContractStakeForm({
                     : null;
                 const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to stake from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -532,7 +534,7 @@ export function ContractStakeForm({
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -597,6 +599,7 @@ export function ContractStakeForm({
         const verb = mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate';
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`${verb} review`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -631,10 +634,14 @@ export function ContractStakeForm({
                     {' '}on contract #{contractActionIndex}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={descriptor} size="sm" />
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -771,6 +778,7 @@ export function ContractStakeForm({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Contract stake"
             onSubmit={handleReview}
             status={formError ? (
@@ -816,33 +824,20 @@ export function ContractStakeForm({
                 </StatusMessage>
             )}
 
-            <fieldset className={styles.radioGroup}>
-                <legend style={{ fontWeight: 'bold' }}>Action</legend>
-                <label className={styles.radioOption}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'stake'}
-                        onChange={() => { setMode('stake'); setAmount(''); }}
-                    /> Stake
-                </label>
-                <label className={styles.radioOption}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'unstake'}
-                        onChange={() => { setMode('unstake'); setAmount(''); }}
-                    /> Unstake
-                </label>
-                <label className={styles.radioOption}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'delegate'}
-                        onChange={() => setMode('delegate')}
-                    /> Delegate (rotate key)
-                </label>
-            </fieldset>
+            <RadioGroup
+                legend="Action"
+                name="contract-stake-mode"
+                value={mode}
+                onChange={(value) => {
+                    setMode(value);
+                    if (value !== 'delegate') setAmount('');
+                }}
+                options={[
+                    { value: 'stake', label: 'Stake' },
+                    { value: 'unstake', label: 'Unstake' },
+                    { value: 'delegate', label: 'Delegate (rotate key)' },
+                ]}
+            />
 
             <TokenField
                 label="Token"

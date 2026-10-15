@@ -19,7 +19,8 @@ function rule(css, selector) {
 const surfaces = [
     ['command palette', 'packages/core/src/shared/commandPalette/CommandPalette.module.css', '.list'],
     ['alerts drawer', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.body'],
-    ['bottom sheet', 'packages/core/src/shared/components/BottomTabBar.module.css', '.sheetBody'],
+    // The More sheet renders through the shared OverlaySurface.
+    ['bottom sheet', 'packages/core/src/shared/components/OverlaySurface.module.css', '.body'],
     ['file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.body'],
     ['network picker', 'packages/core/src/shared/components/NetworkFilter.module.css', '.list'],
     ['shortcut help', 'packages/core/src/shared/keyboard/ShortcutHelp.module.css', '.body'],
@@ -53,14 +54,16 @@ describe('Chrome 102 scroll surfaces', () => {
             'command palette',
             'packages/core/src/shared/commandPalette/CommandPalette.module.css',
             '.overlay',
-            /max-height:\s*var\(--xc-viewport-h,\s*100vh\)/,
+            // Fixed to the viewport top, so the top inset the token subtracts is added back.
+            /max-height:\s*calc\(var\(--xc-viewport-h,\s*100vh\)\s*\+\s*env\(safe-area-inset-top,\s*0px\)\)/,
             false,
         ],
         [
             'shortcut help',
             'packages/core/src/shared/keyboard/ShortcutHelp.module.css',
             '.overlay',
-            /max-height:\s*var\(--xc-viewport-h,\s*100vh\)/,
+            // Fixed to the viewport top, so the top inset the token subtracts is added back.
+            /max-height:\s*calc\(var\(--xc-viewport-h,\s*100vh\)\s*\+\s*env\(safe-area-inset-top,\s*0px\)\)/,
             false,
         ],
     ])('%s caps itself to the fitted WebView height', (_name, path, selector, expected, shrinkable) => {

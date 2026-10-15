@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
@@ -17,7 +17,7 @@ const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const ACTIVE_KEY = 'a'.repeat(64);
 const HISTORICAL_KEY = 'b'.repeat(64);
 
-function mountForm() {
+function mountForm(overrides = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -48,6 +48,7 @@ function mountForm() {
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        ...overrides,
     };
     const messaging = new Proxy(target, {
         get(object, property) {
@@ -65,6 +66,7 @@ function mountForm() {
             />
         </MessagingProvider>,
     );
+    return messaging;
 }
 
 afterEach(() => cleanup());
@@ -77,5 +79,35 @@ describe('DelegationActionForm current delegation prefill', () => {
             expect(screen.getByLabelText('Signing pubkey to revoke')).toHaveValue(ACTIVE_KEY);
         });
         expect(screen.getByLabelText('Signing pubkey to revoke')).not.toHaveValue(HISTORICAL_KEY);
+    });
+
+    it('refuses lifecycle-based prefill when the current indexed height is unavailable', async () => {
+        mountForm({ getIndexerWatermark: vi.fn().mockRejectedValue(new Error('height unavailable')) });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not verify which delegation is currently active. Enter the signing public key manually.',
+        );
+        expect(screen.getByLabelText('Signing pubkey to revoke')).toHaveValue('');
+    });
+
+    it('does not overwrite a signing key entered while the prefill request is pending', async () => {
+        let resolveDelegations;
+        mountForm({
+            getDelegationsForAddress: vi.fn(() => new Promise((resolve) => { resolveDelegations = resolve; })),
+        });
+        const input = await screen.findByLabelText('Signing pubkey to revoke');
+        fireEvent.change(input, { target: { value: HISTORICAL_KEY } });
+
+        await act(async () => {
+            resolveDelegations([{
+                action_index: 10,
+                signing_pubkey: ACTIVE_KEY,
+                status: 'valid',
+                activation_block: 40,
+                deactivation_block: null,
+            }]);
+        });
+
+        await waitFor(() => expect(input).toHaveValue(HISTORICAL_KEY));
     });
 });

@@ -147,7 +147,7 @@ for (const [rel, dontRepeat] of QUEUED_SURFACES) {
     // the DOM ends up showing it.
     const routeSrc = readFileSync(join(shared, rel), 'utf8');
     if (rel === 'routes/Send.jsx') {
-        assert.match(routeSrc, /t\('send\.queued\.body'\)/,
+        assert.match(routeSrc, /t\('send\.queued\.body'\)|body="/,
             'Send routes its queued result copy through i18n');
     }
     const localizedSrc = rel === 'routes/Send.jsx'

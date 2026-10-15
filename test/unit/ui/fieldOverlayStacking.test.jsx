@@ -21,7 +21,6 @@ const tokens = css('packages/core/src/ui/tokens.css');
 const inputCss = css('packages/core/src/ui/Input.module.css');
 const addressFieldCss = css('packages/core/src/ui/AddressField.module.css');
 const comboboxCss = css('packages/core/src/ui/AddressCombobox.module.css');
-const lockedCss = css('packages/core/src/shared/routes/Locked.module.css');
 
 function ruleBody(text, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -57,7 +56,7 @@ describe('overlays drawn on a kit Input', () => {
         ['AddressField address preview', addressFieldCss, '.readOnlyValue'],
         ['AddressField picker icon', addressFieldCss, '.iconButton'],
         ['AddressCombobox picker icon', comboboxCss, '.iconButton'],
-        ['Locked password toggle', lockedCss, '.passwordToggle'],
+        ['Input password show and hide toggle', inputCss, '.revealToggle'],
     ])('stacks the %s above the input', (_name, text, selector) => {
         const body = ruleBody(text, selector);
         expect(body).toMatch(/position:\s*absolute/);
@@ -77,12 +76,15 @@ describe('overlays drawn on a kit Input', () => {
 
         const input = screen.getByLabelText('From');
         const preview = container.querySelector('[class*="readOnlyValue"]');
-        const icon = container.querySelector('button[class*="iconButton"]');
+        const icon = container.querySelector('[class*="iconButton"]');
 
         expect(preview).not.toBeNull();
         // The single-line preview truncates the middle of the address.
         expect(preview.textContent).toMatch(/^bc1qso.*acking$/);
         expect(icon).not.toBeNull();
+        expect(icon.querySelector('button')).not.toBeNull();
+        // The preview duplicates the input value, so it is not a second tab stop.
+        expect(preview.querySelector('[tabindex]')).toBeNull();
         // Equal layers paint in tree order, so both overlays also follow the input.
         for (const overlay of [preview, icon]) {
             expect(input.compareDocumentPosition(overlay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

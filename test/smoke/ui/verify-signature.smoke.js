@@ -61,8 +61,13 @@ assert.match(formSrc, /id="verify-message"/, 'message textarea present');
 assert.match(formSrc, /id="verify-signature"/, 'signature textarea present');
 assert.match(formSrc, /t\('verifySignature\.valid'\)/, 'uses localized valid-result copy');
 assert.match(formSrc, /t\('verifySignature\.invalid'\)/, 'uses localized invalid-result copy');
-assert.match(formSrc, /role="status"/, 'result row has status role');
-assert.match(formSrc, /aria-live="polite"/, 'result row is aria-live');
+// The result row is the shared StatusMessage held to the polite status role
+// (the primitive sets aria-live), whatever tone the verdict takes.
+assert.match(
+    formSrc,
+    /<StatusMessage variant=\{result === 'valid' \? 'success' : 'error'\} role="status">/,
+    'result row is a polite status message',
+);
 
 // No password input; verify is pure.
 assert.equal(/type="password"/.test(formSrc), false, 'no password field');
@@ -81,7 +86,7 @@ assert.match(
 );
 assert.match(
     hostSrc,
-    /try \{[\s\S]*?valid = Boolean\(sdk\.auth\.verifyMessage[\s\S]*?\)/,
+    /try \{[\s\S]*?sdk\.auth\.verifyMessage\(address, message, signature\)[\s\S]*?\.valid === true[\s\S]*?catch/,
     'wraps SDK call so malformed signatures return valid=false',
 );
 

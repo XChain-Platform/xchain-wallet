@@ -16,6 +16,7 @@
        is the viewport MINUS the top safe-area inset that body pads by, so a
        Screen that owns the whole window ends where the screen ends. */
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
+    max-height: var(--xc-screen-visible-height, none);
     overflow: hidden;
 }
 
@@ -40,42 +41,63 @@
     background: var(--xc-surface-raised);
 }
 
-.body {
-    flex: 1 1 auto;
-    min-height: 0;
-    padding: var(--xc-page-top) var(--xc-page-gutter);
-    overflow-y: auto;
-    overflow-x: hidden;
-    scroll-padding-block: var(--xc-space-3);
-    /* Content ends at the scrollbar and never runs under it, and a screen
-       that scrolls is as wide as one that does not. */
-    scrollbar-gutter: stable;
-}
-
-/* macOS draws overlay scrollbars that take no space, so the gutter above
-   reserves nothing there and full-width lists ran under the bar (desktop
-   app, 2026-10-12). A styled scrollbar always takes layout space. Only on
-   a mouse or trackpad: touch screens keep their thin transient indicator.
+/* The WebKit rules are the Chrome 102-safe path and make overlay scrollbars
+   consume their own narrow lane. Touch screens keep their transient indicator.
    No standard scrollbar-width / scrollbar-color here, since Chromium 121+
    ignores these ::-webkit-scrollbar rules wherever those are set. */
 @media (hover: hover) and (pointer: fine) {
-    .body::-webkit-scrollbar {
+    .scrollArea::-webkit-scrollbar {
         width: 10px;
+        height: 10px;
     }
 
-    .body::-webkit-scrollbar-track {
+    .scrollArea::-webkit-scrollbar-track {
         background: transparent;
     }
 
-    .body::-webkit-scrollbar-thumb {
+    .scrollArea::-webkit-scrollbar-thumb {
         background: var(--xc-border-strong);
         border: 2px solid transparent;
         border-radius: 5px;
         background-clip: padding-box;
     }
 
-    .body::-webkit-scrollbar-thumb:hover {
+    .scrollArea::-webkit-scrollbar-thumb:hover {
         background-color: var(--xc-text-muted);
+    }
+}
+
+.body {
+    composes: scrollArea;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--xc-page-top) var(--xc-page-gutter);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-padding-block: var(--xc-space-3);
+}
+
+/* Scroll room under the last row while a toast shows (toastPlacement.js sets
+   the variable to the toast stack's height), so a control the stack sits over
+   can always be scrolled clear of it. Zero height otherwise. */
+.body::after {
+    content: '';
+    display: block;
+    height: var(--xc-toast-room, 0px);
+}
+
+/* The shared scroll class reserves the scrollbar lane on the end edge only,
+   so content runs to the page gutter on the start edge and stops one gutter
+   short of the scrollbar on the end edge, with no blank lane on the left.
+   Safari 16 lacks scrollbar-gutter, so the reservation sits behind
+   @supports; iOS overlay scrollbars need no reserved gutter there. */
+@supports (scrollbar-gutter: stable) {
+    .body {
+        scrollbar-gutter: stable;
+    }
+
+    .scrollArea {
+        scrollbar-gutter: stable;
     }
 }
 
@@ -98,17 +120,44 @@
     outline: none;
 }
 
-/* Route chrome and camera previews yield vertical space on landscape phones.
-   The main body remains the single scroll container for everything below. */
+/* Route chrome and camera previews yield vertical space on landscape phones. */
 @media (orientation: landscape) and (max-height: 480px) {
-    .header,
-    .footer {
-        /* A padding: var(--xc-space-1) var(--xc-space-3); shorthand would
-           replace the tier gutter, so short screens change only the block axis. */
-        padding-block: var(--xc-space-1);
+    .screen {
+        /* The screen scrolls just far enough to move the title row away and
+           expose the content floor; longer route content still scrolls in body. */
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    @supports (scrollbar-gutter: auto) {
+        .body {
+            scrollbar-gutter: auto;
+        }
+    }
+
+    .header {
+        flex: 0 0 auto;
+        padding-block: 0;
+    }
+
+    .body {
+        /* A short landscape route keeps enough content visible after its
+           title scrolls away; this viewport floor has no spacing token. */
+        flex: 1 0 220px;
+        min-height: 220px;
+    }
+
+    /* A footer row is route content too, so a body followed by one keeps a
+       smaller floor. With the full floor a 360px-tall phone overflowed by a
+       few pixels on footer routes (Wallets, Accounts) and the screen scrolled
+       a sliver of the title row away with nothing left to reveal. */
+    .body:not(:last-child) {
+        flex-basis: 160px;
+        min-height: 160px;
     }
 
     .footer {
+        padding-block: var(--xc-space-1);
         padding-bottom: calc(var(--xc-space-1) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
     }
 
@@ -116,4 +165,15 @@
         width: auto;
         max-height: min(40vh, 160px);
     }
+}
+
+/* The shell's fallback notices slot, for a route with no Screen, takes the
+   same page gutter and top inset as the body. */
+.noticesFallback {
+    flex: 0 0 auto;
+    padding-inline: var(--xc-page-gutter);
+}
+
+.noticesFallback > :not(:empty) {
+    margin-top: var(--xc-page-top);
 }

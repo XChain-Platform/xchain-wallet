@@ -77,8 +77,11 @@ export function createBridgeEventBroadcaster(deps = {}) {
             return;
         }
         if (!Array.isArray(targets)) return;
+        const delivered = new Set();
         for (const tabId of targets) {
             if (!Number.isInteger(tabId)) continue;
+            if (delivered.has(tabId)) continue;
+            delivered.add(tabId);
             try {
                 // Delivery is bound to a mutable tab id, so a tab that navigated
                 // since it last called the bridge would hand the NEW origin's
@@ -111,7 +114,8 @@ export function createBridgeEventBroadcaster(deps = {}) {
          * @param {Array<{ id: string, name?: string }>} accounts
          */
         async accountsChanged(origin, accounts) {
-            await fanOut(origin, 'accountsChanged', accounts);
+            if (!Array.isArray(accounts)) return;
+            await fanOut(origin, 'accountsChanged', eventAccounts(accounts));
         },
         /**
          * @param {string} origin
@@ -145,11 +149,14 @@ async function notifyWalletSwitch(deps, accounts, sites) {
     // Skip a lookup that returned no list rather than guessing an empty one.
     if (!Array.isArray(accounts) || !Array.isArray(sites)) return;
     const connected = new Set(await connectedOrigins(deps.connectedTabs));
+    const notified = new Set();
     for (const site of sites) {
         if (!connected.has(site?.origin)) continue;
+        if (notified.has(site.origin)) continue;
         // Send each site only the accounts it was granted; skip a site left with none.
         const payload = eventAccounts(accountsGrantedTo(site, accounts));
         if (payload.length === 0) continue;
+        notified.add(site.origin);
         await deps.events.accountsChanged(site.origin, payload);
     }
 }
@@ -164,6 +171,95 @@ function eventAccounts(accounts) {
     return accounts
         .filter((account) => typeof account?.id === 'string' && account.id)
         .map((account) => ({ id: account.id, name: account.name }));
+}
+
+/**
+ * Notify sites whose visible account records changed. A non-empty
+ * `changedAccountIds` narrows delivery to grants affected by that mutation;
+ * wildcard grants remain affected because they include every account.
+ *
+ * @param {{
+ *   events?: { accountsChanged?: (origin: string, accounts: Array<{ id: string, name?: string }>) => Promise<void> | void },
+ *   accounts: Array<{ id: string, name?: string }>,
+ *   sites: Array<{ origin: string, permissions?: { accounts?: string[] } }>,
+ *   changedAccountIds?: string[],
+ * }} args
+ */
+export async function notifyAccountsChanged(args) {
+    const { events, accounts, sites, changedAccountIds } = args ?? {};
+    if (typeof events?.accountsChanged !== 'function') return;
+    if (!Array.isArray(accounts) || !Array.isArray(sites)) return;
+    const changed = new Set(
+        Array.isArray(changedAccountIds)
+            ? changedAccountIds.filter((id) => typeof id === 'string' && id)
+            : [],
+    );
+    const notified = new Set();
+    for (const site of sites) {
+        const origin = site?.origin;
+        if (typeof origin !== 'string' || !origin || notified.has(origin)) continue;
+        const grants = Array.isArray(site?.permissions?.accounts)
+            ? new Set(site.permissions.accounts)
+            : new Set();
+        if (changed.size > 0 && grants.size > 0
+            && ![...changed].some((id) => grants.has(id))) continue;
+        notified.add(origin);
+        await events.accountsChanged(origin, eventAccounts(accountsGrantedTo(site, accounts)));
+    }
+}
+
+/**
+ * Notify persisted site grants after a network switch. The bridge contract
+ * names this event `chainChanged`, so each origin receives one active chain it
+ * may use and never learns a chain outside its grant.
+ *
+ * @param {{
+ *   events?: { chainChanged?: (origin: string, chainId: string) => Promise<void> | void },
+ *   sites: Array<{ origin: string, permissions?: { chains?: string[] } }>,
+ *   activeChainIds: string[],
+ * }} args
+ */
+export async function notifyNetworkChanged(args) {
+    const { events, sites, activeChainIds } = args ?? {};
+    if (typeof events?.chainChanged !== 'function') return;
+    if (!Array.isArray(sites) || !Array.isArray(activeChainIds)) return;
+    const active = [...new Set(activeChainIds.filter((id) => typeof id === 'string' && id))];
+    const notified = new Set();
+    for (const site of sites) {
+        const origin = site?.origin;
+        if (typeof origin !== 'string' || !origin || notified.has(origin)) continue;
+        const grants = Array.isArray(site?.permissions?.chains)
+            ? new Set(site.permissions.chains)
+            : new Set();
+        const chainId = active.find((id) => grants.size === 0 || grants.has(id));
+        if (!chainId) continue;
+        notified.add(origin);
+        await events.chainChanged(origin, chainId);
+    }
+}
+
+/**
+ * Notify each persisted connected origin once when its session is removed.
+ * Tab selection remains inside the broadcaster, so origins with no registered
+ * receiving tab get no message.
+ *
+ * @param {{
+ *   events?: { disconnect?: (origin: string, reason: string) => Promise<void> | void },
+ *   sites: Array<{ origin: string }>,
+ *   reason: string,
+ * }} args
+ */
+export async function notifyDisconnectedSites(args) {
+    const { events, sites, reason } = args ?? {};
+    if (typeof events?.disconnect !== 'function') return;
+    if (!Array.isArray(sites) || typeof reason !== 'string') return;
+    const notified = new Set();
+    for (const site of sites) {
+        const origin = site?.origin;
+        if (typeof origin !== 'string' || !origin || notified.has(origin)) continue;
+        notified.add(origin);
+        await events.disconnect(origin, reason);
+    }
 }
 
 /**

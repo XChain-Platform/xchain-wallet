@@ -79,7 +79,8 @@ assert.ok(['staking-dashboard', 'contract-deploy'].every(
 
 // --- 3. hasVmAddress gate + aria-current ---------------------------------
 
-assert.ok(/hasVmAddress\s*\?[\s\S]*?'contracts-list'/.test(navSrc),
+assert.ok(/id: 'contracts-list',[^}]*requiresVm: true/.test(navSrc)
+    && /item\.requiresVm && !hasVmAddress/.test(navSrc),
     'Contracts row only appears when hasVmAddress is true');
 assert.ok(!/hasBtcAddress/.test(navSrc),
     'LeftNav no longer carries a BTC gate (contracts is the registry VM gate)');
@@ -89,8 +90,8 @@ assert.ok(/aria-current=\{active \? 'page' : undefined\}/.test(navSrc),
 // Footer rows.
 assert.ok(/onLock\s*\?[\s\S]*?Lock/.test(navSrc),
     'LeftNav footer renders Lock when onLock is provided');
-assert.ok(/onOpenWalletPicker[\s\S]*?walletSwitcher/.test(navSrc),
-    'LeftNav footer renders the wallet switcher when onOpenWalletPicker is provided');
+assert.ok(!/walletSwitcher|walletName/.test(navSrc),
+    'LeftNav leaves the wallet name to the app header');
 
 // --- 4. CSS module: sidebar width + breakpoint ---------------------------
 

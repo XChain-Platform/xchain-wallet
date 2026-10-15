@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -36,6 +37,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -71,6 +73,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     // Delegate and clear share this component; the user can flip between them on
@@ -113,13 +116,15 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 setAddressesByChain(byChain || {});
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
                 setLoadError(null);
             })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => {
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your addresses'));
+            });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 
@@ -159,6 +164,12 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         hardware: isClear ? 'clearVoteDelegationActionHw' : 'delegateVoteActionHw',
     });
 
+    const voteParams = useMemo(() => ({
+        tick: tick.trim(),
+        ...(!isClear && { delegateTo: delegateTo.trim() }),
+        ...(memo.trim() && { memo: memo.trim() }),
+    }), [delegateTo, isClear, memo, tick]);
+
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
@@ -166,9 +177,6 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         submitInFlightRef.current = true;
         setSubmitError(null);
         try {
-            const submitParams = isClear
-                ? { tick: tick.trim(), ...(memo.trim() && { memo: memo.trim() }) }
-                : { tick: tick.trim(), delegateTo: delegateTo.trim(), ...(memo.trim() && { memo: memo.trim() }) };
             const from = {
                 address: fromAddress.address,
                 publicKey: fromAddress.publicKey,
@@ -189,14 +197,14 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     chainId,
                     from,
                     builder: isClear ? 'clearVoteDelegationParams' : 'delegateVoteParams',
-                    params: submitParams,
+                    params: voteParams,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 }),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
-                    params: submitParams,
+                    params: voteParams,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -238,6 +246,16 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRate = Number(feePick.customRate);
+    const customFeeRateError = feePick.mode !== 'custom'
+        ? null
+        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
+            ? 'Enter a custom network fee rate greater than zero.'
+            : Number.isFinite(feeTiers?.maximumRate) && customFeeRate > feeTiers.maximumRate
+                ? 'Custom network fee rate is above this network\'s supported maximum.'
+                : !feeCustomEstimate
+                    ? 'Custom network fee rate can have at most 8 decimal places.'
+                    : null;
 
     useEffect(() => {
         let cancelled = false;
@@ -251,6 +269,12 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No source address available.'); return; }
+        if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
+            fromAddress.address, descriptor.coin, descriptor.networkKind,
+        )) {
+            setFormError('The selected source address is not valid for this network.');
+            return;
+        }
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
         const tickError = tickerReferenceError(tick, { noun: 'Governance token' });
         if (tickError) { setFormError(tickError); return; }
@@ -265,8 +289,10 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             setFormError('Delegate-to address must be different from the source address.');
             return;
         }
+        if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return; }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
+        if (customFeeRateError) { setFormError(customFeeRateError); return; }
         setFormError(null);
         if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
@@ -281,9 +307,6 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         setStage('submitting');
         setSubmitError(null);
         try {
-            const params = isClear
-                ? { tick: tick.trim(), ...(memo.trim() && { memo: memo.trim() }) }
-                : { tick: tick.trim(), delegateTo: delegateTo.trim(), ...(memo.trim() && { memo: memo.trim() }) };
             const base = {
                 walletId,
                 chainId,
@@ -295,7 +318,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
-                params,
+                params: voteParams,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -304,7 +327,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action: 'VOTE', params: { VERSION: '3', TICK: tick.trim(), DELEGATE_TO: isClear ? '' : delegateTo.trim(), ...(memo.trim() && { MEMO: memo.trim() }) } },
+                    actionData: { action: 'VOTE', params: { VERSION: '3', TICK: voteParams.tick, DELEGATE_TO: voteParams.delegateTo || '', ...(voteParams.memo && { MEMO: voteParams.memo }) } },
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else {
@@ -340,7 +363,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             title={stage === 'review' || stage === 'submitting' ? `Review ${verb.toLowerCase()}` : verb}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>;
 
     if (loadError) {
         return wrap(
@@ -364,8 +387,8 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             <>
                 <p className={styles.summary}>
                     {isClear
-                        ? `Delegation cleared. Your ${tick} voting weight stops flowing once the network records the action.`
-                        : `Delegation set. Your ${tick} voting weight flows to the delegate for polls you do not vote on directly.`}
+                        ? `Delegation cleared. Your ${voteParams.tick} voting weight stops flowing once the network records the action.`
+                        : `Delegation set. Your ${voteParams.tick} voting weight flows to the delegate for polls you do not vote on directly.`}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
@@ -379,11 +402,9 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
-                intro={isClear
-                    ? `Clear any standing delegation of your ${tick} voting weight.`
-                    : `Delegate your ${tick} voting weight to ${delegateTo.slice(0, 16)}…`}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
@@ -402,19 +423,23 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Token</dt>
-                    <dd className={styles.detailsValue}>{tick}</dd>
+                    <dd className={styles.detailsValue}>{voteParams.tick}</dd>
                     {!isClear ? (
                         <>
                             <dt className={styles.detailsLabel}>Delegate to</dt>
-                            <dd className={styles.detailsValue}><AddressText address={delegateTo} /></dd>
+                            <dd className={styles.detailsValue}><AddressText address={voteParams.delegateTo} /></dd>
                         </>
                     ) : null}
-                    {memo.trim() ? (<><dt className={styles.detailsLabel}>Memo</dt><dd className={styles.detailsValue}>{memo.trim()}</dd></>) : null}
+                    {voteParams.memo ? (<><dt className={styles.detailsLabel}>Memo</dt><dd className={styles.detailsValue}>{voteParams.memo}</dd></>) : null}
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -452,7 +477,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -510,6 +535,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={verb}
             onSubmit={handleReview}
             status={formError ? (
@@ -526,7 +552,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             <div className={styles.actions} style={{ gap: '0.5rem' }}>
                 <Button type="button" variant={isClear ? 'ghost' : 'primary'} onClick={() => { setMode('delegate'); setFormError(null); }}>Delegate</Button>
                 <Button type="button" variant={isClear ? 'primary' : 'ghost'} onClick={() => { setMode('clear'); setFormError(null); }}>Clear</Button>

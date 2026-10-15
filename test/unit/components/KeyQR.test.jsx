@@ -21,6 +21,7 @@ describe('<KeyQR>', () => {
         await act(async () => Promise.resolve());
 
         expect(toDataURL).toHaveBeenCalledWith('key', expect.objectContaining({
+            errorCorrectionLevel: 'M',
             margin: 4,
             width: 200,
             color: { dark: '#000000', light: '#FFFFFF' },

@@ -101,4 +101,15 @@ describe('extension bottom navigation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
         expect(screen.getByRole('button', { name: 'Messaging' })).toHaveAttribute('aria-current', 'page');
     });
+
+    it.each(['contacts', 'account-picker'])(
+        'leaves the bar tabs unmarked for the %s destination, which has no primary tab',
+        (initialView) => {
+            render(<NavigationHarness initialView={initialView} />);
+            expect(screen.getByRole('button', { name: 'More' }))
+                .not.toHaveAttribute('aria-current');
+            expect(screen.getByRole('button', { name: 'Home' }))
+                .not.toHaveAttribute('aria-current');
+        },
+    );
 });

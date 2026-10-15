@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last thirty are component props: copy shipped through them
+// The last thirty-two are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -70,7 +70,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
     'what', 'prefix', 'noun', 'summary', 'error', 'recovery',
-    'feeText', 'emptyActionLabel', 'warningNoun',
+    'feeText', 'emptyActionLabel', 'warningNoun', 'message', 'description',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -433,6 +433,30 @@ v = findViolations(jsxAttr('feeText', jsxExpr(conditional(callOn(template('Netwo
 assert.strictEqual(v.length, 0, 'only the three trim methods unwrap; another call stays a blind spot');
 v = findViolations(jsxAttr('feeText', jsxExpr(identifier('feeText'))));
 assert.strictEqual(v.length, 0, 'a runtime feeText value stays silent');
+
+// 19f. Dialog and section copy. ConfirmModal renders `message` as its body
+// and SectionHeader renders `description` under its title, so literals,
+// branch copy and templates there are flagged; runtime values stay silent.
+v = findViolations(jsxAttr('message', literal('This cannot be undone.')));
+assert.strictEqual(v.length, 1, 'flags a message literal');
+assert.match(v[0].message, /message/);
+v = findViolations(jsxAttr('message', jsxExpr(conditional(literal('Could not save quiet hours. Try again.'), literal(null)))));
+assert.strictEqual(v.length, 1, 'flags message branch copy with a null alternate');
+v = findViolations(jsxAttr('message', jsxExpr(identifier('deepLinkNotice'))));
+assert.strictEqual(v.length, 0, 'a runtime message value stays silent');
+const optionalMessage = {
+    type: 'ChainExpression',
+    expression: { type: 'MemberExpression', optional: true, computed: false, object: identifier('request'), property: identifier('message') },
+};
+v = findViolations(jsxAttr('message', jsxExpr(logical(optionalMessage, literal('')))));
+assert.strictEqual(v.length, 0, 'a request?.message || \'\' fallback stays silent');
+v = findViolations(jsxAttr('description', literal('Both swap legs settle on this chain.')));
+assert.strictEqual(v.length, 1, 'flags a description literal');
+assert.match(v[0].message, /description/);
+v = findViolations(jsxAttr('description', jsxExpr(template('Write it on paper or store it in a password manager. ', ''))));
+assert.strictEqual(v.length, 1, 'flags a description template with static copy');
+v = findViolations(jsxAttr('description', jsxExpr(identifier('hint'))));
+assert.strictEqual(v.length, 0, 'a runtime description value stays silent');
 
 // 19e. The style guide's note and kicker stay out of the set only while no
 // shipped file passes them as an attribute; this walk keeps that true.

@@ -8,18 +8,32 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
-import { ROUTE_NAV_GROUPS } from '../routeRegistry.js';
+import {
+    ROUTE_NAV_GROUPS,
+    ROUTE_NAV_SECTIONS,
+    SIDEBAR_PRIMARY_DESTINATIONS,
+    SIDEBAR_SECONDARY_DESTINATIONS,
+} from '../routeRegistry.js';
+import { NavSurfaceContext } from './navSurface.js';
+import {
+    NoticesRouteContext,
+    ReachabilityNoticeHiddenContext,
+    ShellNoticesContext,
+} from './noticesRoute.js';
 import styles from './LeftNav.module.css';
+import { t } from '../../i18n/index.js';
+import screenStyles from '../../ui/Screen.module.css';
 
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
  * sidebar listing primary surfaces (Home, History, Send, Receive,
- * Scan, DEX, Dispensers, Contracts, Messaging) plus a contacts row,
- * a wallet switcher, Settings, and Lock. Active row gets
+ * Scan, DEX, Marketplace, Dispensers, Contracts, Messaging) plus a contacts row,
+ * Settings, and Lock. Active row gets
  * `aria-current="page"`.
  *
  * Two of those rows are conditional on the wallet, not the build:
@@ -34,19 +48,42 @@ import styles from './LeftNav.module.css';
  * rows to icons with their labels clipped but still in the accessibility
  * tree. See shared/styles/breakpoints.js for the tier definitions.
  *
- * `currentView` resolves through `LEFT_NAV_VIEW_GROUPS`, so drilldowns keep
- * their parent surface highlighted. A route that has no dedicated group
- * resolves to Home, matching the shell's Home fallback.
+ * `currentView` resolves through `ROUTE_NAV_SECTIONS`, so drilldowns keep
+ * their parent surface highlighted. Utility sections without a sidebar row
+ * leave the sidebar unselected instead of attributing the page to Home.
  */
 
 export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 
+// Labels and icons for the nav rows, shared with BottomTabBar's thumb row.
+// Which rows exist, and in what order, comes from the destination lists in
+// routeRegistry.js, which PageHeader also reads to decide where Back is
+// redundant.
+const LEFT_NAV_ITEMS = [
+    { id: 'home', get label() { return t('home.title'); }, Icon: Icon.HomeIcon },
+    { id: 'history', get label() { return t('history.title'); }, Icon: Icon.HistoryIcon },
+    { id: 'send', get label() { return t('send.title'); }, Icon: Icon.SendIcon, spendable: true },
+    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'scan', get label() { return t('scan.title'); }, Icon: Icon.ScanIcon },
+    { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'market-activity', get label() { return t('nav.marketplace'); }, Icon: Icon.LineChartIcon, requiresDex: true },
+    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
+    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
+    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
+    { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
+    // PC-15: COINPAY obligations queue; badge = payable pending count.
+    { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon },
+];
+
+/** The label and icon row for a nav destination id. */
+export const navItem = (id) => LEFT_NAV_ITEMS.find((row) => row.id === id);
+
 export function activeLeftNavItem(currentView) {
-    return Object.entries(LEFT_NAV_VIEW_GROUPS)
-        .find(([, views]) => views.includes(currentView))?.[0] || 'home';
+    return ROUTE_NAV_SECTIONS[currentView] || 'home';
 }
 
-// Shared with BottomTabBar so both navs highlight the same destination.
+// Sheet rows use the same section match as the desktop sidebar.
 export function isNavItemActive(itemId, currentView) {
     return itemId === activeLeftNavItem(currentView);
 }
@@ -63,9 +100,7 @@ export function formatBadgeCount(n) {
  * @param {(view: string) => void} props.onSelect
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
- * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
- * @param {string} [props.walletName]
  * @param {boolean} [props.hasVmAddress] gates the Contracts row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the tab is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops Send + Receive from the nav
@@ -76,50 +111,34 @@ export function LeftNav({
     onSelect,
     onLock,
     onOpenSettings,
-    onOpenWalletPicker,
     onCommandPalette,
-    walletName,
     hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
     badges = {},
 }) {
     const activeItem = activeLeftNavItem(currentView);
-    const primary = [
-        { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-        { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-        // Signer mode's own hint promises "Send / receive screens
-        // are hidden; this wallet does not broadcast". Absent, not disabled,
-        // for the reason the DEX row below is absent: a greyed Send row still
-        // reads as a capability the device has, and the whole value of the
-        // mode is that an air-gapped user can believe the removal.
-        ...(isSignerMode ? [] : [
-            { id: 'send', label: 'Send', Icon: Icon.SendIcon },
-            { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon },
-        ]),
-        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-        // Absent, not greyed, when the build has no DEX surface: the store
-        // build compiles those routes out, so the destination does
-        // not exist, and a visibly disabled exchange tab asks an app reviewer
-        // the same question a working one does.
-        ...(hasDexSurface
-            ? [{ id: 'markets', label: 'DEX', Icon: Icon.MarketIcon }]
-            : []),
-        { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-        // Gate Contracts on a VM address, matching Home and the command
-        // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
-        ...(hasVmAddress
-            ? [{ id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon }]
-            : []),
-        { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
-    ];
-
-    const secondary = [
-        { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-        { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
-        // PC-15: COINPAY obligations queue; badge = payable pending count.
-        { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
-    ];
+    // Signer mode's own hint promises "Send / receive screens
+    // are hidden; this wallet does not broadcast". Absent, not disabled,
+    // for the reason the DEX rows are absent: a greyed Send row still
+    // reads as a capability the device has, and the whole value of the
+    // mode is that an air-gapped user can believe the removal.
+    // DEX rows are absent, not greyed, when the build has no DEX surface: the
+    // store build compiles those routes out, so the destination does not
+    // exist, and a visibly disabled exchange tab asks an app reviewer the
+    // same question a working one does.
+    // Contracts is gated on a VM address, matching Home and the command
+    // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
+    const shown = (id) => {
+        const item = navItem(id);
+        if (item.spendable && isSignerMode) return false;
+        if (item.requiresDex && !hasDexSurface) return false;
+        if (item.requiresVm && !hasVmAddress) return false;
+        return true;
+    };
+    const toRows = (ids) => ids.filter(shown).map(navItem);
+    const primary = toRows(SIDEBAR_PRIMARY_DESTINATIONS);
+    const secondary = toRows(SIDEBAR_SECONDARY_DESTINATIONS);
 
     const handleKeyDown = (event) => {
         const direction = {
@@ -147,10 +166,10 @@ export function LeftNav({
     return (
         <nav
             className={styles.nav}
-            aria-label="Primary navigation"
+            aria-label={t('components.leftNav.primaryNavigation')}
             onKeyDown={handleKeyDown}
         >
-            <div className={styles.brand}>XChain Wallet</div>
+            <div className={styles.brand}>{t('components.leftNav.xchainWallet')}</div>
             {onCommandPalette ? (
                 <div className={styles.search}>
                     <Button
@@ -158,11 +177,11 @@ export function LeftNav({
                         block
                         icon={<Icon.SearchIcon />}
                         onClick={onCommandPalette}
-                        aria-label="Open command palette"
+                        aria-label={t('components.leftNav.openCommandPalette')}
                         aria-keyshortcuts="Meta+K Control+K"
-                        title="Search (Cmd/Ctrl+K)"
+                        title={t('components.leftNav.searchCmdCtrlK')}
                     >
-                        <span className={styles.label}>Search</span>
+                        <span className={styles.label}>{t('routes.addressList.search')}</span>
                     </Button>
                 </div>
             ) : null}
@@ -185,7 +204,7 @@ export function LeftNav({
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
                                 {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={`${badges[item.id]} unread`}>
+                                    <span className={styles.badge} aria-label={t('components.leftNav.unread', { value: badges[item.id] })}>
                                         {formatBadgeCount(badges[item.id])}
                                     </span>
                                 ) : null}
@@ -213,7 +232,7 @@ export function LeftNav({
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
                                 {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={`${badges[item.id]} pending`}>
+                                    <span className={styles.badge} aria-label={t('components.leftNav.pending', { value: badges[item.id] })}>
                                         {formatBadgeCount(badges[item.id])}
                                     </span>
                                 ) : null}
@@ -224,29 +243,18 @@ export function LeftNav({
             </ul>
             <div className={styles.spacer} />
             <div className={styles.footer}>
-                {walletName && onOpenWalletPicker ? (
-                    <button
-                        type="button"
-                        className={styles.walletSwitcher}
-                        onClick={onOpenWalletPicker}
-                        title={walletName}
-                    >
-                        <span className={styles.walletName}>{walletName}</span>
-                        <span aria-hidden="true">▾</span>
-                    </button>
-                ) : null}
                 {onOpenSettings ? (
                     <button
                         type="button"
                         className={`${styles.item} ${activeItem === 'settings' ? styles.itemActive : ''}`}
                         aria-current={activeItem === 'settings' ? 'page' : undefined}
-                        title="Settings"
+                        title={t('home.settings')}
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">
                             <Icon.GearIcon />
                         </span>
-                        <span className={styles.label}>Settings</span>
+                        <span className={styles.label}>{t('home.settings')}</span>
                     </button>
                 ) : null}
                 {onLock ? (
@@ -255,10 +263,10 @@ export function LeftNav({
                             variant="secondary"
                             block
                             icon={<Icon.LockIcon />}
-                            title="Lock"
+                            title={t('components.leftNav.lock')}
                             onClick={onLock}
                         >
-                            <span className={styles.label}>Lock</span>
+                            <span className={styles.label}>{t('components.leftNav.lock')}</span>
                         </Button>
                     </div>
                 ) : null}
@@ -302,11 +310,15 @@ function skipToMain(e) {
  *
  * The `header` slot (§49 / Cluster G FOLLOWUP 4) renders persistent
  * chrome above the route content so it survives route changes, so Home
- * no longer has to mount it itself. The `notices` slot below it holds
- * the stacked banners (queued broadcasts, reachability, …). Only the
- * notices scroll when the stack grows past its compact-tier cap: the
- * header row hosts anchored popovers (the settings gear, the scan menu),
- * and a scroll box around it would clip them to its own height.
+ * no longer has to mount it itself. It never clips: the header row hosts
+ * anchored popovers (the settings gear, the scan menu).
+ *
+ * The `notices` (queued broadcasts, reachability, update notices) are not
+ * toolbar content. They stay mounted here, so their state survives route
+ * changes, but render into a detached host that the route's `<Screen>`
+ * moves into its scrolling body, below the page header and above the route
+ * content (see noticesRoute.js). A route without a Screen shows them in a
+ * fallback slot at the top of the route area.
  *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav
@@ -322,6 +334,40 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     const previousRouteKeyRef = useRef(routeKey);
     const sidebar = showsSidebar(tier) ? nav : null;
     const bar = showsBottomBar(tier) ? bottomBar : null;
+    // PageHeader reads which surface is on screen to drop a Back control
+    // that would duplicate a visible nav row.
+    const navSurface = sidebar ? 'sidebar' : (bar ? 'tabBar' : null);
+
+    const [noticesHost] = useState(() => {
+        const host = document.createElement('div');
+        host.className = styles.notices;
+        return host;
+    });
+    const noticesFallbackRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const noticeSlotsRef = useRef(/** @type {HTMLElement[]} */ ([]));
+    const [reachabilityHidden, setReachabilityHidden] = useState(0);
+    const hasNotices = Boolean(notices);
+    // The newest claiming Screen shows the notices; with none, the fallback slot.
+    const placeNotices = () => {
+        (noticeSlotsRef.current.at(-1) ?? noticesFallbackRef.current)?.appendChild(noticesHost);
+    };
+    const shellNotices = useMemo(() => (hasNotices ? {
+        claim(slot) {
+            noticeSlotsRef.current.push(slot);
+            placeNotices();
+            return () => {
+                noticeSlotsRef.current = noticeSlotsRef.current.filter((s) => s !== slot);
+                placeNotices();
+            };
+        },
+        setReachabilityHidden,
+    } : null), [hasNotices]);
+
+    // Child Screens claim the host in their own layout effects, which run
+    // before this one; anything left unclaimed goes to the fallback slot.
+    useLayoutEffect(() => {
+        if (hasNotices && !noticesHost.parentNode) placeNotices();
+    });
 
     useEffect(() => {
         if (previousRouteKeyRef.current === routeKey) return;
@@ -348,16 +394,34 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
         <div
             ref={layoutRef}
             data-xc-tier={tier}
+            // Marks a visible rail, whose Search makes a search-only header menu redundant.
+            data-xc-rail={sidebar ? 'shown' : undefined}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
-            {sidebar ? (
-                <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
-            ) : null}
+            <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>{t('components.leftNav.skipToMainContent')}</a>
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
-                {header ? <div className={styles.header}>{header}</div> : null}
-                {notices ? <div className={styles.notices}>{notices}</div> : null}
-                <div className={styles.mainBody}>{children}</div>
+                {header ? (
+                    <NavSurfaceContext.Provider value={navSurface}>
+                        <div className={styles.header}>{header}</div>
+                    </NavSurfaceContext.Provider>
+                ) : null}
+                {hasNotices ? createPortal(
+                    <NoticesRouteContext.Provider value={routeKey ?? null}>
+                        <ReachabilityNoticeHiddenContext.Provider value={reachabilityHidden > 0}>
+                            {notices}
+                        </ReachabilityNoticeHiddenContext.Provider>
+                    </NoticesRouteContext.Provider>,
+                    noticesHost,
+                ) : null}
+                <div className={styles.mainBody}>
+                    {hasNotices ? <div ref={noticesFallbackRef} className={screenStyles.noticesFallback} /> : null}
+                    <NavSurfaceContext.Provider value={navSurface}>
+                        <ShellNoticesContext.Provider value={shellNotices}>
+                            {children}
+                        </ShellNoticesContext.Provider>
+                    </NavSurfaceContext.Provider>
+                </div>
             </div>
             {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}
         </div>

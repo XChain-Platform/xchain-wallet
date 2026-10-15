@@ -25,9 +25,18 @@ function ThrowingRoute() {
 
 function ShellHarness({ shell }) {
     const [route, setRoute] = useState('broken');
+    const [headerUsed, setHeaderUsed] = useState(false);
+    const [navigationUsed, setNavigationUsed] = useState(false);
     return (
         <div>
-            <nav aria-label={`${shell} shell`}>Wallet navigation</nav>
+            <header>
+                <button type="button" onClick={() => setHeaderUsed(true)}>Wallet menu</button>
+                {headerUsed ? <span>Header works</span> : null}
+            </header>
+            <nav aria-label={`${shell} shell`}>
+                <button type="button" onClick={() => setNavigationUsed(true)}>Settings</button>
+                {navigationUsed ? <span>Navigation works</span> : null}
+            </nav>
             <ShellRouteOutlet routeKey={route} onHome={() => setRoute('home')}>
                 {route === 'broken' ? <ThrowingRoute /> : <h1>Wallet Home</h1>}
             </ShellRouteOutlet>
@@ -54,9 +63,14 @@ describe.each(SHELLS)('%s route outlet', (shell, source) => {
 
         expect(screen.getByRole('navigation', { name: `${shell} shell` })).toBeTruthy();
         expect(screen.getByText(/Something went wrong while showing this screen/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back to Home' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Wallet menu' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+        expect(screen.getByText('Header works')).toBeTruthy();
+        expect(screen.getByText('Navigation works')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Go to Home' }));
 
         expect(screen.getByRole('heading', { name: 'Wallet Home' })).toBeTruthy();
         expect(screen.getByRole('navigation', { name: `${shell} shell` })).toBeTruthy();

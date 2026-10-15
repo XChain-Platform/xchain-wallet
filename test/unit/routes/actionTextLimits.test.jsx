@@ -27,9 +27,12 @@ import {
     memoLengthError,
     utf8ByteLength,
 } from '../../../packages/core/src/shared/utils/memoLimit.js';
+import {
+    MAX_MESSAGE_BYTES,
+    messageWireByteLength,
+} from '../../../packages/core/src/flows/messageAction.js';
 
 const MAX_TEXT_LENGTH = 250;
-const MAX_MESSAGE_LENGTH = 1_048_576;
 const AT_LIMIT = 'é'.repeat(MAX_TEXT_LENGTH / 2);
 const OVER_LIMIT = `${AT_LIMIT}a`;
 const BTC = 'bitcoin-mainnet';
@@ -49,7 +52,7 @@ const DOGE_SOURCE = Object.freeze({
     derivationPath: "m/44'/3'/0'/0/0",
 });
 
-function messagingFor() {
+function messagingFor(overrides = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [SOURCE], [DOGE]: [DOGE_SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({
@@ -65,7 +68,7 @@ function messagingFor() {
             creator: SOURCE.address,
             callbackTick: 'XCHAIN',
             callbackAmount: '1',
-            callbackBlock: null,
+            callbackBlock: '1',
         }),
         tokenHolderSummary: vi.fn().mockResolvedValue({ recipientCount: 1, totalPayout: '1' }),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
@@ -73,8 +76,13 @@ function messagingFor() {
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
         }),
+        composeMessageForConfirm: vi.fn().mockResolvedValue({
+            psbt: 'aa00', encoding: 'psbt', actionString: 'MESSAGE', version: 2,
+            messageParams: {},
+        }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
     };
+    Object.assign(target, overrides);
     return new Proxy(target, {
         get(value, prop) {
             if (prop in value) return value[prop];
@@ -83,8 +91,8 @@ function messagingFor() {
     });
 }
 
-function mount(Component, props = {}) {
-    const messaging = messagingFor();
+function mount(Component, props = {}, messagingOverrides = {}) {
+    const messaging = messagingFor(messagingOverrides);
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
@@ -149,14 +157,71 @@ describe('ComposeMessage text limit', () => {
         const submit = screen.getByRole('button', { name: 'Send message' });
 
         fireEvent.change(message, { target: { value: '📦' } });
-        expect(screen.getByText(`4 / ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`)).toBeTruthy();
+        expect(screen.getByText(`4 / ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`)).toBeTruthy();
         expect(submit.disabled).toBe(false);
 
-        fireEvent.change(message, { target: { value: `${'é'.repeat(MAX_MESSAGE_LENGTH / 2)}a` } });
+        fireEvent.change(message, { target: { value: `${'é'.repeat(MAX_MESSAGE_BYTES / 2)}a` } });
         expect(screen.getByText(
-            `Message is ${(MAX_MESSAGE_LENGTH + 1).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`,
+            `Message is ${(MAX_MESSAGE_BYTES + 1).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
         )).toBeTruthy();
         expect(submit.disabled).toBe(true);
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('counts the encrypted protocol field and blocks ECIES ciphertext past its limit', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const messaging = mount(ComposeMessage, { chainId: BTC, toAddress: recipient });
+        const message = await screen.findByLabelText('Message');
+        const submit = screen.getByRole('button', { name: 'Send message' });
+        const atLimit = 'é'.repeat((MAX_MESSAGE_BYTES / 2 - 62) / 2);
+
+        fireEvent.change(message, { target: { value: atLimit } });
+        expect(messageWireByteLength(atLimit, 1)).toBe(MAX_MESSAGE_BYTES);
+        expect(screen.getByText(
+            `${MAX_MESSAGE_BYTES.toLocaleString()} / ${MAX_MESSAGE_BYTES.toLocaleString()} encrypted bytes.`,
+        )).toBeTruthy();
+        expect(submit.disabled).toBe(false);
+
+        fireEvent.change(message, { target: { value: `${atLimit}a` } });
+        expect(screen.getByText(
+            `Encrypted message is ${(MAX_MESSAGE_BYTES + 2).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
+        )).toBeTruthy();
+        expect(submit.disabled).toBe(true);
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('requires confirmation before selecting the missing-key plaintext fallback', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        mount(
+            ComposeMessage,
+            { chainId: BTC, toAddress: recipient },
+            { getRecipientPubkey: vi.fn().mockResolvedValue(null) },
+        );
+
+        expect(await screen.findByText(/we can't encrypt/i)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /Encryption: Standard/ }));
+        fireEvent.click(screen.getByRole('option', { name: /Plain text/ }));
+
+        expect(screen.getByRole('button', { name: /Encryption: Standard/ })).toBeTruthy();
+        expect(screen.getByText(/Send this message as plain text/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send as plain text' }));
+        expect(screen.getByRole('button', { name: /Encryption: Plain text/ })).toBeTruthy();
+    });
+
+    it('refuses a whitespace-only message before compose', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const messaging = mount(ComposeMessage, {
+            chainId: BTC,
+            fixedEncryption: 'plaintext',
+            toAddress: recipient,
+        });
+        const message = await screen.findByLabelText('Message');
+
+        fireEvent.change(message, { target: { value: '   \n  ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+        expect(await screen.findByText('Write a message to send, or attach a file.')).toBeTruthy();
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
     });
 

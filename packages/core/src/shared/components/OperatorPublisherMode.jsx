@@ -29,6 +29,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import dashStyles from '../routes/ActionsMenu.module.css';
 import formStyles from '../routes/IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
@@ -138,14 +139,14 @@ function usePublisherAddress({ messaging, walletId, chainId, address }) {
                 : {
                     loading: false,
                     address: null,
-                    error: 'This wallet does not contain the source address on this network.',
+                    error: t('components.operatorPublisherMode.sourceNotInWallet'),
                 });
         }).catch((err) => {
             if (!cancelled) {
                 setState({
                     loading: false,
                     address: null,
-                    error: userFacingMessage(err, "Couldn't load the source address. Try again."),
+                    error: userFacingMessage(err, t('components.operatorPublisherMode.sourceLoadFailed')),
                 });
             }
         });
@@ -177,8 +178,8 @@ function usePublisherFee(chainId) {
     const validationError = pick.mode !== 'custom' || feePerKb !== null
         ? null
         : Number(pick.customRate) > 0
-            ? 'Custom fee rate can have at most 8 decimal places.'
-            : 'Custom fee rate must be greater than zero.';
+            ? t('components.operatorPublisherMode.feeDecimals')
+            : t('components.operatorPublisherMode.feePositive');
     return { pick, setPick, tiers, customEstimate, feePerKb, validationError };
 }
 
@@ -199,15 +200,15 @@ function usePublisherSubmission({
     async function submit(event) {
         event.preventDefault();
         if (submitting || ownerLane.composing) return;
-        if (!fromAddress) { setError(sourceError || 'Source address is still loading.'); return; }
+        if (!fromAddress) { setError(sourceError || t('components.operatorPublisherMode.sourceStillLoading')); return; }
         const cleanFeedActionIndex = feedActionIndex.trim();
         const cleanValue = value.trim();
-        if (!cleanFeedActionIndex) { setError('Feed reference number is required.'); return; }
+        if (!cleanFeedActionIndex) { setError(t('components.operatorPublisherMode.feedRequired')); return; }
         if (!/^[1-9][0-9]*$/.test(cleanFeedActionIndex)) {
-            setError('Feed reference number must be a positive whole number.'); return;
+            setError(t('components.operatorPublisherMode.feedWholeNumber')); return;
         }
-        if (!cleanValue) { setError('Value is required.'); return; }
-        if (!DECIMAL_NUMBER.test(cleanValue)) { setError('Value must be a number.'); return; }
+        if (!cleanValue) { setError(t('components.operatorPublisherMode.valueRequired')); return; }
+        if (!DECIMAL_NUMBER.test(cleanValue)) { setError(t('components.operatorPublisherMode.valueNumber')); return; }
         if (feeValidationError) { setError(feeValidationError); return; }
         setSubmitting(true);
         setError(null);
@@ -246,7 +247,7 @@ function usePublisherSubmission({
 
 function publisherResultPanel(result, clearResult) {
     if (result?.queued) {
-        return <QueuedResultPanel onDone={clearResult} what="oracle value" unsaved={result.unsaved} />;
+        return <QueuedResultPanel onDone={clearResult} what={t('components.operatorPublisherMode.oracleValue')} unsaved={result.unsaved} />;
     }
     if (result?.psbtHex && !(result.txid || result.broadcast?.txid)) {
         return <WatcherResultPanel result={result} onBuildAnother={clearResult} onDone={clearResult} />;
@@ -265,20 +266,20 @@ function PublisherForm({
     return (
         <section style={SECTION_STYLE}>
             <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.25rem' }}>
-                Publisher mode
+                {t('components.operatorPublisherMode.publisherMode')}
                 <button
                     type="button"
                     onClick={onToggle}
                     aria-expanded={open}
                     style={{ marginInlineStart: '0.5rem', fontSize: '0.85rem' }}
                 >
-                    {open ? 'Leave publisher mode' : 'Enter publisher mode'}
+                    {open ? t('components.operatorPublisherMode.leavePublisherMode') : t('components.operatorPublisherMode.enterPublisherMode')}
                 </button>
             </h3>
             <p className={dashStyles.entryDescription}>
-                Publisher mode creates an on-chain update of the selected feed reference with the value you enter. You review each update before it is signed and sent. {open
-                    ? 'Choose Leave publisher mode to close the form and return to the dashboard.'
-                    : 'Choose Enter publisher mode to open the form.'}
+                {t('components.operatorPublisherMode.publisherModeCreatesAnOn')} {open
+                    ? t('components.operatorPublisherMode.chooseLeavePublisherModeTo')
+                    : t('components.operatorPublisherMode.chooseEnterPublisherModeTo')}
             </p>
             {open ? (
                 <form onSubmit={submission.submit} noValidate>
@@ -307,12 +308,12 @@ function PublisherFields({
     return (
         <>
             <Input
-                label="Feed reference number"
+                label={t('components.operatorPublisherMode.feedReferenceNumber')}
                 hint={feedLoading
-                    ? 'Loading the most recent feed for this address.'
+                    ? t('components.operatorPublisherMode.loadingFeed')
                     : feed
-                        ? 'Pre-filled from the most recent feed you created. Override it to publish to a different feed.'
-                        : 'No feed found for this address. Enter its reference number, or create a feed first.'}
+                        ? t('components.operatorPublisherMode.preFilledFromTheMost')
+                        : t('components.operatorPublisherMode.noFeedFoundForThis')}
                 value={feedActionIndex}
                 onChange={(event) => onFeedActionIndex(event.target.value)}
                 inputMode="numeric"
@@ -321,8 +322,8 @@ function PublisherFields({
                 spellCheck={false}
             />
             <Input
-                label="Value"
-                hint="The feed value to publish. The previous value clears on success; the next value is one keystroke away."
+                label={t('home.tabs.value')}
+                hint={t('components.operatorPublisherMode.theFeedValueToPublish')}
                 value={value}
                 onChange={(event) => onValue(event.target.value)}
                 inputMode="decimal"
@@ -331,7 +332,7 @@ function PublisherFields({
             {feedError ? (
                 <StatusMessage variant="error" className={formStyles.error}>{feedError}</StatusMessage>
             ) : null}
-            {sourceLoading ? <p className={dashStyles.entryDescription}>Loading source address…</p> : null}
+            {sourceLoading ? <p className={dashStyles.entryDescription}>{t('components.operatorPublisherMode.loadingSourceAddress')}</p> : null}
             {!sourceLoading && sourceError ? (
                 <StatusMessage variant="error" className={formStyles.error}>{sourceError}</StatusMessage>
             ) : null}
@@ -345,7 +346,7 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
         <>
             {fee.tiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={fee.tiers}
                     value={fee.pick}
@@ -355,7 +356,7 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
             ) : null}
             {submission.ownerLane.isWatcherMode ? (
                 <p className={dashStyles.entryDescription}>
-                    Watcher mode builds an unsigned transaction for a Signer-mode wallet.
+                    {t('components.operatorPublisherMode.watcherModeBuildsAnUnsigned')}
                 </p>
             ) : null}
             {submission.error ? (
@@ -363,12 +364,12 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
             ) : null}
             {lastTxid ? (
                 <p className={dashStyles.entryDescription}>
-                    Last published: txid {String(lastTxid).slice(0, 16)}…
+                    {t('components.operatorPublisherMode.lastPublishedTxid')} {String(lastTxid).slice(0, 16)}…
                 </p>
             ) : null}
             <div className={formStyles.actions}>
                 <Button type="submit" variant="primary" loading={busy} disabled={busy}>
-                    {submission.ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Publish value'}
+                    {submission.ownerLane.isWatcherMode ? t('components.placeOrderPanel.createUnsignedTransaction') : t('components.operatorPublisherMode.publishValue')}
                 </Button>
             </div>
         </>

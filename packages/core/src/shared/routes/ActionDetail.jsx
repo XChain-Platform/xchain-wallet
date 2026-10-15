@@ -14,7 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { DetailCard } from './History.jsx';
+import { DetailCard, detailTransferDirection } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
@@ -182,6 +182,13 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     const actionIndexLabel = /^\d+$/.test(rawActionIndex)
         ? BigInt(rawActionIndex).toLocaleString('en-US')
         : '';
+    // A transfer is named by its direction, as its History row is: the
+    // protocol calls both sides SEND, and an incoming one titled "Send"
+    // reads as money leaving the wallet.
+    const direction = detailTransferDirection(entry, entry.detailContext?.walletAddresses);
+    const titleAction = direction === 'in' ? actionDisplayLabel('RECEIVE')
+        : direction === 'out' || direction === 'self' ? actionDisplayLabel('SEND')
+        : actionDisplayLabel(entry.action);
     const header = (
         <PageHeader
             onBack={onBack}
@@ -190,8 +197,8 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 // A pending action has no index, and the fallback here
                 // rendered it as "#0", an index that belongs to a real
                 // action on every chain.
-                ? actionDisplayLabel(entry.action)
-                : `${actionDisplayLabel(entry.action)} #${actionIndexLabel}`}
+                ? titleAction
+                : `${titleAction} #${actionIndexLabel}`}
             titleIcon={iconUrl ? (
                 <img
                     src={iconUrl}

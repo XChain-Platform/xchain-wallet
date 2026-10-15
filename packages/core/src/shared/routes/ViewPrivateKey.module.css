@@ -32,14 +32,11 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: auto 1fr;
     gap: var(--xc-space-1) var(--xc-space-3);
     margin: 0 0 var(--xc-space-3);
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {
@@ -63,9 +60,13 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
     background: var(--xc-surface);
+    /* Two pixels preserve the compact inline-code inset below the spacing scale. */
     padding: 2px var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
+    /* A one-pixel hairline defines inline code without changing its geometry. */
     border: 1px solid var(--xc-border);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .revealRow {
@@ -82,10 +83,13 @@
     color: var(--xc-text);
     padding: var(--xc-space-3);
     background: var(--xc-surface);
+    /* A one-pixel hairline bounds the revealed key without adding visual weight. */
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
     white-space: pre-wrap;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .qrRow {

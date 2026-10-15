@@ -12,16 +12,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { activeNetworkLabel, normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './NetworkStatusIndicator.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
 function chainLabel(chainId) {
     const descriptor = chainRegistry.get(chainId);
-    if (!descriptor?.displayName) return chainId;
-    return descriptor.networkKind && descriptor.networkKind !== 'mainnet'
-        ? `${descriptor.displayName} ${descriptor.networkKind}`
-        : descriptor.displayName;
+    return descriptor?.displayName || chainId;
 }
 
 function affectedChains(overall, perChain) {
@@ -47,13 +48,18 @@ function serviceSummary(chain) {
  *
  * @param {object} props
  * @param {() => void} props.onOpenNetworkSettings
+ * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
  */
-export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
+export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork }) {
     const { overall, perChain } = useReachability();
     const [open, setOpen] = useState(false);
+    const [hovered, setHovered] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const visible = open || hovered;
+    const popoverPlacement = useAnchoredPopover(visible, triggerRef);
     const closePopover = useCallback(() => {
+        setHovered(false);
         setOpen(false);
         triggerRef.current?.focus();
     }, []);
@@ -72,45 +78,62 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
     const explanation = affectedNames.length > 0
         ? `${label}: ${affectedNames.join(', ')}`
         : state === 'offline'
-            ? `${label}: no selected chain is reachable`
+            ? `${label}: no selected network is reachable`
             : label;
+    const networkName = activeNetworkLabel(normalizeActiveNetwork(activeNetwork));
+    const triggerLabel = `${networkName}. ${explanation}`;
 
     useBackHandler(open ? closePopover : undefined);
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!visible) return undefined;
         const onPointerDown = (event) => {
             if (!wrapRef.current?.contains(event.target)) closePopover();
         };
         window.addEventListener('mousedown', onPointerDown);
         return () => window.removeEventListener('mousedown', onPointerDown);
-    }, [closePopover, open]);
+    }, [closePopover, visible]);
 
     return (
         <div
             ref={wrapRef}
             className={styles.wrap}
             data-state={state}
-            data-open={open ? 'true' : 'false'}
+            data-open={visible ? 'true' : 'false'}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
         >
             <button
                 ref={triggerRef}
                 type="button"
                 className={styles.trigger}
-                onClick={() => setOpen((value) => !value)}
-                aria-label={explanation}
+                data-network-status-trigger
+                onClick={() => {
+                    setHovered(false);
+                    setOpen((value) => !value);
+                }}
+                aria-label={triggerLabel}
                 aria-haspopup="dialog"
-                aria-expanded={open ? 'true' : 'false'}
-                title={explanation}
+                aria-expanded={visible ? 'true' : 'false'}
+                title={triggerLabel}
             >
                 <span className={styles.dot} aria-hidden="true" />
+                <span data-network-name>{networkName}</span>
             </button>
-            <div className={styles.popover} role="dialog" aria-label="Network status">
+            <OverlaySurface
+                variant="popover"
+                surfaceRef={popoverPlacement.ref}
+                style={popoverPlacement.style}
+                className={styles.popover}
+                aria-label={t('components.networkStatusIndicator.networkStatus')}
+                hidden={!visible}
+                inert={!visible ? '' : undefined}
+            >
                 <div className={styles.title}>{label}</div>
                 {state === 'normal' ? (
-                    <div className={styles.detail}>All selected chains are reachable.</div>
+                    <div className={styles.detail}>{t('components.networkStatusIndicator.allSelectedChainsAreReachable')}</div>
                 ) : state === 'unknown' ? (
-                    <div className={styles.detail}>Checking selected chains.</div>
+                    <div className={styles.detail}>{t('components.networkStatusIndicator.checkingSelectedChains')}</div>
                 ) : affected.length > 0 ? (
                     <ul className={styles.chains}>
                         {affected.map((chain, index) => (
@@ -120,16 +143,16 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                         ))}
                     </ul>
                 ) : (
-                    <div className={styles.detail}>No selected chain is reachable.</div>
+                    <div className={styles.detail}>{t('components.networkStatusIndicator.noSelectedChainIsReachable')}</div>
                 )}
                 <button
                     type="button"
                     className={styles.settings}
                     onClick={() => { closePopover(); onOpenNetworkSettings(); }}
                 >
-                    Network settings
+                    {t('components.networkStatusIndicator.networkSettings')}
                 </button>
-            </div>
+            </OverlaySurface>
         </div>
     );
 }

@@ -57,13 +57,13 @@ describe('protocol-fee row rendering', () => {
         expect(screen.getByText('Network fee')).toBeTruthy();
         // The two amounts stay distinct: the miner fee is not restated as the
         // total, and the protocol fee is not folded into the "Network fee".
-        expect(screen.getByText(/BTC 0\.00002$/)).toBeTruthy();
+        expect(screen.getByText(/−0\.00002 BTC$/)).toBeTruthy();
     });
 
     it('ActionIntentSummary prices the protocol fee instead of printing a bare arrow', () => {
         render(<ActionIntentSummary decoded={DECODED} simulation={SIMULATION} />);
         expect(screen.getByText('Protocol fee')).toBeTruthy();
-        expect(screen.getByText('BTC 0.00002')).toBeTruthy();
+        expect(screen.getByText('0.00002 BTC')).toBeTruthy();
         // The balance row is the post-state the user checks against the chain.
         expect(screen.getByText('2.99993667 → 2.99990491')).toBeTruthy();
     });

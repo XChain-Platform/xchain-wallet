@@ -15,6 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { t } from '../../i18n/index.js';
+import { walletOriginLabel } from '../utils/walletOriginLabel.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -159,13 +160,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     }
 
     const formatLabel = wallet.format === 'counterwallet-legacy' ? 'FreeWallet (Counterwallet legacy)' : 'BIP39';
-    const originLabel = ({
-        'created':                'Generated in this wallet',
-        'imported-mnemonic':      'Imported from a recovery phrase',
-        'imported-freewallet':    'Imported from FreeWallet',
-        'imported-xchain-backup': 'Restored from backup file',
-        'imported-wif':           'Imported single private key',
-    })[wallet.origin] || wallet.origin || 'N/A';
+    const originLabel = walletOriginLabel(wallet.origin);
     const created = wallet.createdAt ? new Date(wallet.createdAt) : null;
     const createdLabel = created && !Number.isNaN(created.getTime())
         ? created.toLocaleString()
@@ -202,7 +197,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
                 </dl>
                 {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="primary"
@@ -216,7 +211,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     </div>
                 ) : null}
                 {onRename ? (
-                    <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="primary"
@@ -230,7 +225,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     </div>
                 ) : null}
                 {isDemo ? (
-                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="danger"
@@ -240,16 +235,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             {t('walletDetails.exitDemo')}
                         </Button>
                         {exitError && !exitConfirmOpen ? (
-                            <p
-                                role="alert"
-                                style={{
-                                    marginTop: 'var(--xc-space-2)',
-                                    fontSize: 'var(--xc-text-xs)',
-                                    color: 'var(--xc-danger-fg)',
-                                }}
-                            >
-                                {exitError}
-                            </p>
+                            <StatusMessage variant="error">{exitError}</StatusMessage>
                         ) : null}
                         {exitConfirmOpen ? (
                             <DemoExitConfirm

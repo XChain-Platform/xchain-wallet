@@ -30,7 +30,7 @@ describe('SoftwareSigner unlock validation', () => {
         const signer = new SoftwareSigner({
             id: 'software-1', displayName: 'Software wallet', chainRegistry: {}, walletEncryption: {},
         });
-        await expect(signer.unlock({ password: '' })).rejects.toThrow('password is required');
+        await expect(signer.unlock({ password: '' })).rejects.toThrow('password or masterKey is required');
     });
 
     it.each([

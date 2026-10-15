@@ -74,7 +74,7 @@ function recordingMessaging() {
     const target = {
         // Bitcoin first, which is what made the old form publish there.
         getAddressesByChain: () => Promise.resolve({
-            'bitcoin-mainnet': [BTC_ADDRESS],
+            'bitcoin-regtest': [BTC_ADDRESS],
             'litecoin-mainnet': [LTC_ADDRESS],
         }),
         signerReady: () => Promise.resolve({ ready: true }),
@@ -159,6 +159,7 @@ describe('D-145: OracleForm chain picker', () => {
         const field = utils.getByRole('button', { name: /^Network:/ });
         expect(field, 'the oracle form mounts no chain picker at all, so the publishing '
             + 'chain is whichever one the wallet lists first').toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
 
         await domAct(async () => {
             fireEvent.click(field);

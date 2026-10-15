@@ -155,7 +155,7 @@ for (const viewport of VIEWPORTS) {
                 await expect(details, 'wallet details do not show the wallet format')
                     .toContainText('TypeBIP39');
                 await expect(details, 'wallet details do not show the wallet origin')
-                    .toContainText('Origindemo');
+                    .toContainText('OriginCreated for demo mode');
 
                 await page.getByRole('button', { name: 'Rename wallet' }).click();
                 await expectScreen(page, 'Rename wallet', `${size} rename wallet`, { atTop: true });
@@ -193,7 +193,8 @@ for (const viewport of VIEWPORTS) {
                 await expectScreen(page, 'Accounts', `${size} account picker`, { atTop: true });
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Add account' }),
-                    page.getByRole('button', { name: 'Manage account' }),
+                    // The footer action reads "Manage" so the pair stays on one line.
+                    page.getByRole('button', { name: 'Manage', exact: true }),
                 ], `${size} account picker footer`);
 
                 await page.getByRole('button', { name: /^Rename / }).first().click();

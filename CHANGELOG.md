@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.341.4] - 2026-10-14
+
+### Added
+- Every wallet header shows a network health indicator.
+- Settings can change the wallet password.
+- Send has advanced controls, and raw transactions can be broadcast after a safety check.
+- Empty wallet screens offer first actions.
+- Mobile wallets can share a payment request through the system share sheet.
+- Wallet history is cached for viewing offline.
+- Problems can be reported without sending private data.
+- The desktop wallet has a Check for updates button and text context menus.
+- Android and iOS derive vault keys with native Argon2id.
+
+### Changed
+- Every screen is built from shared page templates, so forms sit bare on a phone and carded on a wide screen.
+- Pages use one responsive gutter, and phone layouts fit the screen width with the bottom navigation in reach.
+- Lists, tabs, choice controls and buttons share one set of components and sizes.
+- Tab strips, menus, forms and History work from the keyboard, and screens carry accessible labels.
+- Block explorer links follow the active network.
+- Queued broadcasts back off between retries, and fee estimates are clamped to safe chain bounds.
+
+### Fixed
+- Phone screens no longer render wider than the display, which hid the bottom navigation.
+- A route that fails shows a recovery page instead of a blank screen.
+- Wallets added through onboarding are activated.
+- A dApp signing request is checked against what was approved before signing.
+
 ## [0.341.3] - 2026-10-12
 
 ### Added

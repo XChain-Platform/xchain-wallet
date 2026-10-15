@@ -264,7 +264,7 @@ describe('Send flow with mocked messaging', () => {
     it('replaces an SDK send failure and its raw details with actionable copy', async () => {
         const sdkFailure = Object.assign(
             new Error('SDK wallet exploded\n    at signer.js:9:3'),
-            { name: 'SDKWalletError', code: 'SDK_WALLET_FAILED' },
+            { name: 'SDKWalletError', code: 'SIGN_FAILED' },
         );
         const messaging = mount({ sendResult: sdkFailure });
         await openPasswordConfirm(messaging);
@@ -433,7 +433,7 @@ describe('Send flow with mocked messaging', () => {
         expect(screen.queryByText(/wallet holds none of its unlock keys/i)).not.toBeInTheDocument();
     });
 
-    it('plainly refuses a pasted address from another chain', async () => {
+    it('plainly refuses a pasted address from another network', async () => {
         const messaging = mount();
         const toField = await screen.findByLabelText(/^To$/);
         fireEvent.paste(toField, {
@@ -667,7 +667,7 @@ describe('Send flow with mocked messaging', () => {
             prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
         }));
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
         // The ToastHost notifications viewport is its own status region, so the
         // success screen's announcement is looked up inside the screen's main.
@@ -814,7 +814,7 @@ describe('Send flow with mocked messaging', () => {
         await approveWithPassword(messaging);
 
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
         expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
@@ -828,11 +828,17 @@ describe('Send flow with mocked messaging', () => {
 
     it('reviews the payment and builds an unsigned PSBT in watcher mode', async () => {
         const messaging = mount({ walletMode: 'watcher' });
-        await fillSendForm();
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        const scroller = screen.getByRole('main');
+        scroller.scrollTop = 420;
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
+        expect(scroller.scrollTop).toBe(0);
+        expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
-        expect(review).toHaveTextContent('Chain');
+        expect(review).toHaveTextContent('Network');
         expect(review).toHaveTextContent('Bitcoin');
         expect(review).toHaveTextContent('From');
         expect(review).toHaveTextContent('bc1qse…ndersa');

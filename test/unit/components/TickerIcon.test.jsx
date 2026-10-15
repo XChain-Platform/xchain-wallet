@@ -40,6 +40,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useTokenInfo.js', () => ({
 }));
 
 import { TickerIcon } from '../../../packages/core/src/shared/components/TickerIcon.jsx';
+import { IdentityAvatar } from '../../../packages/core/src/shared/components/WalletIdentity.jsx';
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 
@@ -57,7 +58,8 @@ describe('TickerIcon', () => {
 
         const icon = container.querySelector('img');
         expect(icon).toHaveAttribute('src', '/icons/bitcoin-mainnet-large.png');
-        expect(icon).toHaveStyle({ width: '32px', height: '32px' });
+        expect(icon.parentElement.style.width).toBe('var(--xc-avatar-size-list)');
+        expect(icon.parentElement.style.height).toBe('var(--xc-avatar-size-list)');
 
         fireEvent.error(icon);
         expect(container.querySelector('img')).toBeNull();
@@ -75,14 +77,18 @@ describe('TickerIcon', () => {
             <TickerIcon chainId="bitcoin-mainnet" tick="xcp" size={24} />,
         );
 
-        expect(screen.getByText('X')).toHaveStyle({
-            background: 'rgb(12, 34, 56)',
-            width: '24px',
-            height: '24px',
-        });
+        const fallback = screen.getByText('X');
+        expect(fallback.style.getPropertyValue('--xc-avatar-tone')).toBe('rgb(12, 34, 56)');
+        expect(fallback.style.background).toBe('var(--xc-avatar-tone)');
+        expect(fallback.style.width).toBe('var(--xc-avatar-size-header)');
+        expect(fallback.style.height).toBe('var(--xc-avatar-size-header)');
+        expect(fallback.style.borderRadius).toBe('var(--xc-avatar-shape)');
         const pip = screen.getByTitle('Bitcoin');
         expect(pip).toHaveAttribute('src', '/icons/bitcoin-mainnet-small.png');
-        expect(pip).toHaveStyle({ width: '12px', height: '12px' });
+        expect(pip).toHaveStyle({
+            width: 'var(--xc-avatar-pip-header)',
+            height: 'var(--xc-avatar-pip-header)',
+        });
         expect(container.querySelectorAll('img')).toHaveLength(1);
 
         fireEvent.error(pip);
@@ -95,6 +101,26 @@ describe('TickerIcon', () => {
 
         expect(screen.getByText('?')).toBeInTheDocument();
         expect(container.querySelector('img')).toBeNull();
+    });
+
+    it('uses shared context sizes and initials styling for identity avatars', () => {
+        const { rerender } = render(
+            <IdentityAvatar name="Alice Example" seed="bc1qalice" context="list" />,
+        );
+
+        const listAvatar = screen.getByText('AE');
+        expect(listAvatar).toHaveAttribute('data-xc-avatar-context', 'list');
+        expect(listAvatar.style.width).toBe('var(--xc-avatar-size-list)');
+        expect(listAvatar.style.height).toBe('var(--xc-avatar-size-list)');
+        expect(listAvatar.style.borderRadius).toBe('var(--xc-avatar-shape)');
+        expect(listAvatar.style.fontSize).toBe('var(--xc-avatar-initials-list)');
+        expect(listAvatar.style.placeItems).toBe('center');
+
+        rerender(<IdentityAvatar name="Alice Example" seed="bc1qalice" context="hero" />);
+        const heroAvatar = screen.getByText('AE');
+        expect(heroAvatar.style.width).toBe('var(--xc-avatar-size-hero)');
+        expect(heroAvatar.style.height).toBe('var(--xc-avatar-size-hero)');
+        expect(heroAvatar.style.fontSize).toBe('var(--xc-avatar-initials-hero)');
     });
 });
 

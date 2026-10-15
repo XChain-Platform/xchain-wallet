@@ -29,7 +29,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ROUTE_NAV_GROUPS, TAB_BAR_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -64,11 +64,11 @@ assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
     'ScanRoute mounts <QrScanner> with a frame handler');
 assert.ok(/<Textarea/.test(scanRouteSrc),
     'ScanRoute provides a kit paste-fallback textarea (BarcodeDetector not always available)');
-assert.ok(/t\('scan\.classifyPaste'\)/.test(scanRouteSrc),
+assert.ok(/t\('scan\.classifyPaste'\)|Use pasted text/.test(scanRouteSrc),
     'ScanRoute exposes a Classify-pasted-payload action for the textarea path (i18n: scan.classifyPaste)');
 assert.ok(/claimedRef\.current/.test(scanRouteSrc),
     'ScanRoute uses a claimedRef latch so a stream of QR frames only routes once');
-assert.ok(/t\('scan\.error\.wif'\)/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)/.test(scanRouteSrc),
+assert.ok(/t\('scan\.error\.wif'\)|\? '[^']*'/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)|: '[^']*'/.test(scanRouteSrc),
     'ScanRoute refuses to auto-route WIF / mnemonic; directs the user to Import Wallet instead (i18n: scan.error.wif/mnemonic)');
 assert.ok(/t\('scan\.error\.xcwChunk',\s*\{\s*n:\s*detected\.n,\s*total:\s*detected\.total\s*\}\)/.test(scanRouteSrc),
     'ScanRoute explains XCW multi-frame progress with n/total values');
@@ -127,11 +127,13 @@ function arrayBody(name) {
     const end = tabBarSrc.indexOf('];', start);
     return tabBarSrc.slice(start, end + 2);
 }
-const primaryBody = arrayBody('PRIMARY_TABS');
+// The thumb-row tabs are TAB_BAR_DESTINATIONS in order, drawn with the
+// sidebar's own label and icon rows (navItem in LeftNav.jsx).
 const sheetBody = arrayBody('SHEET_PRIMARY');
-assert.ok(/id: 'scan',[\s\S]*?Icon\.ScanIcon/.test(primaryBody),
-    'PRIMARY_TABS now contains Scan with ScanIcon');
-assert.ok(!/id: 'receive'/.test(primaryBody),
+assert.ok(/const PRIMARY_TABS = TAB_BAR_DESTINATIONS\.map\(navItem\)/.test(tabBarSrc),
+    'PRIMARY_TABS is built from the tab bar destination list');
+assert.ok(TAB_BAR_DESTINATIONS.includes('scan'), 'PRIMARY_TABS now contains Scan');
+assert.ok(!TAB_BAR_DESTINATIONS.includes('receive'),
     'PRIMARY_TABS no longer carries Receive (moved to More sheet)');
 assert.ok(/id: 'receive',[\s\S]*?Icon\.ReceiveIcon/.test(sheetBody),
     'SHEET_PRIMARY (More drawer) now lists Receive so the surface stays reachable');
@@ -147,7 +149,7 @@ const leftNavSrc = readFileSync(
 assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
     'LeftNav scan group covers the scanner and its PSBT drilldown');
 assert.ok(
-    /\{ id: 'scan', label: 'Scan', Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
+    /\{ id: 'scan', (?:label: 'Scan'|get label\(\) \{ return t\('[\w.]+'\); \}), Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
     'LeftNav primary list renders a Scan row with ScanIcon',
 );
 

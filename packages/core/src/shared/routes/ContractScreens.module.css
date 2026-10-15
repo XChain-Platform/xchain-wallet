@@ -7,15 +7,20 @@
 }
 
 .toolbarSearch {
+    /* 200px keeps search usable before the toolbar lets it shrink. */
     flex: 1 1 200px;
     min-width: 0;
-    margin-bottom: calc(var(--xc-space-3) * -1);
+}
+
+.toolbarSearch > * {
+    margin-bottom: 0;
 }
 
 .chainFilters {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--xc-space-1);
+    align-items: center;
+    gap: var(--xc-space-2);
     min-width: 0;
     max-width: 100%;
 }
@@ -31,7 +36,15 @@
 
 /* Single-line technical values stay intact and scroll within their control.
    This keeps long hex and JSON arguments from widening the screen. */
+.monospaceInput,
+.monospaceValue,
+.codeSource {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .monospaceInput {
+    composes: scrollArea from '../../ui/Screen.module.css';
     min-width: 0;
     max-width: 100%;
     font-family: var(--xc-font-mono);
@@ -48,13 +61,14 @@
 }
 
 .codeSource {
+    composes: scrollArea from '../../ui/Screen.module.css';
     display: block;
     width: 100%;
     min-width: 0;
     max-width: 100%;
     padding: var(--xc-space-2);
     font-family: var(--xc-font-mono);
-    font-size: 0.85rem;
+    font-size: var(--xc-text-md);
     overflow: auto;
     white-space: pre;
     resize: vertical;
@@ -65,7 +79,6 @@
     flex-wrap: wrap;
     gap: var(--xc-space-2);
     min-width: 0;
-    margin-bottom: var(--xc-space-2);
 }
 
 .toolActions > * {

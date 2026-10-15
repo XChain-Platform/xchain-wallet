@@ -1,13 +1,10 @@
 .card {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--xc-space-3);
-    padding: var(--xc-card-pad);
-    border-radius: var(--xc-card-radius);
     margin-bottom: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-surface-raised);
 }
 
 .gentle {
@@ -22,6 +19,7 @@
 }
 
 .body {
+    /* The content-specific wrapping threshold has no shared width token. */
     flex: 1 1 240px;
     min-width: 0;
 }
@@ -43,9 +41,12 @@
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
     align-items: center;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .dismissBtn {
@@ -70,6 +71,7 @@
 /* §53 / Cluster K FOLLOWUP 2 - explicit focus ring. */
 .dismissBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The two-pixel focus separation has no spacing-token equivalent. */
     outline-offset: 2px;
     border-radius: var(--xc-radius-sm);
 }

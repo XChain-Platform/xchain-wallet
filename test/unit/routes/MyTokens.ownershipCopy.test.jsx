@@ -112,3 +112,20 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
         expect(entry.keywords).toContain('issued');
     });
 });
+
+describe('My tokens long tickers', () => {
+    afterEach(() => cleanup());
+
+    it('gives a long ticker its own truncating span ahead of the lock mark', async () => {
+        const longTick = 'L'.repeat(120);
+        mountMyTokens({ tokens: [{ tick: longTick, locked: true, description: 'A long one.' }] });
+
+        const name = await screen.findByTitle(longTick);
+        expect(name).toHaveTextContent(longTick);
+        const lock = screen.getByTitle('Supply locked');
+        // The lock is the name's sibling, so the ellipsis on the name stops
+        // before it instead of the text running underneath.
+        expect(name.parentElement).toBe(lock.parentElement);
+        expect(name.contains(lock)).toBe(false);
+    });
+});

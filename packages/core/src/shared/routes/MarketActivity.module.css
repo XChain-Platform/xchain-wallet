@@ -1,15 +1,13 @@
 /* Tappable market header - shows the selected coin/token and opens the
    shared picker to switch markets (mirrors the DEX market header). */
 .marketSelector {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
@@ -54,16 +52,8 @@
     color: var(--xc-text-muted);
 }
 
-.error {
-    color: var(--xc-danger-fg);
-    font-size: var(--xc-text-sm);
-}
-
-.empty {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    text-align: center;
-    padding: var(--xc-space-4);
+:global([dir='rtl']) .marketSelectorChevron {
+    transform: scaleX(-1);
 }
 
 .section {
@@ -72,14 +62,6 @@
 
 .section + .section {
     margin-top: var(--xc-space-6);
-}
-
-.sectionHeader {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
 }
 
 .count {
@@ -98,15 +80,12 @@
 }
 
 .row {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
