@@ -298,7 +298,7 @@ describe('CoinpayForm shared confirmation', () => {
             await drain();
         });
 
-        expect(utils.getByText('Loading wallet addresses…')).toBeTruthy();
+        expect(utils.getByText('Loading addresses…')).toBeTruthy();
         expect(utils.queryByText('10 DOGE')).toBeNull();
         expect(utils.queryByText(PAYEE.slice(0, 6))).toBeNull();
 

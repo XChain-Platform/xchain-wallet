@@ -570,7 +570,7 @@ function ScopedCoinpayForm({
     return wrap(
         <>
             {addressesByChain === null ? (
-                <p className={styles.hint}>Loading wallet addresses…</p>
+                <p className={styles.hint}>Loading addresses…</p>
             ) : null}
             {scanning && obligations.length === 0 ? (
                 <p className={styles.hint}>Scanning for payments due…</p>
