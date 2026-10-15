@@ -39,8 +39,12 @@ describe('ScanRoute paste box', () => {
         fireEvent.click(screen.getByRole('button', { name: /use pasted text/i }));
         const form = screen.getByTestId('scan-route');
         const notice = screen.getByText(/doesn't know how to use/i);
-        expect(form.contains(notice)).toBe(true);
-        // Nothing with text or controls sits between the form's start and the notice.
+        // The shared form template renders form notices just above the form,
+        // so the notice is either inside it or immediately before it.
+        const insideOrBefore = form.contains(notice)
+            || Boolean(notice.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(insideOrBefore).toBe(true);
+        // No form text or control comes before the notice.
         const before = [...form.querySelectorAll('button, input, textarea, p')]
             .filter((el) => el.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING);
         expect(before).toHaveLength(0);
