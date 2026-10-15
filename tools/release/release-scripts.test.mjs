@@ -255,3 +255,113 @@ test('refuses when no merged PR produced the commit', async () => {
         }, prRoutes(prs, [claStatus('success')]));
     }
 });
+
+// Waiver tests run a COPY of the gate inside a temp tree whose package.json
+// carries the version under test, so the real script is exercised unmodified
+// and no env override exists that could be abused in production.
+const WAIVER = {
+    version: '9.9.9',
+    workflow: 'ci.yml',
+    jobs: ['e2e-regtest', 'verdict'],
+    reason: 'venue down for test',
+    ruled_by: 'operator (test)',
+    ruled_at: '2026-10-15',
+};
+const claOk = [{ context: 'license/cla', state: 'success', updated_at: '2026-10-13T10:00:00Z' }];
+const job = (name, conclusion) => ({ name, conclusion, steps: [{ name: 's' }] });
+const runRoute = (status, conclusion) => ({
+    workflow_runs: [{
+        id: 42, path: '.github/workflows/ci.yml', status, conclusion,
+        created_at: '2026-10-13T10:00:00Z', html_url: 'https://example.invalid/run/42',
+    }],
+});
+
+async function withWaiver({ jobs, status = 'completed', conclusion = 'failure', version = '9.9.9', cla = claOk }, check) {
+    const root = mkdtempSync(join(tmpdir(), 'release-gate-waiver-'));
+    const toolDir = join(root, 'tools', 'release');
+    mkdirSync(toolDir, { recursive: true });
+    copyFileSync(GATE, join(toolDir, 'verify-validated-commit.mjs'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version }));
+    writeFileSync(join(toolDir, 'gate-waivers.json'), JSON.stringify([WAIVER]));
+    const server = await serve(cla, {
+        [`/repos/${REPO}/actions/runs`]: runRoute(status, conclusion),
+        [`/repos/${REPO}/actions/runs/42/jobs`]: { jobs },
+    });
+    try {
+        const result = spawnSync(process.execPath, [join(toolDir, 'verify-validated-commit.mjs'), '--sha', SHA, '--repo', REPO], {
+            encoding: 'utf8',
+            env: {
+                ...process.env, GITHUB_TOKEN: 'test-token', GITHUB_REPOSITORY: '',
+                GITHUB_API_URL: `http://127.0.0.1:${server.port}`,
+            },
+        });
+        check(result);
+    } finally {
+        server.stop();
+        rmSync(root, { recursive: true, force: true });
+    }
+}
+
+test('waiver: only waived jobs failed -> accepted with waiver evidence and banner', async () => {
+    await withWaiver({ jobs: [job('test', 'success'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 0, r.stderr);
+        assert.match(r.stdout, /ACCEPTED UNDER WAIVER for version 9\.9\.9/);
+        assert.match(r.stdout, /e2e-regtest=failure, verdict=failure/);
+        assert.match(r.stdout, /venue down for test/);
+        assert.match(r.stdout, /operator \(test\) on 2026-10-15/);
+        assert.match(r.stdout, /\*\*\* WAIVER:/);
+    });
+});
+
+test('waiver: a waived job that was cancelled or succeeded still passes', async () => {
+    await withWaiver({ conclusion: 'cancelled', jobs: [job('test', 'success'), job('e2e-regtest', 'cancelled'), job('verdict', 'skipped')] }, (r) => {
+        assert.equal(r.status, 0, r.stderr);
+        assert.match(r.stdout, /WAIVER:/);
+    });
+    await withWaiver({ jobs: [job('test', 'success'), job('e2e-regtest', 'success'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 0, r.stderr);
+    });
+});
+
+test('waiver: a non-waived job failing still refuses', async () => {
+    await withWaiver({ jobs: [job('test', 'failure'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stderr, /concluded `failure`/);
+        assert.doesNotMatch(r.stdout, /WAIVER/);
+    });
+});
+
+test('waiver: a version mismatch refuses', async () => {
+    await withWaiver({ version: '9.9.8', jobs: [job('test', 'success'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.doesNotMatch(r.stdout, /WAIVER/);
+    });
+});
+
+test('waiver: an in-progress run is never waived', async () => {
+    await withWaiver({ status: 'in_progress', conclusion: null, jobs: [job('test', 'success'), job('e2e-regtest', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stderr, /still in_progress/);
+        assert.doesNotMatch(r.stdout, /WAIVER/);
+    });
+});
+
+test('waiver: never covers commit statuses', async () => {
+    await withWaiver({ cla: [], jobs: [job('test', 'success'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stderr, /license\/cla/);
+    });
+});
+
+test('waiver: an unfetchable jobs list refuses', async () => {
+    await withWaiver({ jobs: [] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+    });
+});
+
+test('the committed gate-waivers.json has exactly the reviewed 0.341.4 entry', () => {
+    const list = JSON.parse(readFileSync(join(HERE, 'gate-waivers.json'), 'utf8'));
+    assert.equal(list.length, 1);
+    assert.equal(list[0].version, '0.341.4');
+    assert.deepEqual(list[0].jobs, ['e2e-regtest', 'verdict']);
+});

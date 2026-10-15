@@ -1,0 +1,14 @@
+[
+    {
+        "version": "0.341.4",
+        "workflow": "ci.yml",
+        "jobs": [
+            "e2e-regtest",
+            "verdict"
+        ],
+        "reason": "the CI regtest venue cannot report the BTC regtest indexer height since 2026-10-14T22:07Z (its indexer tables were dropped), so e2e-regtest cannot run for reasons unrelated to this release; every other ci.yml job passed on the release merge commit",
+        "ruled_by": "operator (J-Dog)",
+        "ruled_at": "2026-10-15",
+        "note": "verdict only classifies the other jobs and is waived because it reports the waived e2e-regtest result"
+    }
+]
