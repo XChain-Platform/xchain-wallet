@@ -243,6 +243,7 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
             <span className={styles.pasteAction}>
                 <ClipboardPasteButton
                     disabled={disabled}
+                    onMessage={(message) => { if (message) setPasteError(message); }}
                     onPaste={(text) => {
                         const inspected = inspectClipboardPaste(text);
                         if (!inspected.ok) {

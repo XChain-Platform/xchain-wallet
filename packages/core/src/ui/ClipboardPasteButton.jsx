@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { Button } from './Button.jsx';
+import { StatusMessage } from './StatusMessage.jsx';
 
 const DENIED_MESSAGE = 'Clipboard access was denied. Paste manually instead.';
 const UNAVAILABLE_MESSAGE = 'Clipboard access is unavailable. Paste manually instead.';
@@ -77,11 +78,7 @@ export function ClipboardPasteButton({
             >
                 Paste
             </Button>
-            {message ? (
-                <span role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }}>
-                    {message}
-                </span>
-            ) : null}
+            <StatusMessage variant="error">{message}</StatusMessage>
         </span>
     );
 }

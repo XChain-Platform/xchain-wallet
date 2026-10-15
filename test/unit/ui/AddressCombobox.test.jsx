@@ -110,9 +110,12 @@ describe('<AddressCombobox>', () => {
 
         navigator.clipboard.readText.mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'));
         fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Clipboard access was denied. Paste manually instead.',
-        );
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Clipboard access was denied. Paste manually instead.');
+        // The failure is the field's own error under the field, not a second
+        // message inside the field box beside the Paste button.
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(screen.getByLabelText('To').getAttribute('aria-describedby')).toContain(alert.id);
     });
 
     it('clears the value and resets keyboard selection', () => {
