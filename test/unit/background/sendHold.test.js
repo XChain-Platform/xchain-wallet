@@ -55,7 +55,7 @@ function deferred() {
     return { promise, resolve };
 }
 
-function makeHost(sendHold) {
+function makeHost(sendHold, activeNetworkRef = { current: 'mainnet' }) {
     return createBackgroundHost({
         broadcastQueueStorage: null,
         signThrottleStorage: null,
@@ -64,10 +64,17 @@ function makeHost(sendHold) {
         bridgeEvents: { emit() {} },
         getDiagnosticContext: () => ({}),
         vault: {
-            settings: { get: async () => ({}) },
+            settings: { get: async () => ({ activeNetwork: activeNetworkRef.current }) },
             wallets: { list: async () => [] },
         },
-        chainRegistry: { get: () => null, list: () => [] },
+        chainRegistry: {
+            get: (id) => {
+                if (id === 'bitcoin-mainnet') return { id, networkKind: 'mainnet' };
+                if (id === 'bitcoin-testnet') return { id, networkKind: 'testnet' };
+                return null;
+            },
+            list: () => [],
+        },
         sdkRegistry: { for: () => ({}) },
         sendHold,
     });
@@ -189,15 +196,64 @@ describe('background send hold wiring', () => {
             cancel: vi.fn(() => false),
             isHeld: vi.fn(() => false),
         };
+        sendTokenMock.mockImplementation(async (opts) => {
+            await opts.beforeBroadcast({ signed: { txHex: '00' }, revealSigned: null });
+            return { txid: 'tx-1' };
+        });
 
         const response = await makeHost(sendHold).handle({
             type: 'action.send',
-            request: {},
+            request: { chainId: 'bitcoin-mainnet' },
         });
 
         expect(response.ok).toBe(true);
-        expect(sendTokenMock.mock.calls[0][0].beforeBroadcast).toBeUndefined();
         expect(sendHold.hold).not.toHaveBeenCalled();
+    });
+
+    it('refuses a send composed for a network that is no longer active', async () => {
+        const response = await makeHost(undefined, { current: 'testnet' }).handle({
+            type: 'action.send',
+            request: { chainId: 'bitcoin-mainnet' },
+        });
+
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toContain('active network changed to testnet');
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('rechecks the active network after the hold, just before broadcast', async () => {
+        const activeNetwork = { current: 'mainnet' };
+        const sendHold = {
+            hold: vi.fn(async () => { activeNetwork.current = 'testnet'; }),
+            cancel: vi.fn(() => false),
+            isHeld: vi.fn(() => false),
+        };
+        const broadcast = vi.fn();
+        sendTokenMock.mockImplementation(async (opts) => {
+            await opts.beforeBroadcast({ signed: { txHex: '00' }, revealSigned: null });
+            broadcast();
+            return { txid: 'must-not-broadcast' };
+        });
+
+        const response = await makeHost(sendHold, activeNetwork).handle({
+            type: 'action.send',
+            request: { chainId: 'bitcoin-mainnet', holdId: 'send-1', undoSeconds: 5 },
+        });
+
+        expect(sendHold.hold).toHaveBeenCalledWith('send-1', 5);
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toContain('review the payment again');
+        expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    it('refuses an unsigned watch-only send for a network that is no longer active', async () => {
+        const response = await makeHost(undefined, { current: 'testnet' }).handle({
+            type: 'action.send.psbt',
+            request: { chainId: 'bitcoin-mainnet' },
+        });
+
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toContain('active network changed to testnet');
     });
 
     it('routes cancellation to the same host-owned registry', async () => {

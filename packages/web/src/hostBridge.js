@@ -1484,6 +1484,7 @@ export async function importMnemonicLocal(req) {
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
         chainId,
+        activeNetwork,
     } = req;
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -1545,6 +1546,10 @@ export async function importMnemonicLocal(req) {
                 // Same password, same params: the wallet seal reuses the vault
                 // key instead of paying a second Argon2id round.
                 masterKey,
+                // The network the caller asked to land on (demo mode asks for
+                // mainnet). Undefined keeps the flow's own inference from the
+                // first chain id.
+                activeNetwork,
             });
         await v.save();
         vault = v;

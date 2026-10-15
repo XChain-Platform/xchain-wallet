@@ -304,7 +304,7 @@ describe('translations', () => {
             savedPackKey: 'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
             watcherPackKey: 'Watcher mode: this builds an unsigned transaction. The pack key stays in this wallet either way.',
             importOptions: 'Wallet import options',
-            historySearch: 'Search action, address, token, transaction ID, memo…',
+            historySearch: 'Search by action, address, token, transaction ID, or memo…',
             peerError: "Couldn't load the linked transaction. Try again.",
         });
     });
@@ -481,6 +481,8 @@ describe('translations', () => {
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],
+            // Leads the blocked-site pattern hint and the biometric unlock sentence.
+            ['settings.biometric.use', 'settings.connectedSites.blockPatternLead'],
         ]);
     });
 

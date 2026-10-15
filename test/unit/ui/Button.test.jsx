@@ -219,8 +219,14 @@ describe('<Button>', () => {
             const source = readFileSync(`packages/core/src/ui/${component}.jsx`, 'utf8');
             expect(source).toMatch(/styles\[size\] \|\| ''/);
             if (component === 'AddressField') {
+                // The end padding clears the icon action alone, or Paste and
+                // the icon together when the field shows the in-field Paste.
+                expect(source).toMatch(/paddingInlineEnd: endRoom/);
                 expect(source).toMatch(
-                    /paddingInlineEnd: 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
+                    /'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
+                );
+                expect(source).toMatch(
+                    /'calc\(var\(--address-paste-width\) \+ var\(--address-control-height\)\)'/,
                 );
             }
             for (const size of ['sm', 'md', 'lg']) {

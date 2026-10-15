@@ -17,6 +17,29 @@ afterEach(() => {
 });
 
 describe('RelativeTime', () => {
+    it('renders bounded labels for a seeded range of timestamps', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(NOW);
+        let state = 0x7a11c10c;
+        const timestamps = Array.from({ length: 32 }, () => {
+            state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+            return NOW.getTime() - (state % (6 * 24 * 60 * 60 * 1000));
+        });
+
+        render(<>{timestamps.map((timestamp) => (
+            <RelativeTime key={timestamp} timestamp={timestamp} />
+        ))}</>);
+
+        const labels = screen.getAllByRole('time');
+        expect(labels).toHaveLength(timestamps.length);
+        labels.forEach((label, index) => {
+            expect(label.textContent.length).toBeGreaterThan(0);
+            expect(label.textContent.length).toBeLessThanOrEqual(16);
+            expect(label).toHaveAttribute('dateTime', new Date(timestamps[index]).toISOString());
+            expect(label.getAttribute('aria-label').length).toBeLessThanOrEqual(100);
+        });
+    });
+
     it('updates while mounted and changes to an absolute date at one week', () => {
         vi.useFakeTimers();
         vi.setSystemTime(NOW);

@@ -416,6 +416,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             chainRegistry: deps.chainRegistry,
             chainId: req.chainId,
             address: req.address,
+            vault: deps.vault,
         });
         const current = await requireCurrentReadSite(deps, req, site.id);
         assertChainPermitted(current, req.chainId);
@@ -1233,6 +1234,7 @@ async function decimalAmountFromBaseUnits({ deps, chainId, address, tick, amount
             chainRegistry: deps.chainRegistry,
             chainId,
             address,
+            vault: deps.vault,
         });
     } catch (err) {
         throw bridgeError(

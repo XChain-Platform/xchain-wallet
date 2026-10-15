@@ -1215,7 +1215,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -1638,7 +1638,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                 </>
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}

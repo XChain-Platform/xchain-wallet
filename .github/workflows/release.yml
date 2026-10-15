@@ -90,7 +90,7 @@ jobs:
   # Gate every downstream job on the tag being what it claims to be.
   # Cheap, and it fails the run before any secret-bearing job starts.
   verify-tag:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # `actions: read` is what lets the step-1 gate below list workflow runs
     # for the tag commit. `contents: read` alone returns 404 there, which the
     # gate reports as a refusal rather than a pass.
@@ -246,7 +246,7 @@ jobs:
   # to this tag.
   build-unsigned:
     needs: verify-tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -327,7 +327,7 @@ jobs:
 
   desktop-linux:
     needs: verify-tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Read into a job env var so step-level `if:` can test it. §7.5: ONE
       # stable non-guessable path, shared across releases, because each
@@ -1148,7 +1148,7 @@ jobs:
   # them to record. A checklist nobody can find is one nobody follows.
   release-record:
     needs: [verify-tag, build-unsigned, desktop-linux, desktop-macos, desktop-windows]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: What to record, and what happens next
         run: |

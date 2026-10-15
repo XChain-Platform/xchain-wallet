@@ -25,12 +25,6 @@
     color: var(--xc-text-muted);
 }
 
-.error {
-    margin: var(--xc-space-2) 0 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-}
-
 .progress {
     margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-sm);

@@ -98,6 +98,7 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
                     ))}
                 </select>
             </div>
+            {switching ? <Status text={t('settings.network.switching')} /> : null}
             {switchError ? <Status text={switchError} tone="error" /> : null}
             {confirmDialog.request ? (
                 <ConfirmModal

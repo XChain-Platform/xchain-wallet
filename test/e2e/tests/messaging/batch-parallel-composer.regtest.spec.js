@@ -115,7 +115,7 @@ async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
 
 // The composers' fields are plain <label><span>Name</span><select>, and
 // getByLabel reads a wrapping label's WHOLE text, options included, so
-// "Chain" also matched the Action select once an option description said
+// "Network" could also match the Action select once an option description said
 // "cross-chain" (a strict-mode failure on the first rail run). The
 // accessible name is just the span, so match on role plus exact name.
 const picker = (scope, name) => scope.getByRole('combobox', { name, exact: true });
@@ -147,7 +147,10 @@ async function gotoBatchComposer(page) {
     const menu = page.getByRole('main');
     await menu.getByRole('button', { name: /^Batch/ }).click();
     const main = page.getByRole('main');
-    await expect(main.getByRole('button', { name: /^Network:/ }), 'the Batch composer never rendered').toBeVisible({ timeout: 30_000 });
+    // The Batch composer's network is a ChainPicker (a button named "Network: <name>"),
+    // not a select; the Parallel rows below still use a native select.
+    await expect(main.getByRole('button', { name: /^Network:/ }).first(), 'the Batch composer never rendered')
+        .toBeVisible({ timeout: 30_000 });
     return main;
 }
 

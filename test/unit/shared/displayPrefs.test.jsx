@@ -199,10 +199,13 @@ describe('LearnNote', () => {
         expect(note).not.toHaveAttribute('role');
         expect(body.textContent.match(/[.!?](?=\s|$)/g)).toHaveLength(1);
         expect(note.textContent).toContain(expected);
-        expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
+        const learnMore = screen.getByRole('link', { name: 'Learn more' });
+        expect(learnMore).toHaveAttribute(
             'href',
-            'https://docs.xchain.io/',
+            'https://docs.xchain.io/components/wallet/security#sign-screen-safety-rails',
         );
+        expect(learnMore).toHaveAttribute('target', '_blank');
+        expect(learnMore).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
     it('keeps each dismissed confirmation note hidden after remounting', () => {

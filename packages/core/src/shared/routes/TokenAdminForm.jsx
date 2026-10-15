@@ -1018,7 +1018,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -1065,7 +1065,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 label={`Review ${MODE_LABEL_LOWER[mode]}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1307,7 +1307,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             label={MODE_LABEL[mode]}
             onSubmit={handleReview}
             status={formError || eligibilityError ? (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     {formError || eligibilityError}
                 </StatusMessage>
             ) : null}
@@ -1354,7 +1354,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}

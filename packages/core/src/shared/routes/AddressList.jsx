@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
@@ -200,13 +201,16 @@ export function AddressList({
         setChainPrefsError(null);
         if (!selected?.address || !selected?.chainId) return undefined;
         if (typeof messaging.getAddressPreferences !== 'function') return undefined;
+        // A demo wallet's addresses never go to an explorer (issue #82); the
+        // card shows no values.
+        if (isDemoWallet(walletId)) return undefined;
         messaging.getAddressPreferences({ chainId: selected.chainId, address: selected.address })
             .then((p) => { if (!cancelled) setChainPrefs(p); })
             .catch((err) => {
                 if (!cancelled) setChainPrefsError(userFacingMessage(err, 'Preferences unavailable.'));
             });
         return () => { cancelled = true; };
-    }, [messaging, selected?.address, selected?.chainId]);
+    }, [messaging, selected?.address, selected?.chainId, walletId]);
 
     // "+" menu in the header: ordinary or advanced generation, plus import.
     const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -740,7 +744,7 @@ export function AddressList({
                     label={t('routes.addressList.generateAddressAtIndex')}
                     onSubmit={handleAdvancedGenerate}
                     status={advancedError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {advancedError}
                         </StatusMessage>
                     ) : null}
@@ -954,76 +958,78 @@ export function AddressList({
             onBack={onBack}
             title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
             titleIcon={<Icon.ScanIcon />}
-            trailing={(
-                <div className={local.addMenuWrap} ref={addMenuRef}>
-                    <Button
-                        type="button"
-                        className={local.addBtn}
-                        icon={<Icon.PlusIcon />}
-                        onClick={() => setAddMenuOpen((o) => !o)}
-                        aria-haspopup="menu"
-                        aria-expanded={addMenuOpen}
-                        aria-label={t('routes.addressList.addOrImportAddress')}
-                        title={t('routes.addressList.addAddress')}
-                        data-testid="address-add-menu"
-                    />
-                    {addMenuOpen ? (
-                        /* The kit has no menu-list container, so native list semantics group its menu items. */
-                        <ul className={local.addMenu} role="menu">
-                            <li>
-                                <Button
-                                    type="button"
-                                    role="menuitem"
-                                    className={local.addMenuItem}
-                                    onClick={() => { setAddMenuOpen(false); setShowAddModal(true); }}
-                                    data-testid="address-add-address"
-                                >
-                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                                    {t('routes.addressList.addAddress')}
-                                </Button>
-                            </li>
-                            <li>
-                                <Button
-                                    type="button"
-                                    role="menuitem"
-                                    className={local.addMenuItem}
-                                    onClick={() => {
-                                        setAddMenuOpen(false);
-                                        setAdvancedError(null);
-                                        setShowAdvancedGenerate(true);
-                                    }}
-                                    data-testid="address-add-at-index"
-                                >
-                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                                    {t('routes.addressList.generateAtIndexAdvanced')}
-                                </Button>
-                            </li>
-                            <li>
-                                <Button
-                                    type="button"
-                                    role="menuitem"
-                                    className={local.addMenuItem}
-                                    onClick={() => {
-                                        setAddMenuOpen(false);
-                                        setWifNotice(null);
-                                        const first = wifChainIds[0] || '';
-                                        // Only the chain is seeded; the
-                                        // address type stays '' so
-                                        // `effectiveWifAddressType` resolves
-                                        // it against this wallet's format.
-                                        if (!wifChainId && first) setWifChainId(first);
-                                        setShowWifForm(true);
-                                    }}
-                                >
-                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
-                                    {t('routes.addressList.importAddress')}
-                                </Button>
-                            </li>
-                        </ul>
-                    ) : null}
-                </div>
-            )}
         />
+    );
+    // The page header holds only the title and Back, so the add and import
+    // menu sits in the content actions row, the first item below any notice.
+    const addMenu = (
+        <div className={local.addMenuWrap} ref={addMenuRef}>
+            <Button
+                type="button"
+                variant="secondary"
+                icon={<Icon.PlusIcon />}
+                onClick={() => setAddMenuOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={addMenuOpen}
+                data-testid="address-add-menu"
+            >
+                {t('routes.addressList.addOrImportAddress')}
+            </Button>
+            {addMenuOpen ? (
+                /* The kit has no menu-list container, so native list semantics group its menu items. */
+                <ul className={local.addMenu} role="menu">
+                    <li>
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            className={local.addMenuItem}
+                            onClick={() => { setAddMenuOpen(false); setShowAddModal(true); }}
+                            data-testid="address-add-address"
+                        >
+                            <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                            {t('routes.addressList.addAddress')}
+                        </Button>
+                    </li>
+                    <li>
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            className={local.addMenuItem}
+                            onClick={() => {
+                                setAddMenuOpen(false);
+                                setAdvancedError(null);
+                                setShowAdvancedGenerate(true);
+                            }}
+                            data-testid="address-add-at-index"
+                        >
+                            <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                            {t('routes.addressList.generateAtIndexAdvanced')}
+                        </Button>
+                    </li>
+                    <li>
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            className={local.addMenuItem}
+                            onClick={() => {
+                                setAddMenuOpen(false);
+                                setWifNotice(null);
+                                const first = wifChainIds[0] || '';
+                                // Only the chain is seeded; the
+                                // address type stays '' so
+                                // `effectiveWifAddressType` resolves
+                                // it against this wallet's format.
+                                if (!wifChainId && first) setWifChainId(first);
+                                setShowWifForm(true);
+                            }}
+                        >
+                            <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
+                            {t('routes.addressList.importAddress')}
+                        </Button>
+                    </li>
+                </ul>
+            ) : null}
+        </div>
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
@@ -1031,19 +1037,20 @@ export function AddressList({
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <ListPage
+                notices={<StatusMessage variant="error">{loadError}</StatusMessage>}
+                actions={addMenu}
+            />,
         );
     }
 
     if (!addressesByChain) {
         return wrap(
-            <div role="status" aria-label={t('routes.addressList.loadingAddresses')}>
-                <Skeleton.List rows={5} />
-            </div>,
+            <ListPage actions={addMenu}>
+                <div role="status" aria-label={t('routes.addressList.loadingAddresses')}>
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
         );
     }
 
@@ -1438,7 +1445,7 @@ export function AddressList({
 
     if (activeChainIds.length === 0 && multisigs.length === 0) {
         return wrap(
-            <ListPage>
+            <ListPage actions={addMenu}>
                 <EmptyState
                     title={t('history.empty.noAddressesTitle')}
                     body={t('routes.addressList.generateAReceiveAddressTo')}
@@ -1451,7 +1458,7 @@ export function AddressList({
     }
 
     return wrap(
-        <ListPage toolbar={(
+        <ListPage actions={addMenu} toolbar={(
             <>
                 <div className={local.searchField}>
                     <Input

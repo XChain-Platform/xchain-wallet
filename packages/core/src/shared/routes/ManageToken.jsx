@@ -929,7 +929,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     // A Mode B row carries no price on this lane; it comes from its oracle.
     const oracleEntries = useMemo(() => (listings || []).map((row) => ({ chainId, row })), [listings, chainId]);
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
-    if (listingsError) return <StatusMessage variant="error" className={styles.error}>{listingsError}</StatusMessage>;
+    if (listingsError) return <StatusMessage variant="error">{listingsError}</StatusMessage>;
     if (listings === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
@@ -985,7 +985,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
 }
 
 function OrdersPanel({ orders, error, tick, chainId }) {
-    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
+    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
     if (orders === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
@@ -1023,7 +1023,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
 }
 
 function SwapsPanel({ swaps, error, tick }) {
-    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
+    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
     if (swaps === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
@@ -1064,7 +1064,7 @@ function SwapsPanel({ swaps, error, tick }) {
 }
 
 function HoldersPanel({ holders, error, onViewAll, divisibility }) {
-    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
+    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
     if (holders === null) return (
         <div className={styles.list}>
             <Skeleton height={36} />
@@ -1121,7 +1121,7 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
 }
 
 function ActivityPanel({ activity, error, onViewAll, tick }) {
-    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
+    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
     if (activity === null) return (
         <div className={styles.list}>
             <Skeleton height={36} />

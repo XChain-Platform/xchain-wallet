@@ -255,9 +255,14 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the Review button did not reach the review stage')
                 .toContainText(/Offer to give/, { timeout: 30_000 });
             await expect(main).toContainText(
-                new RegExp(`${GIVE_AMOUNT} ${TICK} on ${REGTEST_CHAIN_LABEL}`));
-            await expect(main).toContainText(
-                new RegExp(`${GET_AMOUNT} ${TICK} on ${GET.chainLabel}`));
+                new RegExp(`Offer to give ${GIVE_AMOUNT} ${TICK} in exchange for ${GET_AMOUNT} ${TICK}`));
+            // The review names each network through a badge whose accessible name
+            // is the network's display name, beside its "Give network" and "Get
+            // network" rows.
+            await expect(main.getByRole('img', { name: REGTEST_CHAIN_LABEL, exact: true }).first())
+                .toBeVisible();
+            await expect(main.getByRole('img', { name: GET.chainLabel, exact: true }).first())
+                .toBeVisible();
 
             // CONDITIONAL, and not out of caution: `SignCredentials` renders
             // no password field at all when the signer pool is already

@@ -208,7 +208,16 @@ export async function dispenserAddress({
         const sdk = sdkRegistry.get(chainId);
         let nextIndex = null;
         let candidate = null;
-        for (let i = 0; i < highest; i += 1) {
+        // A demo wallet's addresses never go to an explorer (issue #82): it
+        // lands on mainnet, so the gap probe would hand a throwaway address
+        // to a public mainnet explorer. Without the probe every gap counts
+        // as used, the answer a failed probe already gives, and the range
+        // grows past them.
+        let probeGaps = true;
+        try {
+            probeGaps = (await vault.wallets?.get(walletId))?.origin !== 'demo';
+        } catch { /* unreadable record: probe as before */ }
+        for (let i = 0; probeGaps && i < highest; i += 1) {
             if (held.has(i)) continue;
             const [gapAddress] = await signer.getAddresses({
                 chainId,

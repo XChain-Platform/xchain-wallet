@@ -21,6 +21,7 @@ import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
 import { shareContent, ShareOutcome } from '../share.js';
@@ -394,6 +395,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (!activeChainId || !chainsByWallet || typeof messaging.getAddressHistory !== 'function') {
             return undefined;
         }
+        // A demo wallet's addresses stay off every explorer. The demo lands
+        // on mainnet, so this lookup would otherwise send its throwaway
+        // addresses to a public mainnet explorer the moment Receive opens.
+        if (isDemoWallet(walletId)) return undefined;
         const candidates = chainsByWallet[activeChainId] || [];
         const contextKey = receiveContextKey;
         let cancelled = false;
@@ -430,7 +435,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             }
         });
         return () => { cancelled = true; };
-    }, [activeChainId, chainsByWallet, messaging, receiveContextKey]);
+    }, [walletId, activeChainId, chainsByWallet, messaging, receiveContextKey]);
 
     // §17.6: is the shown address backed by a hardware signer? Only those
     // need (and support) on-device confirmation. Reset the verify state
@@ -506,6 +511,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             window.removeEventListener('resize', onWindowResize);
         };
     }, [address?.id, activeChainId, loadError, generateError]);
+
+    // The error sits first in the page content, but New address is lower down:
+    // bring the error into view so a failed tap is not silent on a phone.
+    useEffect(() => {
+        if (!generateError) return;
+        document.getElementById('receive-generate-error')?.scrollIntoView?.({ block: 'nearest' });
+    }, [generateError]);
 
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
@@ -1128,7 +1140,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const body = (
         <>
             {loadError ? (
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+
+            {generateError ? (
+                <StatusMessage variant="error" id="receive-generate-error">{generateError}</StatusMessage>
             ) : null}
 
             {noAddresses ? (
@@ -1153,10 +1169,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         <option key={type} value={type}>{addressTypeLabel(type)}</option>
                     ))}
                 </Select>
-            ) : null}
-
-            {generateError ? (
-                <StatusMessage variant="error" className={styles.error}>{generateError}</StatusMessage>
             ) : null}
 
             {!address && descriptor && addressType && !generating && !generateError ? (
@@ -1280,7 +1292,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         />
                     </div>
                     {amountError ? (
-                        <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
+                        <StatusMessage variant="error">{amountError}</StatusMessage>
                     ) : null}
                     {isHwAddress ? (
                         <section
@@ -1297,11 +1309,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                     {t('receive.addressVerifiedOnYour')} {hwDeviceLabel}{t('receive.itIsSafeToShare')}
                                 </p>
                             ) : hwVerify.status === 'mismatch' ? (
-                                <StatusMessage variant="error" className={styles.error}>
+                                <StatusMessage variant="error">
                                     {t('receive.your')} {hwDeviceLabel} {t('receive.showedADifferentAddressDo')}
                                 </StatusMessage>
                             ) : hwVerify.status === 'error' ? (
-                                <StatusMessage variant="error" className={styles.error}>{hwVerify.message}</StatusMessage>
+                                <StatusMessage variant="error">{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
                                     {t('receive.verifyThisAddressOnYour')} {hwDeviceLabel} {t('receive.beforeSharingItThisProtects')}

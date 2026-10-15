@@ -116,6 +116,9 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     useEffect(() => {
         let cancelled = false;
         if (!chainId || !address) return undefined;
+        // The prefill read is skipped for a demo wallet, which cannot submit
+        // this form: a demo wallet's addresses never go to an explorer (issue #82).
+        if (demoGuard.blocked) return undefined;
         initialPrefillOpen.current = true;
         setCurrent(null);
         setCurrentError(null);
@@ -138,7 +141,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             })
             .catch((err) => { if (!cancelled) setCurrentError(err?.message || 'Could not load current preferences.'); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, address]);
+    }, [messaging, chainId, address, demoGuard.blocked]);
 
     // Network fee plumbing (mirrors DestroyForm).
     const [feePick, setFeePick] = useState(
@@ -264,7 +267,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId || !fromAddress) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (ownerLane.open) {
@@ -322,7 +325,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 label="Review preferences"
                 onSubmit={handleSubmit}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -378,7 +381,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             onSubmit={handleReview}
             sectioned
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button type="submit" variant="primary">Review</Button>
@@ -392,7 +395,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             </details>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
-                    <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
+                    <StatusMessage variant="error">{currentError}</StatusMessage>
                 ) : null}
                 {current ? (
                     <dl className={styles.detailsList}>

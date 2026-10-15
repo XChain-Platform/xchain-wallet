@@ -2,14 +2,6 @@
    DispensersList (48px round icon + chain overlay, search + network
    filter toolbar, status chip on the trailing edge). */
 
-/* Secondary list actions, under the header rather than in it. */
-.actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
-}
-
 .searchField {
     flex: 1 1 0;
     min-width: 0;
@@ -144,26 +136,4 @@
 .status_invalid {
     background: var(--xc-danger-bg);
     color: var(--xc-danger-text);
-}
-
-/* Circular header "+" button that opens the Create list form (same
-   affordance as My dispensers / the messaging inbox). */
-.addBtn {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    padding: 0;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-
-.addBtn:hover {
-    background: var(--xc-bg-muted);
 }

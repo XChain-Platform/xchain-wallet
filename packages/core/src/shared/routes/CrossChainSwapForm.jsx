@@ -620,7 +620,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -682,7 +682,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 label="Review cross-chain swap"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -891,13 +891,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             status={(validationError || feeError || formError) ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
+                        <StatusMessage variant="error">{validationError}</StatusMessage>
                     ) : null}
                     {feeError ? (
-                        <StatusMessage variant="error" className={styles.error}>{feeError}</StatusMessage>
+                        <StatusMessage variant="error">{feeError}</StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}

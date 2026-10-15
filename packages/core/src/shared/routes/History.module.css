@@ -45,8 +45,10 @@
     box-sizing: border-box;
 }
 
+/* Holds only the phone Filters toggle, so it takes no room on wider
+   layouts, where the filter card is always open. */
 .toolbarTop {
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: flex-end;
     gap: var(--xc-space-2);
@@ -893,12 +895,6 @@
     justify-content: flex-end;
 }
 
-.error {
-    color: var(--xc-danger-fg);
-    font-size: var(--xc-text-sm);
-    margin: 0;
-}
-
 .rbfError {
     flex-basis: 100%;
     margin: 0;
@@ -1154,6 +1150,10 @@
    keys stack above their values. System text zoom does not reduce the CSS
    viewport, so this reflow includes common 375px through 430px phone widths. */
 @media not all and (min-width: 480px) {
+    .toolbarTop {
+        display: flex;
+    }
+
     .phoneFilterToggle {
         display: flex;
         flex: 1 1 auto;

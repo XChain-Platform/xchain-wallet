@@ -83,3 +83,23 @@ export async function launchGuardedElectron(electron, options) {
     }
     return app;
 }
+
+/**
+ * Close a test launch of the app, and stop its process if the app does not
+ * exit in time. An unlocked wallet defers quit while any wallet message is
+ * in flight, and under the guard its background reads wait out their
+ * timeouts, so a plain close can wait for minutes.
+ *
+ * @param {import('@playwright/test').ElectronApplication} app
+ * @param {number} [timeoutMs]
+ */
+export async function closeElectron(app, timeoutMs = 20_000) {
+    const proc = app.process();
+    let timer = null;
+    const closed = await Promise.race([
+        app.close().then(() => true, () => true),
+        new Promise((done) => { timer = setTimeout(() => done(false), timeoutMs); }),
+    ]);
+    clearTimeout(timer);
+    if (!closed && proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL');
+}

@@ -45,7 +45,6 @@ import {
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
@@ -361,7 +360,7 @@ function normalizePastedRecipient(value) {
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, scopes source addresses to that account
  * @param {() => void} props.onBack
- * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast', feeSelection?: { mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }, assetSwitchNotice?: string }} [props.prefill]
+ * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string, feePriority?: 'low' | 'normal' | 'fast', feeSelection?: { mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }, assetSwitchNotice?: string }} [props.prefill]
  *        §47 Cluster L FOLLOWUP 1: initial form values from a deep-link
  *        intent (parseXchainUri). Each field is applied once on mount;
  *        the user can override before submitting. Address comes from
@@ -403,10 +402,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { developerMode } = useDeveloperMode();
-    const { settings } = useSettings();
+    const { settings, loading: settingsLoading } = useSettings();
     // Watcher mode still composes unsigned PSBTs, so balance-based Send
-    // empty states never replace its form.
-    const { isWatcherMode, isSignerMode } = useWalletMode();
+    // empty states never replace its form. Mode and readiness come from one
+    // settings snapshot, so the signing form never renders before a
+    // watch-only mode is known; a failed settings read opens in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
+    const isWatcherMode = settings?.walletMode === 'watcher';
+    const isSignerMode = settings?.walletMode === 'signer';
     // A demo wallet holds fixture balances and cannot move funds: the form
     // opens at once with an inline note instead of waiting on a balance read.
     const isDemo = isDemoWallet(walletId);
@@ -532,6 +535,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setMaxBusy(false);
     }, []);
     const [memo, setMemo] = useState(prefill?.memo || '');
+    const [requestMessage, setRequestMessage] = useState(
+        prefill?.requestMessage || prefill?.memo || '',
+    );
     const [assetSwitchNotice, setAssetSwitchNotice] = useState(prefill?.assetSwitchNotice || null);
     const [amountInputMode, setAmountInputMode] = useState(
         /** @type {'coin' | 'fiat'} */ ('coin'),
@@ -963,7 +969,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setTick(nextTick);
             }
             const memoParam = parts.message ?? parts.label;
-            if (memoParam) setMemo(neutralizeControlText(memoParam));
+            const safeMessage = memoParam ? neutralizeControlText(memoParam) : '';
+            setRequestMessage(safeMessage);
+            if (safeMessage) setMemo(safeMessage);
             if (chainChanged) {
                 setChainId(requestChainId);
             }
@@ -1003,6 +1011,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
                     : 'Token changed. The amount was cleared because the new token may use different decimal places.');
             }
+            const safeMessage = intent.message ?? intent.label ?? intent.memo ?? '';
+            setRequestMessage(safeMessage);
             if (intent.memo) setMemo(intent.memo);
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
@@ -1016,6 +1026,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             );
         } else {
             e.preventDefault();
+            setRequestMessage('');
             applyRecipient(trimmed);
             setPasteHint(null);
         }
@@ -2795,6 +2806,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         </StatusMessage>
     ) : null;
 
+    if (!walletModeReady) {
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+    }
+
     // §20: signer mode does not spend. The Wallet Mode screen
     // promises "Send / receive screens are hidden; this wallet does not
     // broadcast", so the form is refused rather than rendered - and the
@@ -2828,7 +2843,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         );
     }
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
@@ -3534,8 +3549,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               * has already watched the whole transaction get composed.
               * Duress-armed freezes render nothing here, by design.
               */}
-            <PanicFreezeNotice surface="send" />
+            {!isWatcherMode ? <PanicFreezeNotice surface="send" /> : null}
             {draftBanner}
+            {requestMessage ? (
+                <StatusMessage variant="status">
+                    {t('send.paymentRequestMessage')} <span data-testid="payment-request-message">
+                        {requestMessage}
+                    </span>
+                </StatusMessage>
+            ) : null}
             {assetSwitchNotice ? (
                 <StatusMessage variant="status">{assetSwitchNotice}</StatusMessage>
             ) : null}
@@ -3583,7 +3605,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     hint={t('send.source.hint')}
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     {t('send.source.noAddress')}
                 </StatusMessage>
             )}

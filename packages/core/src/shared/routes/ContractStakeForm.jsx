@@ -234,7 +234,9 @@ export function ContractStakeForm({
     const [stakedAvailable, setStakedAvailable] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         const address = fromAddress?.address;
-        if (mode !== 'unstake' || !address || !chainId) { setStakedAvailable(null); return undefined; }
+        // A demo wallet cannot unstake, and a demo wallet's addresses never go
+        // to an explorer (issue #82).
+        if (mode !== 'unstake' || !address || !chainId || demoGuard.blocked) { setStakedAvailable(null); return undefined; }
         let cancelled = false;
         Promise.all([
             messaging.getContractStakesForAddress({ chainId, address }),
@@ -256,7 +258,7 @@ export function ContractStakeForm({
             })
             .catch(() => { if (!cancelled) setStakedAvailable(null); });
         return () => { cancelled = true; };
-    }, [mode, chainId, fromAddress?.address, contractActionIndex, tick, signingPubkey, messaging]);
+    }, [mode, chainId, fromAddress?.address, contractActionIndex, tick, signingPubkey, messaging, demoGuard.blocked]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -542,7 +544,7 @@ export function ContractStakeForm({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -552,7 +554,7 @@ export function ContractStakeForm({
     if (!contractMeta.valid) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     Contract #{contractActionIndex} is not stakeable. Its deploy
                     transaction did not set a cooldown duration. Staking is only
                     available on contracts that explicitly opted in at deploy time.
@@ -603,7 +605,7 @@ export function ContractStakeForm({
                 label={`${verb} review`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -782,7 +784,7 @@ export function ContractStakeForm({
             label="Contract stake"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -819,7 +821,7 @@ export function ContractStakeForm({
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain yet. Use Receive to generate one first.
                 </StatusMessage>
             )}

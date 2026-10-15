@@ -49,7 +49,7 @@ function disableSubmits(node) {
  * @param {object} props
  * @param {(e: import('react').FormEvent<HTMLFormElement>) => void} [props.onSubmit]
  * @param {import('react').ReactNode} [props.actions]   the action row: primary last, so it ends up on the right
- * @param {import('react').ReactNode} [props.status]    a StatusMessage shown just above the actions
+ * @param {import('react').ReactNode} [props.status]    a StatusMessage or error summary, the first item of the form content: above the first field, below the form's own logo or title when it draws one
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
  * @param {import('react').ReactNode} [props.title]     centred page title for onboarding and other focused forms
  * @param {import('react').ReactNode} [props.description] supporting copy below `title`
@@ -120,6 +120,12 @@ export const FormPage = forwardRef(function FormPage(
         styles.actions,
         stackedActions ? styles.stackedActions : null,
     ].filter(Boolean).join(' ');
+    // A form that draws its own logo or title is the page header; any other form
+    // sits under the screen's PageHeader and its notice leads the content.
+    const ownsHeading = title != null || visual != null;
+    const statusNode = demoBlocked || status
+        ? <div className={styles.status}>{demoBlocked ? demoGuard.note : status}</div>
+        : null;
     return (
         <Root
             ref={ref}
@@ -128,6 +134,10 @@ export const FormPage = forwardRef(function FormPage(
             {...rest}
             onKeyDown={handleKeyDown}
         >
+            {/* A notice is the first item of the page content, at the top where it
+                is seen, never below the fields or beside the submit button. A form
+                that owns its title (onboarding) puts it under that title instead. */}
+            {!ownsHeading ? statusNode : null}
             {intro ? <p className={styles.intro}>{intro}</p> : null}
             {progress != null || topAction != null ? (
                 <div className={styles.topRow}>
@@ -147,10 +157,10 @@ export const FormPage = forwardRef(function FormPage(
                     {description != null ? <p className={styles.description}>{description}</p> : null}
                 </header>
             ) : null}
+            {ownsHeading ? statusNode : null}
             {/* data-form-stack marks a column the form gap spaces, so a shared row
                 class (an action row, a notice) can drop its own margin inside it. */}
             {children != null ? <div className={styles.body} data-form-stack="">{children}</div> : null}
-            {demoBlocked || status ? <div className={styles.status}>{demoBlocked ? demoGuard.note : status}</div> : null}
             {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}
             {demoBlocked ? demoGuard.dialog : null}
         </Root>

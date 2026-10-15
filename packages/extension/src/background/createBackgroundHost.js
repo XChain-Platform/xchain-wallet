@@ -1053,7 +1053,22 @@ export function createBackgroundHost(deps) {
         }
     }
 
+    // A send composed on one network must not sign or broadcast after the
+    // wallet switched to another: the undo hold and a second window both
+    // leave time for a switch between compose and broadcast.
+    async function assertActiveSendNetwork({ chainId, vault, chainRegistry }) {
+        const descriptor = chainRegistry?.get?.(chainId);
+        if (!descriptor) return;
+        const activeNetwork = getActiveNetwork(await vault.settings.get());
+        if (descriptor.networkKind !== activeNetwork) {
+            throw new Error(
+                `The active network changed to ${activeNetwork}. Return to Send and review the payment again.`,
+            );
+        }
+    }
+
     async function sendWithHold(req, flowDeps) {
+        await assertActiveSendNetwork({ ...req, ...flowDeps });
         const legs = Array.isArray(req?.legs) && req.legs.length > 0
             ? req.legs
             : [{ to: req?.to, tick: req?.tick, amount: req?.amount, memo: req?.memo }];
@@ -1076,11 +1091,17 @@ export function createBackgroundHost(deps) {
         activeSendIntents.add(intentKey);
         try {
             const opts = { ...req, ...flowDeps };
-            const beforeBroadcast = createHoldBeforeBroadcast({
+            const holdBeforeBroadcast = createHoldBeforeBroadcast({
                 sendHold,
                 holdId: opts.holdId,
                 undoSeconds: opts.undoSeconds,
             });
+            // The network check runs again after any hold, the last moment
+            // before the signed transaction leaves the wallet.
+            const beforeBroadcast = async (...args) => {
+                if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
+                await assertActiveSendNetwork(opts);
+            };
             return await sendToken({ ...opts, beforeBroadcast });
         } finally {
             activeSendIntents.delete(intentKey);
@@ -2653,6 +2674,7 @@ export function createBackgroundHost(deps) {
     // gatedKeys access (PC-26): the send guard needs the pack key to
     // compose a valid gated send; no unlock or signing happens here.
     host.register('action.send.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry });
         return buildSendPsbt({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
@@ -2682,6 +2704,7 @@ export function createBackgroundHost(deps) {
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.composeForConfirm: chainId is required');
         }
+        await assertActiveSendNetwork({ chainId, vault, chainRegistry });
         const source = normalizeSource(req?.from, 'action.composeForConfirm');
 
         // Build actionData/encoderOpts from either a generic payload or the
@@ -5415,8 +5438,10 @@ export function createBackgroundHost(deps) {
         return walletBalances({ ...req, vault, chainRegistry, sdkRegistry, activeNetwork });
     });
 
-    host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
-        return addressBalances({ ...req, sdkRegistry, chainRegistry });
+    host.register('balances.address', async (req, { vault, sdkRegistry, chainRegistry }) => {
+        // The vault lets the read answer a demo wallet's address from its
+        // fixture instead of the explorer (issue #82).
+        return addressBalances({ ...req, vault, sdkRegistry, chainRegistry });
     });
 
     host.register('utxos.address', async (req, { sdkRegistry }) => {

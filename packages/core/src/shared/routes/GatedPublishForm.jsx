@@ -425,7 +425,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
 
     if (actionConfirm.open) {
@@ -508,7 +508,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -636,7 +636,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             label={t('gatedPublish.gatedContent')}
             onSubmit={handleReview}
             noValidate
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button type="submit" variant="primary">
                     {t('common.review')}
@@ -644,7 +644,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             )}
         >
             {ownerMissing ? (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     {t('gatedPublish.ownerMissing.beforeAddress')}
                     {' '}(<AddressText address={issuerAddress} />){' '}
                     {t('gatedPublish.ownerMissing.afterAddress', { tick })}
@@ -752,7 +752,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             {packs === null ? (
                 <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
             ) : packsError ? (
-                <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
+                <StatusMessage variant="error">{packsError}</StatusMessage>
             ) : packs.length === 0 ? (
                 <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
             ) : null}

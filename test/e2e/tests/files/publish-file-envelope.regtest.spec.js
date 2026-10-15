@@ -77,7 +77,7 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             await gotoPalette(page, 'Publish file');
             await expect(main.getByRole('radiogroup', { name: 'Publish mode' })).toBeVisible({ timeout: 30_000 });
             await main.getByRole('radio', { name: /Public/ }).check();
-            await selectVenueChain(main, 'Chain');
+            await selectVenueChain(main, 'Network');
             // The form offers the envelope ceiling on this chain and says why.
             await expect(main).toContainText('compact Taproot encoding', { timeout: 30_000 });
 

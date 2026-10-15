@@ -16,6 +16,14 @@
     min-width: 0;
 }
 
+/* A notice row carries an 8px block margin for use outside a stack; in this
+   column the section gap alone spaces it, so two notices do not sit 32px
+   apart. Two-part selector so it outranks the row module whatever the bundle
+   order. */
+.page > [data-variant] {
+    margin: 0;
+}
+
 /* A heading and its content form one section, so their local gap is tighter
    than the gap that separates independent page children. */
 .page > [data-xc-section-header] + * {
@@ -28,6 +36,22 @@
     font-size: var(--xc-text-sm);
     line-height: 1.45;
     color: var(--xc-text-muted);
+}
+
+/* The screen's own actions, in one row that wraps on a narrow screen. Each
+   button keeps its natural width and the row starts at the content edge,
+   so every list screen puts its actions in the same place. */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.actions > * {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
 }
 
 /* First control (usually search) takes the spare room; the rest keep

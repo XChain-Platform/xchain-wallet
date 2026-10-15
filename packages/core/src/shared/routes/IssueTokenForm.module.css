@@ -211,15 +211,6 @@ select.picker {
     margin: 0;
 }
 
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
-}
-
 .actions {
     display: flex;
     /* Wraps: without it a row of three or more buttons ran off the left
@@ -442,6 +433,7 @@ select.picker {
     border: 0;
     background: transparent;
     cursor: pointer;
+    justify-content: flex-start;
 }
 
 .validationLink:focus-visible {
@@ -467,7 +459,10 @@ select.picker {
 
 .validationMeta {
     margin-top: calc(var(--xc-space-1) / 2);
-    color: var(--xc-text-muted);
+    /* The diagnostics sit inside a toned message box, so the line and column inherit its readable text colour. */
+    color: inherit;
+    opacity: 0.85;
+    margin-inline-start: var(--xc-space-2);
     font-size: var(--xc-text-xs);
 }
 

@@ -397,7 +397,7 @@ export function PairSignerForm({
             label="Confirm hardware signer"
             onSubmit={handleSave}
             status={error ? (
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
+                <StatusMessage variant="error">{error}</StatusMessage>
             ) : null}
             actions={(
                 <>

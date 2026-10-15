@@ -112,9 +112,9 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('fill the dedicated same-chain Swap form and approve it', async () => {
             await gotoPalette(page, 'Swap');
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: /^Chain:/ }))
+            await expect(main.getByRole('button', { name: /^Give and get network:/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main, 'Chain');
+            await selectVenueChain(main, 'Give and get network');
             await selectNamedToken(page, 'Give token', {
                 chainId: REGTEST_CHAIN_ID,
                 chainLabel: REGTEST_CHAIN_LABEL,

@@ -11,7 +11,11 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { MessageConfirmScreen } from '../../../packages/core/src/shared/components/MessageConfirmScreen.jsx';
-import { WALLET_TONES, walletIdentityTone } from '../../../packages/core/src/shared/components/WalletIdentity.jsx';
+import {
+    WALLET_TONES,
+    WalletIdentity,
+    walletIdentityTone,
+} from '../../../packages/core/src/shared/components/WalletIdentity.jsx';
 import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPicker.jsx';
 import { clearActiveWallet, writeActiveWallet } from '../../../packages/core/src/shared/utils/activeWalletMemory.js';
 
@@ -41,6 +45,34 @@ function readyConfirm() {
 }
 
 describe('wallet identity surfaces', () => {
+    it('bounds initials and tones for seeded wallet identities with long names', () => {
+        let state = 0x1d3f5a79;
+        const next = () => {
+            state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+            return state;
+        };
+        const generated = Array.from({ length: 24 }, (_, index) => {
+            const id = Array.from({ length: 48 }, () => next().toString(36).at(-1)).join('');
+            const name = `${next().toString(36).repeat(5)} ${next().toString(36).repeat(5)} ${index}`;
+            return { id, name };
+        });
+
+        render(<>{generated.map((wallet) => <WalletIdentity key={wallet.id} wallet={wallet} />)}</>);
+
+        const identities = screen.getAllByTestId('wallet-identity');
+        expect(identities).toHaveLength(generated.length);
+        identities.forEach((identity, index) => {
+            const tone = Number(identity.getAttribute('data-wallet-tone'));
+            const avatar = identity.querySelector('[aria-hidden="true"]');
+            expect(tone).toBe(walletIdentityTone(generated[index].id));
+            expect(tone).toBeGreaterThanOrEqual(0);
+            expect(tone).toBeLessThan(4);
+            expect(avatar.textContent.length).toBeGreaterThan(0);
+            expect(avatar.textContent.length).toBeLessThanOrEqual(2);
+            expect(identity).toHaveAttribute('title', generated[index].name);
+        });
+    });
+
     it('keeps the same wallet tone and name in the header and switcher', async () => {
         const header = render(<AppHeader activeWallet={wallets[1]} />);
         const headerIdentity = screen.getByTestId('wallet-identity');
@@ -109,6 +141,25 @@ describe('wallet identity surfaces', () => {
         await waitFor(() => {
             expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
         });
+    });
+
+    it('renders wallet names containing markup as text in the wallet list', async () => {
+        const name = '<script>globalThis.walletExecuted = true</script>';
+        const messaging = { listWallets: async () => [{ id: 'markup-wallet', name, format: 'bip39' }] };
+        const { container } = render(
+            <MessagingProvider shell="popup" messaging={messaging}>
+                <WalletPicker
+                    activeWalletId="markup-wallet"
+                    onSwitch={() => {}}
+                    onAddWallet={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText(name)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(globalThis.walletExecuted).toBeUndefined();
     });
 });
 

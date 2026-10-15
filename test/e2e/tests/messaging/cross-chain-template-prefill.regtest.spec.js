@@ -122,7 +122,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
             await card.getByRole('button', { name: 'Use template', exact: true }).click();
 
             const main = page.getByRole('main');
-            await expect(main.getByText('Compose any number of independent actions'))
+            await expect(composerRow(main, 1), 'the template never reached the Parallel composer')
                 .toBeVisible({ timeout: 30_000 });
             await expect(rowField(main, 'combobox', 'Action')).toHaveCount(3);
             const rows = [1, 2, 3].map((number) => composerRow(main, number));

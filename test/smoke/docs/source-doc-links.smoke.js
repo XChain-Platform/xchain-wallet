@@ -69,4 +69,25 @@ for (const link of links) {
 }
 
 const uniqueLinks = new Set(links.map(({ url }) => url));
+
+const docsLinkSurfaces = [
+    ['packages/core/src/shared/components/LearnNote.jsx', /<a\b[^>]*href=\{DOCS_URL\}[^>]*>/],
+    ['packages/core/src/shared/components/BottomTabBar.jsx', /<a\b[^>]*href=\{site\.href\}[^>]*>/],
+    ['packages/core/src/shared/components/PlatformSwitcher.jsx', /<a\b[^>]*href=\{p\.href\}[^>]*>/],
+    ['packages/core/src/shared/components/settings/AboutSection.jsx', /<a\b[^>]*href=\{href\}[^>]*>/],
+];
+
+for (const [file, anchorPattern] of docsLinkSurfaces) {
+    const source = readFileSync(join(walletRoot, file), 'utf8');
+    const anchor = source.match(anchorPattern)?.[0];
+    assert.ok(anchor, `${file}: docs link renders as an anchor`);
+    assert.match(anchor, /\btarget="_blank"/, `${file}: docs link opens outside the app`);
+    const rel = anchor.match(/\brel="([^"]+)"/)?.[1].split(/\s+/) || [];
+    assert.ok(rel.includes('noopener'), `${file}: docs link prevents opener access`);
+    assert.ok(rel.includes('noreferrer'), `${file}: docs link omits referrer data`);
+}
+
+for (const { file, url } of links) {
+    console.log(`${file}: ${url}`);
+}
 console.log(`OK: ${links.length} source docs links (${uniqueLinks.size} unique) resolve in ${DOCS_ROOT}`);

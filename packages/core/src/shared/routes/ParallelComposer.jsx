@@ -409,7 +409,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -492,7 +492,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 demoGuard={demoGuard}
                 label="Sign parallel actions"
                 status={activeRow.status === 'failed' && activeRow.error ? (
-                    <StatusMessage variant="error" className={styles.error}>{activeRow.error}</StatusMessage>
+                    <StatusMessage variant="error">{activeRow.error}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -609,7 +609,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             }}
             sectioned
             status={shownComposeError || validationError ? (
-                <StatusMessage variant="error" className={styles.error}>{shownComposeError || validationError}</StatusMessage>
+                <StatusMessage variant="error">{shownComposeError || validationError}</StatusMessage>
             ) : null}
             actions={(
                 <>

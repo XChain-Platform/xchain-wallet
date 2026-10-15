@@ -129,8 +129,8 @@ async function releaseStakeBalanceLookup(page) {
 
 /** Opens Validator staking from Staking and fills a new stake. */
 async function fillNewStake(page, viewport) {
-    // The page header's action: an empty Staking list repeats it in its body.
-    await page.getByRole('banner').getByRole('button', { name: 'New stake', exact: true }).click();
+    // New stake sits in the content, in the actions row or, on an empty list, the empty state.
+    await page.getByRole('main').getByRole('button', { name: 'New stake', exact: true }).click();
     await expectScreenFits(page, 'New stake', `${viewport.name} new stake chooser`);
 
     await page.getByRole('button', { name: /^Validator staking/ }).click();
