@@ -78,7 +78,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
     const explanation = affectedNames.length > 0
         ? `${label}: ${affectedNames.join(', ')}`
         : state === 'offline'
-            ? `${label}: no selected chain is reachable`
+            ? `${label}: no selected network is reachable`
             : label;
     const networkName = activeNetworkLabel(normalizeActiveNetwork(activeNetwork));
     const triggerLabel = `${networkName}. ${explanation}`;

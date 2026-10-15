@@ -106,7 +106,7 @@ assert.match(
 
 // --- empty state -------------------------------------------------------
 
-assert.match(cmp, /Fee estimate unavailable for this chain\./, 'empty-state copy');
+assert.match(cmp, /Fee estimate unavailable for this network\./, 'empty-state copy');
 
 // --- contextual help (§37 / G122 InfoTip) ------------------------------
 

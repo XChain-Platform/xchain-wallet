@@ -200,7 +200,7 @@ export function DisplaySection() {
             return;
         }
         if (!watchChainId) {
-            setWatchMessage({ text: 'Choose a chain.', variant: 'error' });
+            setWatchMessage({ text: 'Choose a network.', variant: 'error' });
             return;
         }
         const chain = chains.find((candidate) => candidate.id === watchChainId);

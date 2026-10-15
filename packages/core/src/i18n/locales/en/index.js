@@ -119,7 +119,7 @@ export const en = {
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchTitle': 'Switch to {network}?',
     'settings.network.switchMessage':
-        'The wallet will reload and show {nextNetwork} chains. Your {currentNetwork} balances and chain settings stay unchanged. Unlock the wallet again after it reloads.',
+        'The wallet will reload and show {nextNetwork} networks. Your {currentNetwork} balances and network settings stay unchanged. Unlock the wallet again after it reloads.',
     'settings.network.switchConfirm': 'Switch network',
     'settings.network.switchError': "Couldn't switch networks. Try again.",
     'settings.undoSend.label': 'Hold signed sends before broadcast',
@@ -404,7 +404,7 @@ export const en = {
     'gatedPublish.gatedContent': 'Gated content',
     'gatedPublish.formHint.beforeToken': 'Publish a file that only holders of',
     'gatedPublish.formHint.afterToken':
-        'can read. The file is encrypted before it touches the chain; the key travels automatically with every normal send of the token.',
+        'can read. The file is encrypted before it touches the network; the key travels automatically with every normal send of the token.',
     'gatedPublish.ownerMissing.beforeAddress': "This wallet doesn't hold the owner address",
     'gatedPublish.ownerMissing.afterAddress':
         'for {tick}. Only the token owner can publish gated files.',
@@ -429,7 +429,7 @@ export const en = {
     // --- governance ----------------------------------------------
     'governance.title': 'Governance',
     'governance.noAddress.title': 'No governance address',
-    'governance.noAddress.body': 'Governance requires an address on a supported chain.',
+    'governance.noAddress.body': 'Governance requires an address on a supported network.',
     'governance.createPoll': 'Create poll',
     'governance.delegateVotes': 'Delegate votes',
     'governance.loadingAddresses': 'Loading governance addresses…',
@@ -439,7 +439,7 @@ export const en = {
     'governance.error.addresses': "Couldn't load governance addresses. Try again.",
     'governance.error.polls': "Couldn't load governance polls. Try again.",
     'governance.empty.title': 'No polls yet',
-    'governance.empty.body': 'Polls created on this chain appear here.',
+    'governance.empty.body': 'Polls created on this network appear here.',
     'governance.closesAtBlock': 'Closes at block {block}',
 
     // --- wallet import -------------------------------------------
@@ -457,10 +457,10 @@ export const en = {
     'importWallet.wif.fullTitle': 'Import a private key',
     'importWallet.wif.title': 'Import private key',
     'importWallet.wif.subtitle':
-        'Import one WIF private key as a wallet. Pick the matching chain so the correct address is derived.',
+        'Import one WIF private key as a wallet. Pick the matching network so the correct address is derived.',
     'importWallet.wif.tab': 'Private key',
     'importWallet.wif.key': 'WIF private key',
-    'importWallet.wif.chain': 'Private key chain',
+    'importWallet.wif.chain': 'Private key network',
     'importWallet.wif.ack': "I understand this key isn't recoverable from a recovery phrase.",
     'importWallet.freeWallet.fullSubtitle':
         'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect BIP39 or the legacy Counterwallet/FreeWallet format automatically.',
@@ -538,9 +538,9 @@ export const en = {
     'issue.lockSupplyWarning':
         'Locking minting means the {amount} left under the cap can never be minted. Clear this box to mint it later.',
     'issue.bridgingHint':
-        'Bridging is off. After the token exists you can open it to other chains from Manage Token, set how deep a lock must be buried before validators sign it, and freeze both settings for your holders.',
+        'Bridging is off. After the token exists you can open it to other networks from Manage Token, set how deep a lock must be buried before validators sign it, and freeze both settings for your holders.',
     'issue.boundListHint':
-        "One thing to decide now: a token bound to an address allow-list or block-list can't be bridged, and a bound list can never be cleared. If you may want this token on other chains, don't bind a list to it.",
+        "One thing to decide now: a token bound to an address allow-list or block-list can't be bridged, and a bound list can never be cleared. If you may want this token on other networks, don't bind a list to it.",
     'issue.transferOwnershipOptional': 'Transfer ownership to (optional)',
     'issue.transferOwnershipHint':
         "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; use the field below to send those too.",
@@ -555,7 +555,7 @@ export const en = {
     'send.demo.blocked': "Demo wallets can't move funds. Create a real wallet to send.",
     'send.demo.createRealWallet': 'Create a real wallet',
     'send.empty.title': 'Nothing to send yet',
-    'send.empty.body': 'Receive coins or tokens on this chain before creating a payment.',
+    'send.empty.body': 'Receive coins or tokens on this network before creating a payment.',
     'send.review': 'Review and send',
     'send.backToEdit': 'Edit payment',
     'send.memoForbiddenChars': "A memo can't include a vertical bar (|) or semicolon (;).",
@@ -578,7 +578,7 @@ export const en = {
     'send.success.sendAnother': 'Send another',
     'send.fields.amount': 'Amount',
     'send.fields.to': 'To',
-    'send.fields.chain': 'Chain',
+    'send.fields.chain': 'Network',
     'send.fields.from': 'From',
     'send.fields.token': 'Token',
     'send.reviewLabel': 'Review payment',
@@ -629,7 +629,7 @@ export const en = {
     'send.draft.discard': 'Discard',
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
-    'send.source.noAddress': 'No address on this chain. Use Receive to generate one first.',
+    'send.source.noAddress': 'No address on this network. Use Receive to generate one first.',
     'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
     'send.offline.title': 'Sending needs a network connection',
     'send.destination.placeholder': 'Enter or paste an address or name…',
@@ -679,7 +679,7 @@ export const en = {
     'send.rbf.enabledHint':
         'You can speed up or cancel this transaction by paying a higher network fee before confirmation.',
     'send.rbf.unsupported': "Changing the network fee later isn't supported on {chain}.",
-    'send.rbf.thisChain': 'this chain',
+    'send.rbf.thisChain': 'this network',
     // M2.4: the success card's in-wallet link to the merged History entry.
     // The entry exists the moment this card does (built from the wallet's
     // own pending record), but the network has not necessarily reported it
@@ -759,7 +759,7 @@ export const en = {
     'scan.error.unknownXchainIntent':
         "This XChain link isn't supported. Check the link and try again.",
     'scan.error.paymentRequest':
-        "This payment request doesn't match a supported chain or valid address. Check the request and scan again, or paste the address instead.",
+        "This payment request doesn't match a supported network or valid address. Check the request and scan again, or paste the address instead.",
     'scan.error.wif':
         'This is a private key. Open Import wallet, choose Private key, and scan it there.',
     'scan.error.mnemonic':
@@ -803,7 +803,7 @@ export const en = {
         'Cross-chain transfers appear here after you send or receive one.',
     'history.empty.noActivityTitle': 'No activity yet',
     'history.empty.noActivityBody':
-        'Activity appears here after you send or receive on a selected chain.',
+        'Activity appears here after you send or receive on a selected network.',
     'history.empty.startReceiving': 'Start receiving',
     'history.filters.label': 'History filters',
     'history.filters.toggle': 'Filters ({count})',
@@ -831,7 +831,6 @@ export const en = {
     'history.filters.filter': 'filter',
     'history.filters.special': 'Special',
     'history.filters.multisigOnly': 'Multisig only',
-    'history.filters.allChains': 'All chains',
     'history.filters.datePresets': 'Date range presets',
     'history.filters.last7Days': '7 days',
     'history.filters.last30Days': '30 days',
@@ -852,9 +851,9 @@ export const en = {
     'history.detail.loadingPeer': 'Loading the linked transaction…',
     'history.detail.peerError': "Couldn't load the linked transaction. Try again.",
     'history.detail.copyPeerRawJson': 'Copy peer raw JSON',
-    'history.detail.peerUnavailableTitle': 'Peer chain unavailable',
+    'history.detail.peerUnavailableTitle': 'Peer network unavailable',
     'history.detail.peerUnavailable':
-        'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
+        'Peer network not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
     'history.detail.openNewWindow': 'Open in new window',
     'history.contact.saveAs': 'Save {address} as',
     'history.contact.save': 'Save',
@@ -1003,14 +1002,14 @@ export const en = {
     'extension.connect.permissions': 'Requested permissions',
     'extension.connect.permission.accounts':
         'View the accounts you select, including their addresses and balances',
-    'extension.connect.permission.chains': 'Use only the chains you select below',
+    'extension.connect.permission.chains': 'Use only the networks you select below',
     'extension.connect.permission.signing':
         'Ask separately before signing any message or transaction',
-    'extension.connect.chains': 'Chains',
+    'extension.connect.chains': 'Networks',
     'extension.connect.chains.requestedHint':
-        'Choose from the chains this site requested. You can change this later.',
+        'Choose from the networks this site requested. You can change this later.',
     'extension.connect.chains.hint':
-        'Pick which chains this site can see. You can change this later.',
+        'Pick which networks this site can see. You can change this later.',
     'extension.connect.chains.allow': 'Allow {chain} {network}',
     'extension.connect.accounts.hint': 'Pick which accounts this site can see.',
     'extension.connect.accounts.share': 'Share {name}',
@@ -1077,7 +1076,7 @@ export const en = {
     'flows.pairPartner.modeMismatch':
         'This wallet is in {localMode} mode, so its partner must be in {partnerMode} mode. The wallet you scanned is in {scannedMode} mode.',
     'flows.pairPartner.noSharedChains':
-        'The two wallets have no chain in common, so there is nothing to compare. Switch on at least one matching chain in both wallets and try again.',
+        'The two wallets have no network in common, so there is nothing to compare. Switch on at least one matching network in both wallets and try again.',
     'flows.pairPartner.seedMismatch':
         "These two wallets were made from different recovery phrases ({chains} doesn't match). Restore both halves from the same phrase and pair again.",
     'flows.pairPartner.paired':
@@ -1093,7 +1092,7 @@ export const en = {
     'flows.protocolFee.paidIn': 'Protocol fee is paid in {ticker}',
     'flows.protocolFee.paidInPlural': 'Protocol fees are paid in {ticker}',
     'flows.protocolFee.onlyWay':
-        '{ticker} is the only way to pay a protocol fee on this chain.',
+        '{ticker} is the only way to pay a protocol fee on this network.',
     'flows.protocolFee.unverifiedNotice':
         "The amount is exact, but the network doesn't check contract actions in advance, so it can't tell you beforehand whether this one will be accepted. If it's rejected, the fee is still spent.",
     'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker} instead of XCHAIN',
@@ -1141,9 +1140,9 @@ export const en = {
     'settings.backup.encryptThisWalletSLabels':
         "Encrypt this wallet's labels + contacts and store a copy on the blockchain, so restoring from your seed can recover them.",
     'settings.backup.publishNow': 'Publish now…',
-    'settings.backup.checkChainForBackedUp': 'Check chain for backed-up contacts',
+    'settings.backup.checkChainForBackedUp': 'Check network for backed-up contacts',
     'settings.backup.looksForLabelsAndContacts':
-        "Looks for labels and contacts you published earlier on the selected chain and merges anything found into this wallet, without erasing what's already here.",
+        "Looks for labels and contacts you published earlier on the selected network and merges anything found into this wallet, without erasing what's already here.",
     'settings.backup.check': 'Check…',
     'settings.backup.labelsChangedSinceTheLast': 'Labels changed since the last publish',
     'settings.backup.publish': 'Publish…',
@@ -1171,9 +1170,9 @@ export const en = {
     'settings.backup.addressesToCheckMustBe': 'Addresses to check must be a whole number from 1 to 100.',
     'settings.backup.testing': 'Testing…',
     'settings.backup.runTest': 'Run test',
-    'settings.backup.noChainComparisons': 'No chain comparisons',
+    'settings.backup.noChainComparisons': 'No network comparisons',
     'settings.backup.chainComparisonResultsAppearHere':
-        'Chain comparison results appear here after the test completes.',
+        'Network comparison results appear here after the test completes.',
     'settings.backup.new': 'new',
     'settings.backup.confirmBackupPassword': 'Confirm backup password',
     'settings.backup.backupPasswordMustBeAt':
@@ -1191,10 +1190,10 @@ export const en = {
     'settings.backup.backupFileHttpsAddress': 'Backup file HTTPS address',
     'settings.backup.backupPointerQr': 'Backup pointer QR',
     'settings.backup.createPointerQr': 'Create pointer QR',
-    'settings.backup.loadingChains': 'Loading chains…',
-    'settings.backup.noChainsWithAddresses': 'No chains with addresses',
-    'settings.backup.noChainsHaveAddressesOn': 'No chains have addresses on this wallet. Generate one first.',
-    'settings.backup.publishChain': 'Publish chain',
+    'settings.backup.loadingChains': 'Loading networks…',
+    'settings.backup.noChainsWithAddresses': 'No networks with addresses',
+    'settings.backup.noChainsHaveAddressesOn': 'No networks have addresses on this wallet. Generate one first.',
+    'settings.backup.publishChain': 'Publish network',
     'settings.backup.publishing': 'Publishing…',
     'settings.backup.labelsSignedNotBroadcastYet': 'Labels signed, not broadcast yet',
     'settings.backup.theLabelTransactionIsWaiting':
@@ -1206,13 +1205,13 @@ export const en = {
     'settings.backup.bytes': 'bytes',
     'settings.backup.discoveryName': 'Discovery name',
     'settings.backup.copyTxid': 'Copy txid',
-    'settings.backup.restoreChain': 'Restore chain',
+    'settings.backup.restoreChain': 'Restore network',
     'settings.backup.checking': 'Checking…',
     'settings.backup.check2': 'Check',
     'settings.developer.developerModeSettings': 'Developer mode settings',
     'settings.developer.developerOptions': 'Developer options',
     'settings.developer.unlocksTestNetworksEndpointOverrides':
-        'Unlocks test networks, endpoint overrides, custom chains, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet.',
+        'Unlocks test networks, endpoint overrides, custom networks, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet.',
     'settings.developer.learnMode': 'Learn Mode',
     'settings.developer.addsPlainLanguageExplanationsTo':
         'Adds plain-language explanations to confirmation screens.',
@@ -1261,20 +1260,20 @@ export const en = {
     'settings.developer.sending': 'Sending…',
     'settings.developer.getTest': 'Get test {coinTicker}',
     'settings.developer.mintTestXchain': 'Mint test XCHAIN',
-    'settings.developer.customChains': 'Custom chains',
+    'settings.developer.customChains': 'Custom networks',
     'settings.developer.plugInANonBundled':
         "Plug in a non-bundled ChainDescriptor (e.g. a fork's regtest, an alt explorer). Persists across restarts. Removed chains are also un-registered immediately.",
-    'settings.developer.turnDeveloperModeOnTo4': ' Turn Developer Mode on to manage custom chains.',
-    'settings.developer.noCustomChainsYet': 'No custom chains yet',
-    'settings.developer.chainsYouAddHereAppear': 'Chains you add here appear in this list.',
-    'settings.developer.removeCustomChain': 'Remove custom chain {value}',
-    'settings.developer.customChainDescriptorJson': 'Custom chain descriptor JSON',
+    'settings.developer.turnDeveloperModeOnTo4': ' Turn Developer Mode on to manage custom networks.',
+    'settings.developer.noCustomChainsYet': 'No custom networks yet',
+    'settings.developer.chainsYouAddHereAppear': 'Networks you add here appear in this list.',
+    'settings.developer.removeCustomChain': 'Remove custom network {value}',
+    'settings.developer.customChainDescriptorJson': 'Custom network descriptor JSON',
     'settings.developer.pasteAFullChaindescriptorJson':
         'Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress).',
-    'settings.developer.pasteCustomChainDescriptor': 'Paste custom chain descriptor',
+    'settings.developer.pasteCustomChainDescriptor': 'Paste custom network descriptor',
     'settings.developer.adding': 'Adding…',
-    'settings.developer.addChain': 'Add chain',
-    'settings.developer.addCustomChain': 'Add custom chain…',
+    'settings.developer.addChain': 'Add network',
+    'settings.developer.addCustomChain': 'Add custom network…',
     'settings.display.displaySettings': 'Display settings',
     'settings.display.balanceDisplay': 'Balance display',
     'settings.display.hideSmallBalances': 'Hide small balances',
@@ -1294,7 +1293,7 @@ export const en = {
     'settings.display.showHideButtonOnRows': 'Show hide button on rows',
     'settings.display.watchedTokens': 'Watched tokens ({length})',
     'settings.display.tokenToWatch': 'Token to watch',
-    'settings.display.tokenChain': 'Token chain',
+    'settings.display.tokenChain': 'Token network',
     'settings.display.tokenTicker': 'Token ticker',
     'settings.display.watchToken': 'Watch token',
     'settings.display.removeWatchedToken': 'Remove watched token {key}',
@@ -1319,7 +1318,7 @@ export const en = {
     'settings.display.hidden': 'hidden',
     'settings.display.unhideAll': 'Unhide all',
     'settings.display.listPreferences': 'List preferences',
-    'settings.display.savedChainFilters': 'Saved chain filters',
+    'settings.display.savedChainFilters': 'Saved network filters',
     'settings.display.resetListPreferences': 'Reset list preferences',
     'settings.display.defaults': 'Defaults',
     'settings.display.resetDisplaySettings': 'Reset display settings',
@@ -1512,7 +1511,7 @@ export const en = {
     'settings.ads.offNewOutgoingTransactionsDo':
         "Off. New outgoing transactions don't add to the pending donation total.",
     'settings.ads.noChainsSetUpFor':
-        'No chains set up for donations yet. Each one is added automatically when you activate that chain.',
+        'No networks set up for donations yet. Each one is added automatically when you activate that network.',
     'settings.ads.setAsidePerOutgoingTransaction': 'Set aside per outgoing transaction (sats)',
     'settings.ads.default': ' · default',
     'settings.ads.custom': ' · custom',
@@ -1570,10 +1569,10 @@ export const en = {
     'settings.safety.shownAutomaticallyForWalletsWithout':
         'Shown automatically for wallets without a verified recovery phrase or encrypted backup.',
     'settings.safety.automatic': 'Automatic',
-    'settings.endpoints.noChainsRegistered': 'No chains registered',
+    'settings.endpoints.noChainsRegistered': 'No networks registered',
     'settings.endpoints.registeredChainsAndTheirEndpoints':
-        'Registered chains and their endpoints appear here.',
-    'settings.endpoints.chainRegistryRefresh': 'Chain registry refresh',
+        'Registered networks and their endpoints appear here.',
+    'settings.endpoints.chainRegistryRefresh': 'Network registry refresh',
     'settings.endpoints.refreshing': 'Refreshing…',
     'settings.endpoints.refreshNow': 'Refresh now',
     'settings.endpoints.explorerUrl': 'Explorer URL',
@@ -1595,7 +1594,7 @@ export const en = {
     'settings.languageRegion.supportedFiatCurrencies': 'Supported fiat currencies',
     'settings.languageRegion.noSupportedCurrenciesMatch': 'No supported currencies match.',
     'settings.fees.noChainFeeProfilesYet':
-        "No chain fee profiles yet. They're seeded automatically when a chain is activated.",
+        "No network fee profiles yet. They're seeded automatically when a network is activated.",
     'settings.fees.feeStrategy': 'Fee strategy',
     'settings.fees.chooseTheBalanceBetweenConfirmation':
         'Choose the balance between confirmation speed and network cost.',
@@ -1605,7 +1604,7 @@ export const en = {
     'settings.fees.customFeeRate2': '{displayName} custom fee rate',
     'settings.fees.allowFeeBumpReplaceBy': 'Allow fee bump (Replace-by-Fee)',
     'settings.fees.keepThisOnSoYou':
-        'Keep this on so you can raise the fee later to speed up a stuck send on this chain.',
+        'Keep this on so you can raise the fee later to speed up a stuck send on this network.',
     'settings.fees.feeBumpingIsNotSupported': "Fee bumping isn't supported on {displayName}.",
     'settings.panic.panicModeIsActive': 'Panic mode is active',
     'settings.panic.signingIsFrozenUntilThe': 'Signing is frozen until the timer expires.',
@@ -1734,7 +1733,7 @@ export const en = {
     'home.tabs.stakingDispensersContractBalancesAnd':
         'Staking, dispensers, contract balances and open orders will show here.',
     'home.tabs.synthesizedDemoActivityWillAppear':
-        'Synthesized demo activity will appear here once the demo wallet has any chains active.',
+        'Synthesized demo activity will appear here once the demo wallet has any networks active.',
     'home.tabs.noDefiPositions': 'No DeFi positions',
     'home.tabs.noDemoPositionsOnThe': 'No demo positions on the selected network.',
     'home.tabs.confirms': 'Confirms',
@@ -1750,7 +1749,7 @@ export const en = {
     'shell.settingsButton.chooseAccount': 'Choose account',
     'shell.settingsButton.account1': 'Account 1',
     'shell.settingsButton.activeNetworkInHeader': 'Active network in header',
-    'shell.settingsButton.chainFilter': 'Chain filter',
+    'shell.settingsButton.chainFilter': 'Network filter',
     'shell.settingsButton.allSettings': 'All settings',
     'undoSend.toast.sendingInS': 'Sending in {remaining} s',
     'undoSend.toast.sendCancelled': 'Send cancelled',
@@ -1877,7 +1876,7 @@ export const en = {
     'settings.developer.activatedDerived':
         '{count, plural, one {Activated. Derived # address.} other {Activated. Derived # addresses.}}',
     'settings.display.noFiltersToReset': 'No saved list filters to reset.',
-    'settings.page.customChains': '{count, plural, one {# chain custom} other {# chains custom}}',
+    'settings.page.customChains': '{count, plural, one {# network custom} other {# networks custom}}',
     'settings.page.donatedOn': 'On · {sats, number} sats donated',
     'settings.page.siteCount': '{count, plural, one {# site} other {# sites}}',
     'locked.countdown.seconds': '{count, plural, one {# second} other {# seconds}}',
@@ -2157,7 +2156,7 @@ export const en = {
     'ui.feeSelector.pickHowFastThisTransaction':
         'Pick how fast this transaction confirms. Faster fees cost more; Custom sets an exact rate.',
     'ui.feeSelector.min': 'min',
-    'ui.feeSelector.feeEstimateUnavailableForThis': 'Fee estimate unavailable for this chain.',
+    'ui.feeSelector.feeEstimateUnavailableForThis': 'Fee estimate unavailable for this network.',
     'ui.feeSelector.slow': 'Slow',
     'ui.feeSelector.normal': 'Normal',
     'ui.feeSelector.fast': 'Fast',
@@ -2343,8 +2342,8 @@ export const en = {
     'components.listPickerScreen.noAddressListsYet': 'No address lists yet',
     'components.listPickerScreen.noPublishedListsYet': 'No published lists yet',
     'components.listPickerScreen.addressListsPublishedFromThis':
-        'Address lists published from this chain appear here.',
-    'components.listPickerScreen.listsPublishedFromThisChain': 'Lists published from this chain appear here.',
+        'Address lists published from this network appear here.',
+    'components.listPickerScreen.listsPublishedFromThisChain': 'Lists published from this network appear here.',
     'components.listPickerScreen.searchLists': 'Search lists',
     'components.listPickerScreen.noMatchingLists': 'No matching lists',
     'components.listPickerScreen.tryADifferentSearch': 'Try a different search.',
@@ -2399,7 +2398,6 @@ export const en = {
     'components.marketChart.noTradesYetInThis': 'No trades yet in this market.',
     'components.networkFilter.searchNetworks': 'Search networks…',
     'components.networkFilter.searchNetworks2': 'Search networks',
-    'components.networkFilter.networks': 'Networks',
     'components.networkFilter.noMatchingNetworks': 'No matching networks.',
     'components.queuedBroadcastBanner.waitingToSend': 'Waiting to send (',
     'components.queuedBroadcastBanner.signed': 'signed',
@@ -2442,9 +2440,9 @@ export const en = {
     'components.actionIntentSummary.balanceUnknown': 'balance unknown',
     'components.actionIntentSummary.unknown': '→ unknown',
     'components.networkStatusIndicator.networkStatus': 'Network status',
-    'components.networkStatusIndicator.allSelectedChainsAreReachable': 'All selected chains are reachable.',
-    'components.networkStatusIndicator.checkingSelectedChains': 'Checking selected chains.',
-    'components.networkStatusIndicator.noSelectedChainIsReachable': 'No selected chain is reachable.',
+    'components.networkStatusIndicator.allSelectedChainsAreReachable': 'All selected networks are reachable.',
+    'components.networkStatusIndicator.checkingSelectedChains': 'Checking selected networks.',
+    'components.networkStatusIndicator.noSelectedChainIsReachable': 'No selected network is reachable.',
     'components.networkStatusIndicator.networkSettings': 'Network settings',
     'components.platformSwitcher.xchainPlatformSites': 'XChain platform sites',
     'components.platformSwitcher.currentSite': '{label}, current site',
@@ -2583,9 +2581,9 @@ export const en = {
     'settings.page.encryptedFileExport': 'Encrypted file export',
     'settings.page.fees': 'Fees',
     'settings.page.chooseTheFeeStrategyAnd':
-        'Choose the fee strategy and fee-bumping default for each chain.',
+        'Choose the fee strategy and fee-bumping default for each network.',
     'settings.page.networkEndpoints': 'Network & endpoints',
-    'settings.page.setExplorerEncoderAndHub': 'Set explorer, encoder, and hub URLs for each chain.',
+    'settings.page.setExplorerEncoderAndHub': 'Set explorer, encoder, and hub URLs for each network.',
     'settings.page.chooseWhichWalletEventsTrigger':
         'Choose which wallet events trigger notifications, sounds, or price alerts.',
     'settings.page.reviewDappConnectionsAndControl':
@@ -2602,12 +2600,12 @@ export const en = {
     'settings.page.viewVersionLicenseBuildVerification':
         'View version, license, build verification, release signature, and diagnostic details.',
     'settings.page.networkChooseAll':
-        'Choose Mainnet, Testnet, or Regtest to control which chains the wallet queries and displays; changing the network reloads the page.',
+        'Choose Mainnet, Testnet, or Regtest to control which networks the wallet queries and displays; changing the network reloads the page.',
     'settings.page.networkMainnetActive':
         'Mainnet is active. Turn on Developer mode to choose a test network.',
     'settings.page.networkActiveLocked': '{network} is active. Turn on Developer mode to switch networks.',
     'settings.page.networkChooseTwo':
-        'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
+        'Choose Mainnet or Testnet to control which networks the wallet queries and displays; changing the network reloads the page.',
     'settings.page.privacyOn': '{on} of {total} on',
     'settings.page.autoLockOff': 'Auto-lock off',
     'settings.page.autoLockMinutes': 'Auto-lock {minutes} min',
@@ -2621,7 +2619,7 @@ export const en = {
     'settings.page.customShortcuts': '{count} custom',
     'settings.page.modeWatcher': 'Watcher (watch-only)',
     'settings.page.modeSigner': 'Signer (air-gapped)',
-    'settings.page.noChains': 'No chains',
+    'settings.page.noChains': 'No networks',
     'settings.page.allDefaults': 'All defaults',
     'settings.page.allCustom': 'All custom',
     'settings.page.feesCustom': '{custom} of {total} custom',
@@ -2657,13 +2655,13 @@ export const en = {
     'settings.display.displayAHideAffordanceOn':
         'Display a hide affordance on each balance row to collapse the token into the Hidden section.',
     'settings.display.addATokenByChain':
-        'Add a token by chain and ticker to keep it in Balances even when its balance is zero.',
+        'Add a token by network and ticker to keep it in Balances even when its balance is zero.',
     'settings.display.pinnedTokensFloatToThe':
         'Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.',
     'settings.display.hiddenTokensCollapseIntoThe':
         'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.',
     'settings.display.rememberTheLastSelectedChain':
-        'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."',
+        'Remember the last selected network filter for each balance and history list until you reset every list to "show all."',
     'settings.notifications.playASoundWithEach':
         'Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply.',
     'settings.notifications.couldNotSaveTheNotification':
@@ -2676,13 +2674,13 @@ export const en = {
     'settings.backup.writeItOnPaperOr':
         '{RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.',
     'settings.backup.enterTheRecoveryPhraseFrom':
-        "Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first {value} addresses on every active chain from it and lists any that don't match. Nothing is saved.",
+        "Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first {value} addresses on every active network from it and lists any that don't match. Nothing is saved.",
     'settings.backup.afterUploadingTheEncryptedFile':
         "After uploading the encrypted file to an HTTPS address you control, enter that address to make a QR for another device. The QR contains only the address and wallet name. It doesn't contain the backup file or password.",
     'settings.backup.theLabelsContactsAreEncrypted':
         "The labels + contacts are encrypted under a key derived from this wallet's seed and stored on the blockchain. Only someone who already has your seed can decrypt them. The transaction pays a network fee.",
     'settings.backup.decryptsTheLabelsContactsFile':
-        "Decrypts the labels + contacts FILE this wallet's seed published on the chain below, if any, and merges anything found into this wallet. Nothing already here is removed.",
+        "Decrypts the labels + contacts FILE this wallet's seed published on the network below, if any, and merges anything found into this wallet. Nothing already here is removed.",
     'settings.connectedSites.showsThe50MostRecent':
         'Shows the 50 most recent changes, with the newest last. Use this history to spot a site that was blocked or unblocked unexpectedly.',
     'settings.connectedSites.limitsHowManySigningRequests':

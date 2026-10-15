@@ -177,7 +177,7 @@ describe('Settings keyboard interaction', () => {
             screen.getByRole('combobox', { name: 'Balance number format' }),
             switches[2],
             switches[3],
-            screen.getByRole('combobox', { name: 'Token chain' }),
+            screen.getByRole('combobox', { name: 'Token network' }),
             screen.getByRole('textbox', { name: 'Token ticker' }),
             screen.getByRole('button', { name: 'Watch token' }),
             screen.getByRole('button', { name: 'Reset list preferences' }),

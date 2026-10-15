@@ -150,7 +150,7 @@ describe('History keyboard operation', () => {
         fireEvent.keyDown(disclosure, { key: 'Enter' });
         fireEvent.click(disclosure);
 
-        const chainTrigger = screen.getByRole('button', { name: 'All chains' });
+        const chainTrigger = screen.getByRole('button', { name: 'All networks' });
         chainTrigger.focus();
         fireEvent.keyDown(chainTrigger, { key: 'ArrowDown' });
         const chainOptions = await screen.findAllByRole('option');

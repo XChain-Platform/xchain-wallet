@@ -116,7 +116,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 setAddressesByChain(byChain || {});
                 const all = (byChain || {})[chainId] || [];
                 if (all.length === 0) {
-                    setLoadError(`No address on this chain to sign from. Use Receive to generate one first.`);
+                    setLoadError(`No address on this network to sign from. Use Receive to generate one first.`);
                     return;
                 }
                 if (initialFromAddress) {
@@ -521,7 +521,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
                 </p>
                 <dl className={styles.detailsList}>
-                    {descriptor ? <DetailRow label="Chain" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
+                    {descriptor ? <DetailRow label="Network" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
                     <DetailRow label="Mechanism" value={mechanismLabel} />

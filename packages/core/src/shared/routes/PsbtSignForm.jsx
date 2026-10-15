@@ -103,7 +103,7 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 // Show fixed copy for every parse failure: the parse handler throws only
 // precondition text and decoder exceptions, never wording written for a user.
 const PARSE_FAILED_MESSAGE = "This doesn't look like a transaction this wallet can read. "
-    + 'Check that you pasted the whole thing and picked the right chain.';
+    + 'Check that you pasted the whole thing and picked the right network.';
 
 // Say what the user cannot do here, not which shell API is missing.
 const SIGN_UNAVAILABLE_MESSAGE = "This version of the wallet can't sign transactions on this screen.";
@@ -684,7 +684,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 if (Object.keys(signingByChain).length === 0) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before signing.');
+                        : 'No addresses on any network yet. Use Receive to generate one before signing.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
@@ -834,7 +834,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 : 'This transaction contains finalized inputs and cannot be signed on this screen.';
         }
         if (walletOwnedInputCount === 0) {
-            return 'This transaction has no inputs this wallet can sign. Check the selected chain or import a different transaction.';
+            return 'This transaction has no inputs this wallet can sign. Check the selected network or import a different transaction.';
         }
         return null;
     }, [decomposed, finalizedInputCount, walletOwnedInputCount]);
@@ -910,10 +910,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         event.preventDefault();
         if (busy) return;
         setError(null);
-        if (!chainId) { setError('Pick a chain.'); return; }
+        if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId) { setError('Pick a signing address.'); return; }
         if (!psbtHex) { setError('Paste a valid transaction (hex or base64).'); return; }
-        if (!decomposed) { setError('Transaction could not be parsed for this chain.'); return; }
+        if (!decomposed) { setError('Transaction could not be parsed for this network.'); return; }
         if (importEligibilityError) return;
         if (ownedInputCount === 0) {
             setError(
@@ -1311,7 +1311,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         setChainId(nextChainId);
                         if (error) setError(null);
                     }}
-                    label="Chain"
+                    label="Network"
                     hideNetworkKind
                 />
             </div>

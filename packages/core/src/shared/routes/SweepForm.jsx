@@ -139,7 +139,7 @@ export function SweepForm({
         // Migrate lane arrives chain-locked (one sweep per chain row).
         lockedToken: migrateLane,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before sweeping.',
+            'No addresses on any network yet. Use Receive to generate one before sweeping.',
     });
 
     const [destination, setDestination] = useState(
@@ -731,7 +731,7 @@ export function SweepForm({
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -920,7 +920,7 @@ export function SweepForm({
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}

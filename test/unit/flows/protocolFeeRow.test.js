@@ -77,12 +77,12 @@ describe('normalizeProtocolFee', () => {
 });
 
 describe('protocolFeeRowCopy', () => {
-    it('states the chain rule conditionally when no quote is in hand', () => {
+    it('states the network rule conditionally when no quote is in hand', () => {
         const copy = protocolFeeRowCopy({ coinTicker: 'LTC', mandatory: true });
         expect(copy.variant).toBe('statement');
         // No promise that THIS action charges anything.
         expect(copy.label).toBe('Protocol fees are paid in LTC');
-        expect(copy.hint).toContain('LTC is the only way to pay a protocol fee on this chain');
+        expect(copy.hint).toContain('LTC is the only way to pay a protocol fee on this network');
         expect(copy.hint).toContain('If this action charges one');
         expect(copy.hint).not.toContain('The fee is sent on-chain');
     });
@@ -109,7 +109,7 @@ describe('protocolFeeRowCopy', () => {
         expect(copy.hint).not.toContain('If this action charges one');
     });
 
-    it('offers the payment-mode switch on a chain that has both lanes', () => {
+    it('offers the payment-mode switch on a network that has both lanes', () => {
         const copy = protocolFeeRowCopy({ coinTicker: 'BTC', mandatory: false });
         expect(copy.variant).toBe('toggle');
         expect(copy.label).toBe('Pay protocol fee in BTC instead of XCHAIN');

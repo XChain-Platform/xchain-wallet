@@ -9,7 +9,7 @@ import { Guidance, LiveExample, Markup, Section } from '../StyleGuidePage.jsx';
 
 const DELIVERY_OPTIONS = [
     { value: 'encrypted', label: 'Encrypted', sub: 'Only the recipient can read it', icon: <Icon.LockIcon /> },
-    { value: 'public', label: 'Public', sub: 'Stored as readable chain data', icon: <Icon.SendIcon /> },
+    { value: 'public', label: 'Public', sub: 'Stored as readable network data', icon: <Icon.SendIcon /> },
 ];
 
 const DESTINATIONS = [

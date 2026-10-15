@@ -405,7 +405,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // An order is signed from an address on THIS chain; without one there is
         // nothing to spend from and nothing to receive into.
         if (!fromAddress) {
-            setFormError('No address to sign from on this chain. Use Receive first.');
+            setFormError('No address to sign from on this network. Use Receive first.');
             return;
         }
         // Both legs are required: an order with one side blank has no price.

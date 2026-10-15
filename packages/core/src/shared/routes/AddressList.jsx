@@ -96,10 +96,10 @@ export function deleteAddressMessage({ record, holdings = [], hidden = false, ac
         parts.push('It runs a dispenser, which this wallet cannot show or manage while the address is gone.');
     }
     if (active) {
-        parts.push('It is the active address; the lowest remaining address on the chain takes over.');
+        parts.push('It is the active address; the lowest remaining address on the network takes over.');
     }
     if (last) {
-        parts.push('It is the only address on this chain, so the chain leaves the wallet until you add one.');
+        parts.push('It is the only address on this network, so the network leaves the wallet until you add one.');
     }
     const derived = DERIVED_SOURCES.has(record?.source) && typeof record?.derivationPath === 'string';
     if (derived) {
@@ -440,7 +440,7 @@ export function AddressList({
             return;
         }
         if (!wifChainId) {
-            setWifError('Pick a chain.');
+            setWifError('Pick a network.');
             return;
         }
         if (wifInput.trim().length === 0) {
@@ -489,7 +489,7 @@ export function AddressList({
             // function the user has never heard of.
             setWifError(userFacingMessage(
                 err,
-                'Could not import that private key. Check the key and the chain, then try again.',
+                'Could not import that private key. Check the key and the network, then try again.',
             ));
         } finally {
             setWifBusy(false);

@@ -208,7 +208,7 @@ export function NetworkFilter({
                             />
                         </div>
                     ) : null}
-                    <ul id={listboxId} className={styles.list} role="listbox" aria-label={t('components.networkFilter.networks')}>
+                    <ul id={listboxId} className={styles.list} role="listbox" aria-label={t('extension.connect.chains')}>
                         <li role="presentation">
                             <button
                                 type="button"

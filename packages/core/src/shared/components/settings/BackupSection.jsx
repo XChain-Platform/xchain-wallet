@@ -320,7 +320,7 @@ export function BackupSection({ activeWallet }) {
 
     async function runPublish({ chainId, password }) {
         // Require a chain with a source address for the FILE action.
-        if (!chainId) { setPublishError('Choose a chain with an address to publish labels.'); return; }
+        if (!chainId) { setPublishError('Choose a network with an address to publish labels.'); return; }
         // Require the wallet credential before preparing encrypted labels.
         if (!password) { setPublishError('Enter your wallet password to publish labels.'); return; }
         if (typeof messaging?.prepareLabelsRequest !== 'function') {
@@ -396,7 +396,7 @@ export function BackupSection({ activeWallet }) {
      */
     async function runRestore({ chainId, password }) {
         if (typeof messaging?.restoreLabelsRequest !== 'function') {
-            setRestoreError('Chain restore is not wired in this shell yet.');
+            setRestoreError('Network restore is not wired in this shell yet.');
             return;
         }
         if (!activeWallet?.id) {
@@ -417,7 +417,7 @@ export function BackupSection({ activeWallet }) {
             setRestoreResult({ ...r, requestedChainId: chainId });
             setRestoreStage('result');
         } catch (err) {
-            setRestoreError(passwordStepFailure(err, 'Failed to check the chain for backed-up contacts.'));
+            setRestoreError(passwordStepFailure(err, 'Failed to check the network for backed-up contacts.'));
             setRestoreStage('form');
         }
     }
@@ -921,8 +921,8 @@ function DryRunReport({ result, onDone }) {
     const overall = result?.overallMatch === true;
     const perChain = Array.isArray(result?.perChain) ? result.perChain : [];
     const title = overall
-        ? '✓ Backup matches this wallet on every active chain.'
-        : '✗ Backup does NOT match this wallet on at least one chain.';
+        ? '✓ Backup matches this wallet on every active network.'
+        : '✗ Backup does NOT match this wallet on at least one network.';
     return (
         <FormSection title={title} className={styles.formSection}>
             {perChain.length > 0 ? (
@@ -1217,7 +1217,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             .catch((err) => {
                 if (cancelled) return;
                 setChains([]);
-                setChainsError(err?.message || 'Failed to load chains.');
+                setChainsError(err?.message || 'Failed to load networks.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -1356,7 +1356,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             .catch((err) => {
                 if (cancelled) return;
                 setChains([]);
-                setChainsError(err?.message || 'Failed to load chains.');
+                setChainsError(err?.message || 'Failed to load networks.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -1432,7 +1432,7 @@ function restoreLabelsMessage(result) {
     if (result.skipped === 'wif-only') {
         return 'This wallet was imported from a private key only. There is no seed to check on-chain backups with.';
     }
-    const chainLabel = chainDisplayName(result.chainId || result.requestedChainId) || 'this chain';
+    const chainLabel = chainDisplayName(result.chainId || result.requestedChainId) || 'this network';
     if (result.restored === true) {
         const contacts = Number(result.contactsAdded || 0) + Number(result.contactsUpdated || 0);
         const labels = Number(result.addressesUpdated || 0);

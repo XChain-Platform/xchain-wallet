@@ -604,7 +604,7 @@ function CustomChainsRow({ developerMode }) {
             setChains(Array.isArray(r?.descriptors) ? r.descriptors : []);
             setLoadError(null);
         } catch (err) {
-            setLoadError(err?.message || 'Failed to load custom chains.');
+            setLoadError(err?.message || 'Failed to load custom networks.');
         } finally {
             setLoading(false);
         }
@@ -625,7 +625,7 @@ function CustomChainsRow({ developerMode }) {
             })
             .catch((err) => {
                 if (cancelled) return;
-                setLoadError(err?.message || 'Failed to load custom chains.');
+                setLoadError(err?.message || 'Failed to load custom networks.');
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
@@ -667,9 +667,9 @@ function CustomChainsRow({ developerMode }) {
             } catch { /* host already accepted the chain; the next read re-hydrates */ }
             // Say which descriptor the vault now holds, since a same-id add may keep the saved one.
             if (r?.restored) {
-                setStatusText(`Restored saved chain "${id}". To change its descriptor, remove it and add it again.`);
+                setStatusText(`Restored saved network "${id}". To change its descriptor, remove it and add it again.`);
             } else if (r?.replaced) {
-                setStatusText(`Replaced saved chain "${id}" (the saved copy is no longer valid).`);
+                setStatusText(`Replaced saved network "${id}" (the saved copy is no longer valid).`);
             } else {
                 setStatusText(`Added "${id}".`);
             }
@@ -677,7 +677,7 @@ function CustomChainsRow({ developerMode }) {
             setOpen(false);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to add custom chain.');
+            setErrorText(err?.message || 'Failed to add custom network.');
         } finally {
             setBusy(false);
         }
@@ -702,7 +702,7 @@ function CustomChainsRow({ developerMode }) {
             setStatusText(`Removed "${chainId}".`);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to remove custom chain.');
+            setErrorText(err?.message || 'Failed to remove custom network.');
         } finally {
             setBusy(false);
         }

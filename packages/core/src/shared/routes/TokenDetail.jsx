@@ -1194,7 +1194,7 @@ function DetailsPanel({
                 ) : null}
                 <DetailRow label="Type">{kindLabel(kind)}</DetailRow>
                 {descriptor ? (
-                    <DetailRow label="Chain"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
+                    <DetailRow label="Network"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
                 ) : null}
                 {!isNative ? (
                     <DetailRow label="Divisibility">{detailText(divisibility)}</DetailRow>
@@ -1912,7 +1912,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                 const usable = list.filter((a) => a.source === 'hd' || a.source === 'imported-wif');
                 setAddresses(usable);
                 if (usable.length === 0) {
-                    setAddressesError('No unlockable addresses for this chain. Holders need an HD or imported-WIF address that holds the token.');
+                    setAddressesError('No unlockable addresses for this network. Holders need an HD or imported-WIF address that holds the token.');
                 }
             })
             .catch((err) => setAddressesError(err?.message || 'Failed to load addresses.'))
@@ -2143,7 +2143,7 @@ function GatedGroupCard({
         event.preventDefault();
         if (submitting || password.length === 0) return;
         if (!Array.isArray(addresses) || addresses.length === 0) {
-            setUnlockError('No usable holding address found for this chain.');
+            setUnlockError('No usable holding address found for this network.');
             return;
         }
         setSubmitting(true);

@@ -118,8 +118,8 @@ export function ExampleListScreen() {
                 toolbar={(
                     <>
                         <input type="search" className={styles.search} aria-label="Search payments" placeholder="Search" />
-                        <select className={styles.select} aria-label="Filter by chain" defaultValue="all">
-                            <option value="all">All chains</option>
+                        <select className={styles.select} aria-label="Filter by network" defaultValue="all">
+                            <option value="all">All networks</option>
                             <option value="btc">Bitcoin</option>
                         </select>
                         <Button size="sm" variant="secondary" onClick={noop}>Refresh</Button>
@@ -161,7 +161,7 @@ export function ExampleEmptyScreen() {
                 <EmptyState
                     icon={<Icon.HandshakeIcon />}
                     title="No polls yet"
-                    body="Create the first poll on this chain."
+                    body="Create the first poll on this network."
                     actionLabel="Create poll"
                     onAction={noop}
                 />

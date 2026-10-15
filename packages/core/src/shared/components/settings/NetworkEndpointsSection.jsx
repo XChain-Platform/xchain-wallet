@@ -112,7 +112,7 @@ function ChainRegistryRefreshRow() {
             if (request !== requestRef.current) return;
             setStatus({
                 ok: false,
-                error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
+                error: userFacingMessage(err, 'Could not refresh the network registry. Try again.'),
             });
             setManualResult(true);
         } finally {

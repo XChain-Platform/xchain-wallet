@@ -195,7 +195,7 @@ export function ChainPicker({
                     id={listboxId}
                     className={styles.popover}
                     role="listbox"
-                    aria-label={label || t('components.networkFilter.networks')}
+                    aria-label={label || t('extension.connect.chains')}
                     onKeyDown={onPopoverKeyDown}
                 >
                     {entries.length > 6 ? (

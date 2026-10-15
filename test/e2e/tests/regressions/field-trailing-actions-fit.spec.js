@@ -127,13 +127,13 @@ async function openPaletteRoute(page, name) {
 
 async function selectBitcoinMainnet(page) {
     const main = page.getByRole('main');
-    const trigger = main.getByRole('button', { name: /^Give and get chain:/ });
+    const trigger = main.getByRole('button', { name: /^Give and get network:/ });
     await expect(trigger).toBeVisible();
-    if (await trigger.getAttribute('aria-label') === 'Give and get chain: Bitcoin') return;
+    if (await trigger.getAttribute('aria-label') === 'Give and get network: Bitcoin') return;
 
     await trigger.click();
     await main.getByRole('option', { name: /^Bitcoin\s*BTC$/ }).click();
-    await expect(trigger).toHaveAttribute('aria-label', 'Give and get chain: Bitcoin');
+    await expect(trigger).toHaveAttribute('aria-label', 'Give and get network: Bitcoin');
 }
 
 async function checkViewports(page, surface, fields) {

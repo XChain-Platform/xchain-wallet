@@ -273,7 +273,7 @@ describe('Settings at a 320px viewport', () => {
         cleanup();
 
         renderSettings('developer');
-        expect(await screen.findByRole('button', { name: 'Remove custom chain fork-regtest' })).toBeVisible();
+        expect(await screen.findByRole('button', { name: 'Remove custom network fork-regtest' })).toBeVisible();
     });
 
     it('keeps equal contact actions together in a wrapping row at 360px', async () => {
