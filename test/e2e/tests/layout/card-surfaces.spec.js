@@ -39,7 +39,8 @@ const ROUTES = [
     { label: 'Home coins', open: (page) => gotoSection(page, 'Home') },
     { label: 'Home tokens', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'Tokens'); } },
     { label: 'Home NFTs', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'NFTs'); } },
-    { label: 'History', open: (page) => gotoSection(page, 'History') },
+    { label: 'Home activity', rows: true, open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'Activity'); } },
+    { label: 'History', rows: true, open: (page) => gotoSection(page, 'History') },
     { label: 'Send', open: (page) => gotoSection(page, 'Send') },
     { label: 'Receive', open: (page) => gotoSection(page, 'Receive') },
     { label: 'Staking positions', open: (page) => palette(page, 'Your staking positions') },
@@ -113,6 +114,46 @@ async function showLockout(page) {
     // The dev server keeps a request open, so the load event never fires.
     await page.reload({ waitUntil: 'commit' });
     await expect(page.getByText(/Too many incorrect passwords/)).toBeVisible({ timeout: 60_000 });
+}
+
+/**
+ * Runs in the page. Home's Activity tab and History draw one list the same
+ * way: the rows of a list sit in one flush card with dividers between them,
+ * never a bordered card per row.
+ */
+function rowListFaults() {
+    const main = document.querySelector('main');
+    const probe = document.createElement('div');
+    probe.style.border = '1px solid var(--xc-border)';
+    document.body.append(probe);
+    const borderColor = getComputedStyle(probe).borderTopColor;
+    probe.remove();
+    const isCard = (el) => {
+        const cs = getComputedStyle(el);
+        return ['Top', 'Right', 'Bottom', 'Left'].every((side) => cs[`border${side}Style`] === 'solid'
+            && cs[`border${side}Width`] === '1px' && cs[`border${side}Color`] === borderColor);
+    };
+    const rows = [...main.querySelectorAll('ul > li > button')].filter((el) => el.getBoundingClientRect().height > 40);
+    const pad = getComputedStyle(document.documentElement).getPropertyValue('--xc-card-pad').trim();
+    const faults = [];
+    for (const row of rows) {
+        const cs = getComputedStyle(row);
+        const label = (row.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 32);
+        if (['Right', 'Bottom', 'Left'].some((side) => parseFloat(cs[`border${side}Width`]) > 0)) {
+            faults.push(`row "${label}" draws its own border`);
+        }
+        let card = row.parentElement;
+        while (card && card !== main && !isCard(card)) card = card.parentElement;
+        if (!card || card === main) faults.push(`row "${label}" is not inside a list card`);
+        // The row keeps the card inset, and every row after the first in its
+        // list sits under a divider.
+        if (cs.paddingLeft !== pad) faults.push(`row "${label}" inset ${cs.paddingLeft}, card padding ${pad}`);
+        const item = row.parentElement;
+        if (item.previousElementSibling && getComputedStyle(item).borderTopWidth === '0px' && cs.borderTopWidth === '0px') {
+            faults.push(`row "${label}" has no divider above it`);
+        }
+    }
+    return { rows: rows.length, faults };
 }
 
 async function measure(page, label, faults) {
@@ -257,6 +298,11 @@ for (const viewport of VIEWPORTS) {
             const result = await page.evaluate(cardFaults);
             measured += result.cards;
             faults.push(...result.faults.map((fault) => `${route.label}: ${fault}`));
+            if (route.rows) {
+                const list = await page.evaluate(rowListFaults);
+                expect(list.rows, `${route.label} shows activity rows to measure`).toBeGreaterThan(1);
+                faults.push(...list.faults.map((fault) => `${route.label}: ${fault}`));
+            }
         }
 
         // The locked demo wallet: its exit block, then a lockout notice.
