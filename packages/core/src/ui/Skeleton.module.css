@@ -3,7 +3,9 @@
  * `prefers-reduced-motion: reduce` (the @media block at the bottom). */
 
 .skeleton {
-    background-color: var(--xc-surface-raised, #1f2937);
+    /* A token of its own: raised surfaces are white in the light themes, which
+       left the placeholders invisible on the white page. */
+    background-color: var(--xc-skeleton, var(--xc-surface-raised, #1f2937));
     background-image: linear-gradient(
         90deg,
         transparent 0%,

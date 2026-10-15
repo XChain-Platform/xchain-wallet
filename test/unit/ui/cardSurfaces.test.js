@@ -27,7 +27,7 @@ const requireFromVite = createRequire(
 );
 const postcss = requireFromVite('postcss');
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'release', 'test-dapp', 'android', 'ios', 'coverage']);
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'release', 'test-dapp', 'android', 'ios', 'coverage', 'www']);
 // Any border, corner, inset or fill declaration redraws part of the card.
 const SURFACE_PROP = /^(border|padding|background)(-|$)/;
 const CARD_COMPOSES = /^(card|flush)\s+from\s+['"][^'"]*\/Card\.module\.css['"]$/;
