@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -20,6 +20,7 @@ import {
     coinFromChainId,
 } from '../components/BalanceList.jsx';
 import { NetworkFilter } from '../components/NetworkFilter.jsx';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -31,18 +32,19 @@ import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
 const PLATFORM_QUERY_DEBOUNCE_MS = 350;
-const LOCAL_QUERY_DEBOUNCE_MS = 200;
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// Rows show the chain only as an icon overlay, and every chain lists the same
+// tickers, so the row's accessible name says which chain (without the network
+// kind) the asset is on.
 function tokenSelectionLabel(row) {
-    const networkSuffix = row.networkKind && row.networkKind !== 'mainnet'
-        ? ` · ${row.networkKind}`
-        : '';
-    const chain = row.chainDisplayName
-        ? ` on ${row.chainDisplayName}${networkSuffix}`
-        : '';
-    return `Select ${row.displayName || row.tick}${chain}`;
+    const chain = chainRegistry.get(row.chainId)?.displayName;
+    return `Select ${row.displayName || row.tick}${chain ? ` on ${chain}` : ''}`;
+}
+
+function withoutRenderedChainLabels(rows) {
+    return rows.map((row) => ({ ...row, chainDisplayName: '', networkKind: '' }));
 }
 
 function hasSpendableBalance(row) {
@@ -91,6 +93,7 @@ function hasSpendableBalance(row) {
  * @param {import('react').ReactNode} [props.titleIcon]
  * @param {string} [props.backLabel]
  * @param {() => void} [props.onBack]
+ * @param {import('react').ElementType} [props.listPageComponent]
  * @param {(sel: { chainId: string, tick: string, kind?: string, displayName?: string, imageUrl?: string | null }) => void} props.onSelect
  */
 export function TokenPicker({
@@ -108,6 +111,7 @@ export function TokenPicker({
     titleIcon,
     backLabel,
     onBack,
+    listPageComponent: ListPageComponent = ListPage,
     onSelect,
 }) {
     const { messaging, shell } = useMessaging();
@@ -117,16 +121,26 @@ export function TokenPicker({
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
 
-    const [balances, setBalances] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
-    const [addressesByChain, setAddressesByChain] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
-    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [balanceReload, setBalanceReload] = useState(0);
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
+    const [balanceLoad, setBalanceLoad] = useState({
+        walletId: null,
+        accountId: null,
+        isReceive: null,
+        reload: null,
+        balances: null,
+        addressesByChain: null,
+        error: null,
+    });
+    const balanceLoadMatches = balanceLoad.walletId === walletId
+        && balanceLoad.accountId === accountId
+        && balanceLoad.isReceive === isReceive
+        && balanceLoad.reload === balanceReload;
+    const balances = balanceLoadMatches ? balanceLoad.balances : null;
+    const addressesByChain = balanceLoadMatches ? balanceLoad.addressesByChain : null;
+    const loadError = balanceLoadMatches ? balanceLoad.error : null;
 
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
@@ -135,7 +149,6 @@ export function TokenPicker({
     const [tokenQueryLocal, setTokenQueryLocal] = useState('');
     const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
     const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
-    const [debouncedTokenQuery, setDebouncedTokenQuery] = useState(tokenQuery);
 
     const [kindFilterLocal, setKindFilterLocal] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
     const kindFilter = kindFilterProp ?? kindFilterLocal;
@@ -154,11 +167,6 @@ export function TokenPicker({
             && window.matchMedia('(pointer: coarse)').matches;
         if (!coarse) searchRef.current?.focus();
     }, []);
-
-    useEffect(() => {
-        const handle = setTimeout(() => setDebouncedTokenQuery(tokenQuery), LOCAL_QUERY_DEBOUNCE_MS);
-        return () => clearTimeout(handle);
-    }, [tokenQuery]);
 
     useEffect(() => {
         let cancelled = false;
@@ -182,9 +190,16 @@ export function TokenPicker({
     useEffect(() => {
         if (!walletId) return undefined;
         let cancelled = false;
-        setBalances(null);
-        setAddressesByChain(null);
-        setLoadError(null);
+        const pendingLoad = {
+            walletId,
+            accountId,
+            isReceive,
+            reload: balanceReload,
+            balances: null,
+            addressesByChain: null,
+            error: null,
+        };
+        setBalanceLoad(pendingLoad);
         (async () => {
             try {
                 // Receive needs addresses-by-chain too: it surfaces every
@@ -193,26 +208,37 @@ export function TokenPicker({
                 const canByChain = typeof messaging.getAddressesByChain === 'function';
                 const isDemo = flowsLib.isDemoWallet(walletId);
                 let b;
+                let byChain = null;
                 if (isDemo && canByChain) {
                     // Demo balances are synthesized from the address map for
                     // both purposes; only Receive keeps the map around.
-                    const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                    if (!cancelled && isReceive) setAddressesByChain(byChain);
+                    byChain = await messaging.getAddressesByChain(walletId, accountId);
                     b = flowsLib.synthesizeDemoBalances(byChain);
                 } else {
                     const byChainPromise = (isReceive && canByChain)
                         ? messaging.getAddressesByChain(walletId, accountId)
                         : Promise.resolve(null);
-                    const [byChain, walletBalances] = await Promise.all([
+                    const [nextByChain, walletBalances] = await Promise.all([
                         byChainPromise,
                         messaging.getWalletBalances(walletId, accountId),
                     ]);
-                    if (!cancelled && isReceive) setAddressesByChain(byChain);
+                    byChain = nextByChain;
                     b = walletBalances;
                 }
-                if (!cancelled) setBalances(b);
+                if (!cancelled) {
+                    setBalanceLoad({
+                        ...pendingLoad,
+                        balances: b,
+                        addressesByChain: isReceive ? byChain : null,
+                    });
+                }
             } catch (err) {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load balances.');
+                if (!cancelled) {
+                    setBalanceLoad({
+                        ...pendingLoad,
+                        error: err?.message || 'Failed to load balances.',
+                    });
+                }
             }
         })();
         return () => { cancelled = true; };
@@ -247,7 +273,7 @@ export function TokenPicker({
         return ordered;
     }, [allRows]);
 
-    const tokenQueryTrim = debouncedTokenQuery.trim().toLowerCase();
+    const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
         let next = isReceive
             ? allRows
@@ -264,7 +290,10 @@ export function TokenPicker({
             next = next.filter((r) => {
                 const tick = String(r.tick || '').toLowerCase();
                 const name = String(r.displayName || '').toLowerCase();
-                return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
+                const assetId = `${r.chainId || ''}:${r.tick || ''}`.toLowerCase();
+                return tick.includes(tokenQueryTrim)
+                    || name.includes(tokenQueryTrim)
+                    || assetId.includes(tokenQueryTrim);
             });
         }
         // A bridged copy is stored origin-rooted ('BTC.PEPECASH') and must not
@@ -279,7 +308,13 @@ export function TokenPicker({
             if (!origin) return r;
             return { ...r, displayName: `${label} (from ${origin})` };
         });
-        return sortByChainThenAsset(next);
+        const sorted = sortByChainThenAsset(next);
+        return isReceive
+            ? [
+                ...sorted.filter(hasSpendableBalance),
+                ...sorted.filter((row) => !hasSpendableBalance(row)),
+            ]
+            : sorted;
     }, [allRows, isReceive, networkFilter, kindFilter, tokenQueryTrim]);
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
@@ -319,7 +354,7 @@ export function TokenPicker({
     }, [allRows]);
 
     useEffect(() => {
-        const query = debouncedTokenQuery.trim().toUpperCase();
+        const query = tokenQuery.trim().toUpperCase();
         if (!isReceive
             || !query
             || query.length < PLATFORM_QUERY_MIN_CHARS
@@ -376,7 +411,7 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, debouncedTokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
 
     const resetFilters = () => {
         setTokenQuery('');
@@ -388,6 +423,7 @@ export function TokenPicker({
         || (!kindLocked && kindFilter !== 'all');
 
     const visibleOptionRows = rows.filter((row) => !hiddenSet.has(`${row.chainId}:${row.tick}`));
+    const hiddenOptionRows = rows.filter((row) => hiddenSet.has(`${row.chainId}:${row.tick}`));
     const sortedOptionRows = pinnedSet.size > 0
         ? [
             ...visibleOptionRows.filter((row) => pinnedSet.has(`${row.chainId}:${row.tick}`)),
@@ -396,8 +432,14 @@ export function TokenPicker({
         : visibleOptionRows;
     const optionRows = [
         ...sortedOptionRows,
+        ...hiddenOptionRows,
         ...platformResults,
     ];
+    const renderedRows = useMemo(() => withoutRenderedChainLabels(rows), [rows]);
+    const renderedPlatformResults = useMemo(
+        () => withoutRenderedChainLabels(platformResults),
+        [platformResults],
+    );
     const optionKeys = optionRows.map((row) => `${row.chainId}:${row.tick}`);
     const optionTabStop = rovingOption && optionKeys.includes(rovingOption)
         ? rovingOption
@@ -438,17 +480,16 @@ export function TokenPicker({
         imageUrl: tok.imageUrl,
     });
     const resultsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const firstResult = () => resultsRef.current?.querySelector('button[aria-label^="Select "]');
     const handleSearchKeyDown = (event) => {
-        if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
-        const result = firstResult();
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return;
+        const results = Array.from(resultsRef.current?.querySelectorAll('button[aria-label^="Select "]') || []);
+        const result = event.key === 'ArrowUp' ? results.at(-1) : results[0];
         if (!result) return;
         event.preventDefault();
         if (event.key === 'Enter') result.click();
         else result.focus();
     };
     const clearSearch = () => {
-        setDebouncedTokenQuery('');
         setTokenQuery('');
         searchRef.current?.focus();
     };
@@ -459,6 +500,7 @@ export function TokenPicker({
 
     const header = (
         <PageHeader
+            nested
             onBack={onBack}
             backLabel={headerBackLabel}
             title={headerTitle}
@@ -497,7 +539,7 @@ export function TokenPicker({
         ? `No balances match "${tokenQuery.trim()}".`
         : (networkFilter === 'all'
             ? (isReceive
-                ? 'Choose a chain to display a fresh receive address for it.'
+                ? 'Choose a network to display a fresh receive address for it.'
                 : 'Sendable coin and token balances appear here after funds are received.')
             : 'Balances on this network appear here after this wallet receives funds.');
 
@@ -509,8 +551,8 @@ export function TokenPicker({
 
     const toolbar = (
         <>
-            <div style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
-                <input
+            <div className={styles.searchField} style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
+                <Input
                     ref={searchRef}
                     type="search"
                     enterKeyHint="search"
@@ -524,6 +566,7 @@ export function TokenPicker({
                     autoCapitalize="characters"
                     spellCheck={false}
                     aria-label="Search coins or tokens"
+                    aria-controls={balances !== null ? 'xc-token-picker-results' : undefined}
                 />
                 {tokenQuery ? (
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear token search">
@@ -544,36 +587,21 @@ export function TokenPicker({
                 anyway would offer a choice the action cannot honour, and
                 the segments would appear dead because the pinned prop wins
                 over the local state they set. */}
-            <div
-                className={styles.kindSegments}
-                role="tablist"
+            <Tabs
+                items={KIND_OPTIONS}
+                value={kindFilter || 'all'}
+                onChange={setKindFilter}
                 aria-label="Asset kind"
                 hidden={kindLocked}
-                style={kindLocked ? { display: 'none' } : undefined}
-            >
-                {KIND_OPTIONS.map((opt) => {
-                    const active = (kindFilter || 'all') === opt.id;
-                    return (
-                        <button
-                            key={opt.id}
-                            type="button"
-                            role="tab"
-                            tabIndex={active ? 0 : -1}
-                            aria-selected={active}
-                            tabIndex={active ? 0 : -1}
-                            className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}
-                            onClick={() => setKindFilter(opt.id)}
-                        >
-                            {opt.label}
-                        </button>
-                    );
-                })}
-            </div>
+                style={kindLocked
+                    ? { display: 'none' }
+                    : { flex: '0 0 auto', width: 'auto' }}
+            />
         </>
     );
 
     const body = (
-        <ListPage toolbar={toolbar} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
+        <ListPageComponent toolbar={toolbar} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
             {loadError ? (
                 <StatusMessage
                     variant="error"
@@ -589,27 +617,31 @@ export function TokenPicker({
                 </div>
             ) : null}
             {balances ? (
-                <div ref={resultsRef} role="group" aria-label="Coins and tokens">
+                <div id="xc-token-picker-results" ref={resultsRef} role="group" aria-label="Coins and tokens">
                     {rows.length > 0 ? (
                         <BalanceList
-                            rows={rows}
+                            rows={renderedRows}
                             onSelectToken={handleSelect}
                             getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
                             onTogglePin={handleTogglePin}
+                            hideSmallBalances={settings?.privacy?.hideSmallBalances === true}
+                            smallBalanceThreshold={settings?.smallBalanceThreshold || 'dust'}
                             allowRemoteImages={allowRemoteImages}
                             getRowTabIndex={(row) => (
                                 `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
                             )}
-                            // The held-balance list is cross-chain too
-                            // whenever the caller has not pinned a network, so
-                            // a user holding the same tick on two chains would
-                            // otherwise face the same indistinguishable rows the
-                            // platform section had. Pinned network = one chain =
-                            // naming it on every row is the noise the default
-                            // avoids.
-                            showChain={networkFilter === 'all'}
+                        />
+                    ) : (platformResults.length === 0 && !platformBusy && !platformError && balancesUnchecked && !tokenQueryTrim) ? (
+                        // An empty list while balances could not be checked is
+                        // not proof of an empty wallet: say that once instead.
+                        <BalancesUncheckedState
+                            plain={false}
+                            onRetry={() => {
+                                recheckBalances();
+                                setBalanceReload((value) => value + 1);
+                            }}
                         />
                     ) : (platformResults.length === 0 && !platformBusy && !platformError) ? (
                         <EmptyState
@@ -638,16 +670,9 @@ export function TokenPicker({
                             ) : null}
                             {platformResults.length > 0 ? (
                                 <BalanceList
-                                    rows={platformResults}
+                                    rows={renderedPlatformResults}
                                     onSelectToken={handleSelect}
                                     getRowActionLabel={tokenSelectionLabel}
-                                    // This section searches EVERY chain
-                                    // the wallet holds an address on, so the
-                                    // same tick legitimately appears once per
-                                    // chain. Without the chain named, those
-                                    // rows are identical, and picking one
-                                    // re-targets the calling form's network.
-                                    showChain
                                     allowRemoteImages={allowRemoteImages}
                                     getRowTabIndex={(row) => (
                                         `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
@@ -658,7 +683,7 @@ export function TokenPicker({
                     ) : null}
                 </div>
             ) : null}
-        </ListPage>
+        </ListPageComponent>
     );
 
     return (

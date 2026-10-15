@@ -26,6 +26,9 @@ const readJson = (path) => JSON.parse(read(path));
 function filesBelow(path, accept) {
     return readdirSync(join(ROOT, path), { withFileTypes: true }).flatMap((entry) => {
         const child = join(path, entry.name);
+        // Installed and tool-generated copies are not shipping manifests: a
+        // running Vite dev server writes node_modules/.vite/deps/package.json.
+        if (entry.isDirectory() && entry.name === 'node_modules') return [];
         if (entry.isDirectory()) return filesBelow(child, accept);
         return accept(entry.name) ? [child] : [];
     });

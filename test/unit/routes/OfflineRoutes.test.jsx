@@ -29,6 +29,7 @@ import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const WALLET = { id: 'offline-wallet', name: 'Offline Wallet' };
@@ -71,7 +72,8 @@ function renderOffline(messaging, route) {
 }
 
 function expectOneOfflineNotice() {
-    expect(screen.getAllByText('Wallet is offline')).toHaveLength(1);
+    // The compact notice uses one sentence for offline and degraded states.
+    expect(screen.getAllByText('Some balances may be out of date')).toHaveLength(1);
 }
 
 beforeEach(() => {
@@ -87,18 +89,26 @@ afterEach(() => {
 
 describe('offline route behavior from reachability', () => {
     it('keeps cached Home balances and blocks Send with a reason', async () => {
+        // Offline, Home starts from its saved balance copy and does not ask
+        // the services for fresh balances.
+        const balances = {
+            [CHAIN]: [{
+                address: ADDRESS,
+                balances: {
+                    native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                    tokens: [],
+                },
+            }],
+        };
+        writeBalanceCache(WALLET.id, null, {
+            balances,
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        });
         const messaging = messagingWith({
             listWallets: vi.fn().mockResolvedValue([WALLET]),
             listAccounts: vi.fn().mockResolvedValue([]),
-            getWalletBalances: vi.fn().mockResolvedValue({
-                [CHAIN]: [{
-                    address: ADDRESS,
-                    balances: {
-                        native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
-                        tokens: [],
-                    },
-                }],
-            }),
+            getWalletBalances: vi.fn().mockResolvedValue(balances),
             getActiveAddresses: vi.fn().mockResolvedValue({}),
             getSettings: vi.fn().mockResolvedValue({}),
             getAddressesByChain: vi.fn().mockResolvedValue({}),
@@ -108,7 +118,8 @@ describe('offline route behavior from reachability', () => {
             <Home activeWalletId={WALLET.id} onSend={vi.fn()} onReceive={() => {}} />
         ));
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
+        expect(messaging.getWalletBalances).not.toHaveBeenCalled();
         expectOneOfflineNotice();
         const send = screen.getByRole('button', { name: 'Send' });
         expect(send).toHaveAttribute('aria-disabled', 'true');

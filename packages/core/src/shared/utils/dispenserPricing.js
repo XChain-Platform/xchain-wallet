@@ -69,9 +69,11 @@ function oraclePriceLabel(row, feeds) {
     if (feeds === null) return unresolved;
     if (feeds === undefined) return `an oracle-set price (checking ${addr}…)`;
     const tick = String(row.give_tick || '').toUpperCase();
-    const fiat = String(row.fiat_code || '').toUpperCase();
+    const coin = String(row.get_coin || '').toUpperCase();
+    const fiat = String(row.fiat_code || row.fiat || '').toUpperCase();
     const matches = feeds.filter((f) => f
         && String(f.tick || '').toUpperCase() === tick
+        && (!coin || !f.coin || String(f.coin).toUpperCase() === coin)
         && (!fiat || String(f.fiat || '').toUpperCase() === fiat));
     if (matches.length !== 1) return unresolved;
     const [feed] = matches;

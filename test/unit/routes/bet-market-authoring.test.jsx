@@ -276,6 +276,23 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
         expect(Number(second.args.deadline)).toBe(DEADLINE_UNIX);
         expect(utils.container.textContent).toContain('0.16500000');
     });
+
+    it('says plainly that the estimate is unavailable and keeps the host error text off the screen', async () => {
+        const { messaging } = harness({
+            betProjectFeedCreateFee: () => Promise.reject(
+                new Error('projectBetFeedCreateFee: sdk.betting.projectFeedCreateFee is unavailable'),
+            ),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        expect(utils.getByText("The cost estimate isn't available right now.")).toBeTruthy();
+        expect(utils.container.textContent).not.toMatch(/projectFeedCreateFee|sdk\.|unavailable:/);
+    });
 });
 
 describe('CreateBetFeedForm: compose and submit', () => {
@@ -336,6 +353,34 @@ describe('CreateBetFeedForm: compose and submit', () => {
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
+    it('starts only one unsigned market build when submit is pressed twice', async () => {
+        let resolveBuild;
+        const build = vi.fn(() => new Promise((resolve) => { resolveBuild = resolve; }));
+        const { messaging } = harness({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildBetActionPsbtRequest: build,
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        const submit = button(utils, /Create unsigned transaction/i);
+        await domAct(async () => {
+            fireEvent.click(submit);
+            fireEvent.click(submit);
+            await drain();
+        });
+        expect(build).toHaveBeenCalledTimes(1);
+
+        await domAct(async () => {
+            resolveBuild({ psbtHex: '70736274ff00', chainId: CHAIN, fromAddress: OWN });
+            await drain();
+        });
+    });
+
     it('composes through the SDK createMarketParams builder and signs the SAME params', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -363,6 +408,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         // Nothing is signed by opening the confirm page.
         expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
+        expect(utils.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.000015 BTC');
 
         await domAct(async () => {
             typeIn(utils, 'Password', 'hunter2');
@@ -626,6 +672,30 @@ describe('BetFeedDetail states what a win would pay', () => {
         await stakeOn(utils, 'Away', '5');
         expect(utils.queryByTestId('bet-projection')).toBeNull();
         expect(button(utils, /Review bet/i)).toBeTruthy();
+    });
+
+    it('starts only one unsigned wager build when submit is pressed twice', async () => {
+        let resolveBuild;
+        const build = vi.fn(() => new Promise((resolve) => { resolveBuild = resolve; }));
+        const { messaging } = harness({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildBetActionPsbtRequest: build,
+        });
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '5');
+
+        const submit = button(utils, /Create unsigned transaction/i);
+        await domAct(async () => {
+            fireEvent.click(submit);
+            fireEvent.click(submit);
+            await drain();
+        });
+        expect(build).toHaveBeenCalledTimes(1);
+
+        await domAct(async () => {
+            resolveBuild({ psbtHex: '70736274ff00', chainId: CHAIN, fromAddress: OWN });
+            await drain();
+        });
     });
 
     it('does not project or compose a stake below the market minimum', async () => {

@@ -8,12 +8,8 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
-/* Contacts list view. Mirrors the Send/Receive TokenPicker toolbar
-   (search left, control right) so the address book feels identical to
-   the picker users meet during a send. The control on the right is a
-   custom network dropdown (chain icon + name) rather than a native select,
-   because native selects can't render images inside options. */
-
+/* Search, network picker and sort share one row and wrap on narrow phones
+   instead of clipping the network name. */
 .toolbar {
     display: flex;
     flex-direction: row;
@@ -28,34 +24,29 @@
 .search {
     flex: 1 1 0;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
-.search::placeholder {
-    color: var(--xc-text-muted);
+.search > *,
+.sort > * {
+    margin-bottom: 0;
+}
+
+.search input {
+    height: var(--xc-control-h-md);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
+    border-radius: var(--xc-control-radius);
 }
 
 /* Sort sits beside the two half-width controls at its natural width. */
 .sort {
     flex: 0 0 auto;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-2);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
 @media (max-width: 420px) {
+    .search {
+        flex: 1 1 100%;
+    }
+
     .sort {
         flex: 1 1 100%;
     }
@@ -95,14 +86,11 @@
 /* One big card wrapping all contacts, mirroring the Home BalanceList:
    rows are separated by a hairline divider and highlight on hover. */
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
     list-style: none;
-    padding: 0;
     margin: 0;
 }
 
@@ -136,7 +124,11 @@
     outline-offset: -2px;
 }
 
+/* Block, because an inline span ignores overflow and text-overflow: a long
+   name ran under the network icons and off the row instead of ending in an
+   ellipsis. */
 .rowName {
+    display: block;
     flex: 1 1 auto;
     min-width: 0;
     font-weight: 600;
@@ -176,17 +168,6 @@
     line-height: 1;
 }
 
-/* Tab strip used in the contact detail view. Canonical underline pattern.
-   space-between pushes the trailing add-address button to the right edge. */
-.tabsRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0;
-    border-bottom: 1px solid var(--xc-border);
-    margin: var(--xc-space-4) 0 0;
-}
-
 /* Plus button on the Addresses tab line, right-justified. Matches the
    sub-header icon buttons but sized to sit on the tab row. */
 .addAddressBtn {
@@ -215,38 +196,6 @@
     outline-offset: 2px;
 }
 
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    padding: var(--xc-space-3) var(--xc-space-3);
-    color: var(--xc-text-muted);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    transition: color 160ms ease, border-color 160ms ease;
-}
-
-.tab:hover { color: var(--xc-text); }
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.tabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
-.tabLabel { font-weight: 700; }
-
 .tabPanel {
     padding: var(--xc-space-3) 0;
 }
@@ -259,9 +208,12 @@
     margin-top: var(--xc-space-2);
 }
 
+/* One row of tiles at every width down to a 360 px phone: five tiles fit
+   at 56 px, and a narrower screen wraps them evenly instead of leaving the
+   fifth alone under a fixed four-column grid. */
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
     gap: var(--xc-space-2);
 }
 
@@ -336,6 +288,15 @@
     text-align: center;
 }
 
+/* Icon above label, as on the View address tiles: side by side, the label
+   had too little room and broke mid-word ("Messa ge"). */
+.quickAction > span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
 .quickAction:hover:not(:disabled) {
     background: var(--xc-bg-muted);
 }
@@ -363,21 +324,15 @@
 
 /* Cards in the contact detail view: one for name + notes, one per address. */
 .infoCard {
-    padding: var(--xc-space-4);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
+    composes: card from '../../ui/Card.module.css';
 }
 
 .addressCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
     margin-bottom: var(--xc-space-2);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .addressCard:last-child {
@@ -390,6 +345,8 @@
 .addressText {
     flex: 1 1 auto;
     min-width: 0;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -433,9 +390,10 @@
 /* Add-address modal: centered card over a dimmed full-screen backdrop. */
 .modalOverlay {
     position: fixed;
+    box-sizing: border-box;
     inset: 0;
-    z-index: 1000;
-    background: rgba(15, 23, 42, 0.55);
+    z-index: var(--xc-z-modal);
+    background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -446,19 +404,30 @@
 }
 
 .modalCard {
+    box-sizing: border-box;
     width: 100%;
     max-width: 420px;
+    /* Overlay-relative bound first; the safe-area-aware viewport cap below wins. */
+    max-height: 100%;
+    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-    padding: var(--xc-space-5);
+    box-shadow: var(--xc-shadow-modal);
+    /* The shared dialog geometry (OverlaySurface): space-4 padding, a
+       centred title and equal-width footer buttons. */
+    padding: var(--xc-space-4);
 }
 
 .modalTitle {
-    font-size: var(--xc-text-md);
+    font-size: var(--xc-text-lg);
     font-weight: 700;
+    line-height: 1.25;
     color: var(--xc-text);
+    text-align: center;
     margin-bottom: var(--xc-space-3);
 }
 
@@ -469,69 +438,8 @@
     margin-top: var(--xc-space-3);
 }
 
-/* Textarea used in the new contact form notes field, styled to match Input. */
-.notesField {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-2);
+.modalActions > * {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
-/* Save row on the create/edit contact forms. Tighter top margin than the
-   shared .actions so the button sits close under the notes textarea. */
-
-.notesLabel {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    font-weight: 500;
-}
-
-.notesTextarea {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    width: 100%;
-    box-sizing: border-box;
-    resize: vertical;
-    min-height: 80px;
-    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
-}
-
-.notesTextarea:focus {
-    outline: none;
-    border-color: var(--xc-accent-primary);
-    box-shadow: 0 0 0 3px var(--xc-focus-ring);
-}
-
-/* Empty state shown when no contacts exist or none match the filter.
-   Rendered as a card so the emptiness is clearly intentional, not a
-   loading glitch. */
-
-/* "Not now" inside the publish nudge: reads as a link so the row keeps one
-   real button (Open Backup). */
-.linkButton {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    background: transparent;
-    border: 0;
-    color: var(--xc-accent-text);
-    font: inherit;
-    cursor: pointer;
-    padding: 0;
-}
-
-.linkButton:hover { text-decoration: underline; }
-
-/* Box-shadow focus rings are not painted in forced-colors mode, so give
- * this control a real outline there (WCAG 2.4.7). */
-@media (forced-colors: active) {
-    .notesTextarea:focus {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
-}

@@ -10,12 +10,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     Screen,
     PageHeader,
     FormPage,
     ListPage,
     Button,
+    Checkbox,
     Input,
     ChainBadge,
     AddressText,
@@ -210,11 +212,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             // The add path stores a second wallet in the existing vault. The
             // fresh-install create path rejects devices that already have one.
             if (typeof messaging.addImportedWallet !== 'function') {
-                throw new Error('messaging.addImportedWallet is not available in this shell.');
+                throw new Error('Adding a second wallet is not supported in this version of the app.');
             }
             const result = await messaging.addImportedWallet({ password, mnemonic, name, origin: 'created' });
             const id = result?.walletId || result?.id || result?.wallet?.id;
-            if (!id) throw new Error('Adding the BIP39 wallet did not return a walletId.');
+            // Warn against a blind retry: the save may have stored the wallet even without returning its id
+            if (!id) throw new Error('The new wallet could not be confirmed. Check your wallet list before trying again.');
             setNewWalletId(id);
             try { flowsLib.markBackupVerified(id); } catch { /* best-effort reminder metadata */ }
             setPassword('');
@@ -222,7 +225,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             setMnemonic(null);
             setStage('done');
         } catch (err) {
-            setError(err?.message || 'Could not create the BIP39 wallet.');
+            // Show user copy as is; developer text from the save becomes a retry prompt
+            setError(userFacingMessage(err,
+                'Could not create the new wallet. Your recovery phrase is still here, so you can try again.'));
             setStage('verify');
         }
     }
@@ -253,12 +258,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         : onBack}
             backDisabled={stage === 'submitting'}
             title={{
-                explain: 'Upgrade recovery phrase',
+                explain: 'Upgrade to a BIP39 recovery phrase',
                 create: 'Set up new wallet',
-                backup: 'Back up recovery phrase',
-                verify: 'Verify recovery phrase',
-                submitting: 'Creating new wallet',
-                done: 'BIP39 wallet created',
+                backup: 'Write down your recovery phrase',
+                verify: 'Verify your written copy',
+                submitting: 'Creating your new wallet',
+                done: 'New BIP39 wallet ready',
             }[stage]}
         />
     );
@@ -271,7 +276,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'explain') {
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Upgrade to a BIP39 recovery phrase</h2>
                 <p style={explainParagraphStyle}>
                     Your current wallet uses the legacy 12-word Counterwallet
                     recovery format. BIP39 is widely supported and gives your
@@ -314,21 +318,19 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     </>
                 )}
             >
-                <h2 className={styles.successTitle}>Write down your recovery phrase</h2>
                 <p style={explainParagraphStyle}>
                     These 12 words are your new recovery phrase. Write them on
                     paper, store them safely, and keep them private. You can use
                     the phrase to restore your BIP39 wallet on another device.
                 </p>
                 {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} /> : null}
-                <label className={styles.hint} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', margin: 'var(--xc-space-3) 0' }}>
-                    <input
-                        type="checkbox"
+                <div style={{ margin: 'var(--xc-space-3) 0' }}>
+                    <Checkbox
+                        label="I have written down the new recovery phrase and stored it safely."
                         checked={wroteItDown}
                         onChange={(e) => setWroteItDown(e.target.checked)}
                     />
-                    I have written down the new recovery phrase and stored it safely.
-                </label>
+                </div>
             </FormPage>,
         );
     }
@@ -353,7 +355,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     </>
                 )}
             >
-                <h2 className={styles.successTitle}>Verify your written copy</h2>
                 <p style={explainParagraphStyle}>
                     Enter the requested words from the recovery phrase you just
                     wrote down. The new wallet is created only after every word
@@ -373,7 +374,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                             if (error) setError(null);
                         }}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
@@ -386,7 +387,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         return wrap(
             <FormPage label="Wallet creation status">
                 <div role="status" aria-live="polite">
-                    <h2 className={styles.successTitle}>Creating your new wallet</h2>
                     <p style={explainParagraphStyle}>
                         XChain Platform is encrypting the new BIP39 wallet with
                         your password. This can take a minute on some devices.
@@ -400,7 +400,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'done') {
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>New BIP39 wallet ready</h2>
                 <p style={explainParagraphStyle}>
                     Your new recovery phrase is verified and the wallet is saved.
                     Your legacy wallet is unchanged, and nothing moves until
@@ -433,7 +432,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                             return (
                                 <div key={row.chainId}>
                                     <dt className={styles.detailsLabel}>
-                                        {d ? <ChainBadge descriptor={d} size="sm" /> : row.chainId}
+                                        {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Network'}
                                     </dt>
                                     <dd className={styles.detailsValue}>
                                         {row.legacy ? (
@@ -464,7 +463,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                 ) : null}
                                             </>
                                         ) : (
-                                            <em>No legacy address on this chain.</em>
+                                            <em>No legacy address on this network.</em>
                                         )}
                                     </dd>
                                 </div>

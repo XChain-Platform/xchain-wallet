@@ -195,7 +195,7 @@ describe('extension popup main-screen accessibility', () => {
         const { container } = renderPopup(
             <Receive walletId={WALLET.id} accountId={ACCOUNT.id} onBack={() => {}} />,
         );
-        await screen.findByRole('textbox', { name: 'Copy payment link for receive address' });
+        await screen.findByRole('textbox', { name: 'Address' });
         await expectNoSeriousAxeViolations(container);
     });
 

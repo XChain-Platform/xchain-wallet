@@ -85,9 +85,132 @@ describe('list create validation', () => {
         expect(await screen.findByText(/over the 8,192-byte limit/)).toBeTruthy();
         expect(screen.queryByText('Review list')).toBeNull();
     });
+
+    it('refuses a custom fee rate with more than eight decimal places before review', async () => {
+        const messaging = messagingWith(BTC);
+        mount(ListCreateForm, {
+            walletId: 'wallet-1', chainId: BTC, initialType: '1', onBack() {},
+        }, messaging);
+
+        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+            target: { value: 'XCHAIN' },
+        });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
+            target: { value: '1.123456789' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('Custom fee rate can have no more than 8 decimal places.')).toBeTruthy();
+        expect(screen.queryByText('Review list')).toBeNull();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('keeps form values and cancels the click when Back leaves review', async () => {
+        mount(ListCreateForm, {
+            walletId: 'wallet-1', chainId: BTC, initialType: '1', onBack() {},
+        }, messagingWith(BTC));
+
+        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+            target: { value: 'XCHAIN' },
+        });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+            target: { value: 'season two' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
+        expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('XCHAIN');
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('season two');
+        expect(screen.queryByText('Review list')).toBeNull();
+    });
 });
 
 describe('list edit validation and review', () => {
+    function mountTokenEdit(actionIndex = '2700') {
+        const row = {
+            action_index: 2700,
+            source: ADDRESS.address,
+            type: '1',
+            list: ['KEEP'],
+            state: { edit_resolution_active: true, current_list: ['KEEP'], owner: ADDRESS.address },
+        };
+        const messaging = messagingWith(BTC, {
+            getListByActionIndex: vi.fn().mockResolvedValue(row),
+        });
+        mount(ListForkForm, {
+            walletId: 'wallet-1',
+            listRef: {
+                chainId: BTC,
+                actionIndex,
+                type: '1',
+                items: ['KEEP'],
+                editResolutionActive: true,
+                source: ADDRESS.address,
+                parentIndex: null,
+            },
+            onBack() {},
+            onDone() {},
+        }, messaging);
+        return messaging;
+    }
+
+    it('refuses a malformed list reference before review', async () => {
+        const messaging = mountTokenEdit('-1');
+        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
+        expect(screen.queryByText('Review list edit')).toBeNull();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('shows plain copy and stays on the form when the list freshness read fails', async () => {
+        const messaging = mountTokenEdit();
+        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
+        messaging.getListByActionIndex.mockRejectedValue(Object.assign(
+            new Error('Explorer returned HTTP 502 for /BTC/api/lists/2700'),
+            { name: 'SDKExplorerError' },
+        ));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(/service that reads the chain is temporarily unavailable/)).toBeTruthy();
+        expect(screen.queryByText(/\/BTC\/api\/lists/)).toBeNull();
+        expect(screen.queryByText('Review list edit')).toBeNull();
+    });
+
+    it('keeps form values and cancels the click when Back leaves review', async () => {
+        mountTokenEdit();
+        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'season two' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
+        expect(await screen.findByLabelText(/Add tokens/)).toHaveValue('ADD');
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('season two');
+        expect(screen.getByRole('button', { name: 'Review' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+    });
+
+    it('refuses an empty custom fee rate before review', async () => {
+        const messaging = mountTokenEdit();
+
+        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'NEW' } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
+            target: { value: '' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('Custom fee rate must be greater than zero.')).toBeTruthy();
+        expect(screen.queryByText('Review list edit')).toBeNull();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('validates additions, reports duplicates, previews the delta, and preserves current members', async () => {
         const row = {
             action_index: 2700,

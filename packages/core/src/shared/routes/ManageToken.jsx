@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -39,6 +39,8 @@ import {
 } from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
 import { formatTokenQuantity, formatWithThousands } from '../utils/amountFormat.js';
+import { formatRelativeDateTime } from '../utils/dateTimeFormat.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -174,11 +176,6 @@ export function ManageToken({
         return () => { cancelled = true; };
     }, [chainId, tick, messaging]);
     const sleepState = flowsLib.interpretSleep(sleepRow ? sleepRow.resumeBlock : null, sleepHeight);
-    const sleepLabel = sleepState.indefinite
-        ? 'Paused indefinitely'
-        : sleepState.resumeBlock
-            ? `Paused until block ${sleepState.resumeBlock}`
-            : 'Paused';
     const maxSupply = assetInfo?.maxSupply ?? null;
     const description = assetInfo?.description || null;
     const owner = assetInfo?.creator || null;
@@ -450,11 +447,6 @@ export function ManageToken({
         return { delta: d, pct: p };
     }, [chartSeries]);
 
-    function shortAddress(a) {
-        if (typeof a !== 'string' || a.length <= 14) return a || '';
-        return `${a.slice(0, 6)}…${a.slice(-4)}`;
-    }
-
     // Issuer-only vs anyone-with-balance actions. Mint / Description /
     // Transfer / Broadcast / Lock require the calling address to match
     // the on-chain creator. Dispenser / Airdrop / Destroy operate on a
@@ -490,7 +482,14 @@ export function ManageToken({
         { id: 'dispenser', label: 'Dispenser', Icon: Icon.DollarIcon, onSelect: onCreateDispenser },
         { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: blockIssuerActions ? undefined : onPayDividend },
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
-        { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: blockIssuerActions ? undefined : onUpdateDescription },
+        {
+            id: 'description',
+            label: 'Description',
+            Icon: Icon.PencilIcon,
+            onSelect: blockIssuerActions ? undefined : onUpdateDescription,
+            disabled: !!tokenLocks.description,
+            disabledReason: 'The description is permanently locked and cannot be updated.',
+        },
         { id: 'attach-content', label: 'Artwork', Icon: Icon.DocumentIcon, onSelect: blockIssuerActions ? undefined : onAttachContent },
         // PC-25: token-gated encrypted publishing. Owner-only by protocol
         // (the indexer rejects gated FILEs from non-owners, FILE.md).
@@ -559,8 +558,8 @@ export function ManageToken({
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to my tokens"
-            title="Manage token"
+            backLabel={t('routes.manageToken.backToMyTokens')}
+            title={t('routes.manageToken.manageToken')}
             titleIcon={<Icon.TokenIcon />}
         />
     );
@@ -577,39 +576,42 @@ export function ManageToken({
         <Screen variant={variant} header={header}>
             <ListPage className={styles.body}>
                 {/* Hero: identity (no Total Balance; this is the issuer view). */}
-                <section className={styles.hero} aria-label="Token identity">
-                    {locked ? (
-                        <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
-                            <Icon.LockIcon />Locked
-                        </span>
-                    ) : (
-                        <span className={`${styles.lockBadge} ${styles.lockBadgeUnlocked}`}>
-                            <Icon.UnlockIcon />Unlocked
-                        </span>
-                    )}
-                    {sleepState.paused ? (
-                        <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
-                            <Icon.LockIcon />{sleepLabel}
-                        </span>
-                    ) : null}
+                <section className={styles.hero} aria-label={t('routes.manageToken.tokenIdentity')}>
                     <div className={styles.heroIconWrap}>
                         <TickerIcon chainId={chainId} tick={tick} size={64} />
                     </div>
                     <div className={styles.heroMain}>
+                        {/* The badges sit in the title row's flow, pushed to
+                            its end, so a long ticker wraps them to the next
+                            line and a paused, locked token shows both. */}
                         <div className={styles.heroTitleRow}>
                             <h2 className={styles.heroTick}>{tick}</h2>
+                            <span className={styles.heroBadges}>
+                                {locked ? (
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
+                                        <Icon.LockIcon />{t('routes.manageToken.locked')}
+                                    </span>
+                                ) : (
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeUnlocked}`}>
+                                        <Icon.UnlockIcon />{t('routes.manageToken.unlocked')}
+                                    </span>
+                                )}
+                                {sleepState.paused ? (
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? t('routes.manageToken.pausedIndefinitely') : (sleepState.resumeBlock ? t('routes.manageToken.pausedUntilBlock', { resumeBlock: sleepState.resumeBlock }) : t('routes.manageToken.paused'))}>
+                                        <Icon.LockIcon />{t('routes.manageToken.paused')}
+                                    </span>
+                                ) : null}
+                            </span>
                         </div>
-                        <div className={styles.heroSub}>
-                            <span>{descriptor?.displayName || chainId}</span>
-                            {owner ? (
-                                <>
-                                    <span className={styles.heroDot}>·</span>
-                                    <span>Owned by</span>
-                                    <span className={styles.heroOwner} title={owner}>{shortAddress(owner)}</span>
-                                    <CopyButton value={owner} ariaLabel="Copy owner address" />
-                                </>
-                            ) : null}
-                        </div>
+                        {/* No chain name here: the icon and its chain overlay
+                            carry the network (operator ruling). */}
+                        {owner ? (
+                            <div className={styles.heroSub}>
+                                <span>{t('routes.manageToken.ownedBy')}</span>
+                                <AddressText address={owner} className={styles.heroOwner} />
+                                <CopyButton value={owner} ariaLabel={t('routes.manageToken.copyOwnerAddress')} />
+                            </div>
+                        ) : null}
                         {description ? (
                             <p className={styles.heroDescription}>{description}</p>
                         ) : null}
@@ -620,13 +622,13 @@ export function ManageToken({
                     current roster (owner-attested; Project_Registry.md). */}
                 {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
                     <p className={styles.officialBanner} role="status">
-                        This token is an official token in the{' '}
+                        {t('routes.manageToken.thisTokenIsAnOfficial')}{' '}
                         {assetInfo.projects.map((p, i) => (
                             <span key={p} className={styles.officialBannerProject}>
                                 {i > 0 ? ', ' : ''}{p}
                             </span>
                         ))}
-                        {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
+                        {' '}{t('manageToken.officialProjectNoun', { count: assetInfo.projects.length })}
                     </p>
                 ) : null}
 
@@ -634,21 +636,21 @@ export function ManageToken({
                     chart slot is reserved for future supply / dispense-
                     price history; today it shows an empty-state hint so
                     the layout doesn't shift when data wires up later. */}
-                <section className={styles.marketPanel} aria-label="Token stats">
+                <section className={styles.marketPanel} aria-label={t('routes.manageToken.tokenStats')}>
                     <div className={styles.statsStrip}>
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>
-                                {assetInfo ? `${locked ? 'Locked' : 'Unlocked'} supply` : 'Supply'}
+                                {assetInfo ? t('routes.manageToken.supply', { value: locked ? 'Locked' : 'Unlocked' }) : t('issue.supply')}
                             </span>
                             <span className={styles.statValue}>
                                 {totalSupply != null ? formatTokenQuantity(totalSupply, divisibility) : '-'}
                             </span>
                             <span className={styles.statSub}>
-                                {maxSupply != null ? `of ${formatTokenQuantity(maxSupply, divisibility)} cap` : 'no cap'}
+                                {maxSupply != null ? t('routes.manageToken.ofCap', { formatTokenQuantityValue: formatTokenQuantity(maxSupply, divisibility) }) : t('routes.manageToken.noCap')}
                             </span>
                         </div>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>You hold</span>
+                            <span className={styles.statLabel}>{t('routes.manageToken.youHold')}</span>
                             <span className={styles.statValue}>
                                 {yourBalance != null ? formatAmount(yourBalance, divisibility || 0) : '-'}
                             </span>
@@ -656,18 +658,18 @@ export function ManageToken({
                                 in raw atomic units, so formatAmount is
                                 the correct formatter here. */}
                             <span className={styles.statSub}>
-                                {yourSharePct != null ? `${yourSharePct.toFixed(1)}% of supply` : ' '}
+                                {yourSharePct != null ? t('routes.manageToken.ofSupply', { value: yourSharePct.toFixed(1) }) : ' '}
                             </span>
                         </div>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>Holders</span>
+                            <span className={styles.statLabel}>{t('routes.manageToken.holders')}</span>
                             <span className={styles.statValue}>
                                 {holders != null ? holders.length.toLocaleString() : '-'}
                             </span>
                             <span className={styles.statSub}>&nbsp;</span>
                         </div>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>Open offers</span>
+                            <span className={styles.statLabel}>{t('routes.manageToken.openOffers')}</span>
                             <span className={styles.statValue}>
                                 {listings != null ? listings.length.toLocaleString() : '-'}
                             </span>
@@ -704,7 +706,8 @@ export function ManageToken({
                             >
                                 <Sparkline series={chartSeries} height={40} />
                             </div>
-                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
+                                {/* Chart-range tabs stay native because Button does not implement tab semantics. */}
                                 {CHART_RANGES.map((r) => (
                                     <button
                                         key={r.id}
@@ -724,8 +727,8 @@ export function ManageToken({
                         </>
                     ) : (
                         <EmptyState
-                            title={isDemo ? 'No market data yet' : 'No price history yet'}
-                            body="Indexed market activity builds this token's price history."
+                            title={isDemo ? t('routes.manageToken.noMarketDataYet') : t('routes.manageToken.noPriceHistoryYet')}
+                            body={t('routes.manageToken.indexedMarketActivityBuildsThis')}
                             titleAs="p"
                         />
                     )}
@@ -736,62 +739,61 @@ export function ManageToken({
                     the on-chain creator. Issuer-only actions are
                     auto-hidden below; the banner explains why. */}
                 {isOwner === false ? (
-                    <p className={styles.ownerWarning} role="status">
-                        This wallet doesn't hold the token's issuer address.
-                        Mint, Mint settings, Lock, Description, Artwork,
-                        Transfer, Broadcast, and Dividend require signing
-                        from {shortAddress(owner)}.
-                    </p>
+                    <StatusMessage variant="warning" role="status">
+                        {t('routes.manageToken.thisWalletDoesnTHold')} <AddressText address={owner} />.
+                    </StatusMessage>
                 ) : null}
 
                 {/* Action buttons: same 3-primary + More pattern as Home. */}
-                <div className={styles.manageGrid} role="group" aria-label="Manage actions">
+                <div className={styles.manageGrid} role="group" aria-label={t('routes.manageToken.manageActions')}>
                     {primaryActions.map((a) => (
-                        <button
+                        <Button
                             key={a.id}
                             type="button"
-                            className={`${styles.manageBtn} ${a.danger ? styles.manageBtnDanger : ''}`}
+                            variant={a.danger ? 'danger' : 'secondary'}
+                            block
+                            icon={<a.Icon />}
+                            // A row the protocol has frozen stays on screen and
+                            // says why on hover, instead of being filtered out
+                            // like an action this wallet simply cannot sign.
                             disabled={!!a.disabled}
+                            title={a.disabled ? a.disabledReason : undefined}
                             onClick={a.onSelect}
                         >
-                            <span className={styles.manageIcon} aria-hidden="true">
-                                <a.Icon />
-                            </span>
-                            <span className={styles.manageLabel}>
-                                {a.label}{a.disabledReason ? `: ${a.disabledReason}` : ''}
-                            </span>
-                        </button>
+                            {a.label}
+                        </Button>
                     ))}
                     {overflowActions.length > 0 ? (
                         <div className={styles.manageMoreWrap} ref={moreWrapRef}>
-                            <button
+                            <Button
                                 type="button"
-                                className={styles.manageBtn}
+                                variant="secondary"
+                                block
+                                icon={<Icon.MoreIcon />}
                                 aria-haspopup="menu"
                                 aria-expanded={moreOpen}
                                 onClick={() => setMoreOpen((o) => !o)}
                             >
-                                <span className={styles.manageIcon} aria-hidden="true">
-                                    <Icon.MoreIcon />
-                                </span>
-                                <span className={styles.manageLabel}>More</span>
-                            </button>
+                                {t('history.detail.more')}
+                            </Button>
                             {moreOpen ? (
                                 <div className={styles.manageMoreMenu} role="menu">
                                     {overflowActions.map((a) => (
-                                        <button
+                                        <Button
                                             key={a.id}
                                             type="button"
                                             role="menuitem"
-                                            className={`${styles.manageMoreItem} ${a.danger ? styles.manageMoreItemDanger : ''}`}
+                                            data-destructive={a.danger ? 'true' : undefined}
+                                            variant={a.danger ? 'danger' : 'ghost'}
+                                            size="sm"
+                                            block
+                                            icon={<a.Icon />}
                                             disabled={!!a.disabled}
+                                            title={a.disabled ? a.disabledReason : undefined}
                                             onClick={() => { setMoreOpen(false); a.onSelect(); }}
                                         >
-                                            <span className={styles.manageMoreItemIcon} aria-hidden="true">
-                                                <a.Icon />
-                                            </span>
-                                            <span>{a.label}{a.disabledReason ? `: ${a.disabledReason}` : ''}</span>
-                                        </button>
+                                            {a.label}
+                                        </Button>
                                     ))}
                                 </div>
                             ) : null}
@@ -800,7 +802,8 @@ export function ManageToken({
                 </div>
 
                 {/* Tab strip + panels: matches TokenDetail's tab pattern. */}
-                <div className={styles.tabs} role="tablist" aria-label="Token management panels">
+                <div className={styles.tabs} role="tablist" aria-label={t('routes.manageToken.tokenManagementPanels')}>
+                    {/* Token panels stay native because Button does not implement tab semantics. */}
                     {tabs.map((t) => (
                         <button
                             key={t.id}
@@ -862,46 +865,47 @@ export function ManageToken({
                     section. Hidden when neither piece of data is
                     present (dev mock returns nothing). */}
                 {(genesisInfo || subassetTicks.length > 0) ? (
-                    <section className={styles.genesisPanel} aria-label="Genesis and subassets">
-                        <SectionHeader as="h3" title="Genesis" />
+                    <section className={styles.genesisPanel} aria-label={t('routes.manageToken.genesisAndSubassets')}>
+                        <SectionHeader as="h3" title={t('routes.manageToken.genesis')} />
                         {genesisInfo ? (
                             <dl className={styles.genesisList}>
                                 {genesisInfo.actionIndex ? (
                                     <>
-                                        <dt>Issue action</dt>
+                                        <dt>{t('routes.manageToken.issueAction')}</dt>
                                         <dd className={styles.genesisMono}>{genesisInfo.actionIndex}</dd>
                                     </>
                                 ) : null}
                                 {genesisInfo.blockIndex ? (
                                     <>
-                                        <dt>Block</dt>
+                                        <dt>{t('settings.connectedSites.block')}</dt>
                                         <dd>{Number(genesisInfo.blockIndex).toLocaleString('en-US')}</dd>
                                     </>
                                 ) : null}
                                 {genesisInfo.timestamp ? (
                                     <>
-                                        <dt>Issued</dt>
+                                        <dt>{t('routes.manageToken.issued')}</dt>
                                         <dd>{new Date(Number(genesisInfo.timestamp) * (Number(genesisInfo.timestamp) > 1e12 ? 1 : 1000)).toLocaleString()}</dd>
                                     </>
                                 ) : null}
                                 {genesisInfo.source ? (
                                     <>
-                                        <dt>Issuer</dt>
+                                        <dt>{t('routes.manageToken.issuer')}</dt>
                                         <dd className={styles.copyableGenesis}>
-                                            <span className={styles.genesisMono} title={genesisInfo.source}>
-                                                {shortAddress(genesisInfo.source)}
-                                            </span>
-                                            <CopyButton value={genesisInfo.source} ariaLabel="Copy genesis issuer address" />
+                                            <AddressText address={genesisInfo.source} className={styles.genesisMono} />
+                                            <CopyButton value={genesisInfo.source} ariaLabel={t('routes.manageToken.copyGenesisIssuerAddress')} />
                                         </dd>
                                     </>
                                 ) : null}
                             </dl>
                         ) : (
-                            <EmptyState title="No genesis record yet" body={`The indexed genesis record for ${tick} appears here.`} titleAs="p" />
+                            <EmptyState title={t('routes.manageToken.noGenesisRecordYet')} body={t('routes.manageToken.theIndexedGenesisRecordFor', { tick })} titleAs="p" />
                         )}
                         {subassetTicks.length > 0 ? (
                             <>
-                                <SectionHeader as="h3" title={`Subassets (${subassetTicks.length})`} />
+                                <SectionHeader
+                                    as="h3"
+                                    title={t('manageToken.subassetCount', { count: subassetTicks.length })}
+                                />
                                 {/* Safari needs an explicit list role because this class removes list styling. */}
                                 <ul className={styles.subassetList} role="list">
                                     {subassetTicks.slice(0, 20).map((t) => (
@@ -925,7 +929,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     // A Mode B row carries no price on this lane; it comes from its oracle.
     const oracleEntries = useMemo(() => (listings || []).map((row) => ({ chainId, row })), [listings, chainId]);
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
-    if (listingsError) return <p className={styles.error}>{listingsError}</p>;
+    if (listingsError) return <StatusMessage variant="error" className={styles.error}>{listingsError}</StatusMessage>;
     if (listings === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
@@ -935,10 +939,10 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     if (listings.length === 0) {
         return (
             <EmptyState
-                title="No open dispensers"
-                body={`Open dispensers selling ${tick} appear here.`}
+                title={t('routes.manageToken.noOpenDispensers')}
+                body={t('routes.manageToken.openDispensersSellingAppearHere', { tick })}
                 titleAs="p"
-                actionLabel={typeof onCreateDispenser === 'function' ? 'Create one' : undefined}
+                actionLabel={typeof onCreateDispenser === 'function' ? t('routes.manageToken.createOne') : undefined}
                 onAction={onCreateDispenser}
             />
         );
@@ -967,7 +971,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
                         chainId={chainId}
                         action="DISPENSER"
                         status="open"
-                        statusLabel="Open"
+                        statusLabel={t('routes.manageToken.open')}
                         summary={summary}
                         blockIndex={d.block_index || d.blockIndex}
                         timestamp={d.timestamp || d.block_time}
@@ -981,14 +985,14 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
 }
 
 function OrdersPanel({ orders, error, tick, chainId }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (orders === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
             <Skeleton height={72} />
         </div>
     );
-    if (orders.length === 0) return <EmptyState title="No open orders" body={`Open orders involving ${tick} appear here.`} titleAs="p" />;
+    if (orders.length === 0) return <EmptyState title={t('routes.manageToken.noOpenOrders')} body={t('routes.manageToken.openOrdersInvolvingAppearHere', { tick })} titleAs="p" />;
     return (
         /* Safari needs an explicit list role because this class removes list styling. */
         <ul className={styles.list} role="list">
@@ -1007,7 +1011,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
                         tick={tick}
                         action="ORDER"
                         status="open"
-                        statusLabel="Open"
+                        statusLabel={t('routes.manageToken.open')}
                         summary={summary}
                         blockIndex={o.block_index || o.blockIndex}
                         timestamp={o.timestamp || o.block_time}
@@ -1019,14 +1023,14 @@ function OrdersPanel({ orders, error, tick, chainId }) {
 }
 
 function SwapsPanel({ swaps, error, tick }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (swaps === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
             <Skeleton height={72} />
         </div>
     );
-    if (swaps.length === 0) return <EmptyState title="No recent swaps" body={`Recent swaps involving ${tick} appear here.`} titleAs="p" />;
+    if (swaps.length === 0) return <EmptyState title={t('routes.manageToken.noRecentSwaps')} body={t('routes.manageToken.recentSwapsInvolvingAppearHere', { tick })} titleAs="p" />;
     return (
         /* Safari needs an explicit list role because this class removes list styling. */
         <ul className={styles.list} role="list">
@@ -1069,16 +1073,16 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
         </div>
     );
     if (holders.length === 0) return (
-        <EmptyState title="No holders yet" body="Holders appear here after supply is minted or distributed." titleAs="p" />
+        <EmptyState title={t('history.recipients.noHoldersFound')} body={t('routes.manageToken.holdersAppearHereAfterSupply')} titleAs="p" />
     );
     return (
         <>
             <table className={tableStyles.table}>
-                <caption className={tableStyles.visuallyHiddenCaption}>Top holder balances</caption>
+                <caption className={tableStyles.visuallyHiddenCaption}>{t('routes.manageToken.topHolderBalances')}</caption>
                 <thead>
                     <tr>
-                        <th className={tableStyles.headerCell} scope="col">Address</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
+                        <th className={tableStyles.headerCell} scope="col">{t('verifySignature.address')}</th>
+                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('routes.manageToken.balance')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1086,13 +1090,14 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
                         <tr key={`${h.address || h.holder || i}`}>
                             <td className={tableStyles.cell} data-label="Address">
                                 <span className={styles.holderAddress}>
-                                    <span className={styles.rowMono} title={h.address || h.holder || undefined}>
-                                        {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
-                                    </span>
+                                    <AddressText
+                                        address={h.address || h.holder || '-'}
+                                        className={styles.rowMono}
+                                    />
                                     {(h.address || h.holder) ? (
                                         <CopyButton
                                             value={h.address || h.holder}
-                                            ariaLabel={`Copy holder address ${i + 1}`}
+                                            ariaLabel={t('routes.manageToken.copyHolderAddress', { value: i + 1 })}
                                         />
                                     ) : null}
                                 </span>
@@ -1107,16 +1112,16 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
                 </tbody>
             </table>
             {typeof onViewAll === 'function' && holders.length > 10 ? (
-                <button type="button" className={styles.viewAll} onClick={onViewAll}>
-                    View all {holders.length} holders
-                </button>
+                <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
+                    {t('routes.manageToken.viewAll')} {holders.length} {t('routes.manageToken.holders2')}
+                </Button>
             ) : null}
         </>
     );
 }
 
 function ActivityPanel({ activity, error, onViewAll, tick }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (activity === null) return (
         <div className={styles.list}>
             <Skeleton height={36} />
@@ -1125,7 +1130,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
         </div>
     );
     if (activity.length === 0) return (
-        <EmptyState title="No activity yet" body={`Indexed activity for ${tick} appears here.`} titleAs="p" />
+        <EmptyState title={t('history.empty.noActivityTitle')} body={t('routes.manageToken.indexedActivityForAppearsHere', { tick })} titleAs="p" />
     );
     return (
         <>
@@ -1160,9 +1165,9 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
                 })}
             </ul>
             {typeof onViewAll === 'function' ? (
-                <button type="button" className={styles.viewAll} onClick={onViewAll}>
-                    View all activity
-                </button>
+                <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
+                    {t('routes.manageToken.viewAllActivity')}
+                </Button>
             ) : null}
         </>
     );
@@ -1180,10 +1185,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
         : status === 'pending' ? styles.histStatusPending
         : styles.histStatusOpen;
     const blockNum = blockIndex != null ? Number(blockIndex) : null;
-    const Tag = (as === 'button' && typeof onClick === 'function') ? 'button' : 'div';
-    const interactiveProps = Tag === 'button'
-        ? { type: 'button', onClick, disabled }
-        : null;
+    const interactive = as === 'button' && typeof onClick === 'function';
     // When a tick is given we lead the row with a 40px TickerIcon
     // (letter avatar + chain pip): used by OrdersPanel so each row
     // visually anchors on the token being traded. The small chain icon
@@ -1191,7 +1193,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
     // already carries the chain pip.
     const showTickerIcon = !!(tick && chainId);
     const contentStack = (
-        <div className={showTickerIcon ? styles.histContent : null}>
+        <span className={showTickerIcon ? styles.histContent : undefined}>
             <span className={styles.histHeader}>
                 {!showTickerIcon && d ? (
                     <img
@@ -1216,29 +1218,40 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
             ) : null}
             <span className={styles.histMeta}>
                 {blockNum != null && Number.isFinite(blockNum) && blockNum > 0 ? (
-                    <span>Block {blockNum.toLocaleString('en-US')}</span>
+                    <span>{t('settings.connectedSites.block')} {blockNum.toLocaleString('en-US')}</span>
                 ) : (
-                    <span>unconfirmed</span>
+                    <span>{t('routes.manageToken.unconfirmed')}</span>
                 )}
                 {timestamp ? (
-                    <span className={styles.histTime}>{formatRelativeTime(timestamp)}</span>
+                    <span className={styles.histTime}>{formatRelativeDateTime(timestamp)}</span>
                 ) : null}
             </span>
-        </div>
+        </span>
     );
+    const tickerIcon = showTickerIcon ? (
+        <span className={styles.histTickerIcon}>
+            <TickerIcon chainId={chainId} tick={tick} size={40} />
+        </span>
+    ) : null;
+    const rowClass = `${styles.histRow} ${showTickerIcon ? styles.histRowWithIcon : ''}`;
     return (
         <li>
-            <Tag
-                className={`${styles.histRow} ${showTickerIcon ? styles.histRowWithIcon : ''}`}
-                {...interactiveProps}
-            >
-                {showTickerIcon ? (
-                    <span className={styles.histTickerIcon} aria-hidden="true">
-                        <TickerIcon chainId={chainId} tick={tick} size={40} />
-                    </span>
-                ) : null}
-                {contentStack}
-            </Tag>
+            {interactive ? (
+                <Button
+                    type="button"
+                    className={rowClass}
+                    icon={tickerIcon}
+                    onClick={onClick}
+                    disabled={disabled}
+                >
+                    {contentStack}
+                </Button>
+            ) : (
+                <div className={rowClass}>
+                    {tickerIcon ? <span aria-hidden="true">{tickerIcon}</span> : null}
+                    {contentStack}
+                </div>
+            )}
         </li>
     );
 }
@@ -1285,23 +1298,4 @@ function formatNativeAmount(value) {
     if (abs >= 1) return v.toLocaleString('en-US', { maximumFractionDigits: 4 });
     const fixed = v.toFixed(8);
     return fixed.replace(/\.?0+$/, '');
-}
-
-function formatRelativeTime(ts) {
-    const n = Number(ts);
-    if (!n) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
 }

@@ -12,6 +12,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { LG_K51 } from '../../fixtures/responsive.js';
 import { measureInPage } from '../../layout/sweep.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
@@ -40,6 +41,8 @@ async function expectActionReachable(page, label, action) {
     }).toBe(0);
 }
 
+test.use(LG_K51);
+
 test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
     test('creates, checks the recovery phrase, and unlocks the wallet', async ({ page }) => {
         const consoleErrors = [];
@@ -48,8 +51,7 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         });
         page.on('pageerror', (error) => consoleErrors.push(String(error)));
 
-        expect(test.info().project.name).toBe('lg-k51');
-        expect(page.viewportSize()).toEqual({ width: 412, height: 869 });
+        expect(page.viewportSize()).toEqual(LG_K51.viewport);
         const device = await page.evaluate(() => ({
             userAgent: navigator.userAgent,
             maxTouchPoints: navigator.maxTouchPoints,

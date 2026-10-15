@@ -106,8 +106,8 @@ assert.equal(
 );
 assert.equal(
     capConfig.plugins?.SystemBars?.style,
-    'LIGHT',
-    'the native status bar starts with dark content over the white splash',
+    'DEFAULT',
+    'native system bars start with content that contrasts with the active splash appearance',
 );
 
 // --- 2a. Native splash configuration ---------------------------------
@@ -209,6 +209,19 @@ assert.ok(
     )),
     'no MainActivity left behind at the pre-rename package path',
 );
+// BridgeActivity (via AppCompatActivity) declares onStart public, and Java
+// refuses an override that narrows it to protected, so the APK fails to compile.
+const mainActivityJava = readFileSync(join(
+    android, 'app', 'src', 'main', 'java', 'io', 'xchain', 'wallet', 'android',
+    'MainActivity.java',
+), 'utf8');
+for (const hook of ['onStart', 'onResume', 'onPause', 'onStop', 'onDestroy', 'onRestart']) {
+    assert.doesNotMatch(
+        mainActivityJava,
+        new RegExp(`\\b(?:protected|private)\\s+void\\s+${hook}\\s*\\(`),
+        `MainActivity keeps ${hook} public, as BridgeActivity declares it`,
+    );
+}
 assert.match(
     appGradle,
     /versionCode versionProps\['versionCode'\]/,
@@ -398,6 +411,7 @@ const jsSources = [
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'backends.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'nativeBiometricProvider.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'update', 'installOrigin.js'), 'utf8'),
+    readFileSync(join(wsRoot, 'packages', 'web', 'src', 'update', 'directUpdateCheck.js'), 'utf8'),
 ].join('\n');
 const calledFromJs = new Set(
     [...jsSources.matchAll(/callNativeVault\(\s*'(\w+)'/g)].map((m) => m[1]),
@@ -1028,8 +1042,9 @@ assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not
 // APK is a genuine second build, because the `default` profile
 // compiles different code in and so there is no bundle to derive it from.
 // What stops that eroding the rule above is that it is OPT-IN: an unset
-// XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was, and its
-// lane is NOT-SHIPPED, so no release demands the file either.
+// XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was. Its lane is
+// SHIPPED since v0.341.3, so a release scoped to it needs the file, while a
+// store-only `--lane android` release does not.
 assert.match(ceremony, /if \[ -n "\$\{XCHAIN_BUILD_ANDROID_FULL:-\}" \]/,
     'the full-feature APK leg exists and is opt-in, leaving the store lane untouched');
 

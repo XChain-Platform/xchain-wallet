@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FormPage, FormSection, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -23,6 +24,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import {
     LOCK_FLAGS,
@@ -36,7 +38,12 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listLabel } from '../utils/listLabel.js';
@@ -45,6 +52,7 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -93,6 +101,8 @@ function isValidIssueAddress(value, descriptor) {
  */
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
+    const networkAvailable = useOnlineStatus();
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
     const { settings } = useSettings();
@@ -122,6 +132,19 @@ export function TokenWizard({ walletId, onBack }) {
     // deliberate choice straight back to the default address.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [sourceChosenFor, setSourceChosenFor] = useState(/** @type {string | null} */ (null));
+    // The address book behind the two recipient fields, as on Issue token:
+    // one picker, and which field it is filling.
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contactsTarget, setContactsTarget] = useState(/** @type {'owner' | 'supply'} */ ('owner'));
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(rows || []); })
+            .catch(() => { if (!cancelled) setContacts([]); });
+        return () => { cancelled = true; };
+    }, [messaging]);
 
     // Details form state (some fields are only visible for certain
     // templates (see renderDetailsStage). Keeping all state here so
@@ -177,6 +200,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const submitPendingRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -194,19 +218,20 @@ export function TokenWizard({ walletId, onBack }) {
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain, settings);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (Object.keys(byChain || {}).length === 0) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before issuing a token.',
-                    );
+                if (Object.keys(signingByChain).length === 0) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any network yet. Use Receive to generate one before issuing a token.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
                 // first key opened the wizard on the wallet's OLDEST chain
                 // forever. Open on the last-used chain instead, ahead of the
                 // first-key fallback, exactly as Send does.
-                setChainId((prev) => pickDefaultChainId(byChain, {
+                setChainId((prev) => pickDefaultChainId(signingByChain, {
                     explicitChainId: prev,
                     settings,
                 }));
@@ -273,6 +298,7 @@ export function TokenWizard({ walletId, onBack }) {
         [chainId],
     );
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
@@ -452,6 +478,10 @@ export function TokenWizard({ walletId, onBack }) {
                 return;
             }
         }
+        if ((template === 'collectible' || template === 'edition') && !imageUrl.trim()) {
+            setFormError('Image URL is required for this template.');
+            return;
+        }
         // PC-06: the advanced fields share the create transaction, so a
         // bad one costs the whole token, not just the field. Pre-flight
         // them here rather than letting the indexer reject the ISSUE.
@@ -484,6 +514,9 @@ export function TokenWizard({ walletId, onBack }) {
     // Compose, tamper-check, and pre-flight run host-side after review.
     // Approve signs the byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
     async function openConfirmScreen() {
+        if (!networkAvailable) return;
+        if (submitPendingRef.current) return;
+        submitPendingRef.current = true;
         const from = fromAddress ? {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -492,7 +525,11 @@ export function TokenWizard({ walletId, onBack }) {
             source: fromAddress.source,
             signerId: fromAddress.signerId,
         } : null;
-        if (!from) { setFormError('No source address available.'); return; }
+        if (!from) {
+            setFormError('No source address available.');
+            submitPendingRef.current = false;
+            return;
+        }
         setFormError(null);
         try {
             if (isWatcherMode) {
@@ -536,15 +573,17 @@ export function TokenWizard({ walletId, onBack }) {
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Issue failed.',
             }));
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
     const stageBack = stage === 'chain'
-        ? () => setStage('template')
+        ? () => { setFormError(null); setStage('template'); }
         : stage === 'details'
-            ? () => setStage('chain')
+            ? () => { setFormError(null); setStage('chain'); }
             : stage === 'preview'
-                ? () => setStage('details')
+                ? () => { setFormError(null); setStage('details'); }
                 : onBack;
     const header = (
         <PageHeader
@@ -554,7 +593,10 @@ export function TokenWizard({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'preview'}>
+            {!networkAvailable ? (
+                <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
+            ) : null}
             {children}
         </Screen>
     );
@@ -595,6 +637,21 @@ export function TokenWizard({ walletId, onBack }) {
     // signed by anyone else, and no field on this screen could change who
     // signed. Same picker, so the coin filtering and the address list are the
     // wallet's own rather than this form's.
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => {
+                    if (contactsTarget === 'supply') setTransferSupplyTo(entry.address);
+                    else setTransferTo(entry.address);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -656,6 +713,7 @@ export function TokenWizard({ walletId, onBack }) {
             <>
                 <WizardProgress stage={stage} />
                 {renderChainStage({
+                    demoGuard,
                     chainsWithAddresses,
                     chainId,
                     setChainId,
@@ -673,6 +731,7 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(<>
             <WizardProgress stage={stage} />
             {renderDetailsStage({
+            demoGuard,
             template,
             name, setName,
             displayName, setDisplayName,
@@ -683,6 +742,7 @@ export function TokenWizard({ walletId, onBack }) {
             lockOnCreate, setLockOnCreate,
             transferTo, setTransferTo,
             transferSupplyTo, setTransferSupplyTo,
+            onPickContact: (target) => { setContactsTarget(target); setContactsPickerOpen(true); },
             imageUrl, setImageUrl,
             parentToken, setParentToken,
             perAddressMax, setPerAddressMax,
@@ -701,7 +761,6 @@ export function TokenWizard({ walletId, onBack }) {
                 }),
                 callbackTickDecimals,
                 currentHeight,
-                chainLabel: descriptor?.displayName || chainId,
                 allowListIdx, blockListIdx, allowListCount, blockListCount,
                 allowListName, blockListName,
                 onPickList: setListPickerFor,
@@ -747,11 +806,12 @@ export function TokenWizard({ walletId, onBack }) {
         }
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Token issued</h2>
+                <SectionHeader title="Token issued" />
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
+                        <CopyButton value={txid} label="Copy transaction ID" />
                     </>
                 ) : (
                     <p className={styles.hint}>Broadcast complete.</p>
@@ -770,6 +830,7 @@ export function TokenWizard({ walletId, onBack }) {
         <>
             <WizardProgress stage={stage} />
             <FormPage
+                demoGuard={demoGuard}
                 label="Review token issuance"
                 onSubmit={(event) => {
                     event.preventDefault();
@@ -779,21 +840,30 @@ export function TokenWizard({ walletId, onBack }) {
                     <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
                 ) : null}
                 actions={(
-                    <Button type="submit" variant="primary" loading={actionConfirm.composing}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={actionConfirm.composing}
+                        disabled={actionConfirm.composing || !networkAvailable}
+                        title={!networkAvailable ? 'Creating a token needs a network connection' : undefined}
+                    >
                         Continue to confirmation
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
+                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
                     <DetailRow label="Template" value={templateLabel(template)} />
                     {displayName.trim() ? (
                         <DetailRow label="Display name (not in transaction)" value={displayName.trim()} />
                     ) : null}
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     {fromAddress ? (
                         <>
                             <dt className={styles.detailsLabel}>From</dt>
@@ -810,7 +880,7 @@ export function TokenWizard({ walletId, onBack }) {
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                     <DetailRow
                         label="Protocol fee paid in"
@@ -818,16 +888,16 @@ export function TokenWizard({ walletId, onBack }) {
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
             </FormPage>
         </>,
@@ -1103,28 +1173,22 @@ const TEMPLATES = [
 
 function renderTemplateStage({ onPick }) {
     return (
-        <ListPage intro="Choose a template.">
+        <ListPage>
+            {/* Native list markup preserves template-list semantics because the UI kit has no list primitive. */}
             <ul className={styles.templateGrid}>
                 {TEMPLATES.map((t) => (
+                    // Native list items preserve list semantics because the UI kit has no list-item primitive.
                     <li key={t.id}>
-                        <button
+                        <ListRow
                             type="button"
-                            className={
-                                t.interactive
-                                    ? styles.templateCard
-                                    : `${styles.templateCard} ${styles.templateCardDisabled}`
-                            }
+                            className={styles.templateCard}
+                            title={t.name}
+                            subtitle={t.tagline}
                             onClick={() => t.interactive && onPick(t.id)}
                             disabled={!t.interactive}
                             aria-disabled={!t.interactive}
-                            title={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
-                        >
-                            <span className={styles.templateName}>{t.name}</span>
-                            <span className={styles.templateTag}>{t.tagline}</span>
-                            {!t.interactive ? (
-                                <span className={styles.templateSoon}>Use the Custom template for now</span>
-                            ) : null}
-                        </button>
+                            tooltip={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
+                        />
                     </li>
                 ))}
             </ul>
@@ -1144,16 +1208,16 @@ function renderTemplateStage({ onPick }) {
 
 function renderChainStage({
     chainsWithAddresses, chainId, setChainId, descriptor, fromAddress,
-    subtoken, onPickSource, onNext,
+    subtoken, onPickSource, onNext, demoGuard,
 }) {
     return (
         <FormPage
-            label="Choose token chain"
+            demoGuard={demoGuard}
+            label="Choose token network"
             onSubmit={(event) => {
                 event.preventDefault();
                 if (fromAddress) onNext();
             }}
-            intro="Which chain should record this token's issuance?"
             actions={(
                 <Button
                     type="submit"
@@ -1164,7 +1228,7 @@ function renderChainStage({
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
 
             {fromAddress ? (
                 <AddressField
@@ -1222,6 +1286,7 @@ const TEMPLATE_FIELDS = {
 };
 
 function renderDetailsStage({
+    demoGuard,
     template,
     name, setName,
     displayName, setDisplayName,
@@ -1232,6 +1297,7 @@ function renderDetailsStage({
     lockOnCreate, setLockOnCreate,
     transferTo, setTransferTo,
     transferSupplyTo, setTransferSupplyTo,
+    onPickContact,
     imageUrl, setImageUrl,
     parentToken, setParentToken,
     perAddressMax, setPerAddressMax,
@@ -1246,10 +1312,10 @@ function renderDetailsStage({
     const isEdition = resolved === 'edition';
     return (
         <FormPage
+            demoGuard={demoGuard}
             label="Token details"
             onSubmit={onSubmit}
             onChangeCapture={onEdit}
-            intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -1306,14 +1372,11 @@ function renderDetailsStage({
                 />
             ) : null}
             {show.divisible ? (
-                <label className={styles.checkRow}>
-                    <input
-                        type="checkbox"
-                        checked={divisible}
-                        onChange={(e) => setDivisible(e.target.checked)}
-                    />
-                    <span>Divisible (8 decimal places)</span>
-                </label>
+                <Switch
+                    label="Divisible (8 decimal places)"
+                    checked={divisible}
+                    onChange={(e) => setDivisible(e.target.checked)}
+                />
             ) : null}
             {show.description ? (
                 <Input
@@ -1382,32 +1445,33 @@ function renderDetailsStage({
                 />
             ) : null}
             {show.lockOnCreate ? (
-                <label className={styles.checkRow}>
-                    <input
-                        type="checkbox"
-                        checked={lockOnCreate}
-                        onChange={(e) => setLockOnCreate(e.target.checked)}
-                    />
-                    <span>Lock supply + minting immediately (irreversible)</span>
-                </label>
+                <Switch
+                    label="Lock supply + minting immediately (irreversible)"
+                    checked={lockOnCreate}
+                    onChange={(e) => setLockOnCreate(e.target.checked)}
+                />
             ) : null}
             {show.transferTo ? (
-                <Input
+                <AddressField
                     label="Transfer ownership to (optional)"
+                    icon="contacts"
                     hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
+                    onIconClick={() => onPickContact('owner')}
                     autoComplete="off"
                     autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
             {show.transferSupplyTo ? (
-                <Input
+                <AddressField
                     label="Send the initial mint to (optional)"
+                    icon="contacts"
                     hint="Leave blank to keep the minted tokens at the issuing address."
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
+                    onIconClick={() => onPickContact('supply')}
                     autoComplete="off"
                     autoCapitalize="off"
                     autoCorrect="off"
@@ -1444,7 +1508,6 @@ function AdvancedIssuePanel({
     callbackBlockEstimate,
     callbackTickDecimals,
     currentHeight,
-    chainLabel,
     allowListIdx, blockListIdx, allowListCount, blockListCount,
     allowListName, blockListName,
     onPickList, onClearList,
@@ -1479,19 +1542,24 @@ function AdvancedIssuePanel({
                         rejects any value, it rejects the whole issuance and does not issue the token.
                     </p>
 
-                    <h3 className={styles.advancedHeading}>Locks (permanent)</h3>
-                    <p className={styles.hint}>
-                        Each flag is a one-way switch. Once the token is issued with a
-                        lock set, it can never be unlocked.
-                    </p>
-                    <div role="group" aria-label="Lock flags">
-                        {LOCK_FLAGS.map((f) => {
-                            const forced = !!forcedByShortcut[f.key];
-                            return (
-                                <div key={f.key} className={styles.lockFlagRow}>
-                                    <label className={styles.checkRow}>
-                                        <input
-                                            type="checkbox"
+                    <FormSection
+                        title="Locks (permanent)"
+                        headingLevel="h3"
+                        description="Each flag is a one-way switch. Once the token is issued with a lock set, it can never be unlocked."
+                    >
+                        <div role="group" aria-label="Lock flags">
+                            {LOCK_FLAGS.map((f) => {
+                                const forced = !!forcedByShortcut[f.key];
+                                return (
+                                    <div key={f.key} className={styles.lockFlagRow}>
+                                        <Checkbox
+                                            label={(
+                                                <>
+                                                    {f.label}
+                                                    {forced ? ' (set by "Lock supply + minting immediately")' : ''}
+                                                </>
+                                            )}
+                                            description={f.hint}
                                             checked={forced || !!lockChecks[f.key]}
                                             disabled={forced}
                                             onChange={(e) => setLockChecks({
@@ -1499,117 +1567,112 @@ function AdvancedIssuePanel({
                                                 [f.key]: e.target.checked,
                                             })}
                                         />
-                                        <span>
-                                            {f.label}
-                                            {forced ? ' (set by "Lock supply + minting immediately")' : ''}
-                                        </span>
-                                    </label>
-                                    <p className={styles.lockFlagHint}>{f.hint}</p>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </FormSection>
 
-                    <h3 className={styles.advancedHeading}>Callback</h3>
-                    <p className={styles.hint}>
-                        A callback lets you later recall <strong>all</strong> of this token
-                        back to your address in one action, paying every holder a set amount
-                        of another token per unit they held. It can only be configured before
-                        any supply is distributed, so setting it during issuance guarantees
-                        it is available.
-                    </p>
-                    <Input
-                        label="Callback token (optional)"
-                        hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
-                        value={callbackTick}
-                        onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
-                        autoComplete="off"
-                        autoCapitalize="characters"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <Input
-                        label="Payout per unit"
-                        hint={callbackTickDecimals != null
-                            ? `How much of ${callbackTick} each holder receives per unit they hold. Up to ${callbackTickDecimals} decimal place${callbackTickDecimals === 1 ? '' : 's'}.`
-                            : 'How much of the callback token each holder receives per unit they hold. Whole numbers only until the wallet can confirm the callback token is divisible.'}
-                        inputMode="decimal"
-                        value={callbackAmount}
-                        onChange={(e) => setCallbackAmount(e.target.value)}
-                        autoComplete="off"
-                    />
-                    <Input
-                        label="Callback allowed from block"
-                        hint={callbackBlockEstimate
-                            ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
-                            : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="numeric"
-                        value={callbackBlock}
-                        onChange={(e) => setCallbackBlock(e.target.value)}
-                        autoComplete="off"
-                    />
-                    {currentHeight != null ? (
+                    <FormSection
+                        title="Callback"
+                        headingLevel="h3"
+                        description={<>A callback lets you later recall <strong>all</strong> of this token back to your address in one action, paying every holder a set amount of another token per unit they held. It can only be configured before any supply is distributed, so setting it during issuance guarantees it is available.</>}
+                    >
+                        <Input
+                            label="Callback token (optional)"
+                            hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
+                            value={callbackTick}
+                            onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
+                            autoComplete="off"
+                            autoCapitalize="characters"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                        <Input
+                            label="Payout per unit"
+                            hint={callbackTickDecimals != null
+                                ? `How much of ${callbackTick} each holder receives per unit they hold. Up to ${callbackTickDecimals} decimal place${callbackTickDecimals === 1 ? '' : 's'}.`
+                                : 'How much of the callback token each holder receives per unit they hold. Whole numbers only until the wallet can confirm the callback token is divisible.'}
+                            inputMode="decimal"
+                            value={callbackAmount}
+                            onChange={(e) => setCallbackAmount(e.target.value)}
+                            autoComplete="off"
+                        />
+                        <Input
+                            label="Callback allowed from block"
+                            hint={callbackBlockEstimate
+                                ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
+                                : 'The earliest block height you can trigger the callback. Must be a future block.'}
+                            inputMode="numeric"
+                            value={callbackBlock}
+                            onChange={(e) => setCallbackBlock(e.target.value)}
+                            autoComplete="off"
+                        />
+                        {currentHeight != null ? (
+                            <p className={styles.hint}>
+                                Current block: {currentHeight.toLocaleString('en-US')}.
+                                Date above is a rough estimate; real block times vary.
+                            </p>
+                        ) : null}
+                    </FormSection>
+
+                    <FormSection
+                        title="Access lists"
+                        headingLevel="h3"
+                        description="Restrict who can interact with the token by pointing it at address lists you've published. An allow-list permits only its members; a block-list denies its members. Create one in My Lists first."
+                    >
+                        {/* Value-and-action rows remain custom because the UI kit has no list-picker field. */}
+                        <div className={styles.listRow}>
+                            <div className={styles.fromLine}>
+                                <span className={styles.detailsLabel}>Allow-list</span>
+                                <span className={styles.detailsValue}>
+                                    {allowListIdx
+                                        ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                        : 'None (anyone may interact)'}
+                                </span>
+                            </div>
+                            <Button type="button" variant="ghost" onClick={() => onPickList('allow')}>
+                                {allowListIdx ? 'Change allow-list' : 'Choose allow-list'}
+                            </Button>
+                            {allowListIdx ? (
+                                <Button type="button" variant="ghost" onClick={() => onClearList('allow')}>
+                                    Remove
+                                </Button>
+                            ) : null}
+                        </div>
+                        {/* Value-and-action rows remain custom because the UI kit has no list-picker field. */}
+                        <div className={styles.listRow}>
+                            <div className={styles.fromLine}>
+                                <span className={styles.detailsLabel}>Block-list</span>
+                                <span className={styles.detailsValue}>
+                                    {blockListIdx
+                                        ? `${listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                        : 'None'}
+                                </span>
+                            </div>
+                            <Button type="button" variant="ghost" onClick={() => onPickList('block')}>
+                                {blockListIdx ? 'Change block-list' : 'Choose block-list'}
+                            </Button>
+                            {blockListIdx ? (
+                                <Button type="button" variant="ghost" onClick={() => onClearList('block')}>
+                                    Remove
+                                </Button>
+                            ) : null}
+                        </div>
                         <p className={styles.hint}>
-                            Current block on {chainLabel}: {currentHeight.toLocaleString('en-US')}.
-                            Date above is a rough estimate; real block times vary.
+                            Removing a list here only clears it before the token exists. Once
+                            issued, a bound list can be replaced but never removed: the
+                            protocol has no "clear" for one. To lift a restriction later, point
+                            it at an empty address list.
                         </p>
-                    ) : null}
-
-                    <h3 className={styles.advancedHeading}>Access lists</h3>
-                    <p className={styles.hint}>
-                        Restrict who can interact with the token by pointing it at address
-                        lists you've published. An allow-list permits only its members; a
-                        block-list denies its members. Create one in My Lists first.
-                    </p>
-                    <div className={styles.listRow}>
-                        <div className={styles.fromLine}>
-                            <span className={styles.detailsLabel}>Allow-list</span>
-                            <span className={styles.detailsValue}>
-                                {allowListIdx
-                                    ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
-                                    : 'None (anyone may interact)'}
-                            </span>
-                        </div>
-                        <Button type="button" variant="ghost" onClick={() => onPickList('allow')}>
-                            {allowListIdx ? 'Change allow-list' : 'Choose allow-list'}
-                        </Button>
-                        {allowListIdx ? (
-                            <Button type="button" variant="ghost" onClick={() => onClearList('allow')}>
-                                Remove
-                            </Button>
-                        ) : null}
-                    </div>
-                    <div className={styles.listRow}>
-                        <div className={styles.fromLine}>
-                            <span className={styles.detailsLabel}>Block-list</span>
-                            <span className={styles.detailsValue}>
-                                {blockListIdx
-                                    ? `${listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
-                                    : 'None'}
-                            </span>
-                        </div>
-                        <Button type="button" variant="ghost" onClick={() => onPickList('block')}>
-                            {blockListIdx ? 'Change block-list' : 'Choose block-list'}
-                        </Button>
-                        {blockListIdx ? (
-                            <Button type="button" variant="ghost" onClick={() => onClearList('block')}>
-                                Remove
-                            </Button>
-                        ) : null}
-                    </div>
-                    <p className={styles.hint}>
-                        Removing a list here only clears it before the token exists. Once
-                        issued, a bound list can be replaced but never removed: the
-                        protocol has no "clear" for one. To lift a restriction later, point
-                        it at an empty address list.
-                    </p>
+                    </FormSection>
 
                     {warnings.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
+                        <StatusMessage variant="warning" role="alert">
                             {warnings.map((w) => (
-                                <p key={w} className={styles.warning}>{w}</p>
+                                <p key={w}>{w}</p>
                             ))}
-                        </div>
+                        </StatusMessage>
                     ) : null}
                 </div>
             )}

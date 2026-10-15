@@ -23,11 +23,16 @@ const { AdsNotice } = await import(
     '../../../packages/core/src/shared/components/AdsNotice.jsx'
 );
 
-function bitcoinSettings({ enabled = true, accumulatedSats = 12_345 } = {}) {
+function bitcoinSettings({
+    enabled = true,
+    accumulatedSats = 12_345,
+    chainId = 'bitcoin-mainnet',
+} = {}) {
+    const networkKind = defaultRegistry().get(chainId)?.networkKind || 'mainnet';
     const seeded = seedSettingsForChains(
-        createDefaultSettings(),
+        { ...createDefaultSettings(), activeNetwork: networkKind },
         defaultRegistry(),
-        ['bitcoin-mainnet'],
+        [chainId],
     );
     return {
         ...seeded,
@@ -36,8 +41,8 @@ function bitcoinSettings({ enabled = true, accumulatedSats = 12_345 } = {}) {
             enabled,
             perChain: {
                 ...seeded.ads.perChain,
-                'bitcoin-mainnet': {
-                    ...seeded.ads.perChain['bitcoin-mainnet'],
+                [chainId]: {
+                    ...seeded.ads.perChain[chainId],
                     accumulatedSats,
                 },
             },
@@ -76,10 +81,26 @@ describe('Automatic Donation System settings', () => {
             .toBe(`${(12_345).toLocaleString()} sats`);
     });
 
+    it('does not repeat the active network kind in its chain heading', () => {
+        settings = bitcoinSettings({ chainId: 'bitcoin-testnet' });
+        render(<AdsSection />);
+
+        expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(screen.queryByText(/testnet/i)).toBeNull();
+    });
+
+    it('labels its switch as an action instead of repeating the page title', () => {
+        render(<AdsSection />);
+
+        const toggle = screen.getByRole('switch', { name: 'Turn on Automatic Donation System' });
+        expect(toggle.closest('label')).toHaveTextContent(/^Turn on/);
+        expect(screen.queryByText('Automatic Donation System')).toBeNull();
+    });
+
     it('writes the switch and both donation choices', () => {
         render(<AdsSection />);
 
-        fireEvent.click(screen.getByRole('switch', { name: 'Automatic Donation System' }));
+        fireEvent.click(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }));
         const amount = screen.getByLabelText('Bitcoin per-transaction amount');
         fireEvent.change(amount, { target: { value: '2000' } });
         fireEvent.blur(amount);
@@ -102,9 +123,13 @@ describe('Automatic Donation System settings', () => {
         const amount = screen.getByLabelText('Bitcoin per-transaction amount');
         const threshold = screen.getByLabelText('Bitcoin trigger threshold');
         expect(amount.type).toBe('text');
-        expect(amount.inputMode).toBe('decimal');
+        expect(amount.inputMode).toBe('numeric');
+        expect(amount).toHaveAttribute('enterkeyhint', 'done');
+        expect(amount).toHaveAttribute('autocomplete', 'off');
         expect(threshold.type).toBe('text');
-        expect(threshold.inputMode).toBe('decimal');
+        expect(threshold.inputMode).toBe('numeric');
+        expect(threshold).toHaveAttribute('enterkeyhint', 'done');
+        expect(threshold).toHaveAttribute('autocomplete', 'off');
 
         fireEvent.wheel(amount, { deltaY: -100 });
         expect(amount.value).toBe('1000');
@@ -119,8 +144,8 @@ describe('Automatic Donation System settings', () => {
         settings = bitcoinSettings({ enabled: false });
         render(<AdsSection />);
 
-        expect(screen.getByRole('switch', { name: 'Automatic Donation System' }).checked).toBe(false);
-        expect(screen.getByText('Off. New outgoing transactions do not add to the pending donation total.')).toBeTruthy();
+        expect(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }).checked).toBe(false);
+        expect(screen.getByText('Off. New outgoing transactions don\'t add to the pending donation total.')).toBeTruthy();
         expect(screen.getByLabelText('Bitcoin per-transaction amount').disabled).toBe(true);
         expect(screen.getByLabelText('Bitcoin trigger threshold').disabled).toBe(true);
 

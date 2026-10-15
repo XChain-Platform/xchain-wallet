@@ -1,9 +1,7 @@
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -11,26 +9,35 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-3);
+    padding: var(--xc-list-row-padding);
     border-top: 1px solid var(--xc-border);
     width: 100%;
-    text-align: start;
-    color: inherit;
-    font: inherit;
 }
 
 .rowContent {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
     flex: 1 1 auto;
     min-width: 0;
-    min-height: 48px;
+    min-height: var(--xc-control-h-lg);
+}
+
+/* The outer row carries the shared list-row inset, so the ListRow inside it
+   drops its own padding instead of doubling the inset.
+
+   The row may wrap: when the figures do not fit beside a name of at least
+   rowBody's floor (a large text size on a phone), they move to their own line
+   under the name instead of ending in an ellipsis. */
+.row > .rowContent {
     padding: 0;
-    border: 0;
-    color: inherit;
-    font: inherit;
-    text-align: start;
+    flex-wrap: wrap;
+    row-gap: var(--xc-space-1);
+}
+
+/* The name column takes whatever the figures leave, down to a floor. The
+   floor is in rem so it grows with the text size, which is what makes the
+   figures wrap at large text and stay beside the name at the default size. */
+.rowBody.rowBody {
+    flex: 1 1 0;
+    min-width: 4rem;
 }
 
 .row:first-of-type {
@@ -40,37 +47,30 @@
 /* The primary content becomes the details button while pin and hide remain
  * separate native controls in the same row. */
 .rowClickable {
-    background: transparent;
-    border-inline-start: none;
-    border-inline-end: none;
-    border-bottom: none;
     cursor: pointer;
 }
-.rowClickable:hover {
-    background: var(--xc-bg-muted);
-}
 .rowClickable:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;
 }
 
 .iconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: var(--xc-bg-muted);
+    background: transparent;
 }
 
 .iconImg {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: block;
     border-radius: 50%;
+    object-fit: contain;
 }
 
 .iconLetter {
@@ -79,16 +79,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
     font-family: var(--xc-font-sans);
     font-weight: 700;
     font-size: var(--xc-text-md);
-    color: var(--xc-on-accent);
+    color: var(--xc-text);
 }
 
-/* The fill is a per-ticker colour set inline; the letter colour lives here so
-   forced-colors mode can re-pair it. --xc-on-accent maps to Canvas there,
-   which only suits an accent fill, and the mode repaints this fill to Canvas
-   as well, so the letter would vanish into it. */
+/* Forced-colors mode pairs the neutral monogram with the platform canvas. */
 @media (forced-colors: active) {
     .iconLetter {
         color: CanvasText;
@@ -106,14 +105,6 @@
     box-shadow: var(--xc-shadow-surface-ring);
     object-fit: cover;
     display: block;
-}
-
-.body {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
 }
 
 .title {
@@ -145,9 +136,7 @@
 }
 
 .amounts {
-    flex: 0 1 auto;
     min-width: 0;
-    max-width: 55%;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -160,10 +149,13 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-md);
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     color: var(--xc-text);
     line-height: 1.1;
     max-width: 100%;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .fiat {
@@ -171,21 +163,33 @@
     color: var(--xc-text-muted);
     font-weight: 600;
     font-family: var(--xc-font-mono);
+    font-variant-numeric: tabular-nums;
     max-width: 100%;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
+/* The balance figures keep their width and the name gives way: a name
+   ends in an ellipsis and a number never does. On a wrapped row the figures
+   sit at the end of their own line. The doubled class outranks ListRow's own
+   trailing rule whatever order the sheets load in. */
+.amountsSlot.amountsSlot {
+    flex-shrink: 0;
+    max-width: 100%;
+    margin-inline-start: auto;
+}
+
+.qtyLong {
+    font-size: var(--xc-text-sm);
+}
+
+/* A figure is never cut. It keeps to one line whenever its row has room,
+   and only a figure wider than the whole row breaks onto a second line. */
 .amountFit {
     display: block;
     width: 100%;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.amountFitInner {
-    display: inline-block;
-    white-space: nowrap;
-    transform-origin: right center;
+    overflow-wrap: anywhere;
 }
 
 /* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
@@ -204,34 +208,10 @@
     padding: var(--xc-space-5) var(--xc-space-3);
 }
 
+/* Row spacing for the kit pin and hide Buttons; the kit owns their look. */
 .pinBtn {
     flex: 0 0 auto;
     margin-inline-start: var(--xc-space-2);
-    width: 1.5rem;
-    height: 1.5rem;
-    min-width: var(--xc-tap-min);
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.125rem;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    user-select: none;
-    border-radius: var(--xc-radius-sm);
-    line-height: 1;
-    padding: 0;
-    border: 0;
-    background: transparent;
-}
-
-.pinBtn:hover {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.pinBtnActive {
-    color: var(--xc-accent-text);
 }
 
 .rowPinned {
@@ -241,38 +221,13 @@
 .hideBtn {
     flex: 0 0 auto;
     margin-inline-start: var(--xc-space-1);
-    width: 1.5rem;
-    height: 1.5rem;
-    min-width: var(--xc-tap-min);
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    user-select: none;
-    border-radius: var(--xc-radius-sm);
-    line-height: 1;
-    padding: 0;
-    border: 0;
-    background: transparent;
-}
-
-.hideBtn:hover {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.hideBtnActive {
-    color: var(--xc-text);
 }
 
 .hiddenToggle {
     border: 0;
     background: transparent;
-    padding: var(--xc-space-3);
-    border-top: 1px dashed var(--xc-border);
+    padding: var(--xc-list-row-padding);
+    border-top: 1px solid var(--xc-border);
     text-align: center;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

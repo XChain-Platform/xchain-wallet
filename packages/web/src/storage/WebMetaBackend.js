@@ -25,6 +25,11 @@
 // The injectable `storage` parameter takes any `Storage`-shaped
 // key/value store so tests can run against an in-memory stand-in.
 
+import { storage as coreStorage } from '@xchain-wallet/core';
+import { persistWithQuotaRecovery } from '@xchain-wallet/core/storage/Vault.js';
+
+const { VaultCorruptError, VaultUnavailableError } = coreStorage;
+
 export const DEFAULT_META_KEY = 'xchain-wallet:vault-meta';
 
 function defaultStorage() {
@@ -53,31 +58,46 @@ export class WebMetaBackend {
 
     /** @returns {Promise<unknown | null>} */
     async load() {
+        if (!this._storage) {
+            throw new VaultUnavailableError('web vault metadata storage is unavailable');
+        }
+        let raw;
         try {
-            const raw = this._storage?.getItem(this._key);
-            if (raw == null) return null;
+            raw = this._storage.getItem(this._key);
+        } catch (_err) {
+            throw new VaultUnavailableError('web vault metadata could not be read');
+        }
+        if (raw == null) return null;
+        try {
             return JSON.parse(raw);
         } catch (_err) {
-            return null;
+            // Malformed metadata cannot mean "no wallet": the IndexedDB
+            // ciphertext may still require these exact KDF parameters.
+            throw new VaultCorruptError('web vault metadata is not valid JSON');
         }
     }
 
     /** @param {unknown} obj */
     async save(obj) {
         try {
-            if (!this._storage) throw new Error('localStorage is not available');
-            this._storage.setItem(this._key, JSON.stringify(obj));
+            await persistWithQuotaRecovery(() => {
+                if (!this._storage) throw new Error('localStorage is not available');
+                this._storage.setItem(this._key, JSON.stringify(obj));
+            });
         } catch (err) {
+            if (err?.name === 'StorageQuotaError') throw err;
             throw new Error(`WebMetaBackend.save: metadata could not be persisted: ${err?.message || err}`);
         }
     }
 
     async clear() {
         try {
-            if (!this._storage) return;
+            if (!this._storage) throw new Error('localStorage is not available');
             this._storage.removeItem(this._key);
-        } catch (_err) {
-            // A failed cleanup leaves the existing wallet metadata intact.
+        } catch (err) {
+            throw new VaultUnavailableError(
+                `web vault metadata could not be cleared: ${err?.message || err}`,
+            );
         }
     }
 }

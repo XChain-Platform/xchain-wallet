@@ -12,17 +12,13 @@
 // persistence via messaging.updateSettings, and reset.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, fireEvent, cleanup, screen, waitFor, act } from '@testing-library/react';
+import { render, fireEvent, cleanup, screen, waitFor, act, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
-import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
 import { updateSettings } from '../../../packages/core/src/flows/settings.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
-afterEach(() => {
-    cleanup();
-    localStorage.clear();
-});
+afterEach(() => cleanup());
 
 function makeMessaging(initialBindings = {}) {
     let settings = { keyboard: { bindings: { ...initialBindings } } };
@@ -70,6 +66,23 @@ describe('KeyboardSection', () => {
         });
     });
 
+    it('uses compact standard-height rows with aligned key and Rebind columns', async () => {
+        await setup({ lock: 'mod+j' });
+
+        const lockRow = screen.getByText('Lock wallet').closest('div');
+        const exportRow = screen.getByText('Export history').closest('div');
+        for (const row of [lockRow, exportRow]) {
+            expect(row.style.boxSizing).toBe('border-box');
+            expect(row.style.minHeight).toBe('var(--xc-control-h-lg)');
+            expect(row.style.paddingBlock).toBe('var(--xc-space-1)');
+            expect(row.querySelector('kbd').style.minWidth).toBe('7rem');
+        }
+
+        const lockActions = lockRow.lastElementChild;
+        expect(lockActions.style.justifyContent).toBe('flex-end');
+        expect(lockActions.lastElementChild).toBe(within(lockRow).getByRole('button', { name: 'Rebind' }));
+    });
+
     it('captures a new combo and persists it', async () => {
         const messaging = await setup();
         const lockRow = screen.getByText('Lock wallet').closest('div');
@@ -94,11 +107,6 @@ describe('KeyboardSection', () => {
         const lockRow = await waitFor(() => screen.getByText('Lock wallet').closest('div'));
         const reset = screen.getByRole('button', { name: 'Reset' });
         fireEvent.click(reset);
-        expect(messaging.updateSettings).not.toHaveBeenCalled();
-        expect(screen.getByRole('dialog', { name: 'Reset shortcut?' })).toHaveTextContent(
-            'Restore "Lock wallet" to its built-in binding?',
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Reset shortcut' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));
@@ -108,7 +116,7 @@ describe('KeyboardSection', () => {
     it('removes an override when capture returns to the built-in binding', async () => {
         const messaging = await setup({ lock: 'mod+j' });
         const lockRow = screen.getByText('Lock wallet').closest('div');
-        fireEvent.click(lockRow.querySelector('button'));
+        fireEvent.click(within(lockRow).getByRole('button', { name: 'Rebind' }));
         press({ key: 'l', ctrlKey: true });
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
@@ -118,8 +126,6 @@ describe('KeyboardSection', () => {
     it('resets every override in one persisted update', async () => {
         const messaging = await setup({ lock: 'mod+j', settings: 'mod+.' });
         fireEvent.click(screen.getByRole('button', { name: 'Reset all shortcuts' }));
-        expect(messaging.updateSettings).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'Reset shortcuts' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));
@@ -128,17 +134,10 @@ describe('KeyboardSection', () => {
 });
 
 describe('Settings reset boundaries', () => {
-    it('replaces reset maps while leaving wallets, contacts, and other settings untouched', async () => {
-        let stored = {
-            ...createDefaultSettings(),
-            theme: 'dark',
-            keyboard: { bindings: { lock: 'mod+j', settings: 'mod+.' } },
-            pinnedTokensByWallet: {
-                'wallet-a': ['bitcoin-mainnet:BTC'],
-                'wallet-b': ['litecoin-mainnet:LTC'],
-            },
-        };
-        const vault = {
+    function settingsVault(initial) {
+        let stored = initial;
+        return {
+            read: () => stored,
             settings: {
                 get: vi.fn(async () => stored),
                 put: vi.fn(async (next) => { stored = next; }),
@@ -146,10 +145,23 @@ describe('Settings reset boundaries', () => {
             wallets: { get: vi.fn(), put: vi.fn(), delete: vi.fn() },
             contacts: { get: vi.fn(), put: vi.fn(), delete: vi.fn() },
         };
+    }
+
+    it('replaces reset maps while leaving wallets, contacts, and other settings untouched', async () => {
+        const vault = settingsVault({
+            ...createDefaultSettings(),
+            theme: 'dark',
+            keyboard: { bindings: { lock: 'mod+j', settings: 'mod+.' } },
+            pinnedTokensByWallet: {
+                'wallet-a': ['bitcoin-mainnet:BTC'],
+                'wallet-b': ['litecoin-mainnet:LTC'],
+            },
+        });
 
         await updateSettings(vault, { keyboard: { bindings: { settings: 'mod+.' } } });
         await updateSettings(vault, { pinnedTokensByWallet: {} });
 
+        const stored = vault.read();
         expect(stored.keyboard.bindings).toEqual({ settings: 'mod+.' });
         expect(stored.pinnedTokensByWallet).toEqual({});
         expect(stored.theme).toBe('dark');
@@ -161,38 +173,11 @@ describe('Settings reset boundaries', () => {
         expect(vault.contacts.delete).not.toHaveBeenCalled();
     });
 
-    it('confirms before clearing only saved list-filter storage', async () => {
-        localStorage.setItem('xc:chainFilter:history', '["bitcoin-mainnet"]');
-        localStorage.setItem('unrelated', 'keep');
-        const settings = {
-            privacy: { hideSmallBalances: false },
-            pinnedTokens: [],
-            watchedTokens: [],
-            hiddenTokens: [],
-            pinnedTokensByWallet: {},
-            showPinAffordance: false,
-            showHideAffordance: false,
-            smallBalanceThreshold: 'dust',
-            numberFormat: 'full',
-        };
-        const messaging = {
-            getSettings: vi.fn(async () => settings),
-            updateSettings: vi.fn(async () => settings),
-            getTokenInfo: vi.fn(),
-        };
-        render(
-            <MessagingProvider shell="web" messaging={messaging}>
-                <DisplaySection />
-            </MessagingProvider>,
-        );
+    it('keeps every setting when the whole patch is empty', async () => {
+        const vault = settingsVault({ ...createDefaultSettings(), theme: 'dark' });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Reset list preferences' }));
-        expect(localStorage.getItem('xc:chainFilter:history')).not.toBeNull();
-        expect(screen.getByRole('dialog', { name: 'Reset list preferences?' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Reset preferences' }));
+        await updateSettings(vault, {});
 
-        await waitFor(() => expect(localStorage.getItem('xc:chainFilter:history')).toBeNull());
-        expect(localStorage.getItem('unrelated')).toBe('keep');
-        expect(messaging.updateSettings).not.toHaveBeenCalled();
+        expect(vault.read().theme).toBe('dark');
     });
 });

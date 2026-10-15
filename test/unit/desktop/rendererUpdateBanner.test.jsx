@@ -10,6 +10,11 @@ import React from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DesktopUpdateBanner } from '../../../packages/desktop/renderer/DesktopUpdateBanner.jsx';
+// updateVerify pulls in openpgp, which cannot load under jsdom; the
+// classifier under test never touches it.
+vi.mock('../../../packages/desktop/main/updateVerify.js', () => ({}));
+
+import { classifyInstallFailure } from '../../../packages/desktop/main/updater.js';
 
 function installBridge() {
     let listener;
@@ -71,6 +76,63 @@ describe('desktop update banner lifecycle', () => {
         });
 
         expect(screen.getByRole('status').textContent).toContain('wallet is untouched');
+    });
+
+    it('names a read-only location when a verified update cannot be installed', async () => {
+        const bridge = installBridge();
+        // Build the result the way main does: classify a real EROFS failure
+        // with the updater's own classifier, so a missing or changed
+        // classification in updater.js fails this test.
+        const err = Object.assign(new Error('remote controlled text'), { code: 'EROFS' });
+        const cause = classifyInstallFailure(err);
+        expect(cause).toBe('read-only');
+        bridge.install.mockResolvedValue({
+            ok: false, cause, reason: String(err.message), retryable: cause !== 'read-only',
+        });
+        render(<DesktopUpdateBanner />);
+        bridge.emit({ type: 'ready', info: { version: '1.2.3' } });
+
+        await act(async () => {
+            screen.getByRole('button', { name: /restart to update/i }).click();
+            await Promise.resolve();
+        });
+
+        const text = screen.getByRole('status').textContent;
+        expect(text).toContain('read-only location');
+        expect(text).not.toContain('could not be downloaded or verified');
+        expect(text).not.toContain('remote controlled text');
+        expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /restart to update/i })).toBeNull();
+    });
+
+    it('offers Retry when the install failed for a permission cause', async () => {
+        const bridge = installBridge();
+        const cause = classifyInstallFailure(Object.assign(new Error('x'), { code: 'EACCES' }));
+        bridge.install.mockResolvedValue({ ok: false, cause, retryable: true });
+        render(<DesktopUpdateBanner />);
+        bridge.emit({ type: 'ready', info: { version: '1.2.3' } });
+
+        await act(async () => {
+            screen.getByRole('button', { name: /restart to update/i }).click();
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('status').textContent).toContain('does not have permission');
+        expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy();
+    });
+
+    it('keeps the restart-blocked copy for an unclassified retryable failure', async () => {
+        const bridge = installBridge();
+        bridge.install.mockResolvedValue({ ok: false, retryable: true });
+        render(<DesktopUpdateBanner />);
+        bridge.emit({ type: 'ready', info: { version: '1.2.3' } });
+
+        await act(async () => {
+            screen.getByRole('button', { name: /restart to update/i }).click();
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('status').textContent).toContain('Finish the current wallet operation');
     });
 
     it('unsubscribes when the renderer removes the banner', () => {

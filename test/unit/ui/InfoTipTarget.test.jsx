@@ -195,7 +195,9 @@ describe('StatusMessage semantics and presentation', () => {
     afterEach(cleanup);
 
     it.each([
-        ['status', 'status', 'polite', statusStyles.status],
+        // status is an alias for the info tone.
+        ['status', 'status', 'polite', statusStyles.info],
+        ['info', 'status', 'polite', statusStyles.info],
         ['success', 'status', 'polite', statusStyles.success],
         ['error', 'alert', 'assertive', statusStyles.error],
     ])('maps %s to its role, live priority, and colour class', (variant, role, live, variantClass) => {
@@ -208,7 +210,7 @@ describe('StatusMessage semantics and presentation', () => {
     });
 
     it('maps each variant class to its semantic colour tokens', () => {
-        expect(statusCss).toMatch(/\.row\.status\s*\{[^}]*background:\s*var\(--xc-bg-muted\)[^}]*color:\s*var\(--xc-text\)/s);
+        expect(statusCss).toMatch(/\.row\.status,\s*\.row\.info\s*\{[^}]*background:\s*var\(--xc-info-bg\)[^}]*color:\s*var\(--xc-info-text\)/s);
         expect(statusCss).toMatch(/\.row\.error\s*\{[^}]*background:\s*var\(--xc-danger\)[^}]*color:\s*var\(--xc-on-danger\)/s);
         expect(statusCss).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg,\s*rgba\(20, 111, 52, 0\.10\)\)/s);
         expect(statusCss).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success,/s);

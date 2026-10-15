@@ -5,7 +5,6 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
@@ -55,7 +54,7 @@ describe('A-L route load failures', () => {
             { listAccounts },
         );
 
-        expect(await screen.findByText(en['accountPicker.error.load'])).toBeInTheDocument();
+        expect(await screen.findByText("Couldn't load accounts. Try again.")).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
@@ -119,7 +118,7 @@ describe('A-L route load failures', () => {
             { getAddressesByChain },
         );
 
-        expect(await screen.findByText('Could not load wallet chains. Try again.')).toBeInTheDocument();
+        expect(await screen.findByText('Could not load wallet networks. Try again.')).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
@@ -154,7 +153,7 @@ describe('A-L route load failures', () => {
             },
         );
 
-        expect(await screen.findByText(en['governance.error.polls'])).toBeInTheDocument();
+        expect(await screen.findByText("Couldn't load governance polls. Try again.")).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 

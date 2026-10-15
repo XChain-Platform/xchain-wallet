@@ -22,12 +22,14 @@
 // adding another 5s timer alongside the orderbook and open-orders
 // pollers.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { RelativeTime } from './RelativeTime.jsx';
 import tableStyles from './DataTable.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -44,29 +46,24 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
     const [addressesLoading, setAddressesLoading] = useState(true);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [addressRetryKey, setAddressRetryKey] = useState(0);
-
-    useEffect(() => {
-        setAddresses([]);
-        setRows([]);
-    }, [walletId, chainId]);
+    const addressScopeRef = useRef(/** @type {string | null} */ (null));
+    const historyRequestRef = useRef(0);
 
     useEffect(() => {
         let cancelled = false;
+        const addressScope = `${walletId}\u0000${chainId}`;
+        addressScopeRef.current = null;
+        historyRequestRef.current += 1;
+        setAddresses([]);
+        setRows([]);
         setAddressesLoading(true);
         setLoading(true);
         setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                if (!byChain || typeof byChain !== 'object' || Array.isArray(byChain)) {
-                    throw new Error('getAddressesByChain: malformed response');
-                }
-                const nextAddresses = byChain[chainId] || [];
-                if (!Array.isArray(nextAddresses)) {
-                    throw new Error('getAddressesByChain: malformed response');
-                }
-                setAddresses(nextAddresses);
+                addressScopeRef.current = addressScope;
+                setAddresses(byChain?.[chainId] || []);
                 setAddressesLoading(false);
             })
             .catch((err) => {
@@ -75,11 +72,16 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 setAddressesLoading(false);
                 setLoading(false);
             });
-        return () => { cancelled = true; };
-    }, [messaging, walletId, chainId, addressRetryKey]);
+        return () => {
+            cancelled = true;
+            historyRequestRef.current += 1;
+        };
+    }, [messaging, walletId, chainId]);
 
     const reload = useCallback(async () => {
-        if (addressesLoading) return;
+        const requestId = ++historyRequestRef.current;
+        const addressScope = `${walletId}\u0000${chainId}`;
+        if (addressesLoading || addressScopeRef.current !== addressScope) return;
         if (addresses.length === 0) {
             setRows([]);
             setLoading(false);
@@ -94,6 +96,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 }).then((resp) => ({ addr, rows: extractRows(resp), error: null }))
                   .catch((error) => ({ addr, rows: [], error }))
             ));
+            if (requestId !== historyRequestRef.current || addressScopeRef.current !== addressScope) return;
             const successes = results.filter(({ error }) => !error);
             if (successes.length === 0) throw results[0].error;
             const flat = [];
@@ -103,11 +106,15 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             flat.sort((a, b) => rowTime(b) - rowTime(a));
             setRows(flat);
         } catch (err) {
+            if (requestId !== historyRequestRef.current || addressScopeRef.current !== addressScope) return;
+            setRows([]);
             setLoadError(readFailureMessage(err, 'load your trade history'));
         } finally {
-            setLoading(false);
+            if (requestId === historyRequestRef.current && addressScopeRef.current === addressScope) {
+                setLoading(false);
+            }
         }
-    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading]);
+    }, [messaging, walletId, chainId, tick1, tick2, addresses, addressesLoading]);
 
     useEffect(() => {
         reload();
@@ -117,26 +124,19 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
         setRows([]);
     }, [chainId, tick1, tick2, walletId]);
 
-    const retryLoad = () => {
-        if (addresses.length === 0) {
-            setAddressRetryKey((key) => key + 1);
-        } else {
-            reload();
-        }
-    };
-
     const summaries = rows
         .map((row) => summarizeRow(row, tick1, tick2))
         .filter(Boolean);
 
     return (
         <section
-            aria-label="Trade history"
+            aria-label={t('components.tradeHistoryPanel.tradeHistory')}
             aria-busy={addressesLoading || loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
                 marginTop: '0.75rem',
             }}
         >
@@ -148,10 +148,10 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 gap: '0.5rem',
                 marginBottom: '0.25rem',
             }}>
-                <p style={{ margin: 0, fontWeight: 600 }}>Trade history</p>
+                <p style={{ margin: 0, fontWeight: 600 }}>{t('components.tradeHistoryPanel.tradeHistory')}</p>
                 <button
                     type="button"
-                    onClick={retryLoad}
+                    onClick={reload}
                     disabled={addressesLoading || loading}
                     style={{
                         background: 'none',
@@ -164,20 +164,15 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         color: 'inherit',
                     }}
                 >
-                    {addressesLoading || loading ? 'Loading…' : 'Refresh'}
+                    {addressesLoading || loading ? t('common.loading') : t('components.tradeHistoryPanel.refresh')}
                 </button>
             </div>
 
             {addressesLoading || loading ? (
-                <StatusMessage variant="status">Loading trade history…</StatusMessage>
+                <StatusMessage variant="status">{t('components.tradeHistoryPanel.loadingTradeHistory')}</StatusMessage>
             ) : null}
             {loadError ? (
-                <StatusMessage
-                    variant="error"
-                    recovery={{ label: 'Try again', onAction: retryLoad }}
-                >
-                    {loadError}
-                </StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             ) : null}
             {!loadError && !addressesLoading && !loading && summaries.length === 0 ? (
                 <p
@@ -187,26 +182,26 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         fontSize: '0.75rem',
                     }}
                 >
-                    No trades on this market yet.
+                    {t('components.tradeHistoryPanel.noTradesOnThisMarket')}
                 </p>
             ) : null}
             {summaries.length > 0 ? (
                 <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
                     <table className={tableStyles.table}>
-                        <caption className={tableStyles.caption}>Trade history</caption>
+                        <caption className={tableStyles.caption}>{t('components.tradeHistoryPanel.tradeHistory')}</caption>
                         <thead>
                             <tr>
-                                <th className={tableStyles.headerCell} scope="col">Time</th>
-                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
-                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
-                                <th className={tableStyles.headerCell} scope="col">Side</th>
-                                <th className={tableStyles.headerCell} scope="col">Address</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.tradeHistoryPanel.time')}</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.placeOrderPanel.price')}</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.openOrdersPanel.size')}{tick1})</th>
+                                <th className={tableStyles.headerCell} scope="col">{t('components.placeOrderPanel.side')}</th>
+                                <th className={tableStyles.headerCell} scope="col">{t('verifySignature.address')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {summaries.map((summary, idx) => {
-                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
-                                const key = summary.key || `row-${idx}`;
+                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)';
+                                const key = `${summary.ownerAddress || 'unknown'}-${summary.key || 'row'}-${idx}`;
                                 return (
                                     <tr key={key}>
                                         <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
@@ -214,12 +209,12 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                                 <button
                                                     type="button"
                                                     onClick={() => onOpenTx(summary.txHash)}
-                                                    aria-label={`Open transaction ${summary.txHash}`}
+                                                    aria-label={t('components.tradeHistoryPanel.openTransaction', { txHash: summary.txHash })}
                                                     className={tableStyles.cellButton}
                                                 >
-                                                    {summary.timeLabel}
+                                                    <RelativeTime timestamp={summary.timestamp} />
                                                 </button>
-                                            ) : summary.timeLabel}
+                                            ) : <RelativeTime timestamp={summary.timestamp} />}
                                         </td>
                                         <td
                                             className={`${tableStyles.cell} ${tableStyles.numeric}`}
@@ -232,7 +227,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                             {summary.size}
                                         </td>
                                         <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
-                                            {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                            {summary.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
                                         </td>
                                         <td className={tableStyles.cell} data-label="Address">
                                             {summary.ownerAddress ? (
@@ -257,7 +252,7 @@ function summarizeRow(row, tick1, tick2) {
         price: String(parsed.price),
         size: String(parsed.amount),
         side: parsed.side,
-        timeLabel: formatTime(parsed.timestamp),
+        timestamp: parsed.timestamp,
         ownerAddress: row.__owner?.address || null,
         txHash: parsed.txHash ? String(parsed.txHash) : null,
         key: String(parsed.actionIndex ?? parsed.txHash
@@ -270,24 +265,11 @@ function rowTime(row) {
     return Number.isFinite(ts) ? ts : 0;
 }
 
-function formatTime(unixSeconds) {
-    try {
-        const d = new Date(unixSeconds * 1000);
-        return d.toLocaleString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    } catch {
-        return '--';
-    }
-}
-
 function extractRows(resp) {
+    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     if (Array.isArray(resp.history)) return resp.history;
-    throw new Error('getMarketHistory: malformed response');
+    return [];
 }

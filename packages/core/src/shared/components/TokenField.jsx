@@ -9,19 +9,18 @@
 // contact legal@dankest.llc.
 
 import { useId } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '../../index.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
 import styles from './TokenField.module.css';
-import { StatusMessage } from '@xchain-wallet/core/ui';
-
-const chainRegistry = registryLib.defaultRegistry();
+import inputStyles from '../../ui/Input.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * TokenField: the canonical inline token/asset selector for forms.
  *
  * A field-shaped button that shows the selected token's icon (with its
- * chain pip), ticker, and chain, and opens the full-page TokenPicker when
+ * chain pip) and ticker, and opens the full-page TokenPicker when
  * tapped. Presentation + click only: the host owns the picker navigation and
  * feeds the chosen `{ chainId, tick }` back in via `value`, mirroring how
  * AmountField is presentation-only and the route owns the data. This keeps
@@ -44,11 +43,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} [props.id]
  */
 export function TokenField({
-    label = 'Token',
+    label = t('send.fields.token'),
     size = 'md',
     value = null,
     onOpenPicker,
-    placeholder = 'Select a token',
+    placeholder = t('components.tokenField.selectAToken'),
     disabled = false,
     error,
     id,
@@ -60,15 +59,13 @@ export function TokenField({
     const chainId = value?.chainId;
     const tick = value?.tick;
     const hasValue = Boolean(chainId && tick);
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const networkSuffix = descriptor?.networkKind && descriptor.networkKind !== 'mainnet'
-        ? ` · ${descriptor.networkKind}`
-        : '';
-    const chainName = descriptor ? `${descriptor.displayName}${networkSuffix}` : chainId;
     const iconSize = size === 'lg' ? 24 : 20;
 
     // Accessible name carries the field label + current selection (or the
     // empty-state text), since the visual chip isn't a native form control.
+    // The chain shows only as the icon overlay, so the name says which chain
+    // the token is on (without the network kind): every chain lists XCHAIN.
+    const chainName = hasValue ? registryLib.defaultRegistry().get(chainId)?.displayName : null;
     const selectionText = hasValue
         ? `${tick}${chainName ? ` on ${chainName}` : ''}`
         : placeholder;
@@ -92,9 +89,6 @@ export function TokenField({
                         <TickerIcon chainId={chainId} tick={tick} size={iconSize} />
                         <span className={styles.text}>
                             <span className={styles.tick} title={tick}>{tick}</span>
-                            {chainName ? (
-                                <span className={styles.chain} title={chainName}>on {chainName}</span>
-                            ) : null}
                         </span>
                     </>
                 ) : (
@@ -107,7 +101,7 @@ export function TokenField({
                 </span>
             </button>
             {error ? (
-                <StatusMessage variant="error" id={errorId} className={styles.error}>{error}</StatusMessage>
+                <div id={errorId} className={inputStyles.error} role="alert">{error}</div>
             ) : null}
         </div>
     );

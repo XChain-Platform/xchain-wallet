@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 
 /**
@@ -31,6 +31,13 @@ export function useAccountList(walletId, refreshKey) {
     const [accounts, setAccounts] = useState(
         /** @type {Array<{ id: string, index: number, name?: string }>} */ ([]),
     );
+    const scopeRef = useRef({ walletId, messaging });
+    if (scopeRef.current.walletId !== walletId || scopeRef.current.messaging !== messaging) {
+        scopeRef.current = { walletId, messaging };
+        // React retries this render with an empty list, so wallet chrome never
+        // commits an account name from a different wallet or bridge.
+        setAccounts([]);
+    }
 
     useEffect(() => {
         if (!walletId || typeof messaging?.listAccounts !== 'function') {
@@ -38,10 +45,6 @@ export function useAccountList(walletId, refreshKey) {
             return undefined;
         }
         let cancelled = false;
-        // Clear first: an account list belonging to the PREVIOUS wallet
-        // must not survive into a render that already carries the new
-        // walletId, or the header would name a foreign account.
-        setAccounts([]);
         Promise.resolve(messaging.listAccounts(walletId))
             .then((list) => {
                 if (cancelled) return;

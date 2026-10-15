@@ -167,6 +167,8 @@ function makeNonce() {
 let bridgeWindow = null;
 /** @type {((event: MessageEvent) => void) | null} */
 let messageListener = null;
+/** @type {((event: MessageEvent) => void) | null} */
+let readyListener = null;
 /** @type {Map<string, { resolve: (v: any) => void, reject: (e: Error) => void }>} */
 const pendingCalls = new Map();
 let nextCallId = 1;
@@ -205,14 +207,15 @@ function openBridgeWindow() {
             messageListener = handleBridgeMessage;
             window.addEventListener('message', messageListener);
         }
-        const onReady = (event) => {
+        readyListener = (event) => {
             if (event.source !== win) return;
             if (event.data && event.data.type === BRIDGE_READY_MESSAGE) {
-                window.removeEventListener('message', onReady);
+                window.removeEventListener('message', readyListener);
+                readyListener = null;
                 resolve(win);
             }
         };
-        window.addEventListener('message', onReady);
+        window.addEventListener('message', readyListener);
     });
 }
 
@@ -316,4 +319,10 @@ export function resetTrezorConnect() {
         }
     }
     bridgeWindow = null;
+    if (typeof window !== 'undefined') {
+        if (readyListener) window.removeEventListener('message', readyListener);
+        if (messageListener) window.removeEventListener('message', messageListener);
+    }
+    readyListener = null;
+    messageListener = null;
 }

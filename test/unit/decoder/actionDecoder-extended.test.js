@@ -67,6 +67,28 @@ describe('decodeAction extended', () => {
             const d = decodeAction({ action: 'MINT', params: { TICK: 'X', AMOUNT: '1', MEMO: 'hello' } });
             expect(d.details.find((r) => r.label === 'Memo').value).toBe('hello');
         });
+
+        it('matches the built amount precision and asset in review details', () => {
+            const mint = decodeAction({
+                action: 'MINT', params: { TICK: 'ART', AMOUNT: '1.50' },
+            });
+            const destroy = decodeAction({
+                action: 'DESTROY', params: { VERSION: '0', TICK: 'ART', AMOUNT: '0.250' },
+            });
+            const issue = decodeAction({
+                action: 'ISSUE',
+                params: {
+                    VERSION: '0', TICK: 'ART', MAX_SUPPLY: '10.00',
+                    MINT_SUPPLY: '2.50', CALLBACK_TICK: 'PAY', CALLBACK_AMOUNT: '0.125',
+                },
+            });
+
+            expect(mint.details.find((r) => r.label === 'Amount').value).toBe('1.50 ART');
+            expect(destroy.details.find((r) => r.label === 'Amount').value).toBe('0.250 ART');
+            expect(issue.details.find((r) => r.label === 'Max supply').value).toBe('10.00 ART');
+            expect(issue.details.find((r) => r.label === 'Initial mint').value).toBe('2.50 ART');
+            expect(issue.details.find((r) => r.label === 'Callback amount').value).toBe('0.125 PAY');
+        });
     });
 
     describe('DESTROY', () => {
@@ -189,7 +211,7 @@ describe('decodeAction extended', () => {
             const rows = Object.fromEntries(d.details.map((r) => [r.label, r.value]));
             expect(rows['Callback at block']).toBe('900100');
             expect(rows['Callback token']).toBe('XCHAIN');
-            expect(rows['Callback amount']).toBe('1');
+            expect(rows['Callback amount']).toBe('1 XCHAIN');
             expect(d.warnings.some((w) => /recall every holder/i.test(w))).toBe(true);
         });
 
@@ -563,6 +585,18 @@ describe('decodeAction extended', () => {
             expect(d.warnings.some((w) => /positive/i.test(w))).toBe(true);
         });
     });
+
+    describe('CALLBACK', () => {
+        it('shows the exact optional memo and warns when it is malformed', () => {
+            const d = decodeAction({
+                action: 'CALLBACK',
+                params: { VERSION: '0', TICK: 'JDOG', MEMO: 'final;note' },
+            });
+            expect(d.details).toContainEqual({ label: 'Memo', value: 'final;note' });
+            expect(d.warnings.some((warning) => /Memo contains/.test(warning))).toBe(true);
+        });
+    });
+
     // PC-30. The two standing warnings are the point of this case: they
     // are properties of the protocol (the 24h delay with no retraction,
     // and third parties settling against the quote) rather than of any

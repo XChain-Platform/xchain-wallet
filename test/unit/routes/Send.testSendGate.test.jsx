@@ -21,9 +21,23 @@
 // with a threshold configured, and assert the user is actually stopped, i.e.
 // nothing crosses the messaging boundary until the warning is acknowledged.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+
+const renderMetrics = vi.hoisted(() => ({ noveltyChecks: vi.fn() }));
+
+vi.mock('../../../packages/core/src/flows/recipientNovelty.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        checkRecipientNovelty: (...args) => {
+            renderMetrics.noveltyChecks();
+            return actual.checkRecipientNovelty(...args);
+        },
+    };
+});
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
@@ -92,6 +106,7 @@ async function fillNativeSend({ to = NOVEL, amount = '0.02' } = {}) {
 
 const sendButton = () => screen.getByRole('button', { name: /^Send$/ });
 
+beforeEach(() => renderMetrics.noveltyChecks.mockClear());
 afterEach(() => cleanup());
 
 describe('Send: test-send gate reaches the screen', () => {
@@ -160,5 +175,23 @@ describe('Send: test-send gate reaches the screen', () => {
         fireEvent.click(sendButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         expect(screen.queryByText(/First payment to this address/i)).toBeNull();
+    });
+
+    it('does not rescan contacts and history on amount keystrokes', async () => {
+        const history = Array.from({ length: 5_000 }, (_, index) => ({
+            action: 'SEND',
+            destination: `past-recipient-${index}`,
+        }));
+        mount({ thresholdSats: 1, history });
+        await fillNativeSend({ amount: '0.02' });
+        await screen.findByText(/First payment to this address/i);
+        const checksAfterRecipient = renderMetrics.noveltyChecks.mock.calls.length;
+        const amountField = screen.getByLabelText(/^Amount \(/);
+
+        fireEvent.change(amountField, { target: { value: '0.021' } });
+        fireEvent.change(amountField, { target: { value: '0.0212' } });
+        fireEvent.change(amountField, { target: { value: '0.02123' } });
+
+        expect(renderMetrics.noveltyChecks).toHaveBeenCalledTimes(checksAfterRecipient);
     });
 });

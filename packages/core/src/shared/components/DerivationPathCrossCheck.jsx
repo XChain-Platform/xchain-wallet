@@ -8,9 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState, useEffect } from 'react';
-import { AddressText, InfoTip } from '@xchain-wallet/core/ui';
+import { useEffect, useRef, useState } from 'react';
+import { AddressText, Checkbox, InfoTip } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * DerivationPathCrossCheck (§18.5): reusable UI block that sits above
@@ -57,6 +58,8 @@ export function DerivationPathCrossCheck({
         : signerKind === 'ledger' ? 'Ledger' : 'your device';
 
     const [confirmed, setConfirmed] = useState(false);
+    const onConfirmedChangeRef = useRef(onConfirmedChange);
+    onConfirmedChangeRef.current = onConfirmedChange;
 
     // Reset the checkbox whenever the path or address changes. The user
     // must re-confirm if the values they were verifying have rotated under
@@ -64,8 +67,8 @@ export function DerivationPathCrossCheck({
     // change.
     useEffect(() => {
         setConfirmed(false);
-        onConfirmedChange?.(false);
-    }, [path, address, onConfirmedChange]);
+        onConfirmedChangeRef.current?.(false);
+    }, [path, address]);
 
     function handleToggle(event) {
         const next = event.target.checked;
@@ -74,47 +77,42 @@ export function DerivationPathCrossCheck({
     }
 
     return (
-        <section className={styles.root} aria-label="Hardware signer verification">
-            <p className={styles.title}>Signing with hardware device</p>
+        <section className={styles.root} aria-label={t('components.derivationPathCrossCheck.hardwareSignerVerification')}>
+            <p className={styles.title}>{t('components.derivationPathCrossCheck.signingWithHardwareDevice')}</p>
             <dl className={styles.grid}>
-                <dt className={styles.label}>Signer</dt>
+                <dt className={styles.label}>{t('signerSelect.title')}</dt>
                 <dd className={styles.value}>{signerName}</dd>
                 <dt className={styles.label}>
-                    Derivation path
+                    {t('multisig.share.derivationPath')}
                     <InfoTip
-                        aria="Derivation path help"
-                        label="Locates this account within your recovery phrase. Compare it with your device to make sure you sign from the intended account."
+                        aria={t('components.derivationPathCrossCheck.derivationPathHelpLabel')}
+                        label={t('components.derivationPathCrossCheck.locatesThisAccountWithinYour')}
                     />
                 </dt>
                 <dd className={styles.value}><code className={styles.path}>{path}</code></dd>
-                <dt className={styles.label}>Address</dt>
+                <dt className={styles.label}>{t('verifySignature.address')}</dt>
                 <dd className={styles.value}><AddressText address={address} /></dd>
             </dl>
             <p className={styles.instruction}>
-                Verify <strong>both</strong> the derivation path and address on your <strong>{deviceLabel}</strong> match the values above.
-                Approve only when both match.
+                {t('components.derivationPathCrossCheck.verify')} <strong>{t('components.derivationPathCrossCheck.both')}</strong> {t('components.derivationPathCrossCheck.theDerivationPathAndAddress')} <strong>{deviceLabel}</strong> {t('components.derivationPathCrossCheck.matchTheValuesAboveApprove')}
             </p>
             <p className={styles.deviceHint}>
-                If either value is different, the device may be using a different account or signing address.
-                Reject on the device. Nothing is signed, and you can check the selected account before trying again.
+                {t('components.derivationPathCrossCheck.ifEitherValueIsDifferent')}
             </p>
             <p className={styles.deviceHint}>
                 {signerKind === 'trezor'
-                    ? 'Trezor displays the address and the derivation path side-by-side on the confirmation screen.'
+                    ? t('components.derivationPathCrossCheck.trezorDisplaysTheAddressAnd')
                     : signerKind === 'ledger'
-                    ? 'Ledger displays the address on the main screen. On Nano models, press the right button to step through to the path; on Stax, the path appears below the address.'
-                    : 'Step through the device screens to compare both values.'}
+                    ? t('components.derivationPathCrossCheck.ledgerDisplaysTheAddressOn')
+                    : t('components.derivationPathCrossCheck.stepThroughTheDeviceScreens')}
             </p>
             {requireExplicitConfirm ? (
-                <label className={styles.confirmRow}>
-                    <input
-                        type="checkbox"
-                        checked={confirmed}
-                        onChange={handleToggle}
-                        className={styles.confirmCheckbox}
-                    />
-                    <span>I've verified the path and address on my {deviceLabel}.</span>
-                </label>
+                <Checkbox
+                    className={styles.confirmRow}
+                    label={t('components.derivationPathCrossCheck.iVeVerifiedThePath', { deviceLabel })}
+                    checked={confirmed}
+                    onChange={handleToggle}
+                />
             ) : null}
         </section>
     );

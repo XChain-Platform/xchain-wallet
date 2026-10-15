@@ -70,8 +70,8 @@ describe('GovernancePolls states', () => {
             }),
         });
 
-        const question = await screen.findByText('Ship the release?');
-        fireEvent.click(question.closest('button'));
+        await screen.findByText('Ship the release?');
+        fireEvent.click(screen.getByRole('button', { name: /Ship the release/ }));
         expect(onOpenPoll).toHaveBeenCalledWith(CHAIN, 11);
         expect(screen.getByRole('button', { name: 'Create poll' })).toBeInTheDocument();
     });

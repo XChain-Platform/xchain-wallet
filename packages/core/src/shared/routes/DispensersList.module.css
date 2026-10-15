@@ -2,26 +2,26 @@
    Send token selector (BalanceList) but with a 48px token logo (matching the token selector) and
    the chain icon overlaid in its lower-right corner. */
 
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    /* Same tight toolbar-to-list gap as the messaging inbox. */
-    margin-bottom: calc(var(--xc-space-1) + 2px);
-}
-
 .search {
     flex: 1 1 0;
     min-width: 0;
+    height: var(--xc-control-h-md);
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
+}
+
+.searchField {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.searchField > div {
+    margin-bottom: 0;
 }
 
 .search::placeholder {
@@ -29,31 +29,25 @@
 }
 
 .list {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
-.row {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: none;
+.listItem + .listItem {
     border-top: 1px solid var(--xc-border);
-    background: transparent;
-    width: 100%;
-    text-align: start;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
 }
 
-.row:first-of-type {
-    border-top: none;
+.row {
+    min-width: 0;
+    padding: var(--xc-space-3);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
 }
 
 .row:hover {
@@ -139,6 +133,7 @@
 /* Status chip on the row's trailing edge; tinted per state. */
 .status {
     flex: 0 0 auto;
+    white-space: nowrap;
     font-size: var(--xc-text-xs);
     font-weight: 600;
     text-transform: uppercase;
@@ -150,15 +145,15 @@
 }
 
 .status_open {
-    background: rgba(34, 197, 94, 0.15);
-    color: var(--xc-success, #22C55E);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
 }
 
 .status_canceled,
 .status_cancelled,
 .status_expired {
-    background: rgba(220, 38, 38, 0.15);
-    color: var(--xc-danger-fg);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
 }
 
 /* Drained or ran to completion: over, but not an owner-initiated teardown. */
@@ -201,8 +196,8 @@
 }
 
 .status_cancelling {
-    background: rgba(234, 179, 8, 0.15);
-    color: var(--xc-warning, #B45309);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
 }
 
 @media not all and (min-width: 400px) {
@@ -234,10 +229,14 @@
         align-items: flex-start;
     }
 
-    .status {
+    .row > :last-child {
+        grid-column: 2;
         max-width: 100%;
+        justify-content: flex-start;
+    }
+
+    .status {
         box-sizing: border-box;
-        white-space: normal;
         overflow-wrap: anywhere;
         line-height: 1.3;
     }

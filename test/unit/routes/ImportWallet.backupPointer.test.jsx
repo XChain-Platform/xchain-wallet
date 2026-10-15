@@ -27,7 +27,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     return {
         ...actual,
         QrScanner: ({ onFrame }) => (
-            <button type="button" data-testid="fake-scan" onClick={() => onFrame(globalThis.__XC_SCAN_FRAME__)}>
+            <button type="button" aria-label="Emit scanned backup pointer" onClick={() => onFrame(globalThis.__XC_SCAN_FRAME__)}>
                 scan
             </button>
         ),
@@ -40,7 +40,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 // renders and the button is simply absent. Say that out loud instead of
 // leaving a bare "cannot find fake-scan" to read like a product bug.
 function clickFakeScan() {
-    const stub = screen.queryByTestId('fake-scan');
+    const stub = screen.queryByRole('button', { name: 'Emit scanned backup pointer' });
     expect(
         stub,
         'the @xchain-wallet/core/ui mock never reached ImportWallet - the route resolved '

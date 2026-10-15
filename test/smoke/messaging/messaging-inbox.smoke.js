@@ -105,11 +105,11 @@ assert.ok(
     'MessagingInbox sends handshake software and hardware signing through the owner confirm lane',
 );
 assert.ok(
-    /buildHandshakeActionData\(\{[\s\S]*?version:\s*1,[\s\S]*?lane\.run\(\{[\s\S]*?actionData/.test(src),
+    /buildHandshakeActionData\(\{[\s\S]*?version:\s*1,[\s\S]*?(?:lane|LaneRef\.current)\.run\(\{[\s\S]*?actionData/.test(src),
     'MessagingInbox confirms a format-1 response handshake before signing',
 );
 assert.ok(
-    /if \(lane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.lane\.confirmProps\}/.test(src),
+    /if \((?:shareTarget && )?(?:lane|shareLane)\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.(?:lane|shareLane)\.confirmProps\}/.test(src),
     'MessagingInbox renders the shared dry-run confirmation screen for the reply',
 );
 assert.ok(/Share my key/.test(src),
@@ -127,10 +127,11 @@ assert.ok(/toAddress: selectedCounterparty/.test(src) && /message: t,/.test(src)
     'the reply prefill carries the recipient and the typed body');
 assert.ok(/fixedEncryption: threadEncryption/.test(src) && /threadEncryption\b/.test(src),
     'the reply locks the conversation encryption method onto the form');
-assert.ok(/className=\{local\.composerInput\}/.test(src) && /className=\{local\.composerSend\}/.test(src),
-    'composer pairs a message input with a send button');
-assert.ok(/className=\{local\.composerSend\} aria-label="Send message"/.test(src),
-    'the composer send button is labelled and submits the form (Enter or click)');
+assert.ok(/<Input[\s\S]*?className=\{local\.composerInput\}/.test(src)
+    && /<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
+    'composer pairs the shared message Input with a shared send Button');
+assert.ok(/<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
+    'the shared composer send Button is labelled and submits the form (Enter or click)');
 assert.ok(!/function SendConfirm\b/.test(src) && !/messaging\.messageAction\s*\(/.test(src),
     'the bespoke SendConfirm screen is gone; ComposeMessage is the single send surface');
 assert.ok(!/>\s*Reply\s*</.test(src),
@@ -160,8 +161,8 @@ assert.ok(/function formatDaySeparator\b/.test(src) && /'Today'/.test(src) && /'
     'day separator labels Today / Yesterday and dates');
 assert.ok(/local\.daySeparator/.test(src),
     'thread renders a day-separator row');
-assert.ok(/function formatTime\b/.test(src),
-    'message bubbles show a per-message time-of-day caption');
+assert.ok(/<RelativeTime timestamp=\{m\.timestamp\}/.test(src),
+    'message bubbles use the shared recent and absolute timestamp display');
 
 // --- 2e. iMessage-style bubbles ---------------------------------------
 

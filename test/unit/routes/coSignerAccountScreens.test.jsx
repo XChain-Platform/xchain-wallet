@@ -105,6 +105,6 @@ describe('co-signer account screens', () => {
         });
 
         expect(await screen.findByText(/starting with 02 or 03/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create agent account' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Review agent account' }).disabled).toBe(true);
     });
 });

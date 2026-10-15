@@ -3,12 +3,43 @@
    like an encryption description, not a ticker). */
 
 .wrap {
+    --xc-control-height: var(--xc-control-h-md);
+    --xc-control-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --xc-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --xc-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+    --xc-control-hit-inset: -2px 0;
     position: relative;
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-3);
+    gap: var(--xc-label-gap);
+    /* No outer margin: the form around the field spaces it with --xc-form-gap,
+       the same as every Input, so a picker never adds its own gap on top. */
+    margin: 0;
+}
+
+.sm {
+    --xc-control-height: var(--xc-control-h-sm);
+    --xc-control-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    --xc-control-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
+    --xc-control-font-size: var(--xc-control-font-sm, var(--xc-control-font));
+    --xc-control-hit-inset: -6px 0;
+}
+
+.md {
+    --xc-control-height: var(--xc-control-h-md);
+    --xc-control-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --xc-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --xc-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+    --xc-control-hit-inset: -2px 0;
+}
+
+.lg {
+    --xc-control-height: var(--xc-control-h-lg);
+    --xc-control-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    --xc-control-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
+    --xc-control-font-size: var(--xc-control-font-lg, var(--xc-control-font));
+    --xc-control-hit-inset: 0;
 }
 
 .label {
@@ -18,16 +49,25 @@
 }
 
 .trigger {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     appearance: none;
+    box-sizing: border-box;
+    position: relative;
     width: 100%;
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: 8px 12px;
-    min-height: 36px;
+    height: var(--xc-control-height);
+    min-height: var(--xc-control-height);
+    padding: 0 var(--xc-control-pad-x);
+    padding: 0 var(--xc-control-padding-x);
+    font-size: var(--xc-control-font);
+    font-size: var(--xc-control-font-size);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     color: var(--xc-text);
     cursor: pointer;
     text-align: start;
@@ -51,8 +91,8 @@
 
 .icon {
     flex: 0 0 auto;
-    width: 26px;
-    height: 26px;
+    width: var(--xc-control-icon-size);
+    height: var(--xc-control-icon-size);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -63,14 +103,14 @@
 }
 
 .icon img {
-    width: 20px;
-    height: 20px;
+    width: 100%;
+    height: 100%;
     display: block;
 }
 
 .icon svg {
-    width: 16px;
-    height: 16px;
+    width: 100%;
+    height: 100%;
 }
 
 .text {
@@ -83,11 +123,21 @@
 
 .labelText {
     font-weight: 600;
-    font-size: var(--xc-text-sm);
+    font-size: inherit;
     color: var(--xc-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Compact controls keep a 44px coarse-pointer target without enlarging the
+   painted control box. */
+@media (pointer: coarse), (hover: none) {
+    .trigger::before {
+        content: '';
+        position: absolute;
+        inset: var(--xc-control-hit-inset);
+    }
 }
 
 .sub {
@@ -115,9 +165,9 @@
     inset-inline-end: 0;
     z-index: var(--xc-z-dropdown);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
     max-height: 320px;
     overflow-y: auto;
 }

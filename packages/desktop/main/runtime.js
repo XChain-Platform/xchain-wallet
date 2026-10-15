@@ -69,6 +69,7 @@ import { createBroadcastQueueStore, sealBroadcastQueueStore } from '@xchain-wall
 import { createBroadcastQueueStorage } from '@xchain-wallet/extension/src/background/broadcastQueueStorage.js';
 import { restoreLabelSyncBestEffort } from '@xchain-wallet/extension/src/background/walletCreate.js';
 import { startLabelSyncRestoreTask } from '@xchain-wallet/extension/src/background/labelSyncRestoreTasks.js';
+import { createVaultKeyring } from '@xchain-wallet/extension/src/background/vaultKeyring.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
 import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
@@ -158,11 +159,9 @@ export function createRuntime(deps) {
         dispenserEscrowWatcher: null,
         coinpayAutopayWatcher: null,
         // PC-16: pre-unlocked software signers, populated by the shared
-        // wallet.unlock handler while the password is in scope (wallet
-        // seeds have their own per-wallet KDF, so the keychain-cached
-        // master key alone cannot sign). A keychain auto-unlock leaves
-        // this pool empty: the wallet works with per-op passwords and
-        // auto-pay stays disarmed until one password unlock arms it.
+        // wallet.unlock handler while the password is in scope. A keychain
+        // restore can also populate wallets sealed under the vault key; any
+        // wallet with independent KDF params still requires a password.
         signerPool: new signersLib.SignerPool(),
         // The windowless idle check in flight, shared by concurrent callers.
         idleLockInFlight: null,
@@ -358,6 +357,27 @@ export async function ensureHost(runtime) {
         await vault.open();
         runtime.vault = vault;
 
+        // The keychain restores the already-derived vault key rather than a
+        // password. Reuse it only for wallet records carrying identical KDF
+        // params, which is the primary wallet created with the vault. Added
+        // wallets with independent params remain unpooled and require unlock.
+        try {
+            const meta = await runtime.metaBackend.load();
+            if (meta?.kdfParams) {
+                await runtime.signerPool.populate({
+                    vault,
+                    masterKey,
+                    masterKeyKdfParams: meta.kdfParams,
+                    chainRegistry: runtime.chainRegistry,
+                    sdkRegistry: runtime.sdkRegistry,
+                });
+            }
+        } catch {
+            // Best-effort restoration. The network switch locks before reload
+            // when its wallet has no signer, so this cannot leave a false
+            // unlocked state with address derivation unavailable.
+        }
+
         // Apply the egress policy before the host or any watcher can reach
         // the network (both boot and the `onUnlocked` path land here).
         if (runtime.onPrivacySettingsChanged) {
@@ -376,11 +396,37 @@ export async function ensureHost(runtime) {
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
             signerPool: runtime.signerPool,
+            // A password change re-seals the vault; the keychain-cached
+            // session key must follow it or the next launch opens nothing.
+            vaultKeyring: createVaultKeyring({
+                metaBackend: runtime.metaBackend,
+                sessionBackend: runtime.sessionBackend,
+            }),
             broadcastQueueStore: runtime.broadcastQueueStore,
             getDiagnosticContext: runtime.getDiagnosticContext,
             // Re-applies routing on any settings.update touching `privacy`,
             // so the toggle takes effect on the next request.
             onPrivacySettingsChanged: runtime.onPrivacySettingsChanged,
+            surfaceStateEvents: {
+                async publish(kind) {
+                    if (kind !== 'network') return;
+                    await runtime.notificationService?.refresh();
+                    for (const watcher of [
+                        runtime.governancePollWatcher,
+                        runtime.deadlineWatcher,
+                        runtime.dispenserEscrowWatcher,
+                    ]) {
+                        if (!watcher) continue;
+                        watcher.stop();
+                        watcher.start();
+                    }
+                    if (runtime.coinpayAutopayWatcher) {
+                        runtime.coinpayAutopayWatcher.stop();
+                        runtime.coinpayAutopayWatcher.start();
+                        await runtime.coinpayAutopayWatcher.refresh();
+                    }
+                },
+            },
         });
 
         // §46: start the live notification watcher. main/index.js injects the

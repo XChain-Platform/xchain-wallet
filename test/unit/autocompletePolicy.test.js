@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest';
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
 
+import { en } from '../../packages/core/src/i18n/locales/en/index.js';
+
 const traverse = _traverse.default || _traverse;
 const sources = import.meta.glob(
     ['../../packages/**/*.jsx', '!../../packages/**/node_modules/**'],
@@ -23,6 +25,12 @@ function attributeValue(attribute, source) {
     if (!attribute.value) return 'true';
     if (attribute.value.type === 'StringLiteral') return attribute.value.value;
     if (attribute.value.type === 'JSXExpressionContainer') {
+        // A label written as t('key') is judged by the English copy it renders.
+        const expression = attribute.value.expression;
+        if (expression.type === 'CallExpression' && expression.callee.name === 't'
+            && expression.arguments[0]?.type === 'StringLiteral' && expression.arguments[0].value in en) {
+            return en[expression.arguments[0].value];
+        }
         return source.slice(attribute.value.expression.start, attribute.value.expression.end);
     }
     return '';
@@ -125,13 +133,41 @@ describe('browser autocomplete policy', () => {
                     failures.push(description(path, entry));
                     continue;
                 }
-                if (/(mnemonic|recovery phrase|private key|\bwif\b)/i.test(text)
-                    && entry.attributes.spellCheck !== 'false') {
-                    failures.push(`${description(path, entry)} enables spellcheck`);
+                if (/(mnemonic|recovery phrase)/i.test(text)) {
+                    if (entry.attributes.autoCapitalize !== 'off') {
+                        failures.push(`${description(path, entry)} enables capitalization`);
+                    }
+                    if (entry.attributes.autoCorrect !== 'off') {
+                        failures.push(`${description(path, entry)} enables autocorrect`);
+                    }
+                }
+                if (/(mnemonic|recovery phrase|private key|\bwif\b)/i.test(text)) {
+                    if (entry.attributes.spellCheck !== 'false') {
+                        failures.push(`${description(path, entry)} enables spellcheck`);
+                    }
                 }
             }
         }
         expect(failures).toEqual([]);
+    });
+
+    it('keeps recovery-word verification fields free of text transformations', () => {
+        const recoveryWordFields = [
+            ...fileEnding('CreateWallet.jsx').controls.filter(
+                (entry) => /^(`Word \$\{\w+\}`|Word \{\w+\})$/.test(entry.attributes.label),
+            ),
+            ...fileEnding('MigrateToBip39.jsx').controls.filter(
+                (entry) => /^(`Word \$\{\w+\}`|Word \{\w+\})$/.test(entry.attributes.label),
+            ),
+        ];
+
+        expect(recoveryWordFields).toHaveLength(2);
+        for (const entry of recoveryWordFields) {
+            expect(entry.attributes.autoComplete).toBe('off');
+            expect(entry.attributes.autoCapitalize).toBe('off');
+            expect(entry.attributes.autoCorrect).toBe('off');
+            expect(entry.attributes.spellCheck).toBe('false');
+        }
     });
 
     it('turns browser autocomplete off for address entry fields', () => {

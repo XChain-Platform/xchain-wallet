@@ -26,6 +26,18 @@ function deferred() {
     return { promise, resolve };
 }
 
+function balances({ xchain = '1000', xchainDivisibility = 2, btc = '500000000' } = {}) {
+    return {
+        [CHAIN]: [{
+            address: ADDRESS.address,
+            balances: {
+                native: { tick: 'BTC', quantity: btc, divisibility: 8 },
+                tokens: [{ tick: 'XCHAIN', quantity: xchain, divisibility: xchainDivisibility }],
+            },
+        }],
+    };
+}
+
 function mount(props = {}, overrides = {}, viewportWidth = null) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
@@ -59,7 +71,9 @@ describe('PlaceOrderPanel validation', () => {
         mount({}, { getWalletBalances: vi.fn(() => balanceRequest.promise) });
 
         expect(screen.getByRole('status')).toHaveTextContent('Loading wallet balances…');
-        expect(screen.getByRole('button', { name: 'Loading wallet…' })).toBeDisabled();
+        const loadingSubmit = screen.getByRole('button', { name: 'Place buy order' });
+        expect(loadingSubmit).toBeDisabled();
+        expect(loadingSubmit).toHaveAttribute('aria-busy', 'true');
 
         await act(async () => balanceRequest.resolve({}));
 
@@ -79,7 +93,72 @@ describe('PlaceOrderPanel validation', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('accepts grouped decimal entry and uses theme tokens for side controls', async () => {
+    it('uses a consent checkbox for CoinPay auto-pay', async () => {
+        mount();
+
+        const consent = await screen.findByRole('checkbox', {
+            name: /Enable CoinPay auto-pay/,
+        });
+        expect(consent).toBeChecked();
+        fireEvent.click(consent);
+        expect(consent).not.toBeChecked();
+    });
+
+    it('rejects wire amounts with more precision than either market asset supports', async () => {
+        const messaging = mount({}, {
+            getWalletBalances: vi.fn().mockResolvedValue(balances()),
+        });
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1.001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Size can have at most 2 decimal places for XCHAIN.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '0.000000001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Price and size total can have at most 8 decimal places for BTC.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects a give amount above the funding address balance before review', async () => {
+        const messaging = mount({}, {
+            getWalletBalances: vi.fn().mockResolvedValue(balances({ xchain: '1000' })),
+        });
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '10.01' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Give amount exceeds your available XCHAIN balance of 10.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('uses token metadata to validate a receive-side asset absent from wallet balances', async () => {
+        const messaging = mount({ tick2: 'OTHER' }, {
+            getWalletBalances: vi.fn().mockResolvedValue(balances()),
+            getTokenInfo: vi.fn(async ({ tick }) => ({ divisibility: tick === 'OTHER' ? 1 : 2 })),
+        });
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
+        fireEvent.change(screen.getByLabelText('Price (OTHER)'), { target: { value: '0.01' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'OTHER' })));
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Price and size total can have at most 1 decimal place for OTHER.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('accepts grouped decimal entry and selects the order side as a radio group', async () => {
         mount();
         const price = await screen.findByLabelText('Price (BTC)');
         fireEvent.change(price, { target: { value: '1,234.5' } });
@@ -87,19 +166,26 @@ describe('PlaceOrderPanel validation', () => {
         expect(price.style.textAlign).toBe('right');
         expect(price.style.fontVariantNumeric).toBe('tabular-nums');
 
-        const buy = screen.getByRole('button', { name: 'Buy XCHAIN' });
-        const sell = screen.getByRole('button', { name: 'Sell XCHAIN' });
+        const buy = screen.getByRole('radio', { name: 'Buy XCHAIN' });
+        const sell = screen.getByRole('radio', { name: 'Sell XCHAIN' });
         expect(buy.parentElement.className).toMatch(/sideToggle/);
-        expect(buy.style.background).toBe('var(--xc-success)');
-        expect(sell.style.background).toBe('var(--xc-danger)');
-        expect(buy.style.color).toBe('var(--xc-on-accent)');
+        expect(buy).toHaveAttribute('aria-checked', 'true');
+        expect(buy).toHaveAttribute('data-tone', 'success');
+        expect(sell).toHaveAttribute('data-tone', 'danger');
+        fireEvent.keyDown(buy, { key: 'ArrowRight' });
+        expect(sell).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('button', { name: 'Place sell order' })).toBeEnabled();
+
+        const expiration = screen.getByRole('combobox', { name: 'Expiration' });
+        fireEvent.change(expiration, { target: { value: 'custom' } });
+        expect(screen.getByLabelText('Custom expiration')).toBeInTheDocument();
     });
 
     it('renders the 360px layout hooks for stacked fields and a visible side toggle', async () => {
         mount({}, {}, 360);
 
         await screen.findByLabelText('Price (BTC)');
-        expect(screen.getByRole('group', { name: 'Order side' }).className).toMatch(/sideToggle/);
+        expect(screen.getByRole('radiogroup', { name: 'Order side' }).className).toMatch(/sideToggle/);
         expect(screen.getByRole('group', { name: 'Price and amount' }).className).toMatch(/priceAmountFields/);
 
         const tradingCss = readFileSync(resolve(
@@ -193,11 +279,117 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
         pressEnter(await screen.findByRole('button', { name: 'Review' }));
         expect(await screen.findByRole('button', { name: 'Edit order' })).toBeInTheDocument();
+        expect(screen.getAllByText(ADDRESS.address)).toHaveLength(2);
+        expect(screen.getByText('Settlement address')).toBeInTheDocument();
 
         fireEvent.keyDown(window, { key: 'Escape' });
 
         expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
         expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
         expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();
+    });
+
+    it('returns from review without resubmitting and preserves the order fields', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        mount({}, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        });
+
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Edit order' }))).toBe(false);
+        expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
+        expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
+        expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();
+    });
+
+    it('clears the review focus timer on unmount', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        mount({}, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        });
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        const setTimer = vi.spyOn(globalThis, 'setTimeout').mockImplementationOnce(() => 424242);
+        const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+        try {
+            fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+            expect(setTimer).toHaveBeenCalled();
+            cleanup();
+            expect(clearTimer).toHaveBeenCalledWith(424242);
+        } finally {
+            setTimer.mockRestore();
+            clearTimer.mockRestore();
+        }
+    });
+
+    it('ignores a watcher result after the wallet changes', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        const request = deferred();
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: watchAddress.id }),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+            composeForConfirm: vi.fn(),
+            buildActionPsbtRequest: vi.fn(() => request.promise),
+        };
+        const view = render(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-old" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+
+        view.rerender(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-new" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+        await act(async () => request.resolve({ psbtHex: 'stale', encoding: 'psbt' }));
+
+        expect(screen.queryByDisplayValue('stale')).toBeNull();
+        expect(await screen.findByLabelText('Price (BTC)')).toBeInTheDocument();
+    });
+
+    it('clears autopay exposure while a different wallet loads', async () => {
+        const nextExposure = deferred();
+        const getAutopayExposure = vi.fn()
+            .mockResolvedValueOnce({ [CHAIN]: '100000000' })
+            .mockImplementationOnce(() => nextExposure.promise);
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: ADDRESS.id }),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+            composeForConfirm: vi.fn(),
+            getAutopayExposure,
+        };
+        const view = render(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-old" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+        expect(await screen.findByText(/Outstanding auto-pay exposure on this chain/)).toBeInTheDocument();
+
+        view.rerender(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-new" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        expect(screen.queryByText(/Outstanding auto-pay exposure on this chain/)).toBeNull();
+        expect(getAutopayExposure).toHaveBeenLastCalledWith({ walletId: 'wallet-new' });
     });
 });

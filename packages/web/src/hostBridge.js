@@ -76,6 +76,7 @@ import {
 } from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 import { startLabelSyncRestoreTask } from '../../extension/src/background/labelSyncRestoreTasks.js';
+import { createVaultKeyring } from '../../extension/src/background/vaultKeyring.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
 import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
@@ -90,6 +91,7 @@ import {
     fakeOwnedTokensFor,
     fakeTokenInfoFor,
     fakeDispensersFor,
+    fakeDispenserByActionIndex,
     fakeOrdersFor,
     fakeSwapsFor,
     fakeHoldersFor,
@@ -104,6 +106,14 @@ import {
     installDevMockConsole,
 } from './devMockEvents.js';
 import { buildDevMockActionString } from './devMockActionString.js';
+
+// The page holds the open vault itself and caches no session key or signing
+// password, so a password change only needs the meta slot kdfParams the vault
+// key is derived under.
+function webVaultKeyring() {
+    // Resolved per read, so building a host never touches the meta store.
+    return createVaultKeyring({ metaBackend: { load: () => createMetaBackend().load() } });
+}
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -341,6 +351,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                     if (type === 'token' && query) return fakeDispensersFor(query, chainId);
                     return [];
                 };
+            }
+            if (prop === 'getAction') {
+                // The dispenser detail page reads one dispenser by action
+                // index; answer for rows the token-scoped list served, and keep
+                // the empty answer every other lookup got before.
+                return async (actionIndex) => fakeDispenserByActionIndex(actionIndex, chainId) || [];
             }
             if (prop === 'getOrders') {
                 return async (query, type /* , opts */) => {
@@ -661,7 +677,7 @@ class WebBroadcastClaims extends Set {
 // Signing routes hand their flow a hook that queues the signed bytes when the
 // broadcast fails, so the lease has to outlive that network call the way the
 // queue routes' own claims make it outlive theirs.
-const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake$)/;
+const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake$|tx\.replace$|multisigSign\.finalize$)/;
 let routeClaimSeq = 0;
 
 async function runRouteHoldingLease(store, type, run) {
@@ -1427,6 +1443,7 @@ export async function createWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1550,6 +1567,7 @@ export async function importMnemonicLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1736,6 +1754,7 @@ export async function importBackupLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1878,6 +1897,7 @@ export async function unlockWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();

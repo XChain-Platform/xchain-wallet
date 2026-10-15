@@ -1,8 +1,8 @@
 .headerIcon {
     display: block;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 6px;
+    width: var(--xc-avatar-size-header);
+    height: var(--xc-avatar-size-header);
+    border-radius: var(--xc-avatar-shape);
     object-fit: contain;
     flex: 0 0 auto;
 }
@@ -20,26 +20,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 6px;
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
+    width: var(--xc-avatar-size-header);
+    height: var(--xc-avatar-size-header);
+    border-radius: var(--xc-avatar-shape);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    font-size: var(--xc-avatar-initials-header);
     font-weight: 700;
     flex: 0 0 auto;
-}
-
-/* Body sizing mirrors Home.module.css exactly so the two routes share
-   visual rhythm. Both fill the content area (lists run the full width,
-   operator ruling 2026-10-12), and Screen.body's padding is the only
-   horizontal padding. */
-.bodyFull {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-    width: 100%;
-    box-sizing: border-box;
 }
 
 /* ───── Asset balance hero - matches TotalBalanceHero ───── */
@@ -54,7 +42,9 @@
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-2);
-    box-shadow: 0 6px 18px rgba(30, 144, 199, 0.25);
+    box-shadow: var(--xc-shadow-sm);
+    min-height: 104px;
+    box-sizing: border-box;
 }
 
 .balanceHeroMain {
@@ -94,7 +84,7 @@
 .balanceHeroSwap,
 .balanceHeroEye {
     appearance: none;
-    background: rgba(255, 255, 255, 0.15);
+    background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
     border: none;
     color: var(--xc-on-accent);
     width: 28px;
@@ -107,7 +97,7 @@
 }
 
 .balanceHeroSwap:hover:not(:disabled),
-.balanceHeroEye:hover { background: rgba(255, 255, 255, 0.25); }
+.balanceHeroEye:hover { background: color-mix(in srgb, var(--xc-on-accent) 25%, transparent); }
 
 .balanceHeroSwap:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -124,31 +114,30 @@
 .balanceHeroIconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: 4.5rem;
-    height: 4.5rem;
+    width: var(--xc-avatar-size-hero);
+    height: var(--xc-avatar-size-hero);
 }
 
 .balanceHeroIcon {
     display: block;
-    /* Sized to match the height of the right-side content stack (label
-       + amount + fiat ≈ 4.5rem) so the icon dominates the left side
-       and visually fills the hero without forcing it taller. */
-    width: 4.5rem;
-    height: 4.5rem;
+    /* The shared hero size keeps detail artwork aligned with other asset heroes. */
+    width: var(--xc-avatar-size-hero);
+    height: var(--xc-avatar-size-hero);
     flex: 0 0 auto;
     object-fit: contain;
+    border-radius: var(--xc-avatar-shape);
 }
 
 .balanceHeroIconFallback {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 4.5rem;
-    height: 4.5rem;
-    border-radius: var(--xc-radius-sm);
-    background: rgba(255, 255, 255, 0.2);
+    width: var(--xc-avatar-size-hero);
+    height: var(--xc-avatar-size-hero);
+    border-radius: var(--xc-avatar-shape);
+    background: color-mix(in srgb, var(--xc-on-accent) 20%, transparent);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xl);
+    font-size: var(--xc-avatar-initials-hero);
     font-weight: 800;
 }
 
@@ -178,14 +167,16 @@
     color: var(--xc-on-accent);
     white-space: nowrap;
     overflow: hidden;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* AutoShrinkText scaffolding. The wrap is the measurement container -
    block-level so it inherits the parent's font-size and width. The
    inner span carries the actual text and is `transform: scale(...)`d
-   to fit when overflowing. Origin: left center so shrinking pulls the
-   trailing characters in toward the leading edge rather than collapsing
-   around the middle. */
+   to fit when overflowing. Its LTR number origin stays at the physical
+   left so shrinking pulls trailing characters toward the leading edge
+   rather than collapsing around the middle. */
 .balanceHeroAmountFitWrap {
     display: block;
     overflow: hidden;
@@ -201,12 +192,12 @@
 
 /* Unit code (BTC / USD / JPY / …) suffix next to the primary big
    amount. Half the size of the 32px amount so the digits stay the
-   primary visual anchor; slightly lower opacity to push the eye to
-   the number. Matches the Home total-balance hero treatment. */
+   primary visual anchor while the shared on-accent color keeps the
+   suffix readable. Matches the Home total-balance hero treatment. */
 .balanceHeroAmountCode {
     font-size: 16px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--xc-on-accent);
     margin-inline-start: 6px;
     letter-spacing: 0;
     white-space: nowrap;
@@ -219,7 +210,7 @@
 .balanceHeroNoteCode {
     font-size: 0.85em;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--xc-on-accent);
     margin-inline-start: var(--xc-space-1);
     white-space: nowrap;
     vertical-align: baseline;
@@ -227,7 +218,7 @@
 
 .balanceHeroHidden {
     letter-spacing: 0.15em;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--xc-on-accent);
 }
 
 .balanceHeroNote {
@@ -247,41 +238,11 @@
     white-space: nowrap;
 }
 
-/* ───── Quick actions - matches Home's quickActions ───── */
+/* ───── Quick actions ───── */
 
 .quickActions {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--xc-space-2);
-}
-
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    min-height: 72px;
-    text-align: center;
-}
-.quickAction:hover:not(:disabled) { background: var(--xc-bg-muted); }
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
 }
 
 .quickActionIcon {
@@ -293,115 +254,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-}
-
-.quickActionReason {
-    color: var(--xc-text-muted);
-    font-size: 0.65rem;
-    font-weight: 500;
-    line-height: 1.2;
-}
-
-/* "More" entry in the 4-up quick-actions grid. Wrapper is a flex
-   container so the inner button stretches to the grid cell's height,
-   matching the three buttons next to it. The dropdown anchors to the
-   wrapper via `position: relative`. */
-.quickActionMoreWrap {
-    position: relative;
-    display: flex;
-    align-self: stretch;
-}
-.quickActionMoreWrap > .quickAction {
-    flex: 1 1 auto;
-    width: 100%;
-}
-.quickActionMoreMenu {
-    position: absolute;
-    inset-inline-end: 0;
-    top: calc(100% + var(--xc-space-1));
-    min-width: 200px;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    padding: var(--xc-space-1) 0;
-}
-.quickActionMoreItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    text-align: start;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-family: inherit;
-    color: var(--xc-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-.quickActionMoreItem:hover { background: var(--xc-bg-muted); }
-.quickActionMoreItem:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-.quickActionMoreItem:disabled {
-    color: var(--xc-text-muted);
-    cursor: not-allowed;
-}
-.quickActionMoreItemIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    color: var(--xc-accent-text);
-}
-
-/* ───── Tabs - matches HomeTabs ───── */
-
-.tabs {
-    display: flex;
-    gap: var(--xc-space-1);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-border);
-    padding-bottom: 1px;
-    margin-bottom: -1px;
-    scrollbar-width: none;
-}
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: var(--xc-space-3) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    border-bottom: 2px solid transparent;
-    transition: color var(--xc-transition), border-color var(--xc-transition);
-    flex: 0 0 auto;
-    font-family: inherit;
-}
-.tab:hover { color: var(--xc-text); }
-.tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-.tabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
 }
 
 .tabPanel {
@@ -416,28 +268,47 @@
    structure as they scroll. */
 
 .infoCard {
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
+}
+
+.priceAlertCard {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    min-height: 54px;
+    box-sizing: border-box;
+}
+
+.priceAlertCard > button {
+    align-self: flex-start;
 }
 
 /* Pulls the market card up under the balance hero's box-shadow halo so
    the visible gap above the chart matches the gap to the quick-action
-   row below it. Mirrors the same offset PortfolioChart uses on Home.
-   Also tightens the card's padding + internal gap to mirror Home's
-   PortfolioChart.module.css `.wrap` exactly so the two chart cards
-   render at the same vertical size. */
+   row below it. Mirrors the same offset PortfolioChart uses on Home, and
+   keeps the shared card border and padding like that chart card does. */
 .marketCardOffset {
     margin-top: -6px;
-    padding: var(--xc-space-2) var(--xc-space-3);
     display: flex;
     flex-direction: column;
     gap: 2px;
-    /* Blue accent border to match the Home PortfolioChart and the
-       quick-action buttons immediately below - same accent cue tying
-       the chart card into the page's blue-highlighted controls. */
-    border-color: var(--xc-accent-primary);
+}
+
+.marketHistorySlot {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 72px;
+}
+
+.officialBannerSlot {
+    min-height: 38px;
+}
+
+.supplyCard {
+    min-height: 118px;
+    box-sizing: border-box;
 }
 
 /* Adjacent metaBlocks inside an infoCard get a divider + vertical
@@ -450,21 +321,16 @@
     border-top: 1px solid var(--xc-border);
 }
 
-.sectionTitle {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--xc-text-muted);
-    font-weight: 600;
-}
-
 /* ───── Per-tab content ───── */
 
+/* Cells size to their values and wrap to a new line when a phone row
+   cannot hold all three, so a long price or market cap is shown whole
+   instead of being cut to an ellipsis in a third of the width. */
 .stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: var(--xc-space-3);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--xc-space-2) var(--xc-space-3);
 }
 
 /* The third stats cell (24h change) is right-aligned so the +/- pct
@@ -473,13 +339,16 @@
 .stats > .statCell:last-child {
     text-align: end;
     align-items: flex-end;
+    margin-inline-start: auto;
 }
 
 .statCell {
     display: flex;
     flex-direction: column;
+    flex: 0 1 auto;
     gap: 2px;
     min-width: 0;
+    max-width: 100%;
 }
 
 .statLabel {
@@ -499,6 +368,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .statValuePositive { color: var(--xc-success, #14b86c); }
@@ -514,21 +385,30 @@
     font-size: var(--xc-text-sm);
 }
 
+.detailList,
+.holdersList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
 .metaRow th,
 .metaRow td {
-    padding: var(--xc-space-2) 0;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
     vertical-align: top;
     line-height: 1.4;
 }
 
 .metaRow + .metaRow th,
 .metaRow + .metaRow td {
-    border-top: 1px solid var(--xc-border);
+    border-top: var(--xc-table-row-divider);
 }
 
 .metaRow th {
     text-align: start;
-    width: 40%;
+    width: var(--xc-table-label-width);
     font-weight: 500;
     color: var(--xc-text-muted);
     text-transform: uppercase;
@@ -540,19 +420,39 @@
     text-align: end;
     color: var(--xc-text);
     word-break: break-word;
+    font-variant-numeric: tabular-nums;
+}
+
+.detailList > li + li {
+    border-top: var(--xc-table-row-divider);
+}
+
+@media not all and (min-width: 400px) {
+    .metaRow th,
+    .metaRow td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        text-align: start;
+    }
+
+    .metaRow th {
+        padding-bottom: 0;
+    }
+
+    .metaRow td {
+        padding-top: var(--xc-space-1);
+    }
+
+    .metaRow + .metaRow td {
+        border-top: 0;
+    }
 }
 
 .supplyState {
     display: block;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
-}
-
-.metadataHint {
-    margin: var(--xc-space-2) 0 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-style: italic;
 }
 
 .infoStack {
@@ -587,15 +487,6 @@
 .aboutCard > .metaBlock + .metaBlock {
     padding-top: var(--xc-space-2);
     border-top: 1px solid var(--xc-border);
-}
-
-.metaBlockTitle {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--xc-text-muted);
-    font-weight: 700;
 }
 
 .pgpsigBlock {
@@ -734,7 +625,7 @@
     justify-content: center;
     padding: var(--xc-space-4);
     box-sizing: border-box;
-    border: 1px dashed var(--xc-border-strong);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
@@ -847,6 +738,18 @@
     font-weight: 600;
 }
 
+.fileLinkContent {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+}
+
+.fileButton > span {
+    width: 100%;
+}
+
 .fileLink:hover,
 .fileLink:focus-visible {
     background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 10%, transparent);
@@ -882,16 +785,25 @@
 .creatorCell {
     font-family: var(--xc-font-mono, monospace);
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .copyableValue,
 .holdersAddrWrap {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
     flex-wrap: wrap;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+.copyableValue {
+    justify-content: flex-end;
+}
+
+.holdersAddrWrap {
+    justify-content: flex-start;
 }
 
 .lockedFlag {
@@ -920,10 +832,14 @@
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .holdersQty {
     color: var(--xc-text-muted);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .muted {
@@ -938,19 +854,9 @@
     font-size: var(--xc-text-sm);
 }
 
-/* ───── "Official token" banner - shown when the token is on a project
-   registry's current roster (assetInfo.projects). Green = attested. ───── */
+/* Project names inside the "Official token" success message, shown when the
+   token is on a project registry's current roster (assetInfo.projects). */
 
-.officialBanner {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: color-mix(in srgb, var(--xc-success, #14b86c) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-success, #14b86c) 40%, transparent);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-}
 .officialBannerProject {
     font-weight: 600;
 }

@@ -21,6 +21,7 @@ import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-li
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const CHAIN = 'dogecoin-testnet';
 const VIEWER = 'nViewerViewerViewerViewerViewerViewer1';
@@ -82,9 +83,10 @@ function mount(dispenses) {
     return messaging;
 }
 
-// The amount also appears in the stats hero, so rows are found as list items.
+// The amount also appears in the stats hero, so rows are found in the named activity list.
 const rowOf = (text) => {
-    const li = Array.from(document.querySelectorAll('li')).find((el) => el.textContent.includes(text));
+    const list = screen.getByRole('list', { name: /^(Dispenses|Dispenser lifecycle)$/ });
+    const li = within(list).getAllByRole('listitem').find((el) => el.textContent.includes(text));
     if (!li) throw new Error(`no list row containing ${text}`);
     return li;
 };
@@ -102,6 +104,9 @@ describe('dispenser detail: refused dispenses', () => {
         expect(marker).toHaveTextContent(/Invalid/);
         expect(marker).toHaveTextContent('SOURCE and GET_ADDRESS can not be same');
         expect(refused).toHaveTextContent(/for 450\.02310427 DOGE/);
+        expect(refused.querySelector(`.${listRowStyles.row}`)).toBeInTheDocument();
+        expect(within(refused).queryByRole('button')).toBeNull();
+        expect(within(refused).queryByRole('link')).toBeNull();
 
         const honoured = rowOf('100 DOGESWAP');
         expect(within(honoured).queryByTestId('dispense-invalid')).toBeNull();

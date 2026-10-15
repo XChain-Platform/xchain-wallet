@@ -233,7 +233,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await gotoPalette(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(seller, 'the seller wallet derived the buyer\'s address').not.toBe(buyer);
@@ -247,20 +247,20 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await seedPrices();
             await gotoPalette(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // The token being SOLD comes from a picker over real balances.
             await main.getByRole('button', { name: /^Token/ }).click();
             await page.getByText('XCHAIN', { exact: true }).first().click();
 
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
 
             // The lane under test: buyers pay in a TOKEN, not the native coin.
             await main.getByRole('radio', { name: 'A token' }).check();
             await main.getByLabel('Payment token').fill(PAY_TICK);
-            await main.getByLabel('Payment amount (per fill)').fill(String(PRICE_PER_FILL));
+            await main.getByLabel('Payment amount per fill').fill(String(PRICE_PER_FILL));
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
             await expectConfirmModal(page);

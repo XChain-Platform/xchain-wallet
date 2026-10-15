@@ -1,125 +1,25 @@
-.heroPopup {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: var(--xc-space-4) 0 var(--xc-space-6);
-    animation: heroEnter 380ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
-    min-width: 0;
-    width: 100%;
-}
-
-.heroFull {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: var(--xc-space-8) 0;
-    max-width: 560px;
-    margin: 0 auto;
-    animation: heroEnter 460ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
-    min-width: 0;
-    width: 100%;
-}
-
-@keyframes heroEnter {
-    from {
-        opacity: 0;
-        transform: translateY(12px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 .logoPopup {
+    /* Preserve the compact brand artwork width, which has no size token. */
     width: 140px;
     height: auto;
     margin-bottom: var(--xc-space-3);
 }
 
 .logoFull {
+    /* Preserve the full-page brand artwork width, which has no size token. */
     width: 240px;
     height: auto;
     margin-bottom: var(--xc-space-4);
 }
 
-.namePopup {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-1);
-    color: var(--xc-text);
-}
-
-.nameFull {
-    font-size: var(--xc-text-2xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-2);
-    color: var(--xc-text);
-}
-
-.taglinePopup {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin: 0;
-    max-width: 280px;
-}
-
-.taglineFull {
-    font-size: var(--xc-text-md);
-    color: var(--xc-text-muted);
-    margin: 0 0 var(--xc-space-6);
-    max-width: 360px;
-}
-
-.actionsPopup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    animation: actionsEnter 460ms cubic-bezier(0.2, 0.8, 0.3, 1) 140ms both;
-    min-width: 0;
-    width: 100%;
-}
-
-.actionsFull {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    max-width: 360px;
-    margin: 0 auto;
-    animation: actionsEnter 540ms cubic-bezier(0.2, 0.8, 0.3, 1) 180ms both;
-    min-width: 0;
-    width: 100%;
-}
-
 /* Short landscape viewports keep the first actions near the fold while the
    Screen body remains the single scroll container for every later action. */
 @media (max-height: 520px) {
-    .heroPopup,
-    .heroFull {
-        padding: var(--xc-space-2) 0 var(--xc-space-3);
-    }
-
     .logoPopup,
     .logoFull {
+        /* Preserve the compact landscape artwork width, which has no size token. */
         width: 96px;
         margin-bottom: var(--xc-space-1);
-    }
-
-    .taglineFull {
-        margin-bottom: var(--xc-space-2);
-    }
-}
-
-@keyframes actionsEnter {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -144,10 +44,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .heroPopup,
-    .heroFull,
-    .actionsPopup,
-    .actionsFull,
     .logoPopup,
     .logoFull {
         animation: none;
@@ -157,11 +53,8 @@
 /* The add-a-wallet lane, entered from inside the demo, explains
    why the demo has to be cleared before a real wallet can be made. */
 .demoGraduateNotice {
+    composes: card from '../../ui/Card.module.css';
     margin: 0 var(--xc-space-3) var(--xc-space-3);
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
 }
@@ -181,35 +74,30 @@
     text-align: center;
 }
 
-.licenseHero {
-    display: flex;
-    justify-content: center;
-    margin-bottom: var(--xc-space-2);
-    flex: 0 0 auto;
-}
-
 .licenseGate {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1 1 auto;
     min-height: 0;
     gap: var(--xc-space-2);
     width: 100%;
-    max-width: 560px;
     margin: 0 auto;
 }
 
 .licenseScroll {
+    composes: card from '../../ui/Card.module.css';
+    /* The terms take every pixel the screen has left (FormPage fill), so
+       Accept and continue sits at the bottom of the phone, and the panel
+       keeps its own scroll: reaching its end unlocks the acknowledgement. */
     flex: 1 1 auto;
+    /* Retain enough initial license text to identify the scroll region. */
     min-height: 160px;
     overflow-y: auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    margin: 0 auto;
+    /* Padding and border sit inside the full width, so the terms never push
+       the page sideways. */
+    box-sizing: border-box;
     width: 100%;
-    max-width: 560px;
+    min-width: 0;
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
     line-height: 1.45;
@@ -217,13 +105,16 @@
 
 .licenseScroll:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .licenseParagraph {
     margin: 0 0 var(--xc-space-2);
-    text-align: justify;
-    hyphens: manual;
+    max-width: none;
+    /* Start-aligned: justified text opens wide gaps between words on a
+       narrow phone. */
+    text-align: start;
+    hyphens: none;
 }
 
 .licenseParagraph:last-child {
@@ -235,56 +126,65 @@
     font-weight: 600;
     color: var(--xc-text);
     background: var(--xc-danger-bg);
+    /* Keep the critical-copy marker heavier than a hairline without adding a token. */
     border-inline-start: 3px solid var(--xc-danger);
     padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: 0 var(--xc-radius-sm) var(--xc-radius-sm) 0;
+    border-radius: 0;
+    border-start-end-radius: var(--xc-radius-sm);
+    border-end-end-radius: var(--xc-radius-sm);
     margin: var(--xc-space-2) 0;
 }
 
+/* The kit Checkbox owns its grid (box and native input share one cell), so
+   this rule only places it; a display override split the box from its input. */
 .licenseAck {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
     margin: 0;
     width: 100%;
-    max-width: 560px;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     line-height: 1.4;
+    white-space: nowrap;
 }
 
-.licenseAck input[type="checkbox"] {
-    margin-top: 2px;
+/* Sized rules target the button: the visually hidden disabled reason beside
+   it must keep its one-pixel box, or it widens the page sideways. */
+.licenseActions {
+    display: flex;
+    width: 100%;
+}
+
+.licenseActions > button {
+    width: 100%;
+}
+
+@media (min-width: 600px) {
+    .licenseActions {
+        justify-content: flex-end;
+    }
+
+    .licenseActions > button {
+        width: auto;
+    }
 }
 
 /* Short landscape screens retain every onboarding action while trimming
    decorative height around the brand and license gate. */
 @media (orientation: landscape) and (max-height: 480px) {
-    .heroPopup,
-    .heroFull {
-        padding: 0;
-    }
-
     .logoPopup,
     .logoFull {
+        /* Preserve the compact landscape artwork width, which has no size token. */
         width: 96px;
         margin-bottom: var(--xc-space-1);
     }
 
-    .taglineFull {
-        margin-bottom: var(--xc-space-2);
-    }
-
-    .actionsPopup,
-    .actionsFull {
-        gap: var(--xc-space-1);
-    }
-
-    .licenseHero {
-        margin-bottom: 0;
+    /* The page title names the screen; on a short landscape view the logo
+       would cost the terms about 70px of their height. */
+    .licenseLogo {
+        display: none;
     }
 
     .licenseScroll {
+        /* Keep two short lines visible while leaving room for landscape actions. */
         min-height: 96px;
         padding: var(--xc-space-2) var(--xc-space-3);
     }

@@ -135,11 +135,16 @@ function flushWindow(w) {
     openWindows.delete(w);
     const { sdk, addresses, resolvers, opts } = w;
     for (let i = 0; i < addresses.length; i += COINPAY_BATCH_MAX_ADDRESSES) {
+        const chunkResolvers = resolvers.slice(i, i + COINPAY_BATCH_MAX_ADDRESSES);
         runCoinpayChunk({
             sdk,
             addresses: addresses.slice(i, i + COINPAY_BATCH_MAX_ADDRESSES),
-            resolvers: resolvers.slice(i, i + COINPAY_BATCH_MAX_ADDRESSES),
+            resolvers: chunkResolvers,
             opts,
+        }).catch((e) => {
+            // The timer has no caller that can observe a rejected chunk. Reject
+            // each waiting read so every failure remains handled and visible.
+            for (const r of chunkResolvers) r.reject(e);
         });
     }
 }

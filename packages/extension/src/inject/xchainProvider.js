@@ -57,6 +57,18 @@
     // The provider belongs to the top document. The manifest follows this
     // policy, and this guard keeps an accidentally injected subframe inert.
     if (window.top !== window) return;
+    try {
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname.toLowerCase();
+        const pathname = window.location.pathname;
+        if ((protocol !== 'https:' && protocol !== 'http:')
+            || window.location.origin === 'null'
+            || window.document?.contentType === 'application/pdf'
+            || hostname === 'chromewebstore.google.com'
+            || (hostname === 'chrome.google.com' && pathname.startsWith('/webstore'))) return;
+    } catch {
+        return;
+    }
     if (window.xchain && window.xchain.isXChainWallet) return;
 
     const VERSION = '0.1.0';
@@ -195,7 +207,15 @@
             const handlers = listeners.get(data.event);
             if (!handlers) return;
             for (const fn of handlers) {
-                try { fn(data.payload); } catch { /* isolate listener errors */ }
+                try {
+                    const result = fn(data.payload);
+                    // Event callbacks are user code. Isolate rejected async
+                    // handlers as well as synchronous throws so one listener
+                    // cannot create a page-level unhandled rejection.
+                    if (result && typeof result.catch === 'function') {
+                        result.catch(() => {});
+                    }
+                } catch { /* isolate listener errors */ }
             }
         }
     });

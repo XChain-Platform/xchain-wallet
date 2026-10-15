@@ -132,11 +132,22 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         showToast({
             id: 'auto-lock-signing-deferred',
             message: 'Auto-lock is waiting for the current signing request to finish.',
-            durationMs: 8000,
         });
     }, [showToast]);
 
-    const checkNow = useAutoLock(lock, { enabled: armed, idleMs, onDeferred: explainDeferredLock });
+    const reportActivity = useCallback(() => {
+        if (!armed || typeof messaging?.reportAutoLock !== 'function') return;
+        Promise.resolve()
+            .then(() => messaging.reportAutoLock({ armed: true, idleMs, activity: true }))
+            .catch(() => { /* best-effort */ });
+    }, [messaging, armed, idleMs]);
+
+    const checkNow = useAutoLock(lock, {
+        enabled: armed,
+        idleMs,
+        onDeferred: explainDeferredLock,
+        onActivity: reportActivity,
+    });
 
     // §26 out-of-renderer backstop: the foreground hook above dies with the
     // renderer, so hand the shell's own process the arm decision and the
@@ -155,9 +166,9 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
     useEffect(() => {
         if (sessionState === 'loading') return;
         if (typeof messaging?.reportAutoLock !== 'function') return;
-        Promise.resolve(
-            messaging.reportAutoLock({ armed, idleMs }),
-        ).catch(() => { /* best-effort */ });
+        Promise.resolve()
+            .then(() => messaging.reportAutoLock({ armed, idleMs }))
+            .catch(() => { /* best-effort */ });
     }, [messaging, sessionState, armed, idleMs]);
 
     return { armed, idleMs, minutes, checkNow };

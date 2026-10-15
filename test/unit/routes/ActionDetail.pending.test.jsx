@@ -20,7 +20,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import React from 'react';
-import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDetail.jsx';
 import { DetailCard } from '../../../packages/core/src/shared/routes/History.jsx';
@@ -157,7 +156,7 @@ describe('ActionDetail on a pending entry', () => {
     it('carries the pending branch onto the page', async () => {
         renderDetail(pendingEntry());
         const panel = await screen.findByRole('region', { name: 'Pending transaction' });
-        expect(within(panel).getByText(en['pending.detail.notValidated'])).toBeTruthy();
+        expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
     });
 
     it('uses plain labels, translated action codes, copy controls, and explorer links', () => {
@@ -166,7 +165,7 @@ describe('ActionDetail on a pending entry', () => {
         const details = screen.getByRole('tabpanel');
 
         expect(within(details).getByRole('rowheader', { name: 'Action' })
-            .closest('tr').querySelector('td').textContent).toBe('Send');
+            .closest('tr').querySelector('td').textContent).toBe('Receive');
         expect(within(details).getByRole('rowheader', { name: 'Transaction ID' })).toBeTruthy();
         expect(within(details).getByRole('rowheader', { name: 'From' })).toBeTruthy();
         expect(within(details).getByRole('rowheader', { name: 'To' })).toBeTruthy();

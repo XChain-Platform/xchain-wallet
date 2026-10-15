@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useRef } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
-import styles from './NoticeModal.module.css';
+import { Button, StatusMessage } from '@xchain-wallet/core/ui';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
-import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
@@ -48,18 +48,26 @@ export function ConfirmModal({
 }) {
     const cancel = useCallback(() => { if (!busy) onCancel(); }, [busy, onCancel]);
     const confirmingRef = useRef(false);
+    const confirmationIdRef = useRef(0);
+    const releaseTimerRef = useRef(null);
     const confirm = useCallback((event) => {
         event?.preventDefault();
         // Hold the first activation while the parent closes the dialog or exposes its busy state.
         if (busy || confirmingRef.current) return;
         confirmingRef.current = true;
-        const release = () => { confirmingRef.current = false; };
+        const confirmationId = ++confirmationIdRef.current;
+        const release = () => {
+            if (confirmationId === confirmationIdRef.current) confirmingRef.current = false;
+        };
         try {
             const result = onConfirm();
             if (result && typeof result.then === 'function') {
                 Promise.resolve(result).then(release, release);
             } else {
-                setTimeout(release, 0);
+                releaseTimerRef.current = setTimeout(() => {
+                    releaseTimerRef.current = null;
+                    release();
+                }, 0);
             }
         } catch (error) {
             release();
@@ -71,9 +79,18 @@ export function ConfirmModal({
     const titleId = useId();
     const messageId = useId();
     useFocusTrap(panelRef, { active: true });
-    useInertBackground(rootRef, { active: true });
+    // The trap also inerts the background outside the modal root. A second
+    // inert lock here outlived the trap on close, so the browser refused the
+    // focus hand-back to the opener.
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(cancel);
+    useEffect(() => () => {
+        confirmationIdRef.current += 1;
+        if (releaseTimerRef.current !== null) {
+            clearTimeout(releaseTimerRef.current);
+            releaseTimerRef.current = null;
+        }
+    }, []);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') cancel(); };
         window.addEventListener('keydown', onKey);
@@ -81,28 +98,19 @@ export function ConfirmModal({
     }, [cancel]);
 
     return (
-        <div
-            ref={rootRef}
-            className={styles.overlay}
-            role="dialog"
-            aria-modal="true"
+        <OverlaySurface
+            rootRef={rootRef}
+            surfaceRef={panelRef}
+            title={title}
+            titleId={titleId}
+            titleAs="p"
             aria-labelledby={titleId}
             aria-describedby={message ? messageId : undefined}
             aria-busy={busy ? 'true' : 'false'}
-            onClick={cancel}
+            onBackdrop={cancel}
             tabIndex={-1}
-        >
-            <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <div className={styles.content}>
-                    <p id={titleId} className={styles.title}>{title}</p>
-                    {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
-                    {error ? (
-                        <p role="alert" className={styles.error}>
-                            {userFacingMessage(error, 'Could not complete this request. Try again.')}
-                        </p>
-                    ) : null}
-                </div>
-                <div className={styles.actions}>
+            footer={(
+                <>
                     <Button variant="secondary" block onClick={cancel} disabled={busy} autoFocus>
                         {cancelLabel}
                     </Button>
@@ -115,8 +123,15 @@ export function ConfirmModal({
                     >
                         {confirmLabel}
                     </Button>
-                </div>
-            </div>
-        </div>
+                </>
+            )}
+        >
+            {message ? <p id={messageId}>{message}</p> : null}
+            {error ? (
+                <StatusMessage variant="error">
+                    {userFacingMessage(error, 'Could not complete this request. Try again.')}
+                </StatusMessage>
+            ) : null}
+        </OverlaySurface>
     );
 }

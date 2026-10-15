@@ -1,0 +1,29 @@
+.control {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    min-height: var(--xc-control-h-md);
+    color: var(--xc-text);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-control-font);
+    cursor: pointer;
+}
+
+.input {
+    flex: 0 0 auto;
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
+    margin: 0;
+    accent-color: var(--xc-accent-primary);
+    cursor: inherit;
+}
+
+.label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.disabled {
+    cursor: not-allowed;
+}

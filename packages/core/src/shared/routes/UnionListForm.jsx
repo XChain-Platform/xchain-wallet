@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     AddressField,
     Button,
+    Checkbox,
     EmptyState,
     FormPage,
     FormSection,
@@ -32,6 +33,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -145,6 +147,7 @@ async function readCandidates({ messaging, chainId, addresses }) {
  */
 export function UnionListForm({ walletId, chainId: initialChainId, activeAccountId, onBack, onDone = onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const [chainId, setChainId] = useState(initialChainId || null);
@@ -162,12 +165,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
     useEffect(() => {
         let cancelled = false;
         Promise.all([
-            messaging.getAddressesByChain(walletId, activeAccountId),
+            Promise.resolve().then(() => messaging.getAddressesByChain(walletId, activeAccountId)),
             typeof messaging.getActiveAddresses === 'function'
-                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                ? Promise.resolve().then(() => messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
             typeof messaging.getSettings === 'function'
-                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                ? Promise.resolve().then(() => messaging.getSettings()).catch(() => null)
                 : Promise.resolve(null),
         ]).then(([byChain, active, settings]) => {
             if (cancelled) return;
@@ -255,7 +258,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
         event.preventDefault();
         const trimmedMemo = memo.trim();
         if (sdkSupported !== true) { setFormError(SDK_REASON); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if (!pickState.canReview) {
             setFormError(pickState.overLimit
                 ? 'The estimated merged membership is over 10,000.'
@@ -283,6 +286,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
     }
 
     const header = <PageHeader onBack={onBack} title="Create union list" />;
+    const buildAnother = () => {
+        setResult(null);
+        setPicked([]);
+        setMemo('');
+        setFormError(null);
+    };
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -309,7 +318,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             return wrap(
                 <WatcherResultPanel
                     result={result}
-                    onBuildAnother={() => setResult(null)}
+                    onBuildAnother={buildAnother}
                     onDone={onDone}
                 />,
             );
@@ -328,6 +337,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create union list"
             onSubmit={handleReview}
             sectioned
@@ -362,7 +372,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             {fromAddress ? (
                 <AddressField label="From" value={fromAddress.address} readOnly onChange={() => {}} />
             ) : (
-                <StatusMessage variant="error">No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
             </FormSection>
 
@@ -371,7 +381,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                 {candidates.length === 0 ? (
                     <EmptyState
                         title="No usable lists"
-                        body="Local and shared lists available on this chain appear here."
+                        body="Local and shared lists available on this network appear here."
                         titleAs="p"
                     />
                 ) : null}
@@ -380,15 +390,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     const reason = state?.reason || null;
                     return (
                         <div key={candidate.actionIndex}>
-                            <label>
-                                <input
-                                    type="checkbox"
-                                    checked={state?.picked === true}
-                                    disabled={sdkSupported !== true || state?.disabled === true}
-                                    onChange={() => toggleCandidate(candidate.actionIndex)}
-                                />
-                                {' '}{candidateName(candidate)}
-                            </label>
+                            <Checkbox
+                                label={candidateName(candidate)}
+                                checked={state?.picked === true}
+                                disabled={sdkSupported !== true || state?.disabled === true}
+                                onChange={() => toggleCandidate(candidate.actionIndex)}
+                            />
                             {reason ? <p className={styles.hint}>{reason}</p> : null}
                         </div>
                     );
@@ -418,12 +425,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     </p>
                 </div>
             ) : null}
-            <div className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role={null}>
+                <p>
                     A union follows each member's edits, including a shared list's new versions.
                 </p>
-                <p className={styles.warning}>A union cannot itself be shared in this release.</p>
-            </div>
+                <p>A union cannot itself be shared in this release.</p>
+            </StatusMessage>
             </FormSection>
 
         </FormPage>,

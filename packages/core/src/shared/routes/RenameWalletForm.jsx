@@ -9,11 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
 const NAME_MAX_LENGTH = 64;
+const nameLength = (value) => Array.from(value).length;
 
 /**
  * RenameWalletForm: change a Wallet record's `name` field. No
@@ -74,7 +75,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
             setError('Wallet name is required.');
             return;
         }
-        if (name.length > NAME_MAX_LENGTH) {
+        if (nameLength(trimmed) > NAME_MAX_LENGTH) {
             setError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
             return;
         }
@@ -104,7 +105,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
     }
 
     const saveDisabled = busy || wallets === null || name.trim().length === 0
-        || name.length > NAME_MAX_LENGTH;
+        || nameLength(name.trim()) > NAME_MAX_LENGTH;
 
     const header = (
         <PageHeader
@@ -112,8 +113,11 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
             backDisabled={busy}
             title={t('renameWallet.title')}
             trailing={(
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     onClick={() => handleSubmit()}
                     aria-label={t('history.contact.save')}
                     title={t('history.contact.save')}
@@ -121,7 +125,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                     aria-busy={busy ? 'true' : undefined}
                 >
                     <Icon.CheckIcon />
-                </button>
+                </Button>
             )}
         />
     );
@@ -132,8 +136,13 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                 ref={nameRef}
                 label={t('renameWallet.name')}
                 value={name}
-                onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
-                maxLength={NAME_MAX_LENGTH}
+                onChange={(e) => {
+                    const nextName = e.target.value;
+                    setName(nextName);
+                    setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
+                        ? `Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                        : null);
+                }}
                 autoComplete="off"
                 disabled={busy || Boolean(walletLoadError)}
                 error={error || walletLoadError || undefined}

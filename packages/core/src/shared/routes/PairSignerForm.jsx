@@ -241,7 +241,14 @@ export function PairSignerForm({
             backDisabled={stage === 'saving'}
             title="Pair hardware signer"
             trailing={onOpenInTab && (stage === 'vendor' || stage === 'error') ? (
-                <Button variant="ghost" size="sm" onClick={onOpenInTab}>Open in tab</Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.ExternalLinkIcon />}
+                    onClick={onOpenInTab}
+                    aria-label="Open in tab"
+                    title="Open in tab"
+                />
             ) : null}
         />
     );
@@ -270,7 +277,6 @@ export function PairSignerForm({
                 ) : notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
             >
                 <StepIndicator current={1} />
-                <p className={styles.stageHint}>Which kind of device are you pairing?</p>
                 {pairedSigners.length > 0 ? (
                     <PairedDeviceList
                         records={pairedSigners}
@@ -280,38 +286,42 @@ export function PairSignerForm({
                 ) : null}
                 <ul className={styles.vendorGrid}>
                     <li>
-                        <button
+                        <Button
                             type="button"
                             className={styles.vendorCard}
                             onClick={() => handlePickVendor('trezor')}
                             disabled={!pairTrezor}
                         >
-                            <span className={styles.vendorName}>Trezor</span>
-                            <span className={styles.vendorTag}>
-                                {pairTrezor ? 'Connect via Trezor Connect popup.' : 'Not available in this context.'}
+                            <span className={styles.vendorCardContent}>
+                                <span className={styles.vendorName}>Trezor</span>
+                                <span className={styles.vendorTag}>
+                                    {pairTrezor ? 'Connect via Trezor Connect popup.' : 'Not available in this context.'}
+                                </span>
                             </span>
-                        </button>
+                        </Button>
                     </li>
                     <li>
-                        <button
+                        <Button
                             type="button"
                             className={styles.vendorCard}
                             onClick={() => handlePickVendor('ledger')}
                             disabled={!ledgerCanPair}
                         >
-                            <span className={styles.vendorName}>Ledger</span>
-                            <span className={styles.vendorTag}>
-                                {!pairLedger
-                                    ? 'Not available in this context.'
-                                    : ledgerNeedsWebHid
-                                    ? browserFamily === 'firefox'
-                                        ? 'WebHID required. Firefox is not supported. Switch to Chrome, Edge, or Brave.'
-                                        : browserFamily === 'safari'
-                                        ? 'WebHID required. Safari is not supported. Switch to Chrome, Edge, or Brave.'
-                                        : 'WebHID required. This browser does not support it. Switch to Chrome, Edge, or Brave.'
-                                    : 'Connect via WebHID. Chrome, Edge, or Brave on desktop.'}
+                            <span className={styles.vendorCardContent}>
+                                <span className={styles.vendorName}>Ledger</span>
+                                <span className={styles.vendorTag}>
+                                    {!pairLedger
+                                        ? 'Not available in this context.'
+                                        : ledgerNeedsWebHid
+                                        ? browserFamily === 'firefox'
+                                            ? 'WebHID required. Firefox is not supported. Switch to Chrome, Edge, or Brave.'
+                                            : browserFamily === 'safari'
+                                            ? 'WebHID required. Safari is not supported. Switch to Chrome, Edge, or Brave.'
+                                            : 'WebHID required. This browser does not support it. Switch to Chrome, Edge, or Brave.'
+                                        : 'Connect via WebHID. Chrome, Edge, or Brave on desktop.'}
+                                </span>
                             </span>
-                        </button>
+                        </Button>
                     </li>
                 </ul>
             </FormPage>,
@@ -406,9 +416,6 @@ export function PairSignerForm({
             )}
         >
             <StepIndicator current={3} />
-            <p className={styles.stageHint}>
-                Confirm the device you just paired.
-            </p>
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Vendor</dt>
                 <dd className={styles.detailsValue}>{labelFor(pairingInfo?.vendor)}</dd>
@@ -455,12 +462,12 @@ function isPairingCancellation(err) {
 
 function FirmwareBanner({ verdict, vendor }) {
     if (verdict.status === 'ok') return null;
-    const variantClass = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
-        ? styles.errorBanner
-        : styles.warningBanner;
+    const tone = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
+        ? 'error'
+        : 'warning';
     const updateUrl = safeHttpUrl(verdict.updateUrl);
     return (
-        <StatusMessage variant="error" className={variantClass}>
+        <StatusMessage variant={tone} role="alert">
             <p className={styles.bannerDetail}>
                 {verdict.status === 'unsupported'
                     ? firmwareUpdateAdvice(vendor, verdict.recommended)

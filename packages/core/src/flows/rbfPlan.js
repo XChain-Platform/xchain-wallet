@@ -34,6 +34,7 @@ function txShape(value, label) {
     if (!Array.isArray(value.outputs) || value.outputs.length === 0) {
         throw new RbfPlanError(`planRbfReplacement: ${label}.outputs must be a non-empty array`);
     }
+    const seenOutpoints = new Set();
     const inputs = value.inputs.map((input, index) => {
         const txid = String(input?.prevTxHash || input?.txid || '').toLowerCase();
         const vout = Number(input?.prevTxIndex ?? input?.vout);
@@ -47,6 +48,12 @@ function txShape(value, label) {
         if (!/^(?:[0-9a-fA-F]{2})+$/.test(scriptPubKey)) {
             throw new RbfPlanError(`planRbfReplacement: ${label}.inputs[${index}] has no usable scriptPubKey`);
         }
+        // Reject a transaction shape that counts the same coin more than once.
+        const outpoint = `${txid}:${vout}`;
+        if (seenOutpoints.has(outpoint)) {
+            throw new RbfPlanError(`planRbfReplacement: ${label}.inputs[${index}] duplicates an earlier outpoint`);
+        }
+        seenOutpoints.add(outpoint);
         return {
             txid,
             vout,
@@ -226,11 +233,13 @@ export function signalsReplaceability(tx) {
  * Speed up a pending send: replace it when it is RBF-flagged, otherwise offer
  * a CPFP child on its wallet-owned change at a feeRate covering parent plus
  * child. Cancel and restore stay RBF-only because a child cannot evict.
+ * `network` (the SDK network params) is required on the CPFP branch, which
+ * sizes the child against that chain's dust floor and segwit support.
  *
  * @returns {{ method: 'rbf'|'cpfp', plan: object }}
  */
 export function planSpeedUp({
-    conflict, parentTxid, sourceAddress, ownAddresses, feeRate, transactionBytes, childVbytes,
+    conflict, parentTxid, sourceAddress, ownAddresses, feeRate, transactionBytes, childVbytes, network,
 } = {}) {
     if (signalsReplaceability(conflict)) {
         return {
@@ -250,6 +259,7 @@ export function planSpeedUp({
             feeRate,
             parentVbytes: transactionBytes,
             childVbytes,
+            network,
         }),
     };
 }

@@ -30,6 +30,7 @@ import {
     settingsCustomToDisplayRate,
     displayRateToSettingsCustom,
     defaultCustomSettingsRate,
+    satsToCoinDecimal,
 } from '../../../packages/core/src/flows/feeEstimate.js';
 
 describe('resolveFeeUnit', () => {
@@ -105,6 +106,7 @@ describe('resolveFeeUnit', () => {
         expect([ltc.low.etaMinutes, ltc.normal.etaMinutes, ltc.fast.etaMinutes]).toEqual([5, 3, 2]);
         expect([doge.low.etaMinutes, doge.normal.etaMinutes, doge.fast.etaMinutes]).toEqual([5, 1, 1]);
         expect([btc.minimumRate, ltc.minimumRate, doge.minimumRate]).toEqual([1, 1, 1]);
+        expect([btc.maximumRate, ltc.maximumRate, doge.maximumRate]).toEqual([1000, 1000, 10]);
         expect([btc.unit, ltc.unit, doge.unit]).toEqual(['sat/vB', 'sat/vB', 'DOGE/kB']);
     });
 
@@ -122,5 +124,9 @@ describe('resolveFeeUnit', () => {
         });
 
         expect(tiers.minimumRate).toBe(1.5);
+    });
+
+    it('formats an exact whole coin without a decimal point', () => {
+        expect(satsToCoinDecimal(100_000_000)).toBe('1');
     });
 });

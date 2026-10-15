@@ -5,16 +5,25 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 
 const mocks = vi.hoisted(() => ({
     getNativePricesRequest: vi.fn(),
+    heroProps: { current: null },
+    chartProps: { current: null },
 }));
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
-    TotalBalanceHero: () => null,
+    TotalBalanceHero: (props) => {
+        mocks.heroProps.current = props;
+        return null;
+    },
 }));
 vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () => ({
-    PortfolioChart: () => null,
+    PortfolioChart: (props) => {
+        mocks.chartProps.current = props;
+        return null;
+    },
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging: mocks, shell: 'web' }),
@@ -42,6 +51,11 @@ import {
     getTokenFiatRate,
     refreshTokenFiatRate,
 } from '../../../packages/core/src/flows/priceLookup.js';
+
+const tabsCss = readFileSync(
+    'packages/core/src/shared/components/HomeTabs.module.css',
+    'utf8',
+);
 
 const descriptors = new Map([
     ['bitcoin-mainnet', {
@@ -108,7 +122,7 @@ function mountTokens() {
 }
 
 function renderedKeys() {
-    return [...document.querySelectorAll('[data-balance-key]')]
+    return screen.queryAllByRole('listitem')
         .map((element) => element.dataset.balanceKey);
 }
 
@@ -116,6 +130,8 @@ beforeEach(() => {
     _resetPriceLookupForTests();
     localStorage.clear();
     mocks.getNativePricesRequest.mockReset();
+    mocks.heroProps.current = null;
+    mocks.chartProps.current = null;
     mocks.getNativePricesRequest.mockResolvedValue({
         prices: {
             'bitcoin-mainnet': { change24hPct: 5 },
@@ -131,6 +147,26 @@ afterEach(() => {
 });
 
 describe('balance row sorting', () => {
+    it('shares one history-enabled native price response across the Home headline and chart', async () => {
+        const prices = {
+            'bitcoin-mainnet': { change24hPct: 1.4, sparkline: [100, 97.16] },
+            'litecoin-mainnet': { change24hPct: -1, sparkline: [100, 99] },
+            'dogecoin-mainnet': { change24hPct: 2, sparkline: [100, 102] },
+        };
+        mocks.getNativePricesRequest.mockResolvedValue({ prices });
+
+        mount();
+
+        await waitFor(() => expect(mocks.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: ['bitcoin-mainnet', 'dogecoin-mainnet', 'litecoin-mainnet'],
+            includeSparkline: true,
+            fiatCurrency: 'USD',
+        }));
+        await waitFor(() => expect(mocks.heroProps.current.nativePriceMap).toBe(prices));
+        expect(mocks.chartProps.current.nativePriceMap).toBe(prices);
+        expect(mocks.getNativePricesRequest).toHaveBeenCalledTimes(1);
+    });
+
     it('sorts exact values and changes descending, names ascending, and missing metrics last', () => {
         const rows = [
             { chainId: 'c:a', tick: 'AAA', displayName: 'Zulu', quantity: '9007199254740993', divisibility: 0, fiatRate: 1, change24hPct: -2 },
@@ -143,14 +179,31 @@ describe('balance row sorting', () => {
         expect(sortBalanceRows(rows, 'change').map((row) => row.tick)).toEqual(['BBB', 'AAA', 'CCC']);
     });
 
-    it('exposes the sort control on a narrow screen and applies native 24h changes', async () => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+    it.each([360, 400])('puts the compact sort below complete tab labels at %ipx', async (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
         mount();
 
         const sort = screen.getByRole('combobox', { name: 'Sort balances' });
+        const tablist = screen.getByRole('tablist', { name: 'Wallet view' });
         expect(sort).toBeVisible();
+        expect(sort.closest('label')?.parentElement).toBe(tablist.parentElement);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi', 'Activity']);
         expect([...sort.options].map((option) => option.textContent))
             .toEqual(['Value', 'Name', '24h change']);
+        expect(tablist.compareDocumentPosition(sort)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+        const narrowRules = tabsCss.slice(
+            tabsCss.indexOf('@media not all and (min-width: 600px)'),
+            tabsCss.indexOf('@media (max-width: 420px)'),
+        );
+        const compactRules = tabsCss.slice(tabsCss.indexOf('@media (max-width: 420px)'));
+        expect(narrowRules).toMatch(/\.tabsRow\s*\{[^}]*flex-direction:\s*column;/s);
+        expect(narrowRules).toMatch(/\.tabsRow\s*>\s*\[role='tablist'\]\s*\{[^}]*width:\s*100%;/s);
+        expect(narrowRules).toMatch(/\.sortControl\s*\{[^}]*align-self:\s*flex-end;/s);
+        expect(compactRules).toMatch(/\.sortSelect\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;/s);
+        expect(tabsCss).toMatch(/\.sortControl\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*var\(--xc-control-h-md\);/s);
+        expect(tabsCss).toMatch(/\.tabsRow\s+\[role='tab'\]\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/s);
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'dogecoin-mainnet:DOGE',
@@ -164,6 +217,25 @@ describe('balance row sorting', () => {
             'dogecoin-mainnet:DOGE',
             'litecoin-mainnet:LTC',
         ]);
+    });
+
+    it('does not render sort controls above the first-funding card at 360px', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+        render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{}}
+                walletId="empty-wallet"
+                networkFilter="all"
+            />,
+        );
+
+        expect(screen.getByText('Fund your wallet')).toBeVisible();
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(screen.getByText('No tokens yet')).toBeVisible();
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
     });
 
     it('restores the choice only for the wallet that saved it', () => {

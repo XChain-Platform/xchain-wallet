@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -17,6 +17,7 @@ import {
     Send,
     getUnusualSendWarnings,
 } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
 import { sendToken as submitSendToken } from '../../../packages/core/src/flows/sendToken.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -65,6 +66,8 @@ function mount({
     history = [],
     networkFeeSats = 1234,
     encoding,
+    messagingOverrides = {},
+    overrides = {},
 } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -120,6 +123,8 @@ function mount({
             fromAddress: FROM,
             chainId: CHAIN_ID,
         }),
+        ...messagingOverrides,
+        ...overrides,
     };
     // Send's supporting lookups are not part of this flow contract. Empty
     // host responses keep the test focused on the compose and submit messages.
@@ -133,13 +138,14 @@ function mount({
         },
     });
 
-    render(
+    const view = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
                 <Send walletId={WALLET_ID} onBack={onBack} onDone={onDone} />
             </ToastHost>
         </MessagingProvider>,
     );
+    messaging.unmountView = view.unmount;
     return messaging;
 }
 
@@ -186,6 +192,13 @@ function sdkBroadcastHarness(broadcastAnswer) {
     return { send, signPsbt, broadcastTx, pendingTxs, queued };
 }
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+}
+
 async function fillSendForm(sendAmount = AMOUNT) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
     fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: sendAmount } });
@@ -210,9 +223,62 @@ afterEach(() => {
     cleanup();
     localStorage.clear();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('does not show SDK text when loading send or receive addresses fails', async () => {
+        const sdkFailure = Object.assign(
+            new Error('SDKHubError: request failed with status code 503\n    at load.js:4:2'),
+            { name: 'SDKHubError', code: 'HUB_UNAVAILABLE' },
+        );
+        mount({
+            messagingOverrides: {
+                getAddressesByChain: vi.fn().mockRejectedValue(sdkFailure),
+            },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't load addresses. Check your connection and try again.",
+        );
+        expect(document.body).not.toHaveTextContent('SDKHubError');
+        expect(document.body).not.toHaveTextContent('status code 503');
+
+        cleanup();
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain: vi.fn().mockRejectedValue(sdkFailure),
+                getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+            }}>
+                <Receive walletId={WALLET_ID} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't load addresses. Check your connection and try again.",
+        );
+        expect(document.body).not.toHaveTextContent('SDKHubError');
+        expect(document.body).not.toHaveTextContent('status code 503');
+    });
+
+    it('replaces an SDK send failure and its raw details with actionable copy', async () => {
+        const sdkFailure = Object.assign(
+            new Error('SDK wallet exploded\n    at signer.js:9:3'),
+            { name: 'SDKWalletError', code: 'SIGN_FAILED' },
+        );
+        const messaging = mount({ sendResult: sdkFailure });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(
+            'The wallet could not prepare or sign this request. Check the wallet details and try again.',
+        );
+        expect(alert).not.toHaveTextContent('SDK wallet exploded');
+        expect(alert).not.toHaveTextContent('signer.js');
+        expect(screen.queryByText(/technical details/i)).toBeNull();
+    });
+
     it('keeps field labels ahead of their values in DOM reading order', async () => {
         mount();
 
@@ -316,7 +382,58 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ to: TO }));
     });
 
-    it('plainly refuses a pasted address from another chain', async () => {
+    it('ignores an older clipboard check after a newer recipient is pasted', async () => {
+        const firstRead = deferred();
+        const secondRead = deferred();
+        const readText = vi.fn()
+            .mockReturnValueOnce(firstRead.promise)
+            .mockReturnValueOnce(secondRead.promise);
+        vi.stubGlobal('navigator', { ...navigator, clipboard: { readText } });
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, { clipboardData: { getData: () => TO } });
+        await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
+        fireEvent.paste(toField, { clipboardData: { getData: () => FROM } });
+        await waitFor(() => expect(readText).toHaveBeenCalledTimes(2));
+        secondRead.resolve(FROM);
+        await waitFor(() => expect(toField).toHaveValue(FROM));
+        firstRead.resolve('clipboard malware replacement');
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.queryByText(/Clipboard changed after paste/i)).not.toBeInTheDocument();
+    });
+
+    it('discards a key-recovery result after the selected asset changes', async () => {
+        const scan = deferred();
+        const readiness = vi.fn(async ({ tick }) => (
+            tick === 'PEPE'
+                ? { state: 'blocked', groups: [{ keyHash: 'aa', haveKey: false }] }
+                : { state: 'ungated', groups: [] }
+        ));
+        mount({
+            overrides: {
+                gatedSendReadiness: readiness,
+                gatedContentScan: vi.fn(() => scan.promise),
+            },
+        });
+        await screen.findByLabelText(/^To$/);
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'PEPE' } });
+        const password = await screen.findByLabelText('Wallet password', {}, { timeout: 1500 });
+        fireEvent.change(password, { target: { value: PASSWORD } });
+        fireEvent.click(screen.getByRole('button', { name: 'Recover keys' }));
+
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
+        expect(screen.queryByLabelText('Wallet password')).not.toBeInTheDocument();
+        scan.resolve({ recoveredKeyHashes: ['aa'] });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.queryByText(/wallet holds none of its unlock keys/i)).not.toBeInTheDocument();
+    });
+
+    it('plainly refuses a pasted address from another network', async () => {
         const messaging = mount();
         const toField = await screen.findByLabelText(/^To$/);
         fireEvent.paste(toField, {
@@ -331,6 +448,57 @@ describe('Send flow with mocked messaging', () => {
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('accepts optional BIP21 fields while refusing unsupported required fields', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: {
+                getData: () => `BITCOIN:${TO}?AMOUNT=0.25&LABEL=Coffee%20shop&EXTRA=kept`,
+            },
+        });
+
+        expect(toField).toHaveValue(TO);
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25');
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Coffee shop');
+
+        fireEvent.change(toField, { target: { value: '' } });
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?req-extra=needed` },
+        });
+
+        expect(toField).toHaveValue('');
+        expect(await screen.findByText(
+            'This payment request requires a feature this wallet does not support.',
+        )).toBeInTheDocument();
+    });
+
+    it.each([
+        ['malformed', 'bitcoin', TO, '../../evil'],
+        ['unsupported', 'bitcoin', TO, 'monero-mainnet'],
+        ['not held by this wallet', 'litecoin', LTC_TO, 'litecoin-mainnet'],
+    ])('refuses a BIP21 request for a %s network', async (
+        _label,
+        scheme,
+        address,
+        requestChainId,
+    ) => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: {
+                getData: () => `${scheme}:${address}?chain=${encodeURIComponent(requestChainId)}`,
+            },
+        });
+
+        expect(toField).toHaveValue('');
+        expect(await screen.findByText(
+            'This payment request names a network this wallet cannot use.',
+        )).toBeInTheDocument();
     });
 
     it('validates a typed recipient on blur without interrupting typing', async () => {
@@ -501,6 +669,21 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('rejects an iOS-swiped review without retaining its partial password', async () => {
+        const onBack = vi.fn();
+        const messaging = mount({ onBack });
+        await openPasswordConfirm(messaging);
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'partial secret' } });
+
+        act(() => window.dispatchEvent(new Event('xchain:native-edge-back')));
+
+        await waitFor(() => expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument());
+        expect(onBack).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(2));
+        expect(await screen.findByLabelText('Password')).toHaveValue('');
+    });
+
     it('reviews every payment field, signs with the password, and shows the txid', async () => {
         const onBack = vi.fn();
         const onDone = vi.fn();
@@ -536,7 +719,7 @@ describe('Send flow with mocked messaging', () => {
             prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
         }));
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
         // The ToastHost notifications viewport is its own status region, so the
         // success screen's announcement is looked up inside the screen's main.
@@ -554,6 +737,25 @@ describe('Send flow with mocked messaging', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Done' }));
         expect(onDone).toHaveBeenCalledTimes(1);
         expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it('launches only one confirmation when the compose form submits twice', async () => {
+        const compose = deferred();
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const messaging = mount({
+            overrides: { composeForConfirm: vi.fn(() => compose.promise) },
+        });
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        const form = screen.getByRole('form', { name: 'Send' });
+
+        fireEvent.submit(form);
+        fireEvent.submit(form);
+        expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
+        expect(consoleError).not.toHaveBeenCalled();
+
+        compose.resolve(composedSend());
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
     });
 
     it('saves a new recipient as a contact after broadcast', async () => {
@@ -575,6 +777,26 @@ describe('Send flow with mocked messaging', () => {
         }));
         expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Save recipient' })).not.toBeInTheDocument();
+    });
+
+    it('submits only one contact save when the post-send form submits twice', async () => {
+        const save = deferred();
+        const messaging = mount({
+            overrides: { saveContact: vi.fn(() => save.promise) },
+        });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+        await screen.findByRole('heading', { name: 'Broadcast pending' });
+        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
+        const saveForm = screen.getByLabelText('Contact name').closest('form');
+
+        fireEvent.submit(saveForm);
+        fireEvent.submit(saveForm);
+        expect(messaging.saveContact).toHaveBeenCalledTimes(1);
+
+        save.resolve({ id: 'alice', name: 'Alice', entries: [] });
+        expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
     });
 
     it('ends on the signed-not-broadcast screen when the signed transaction is queued', async () => {
@@ -644,7 +866,7 @@ describe('Send flow with mocked messaging', () => {
         await approveWithPassword(messaging);
 
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
         expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
@@ -658,11 +880,17 @@ describe('Send flow with mocked messaging', () => {
 
     it('reviews the payment and builds an unsigned PSBT in watcher mode', async () => {
         const messaging = mount({ walletMode: 'watcher' });
-        await fillSendForm();
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        const scroller = screen.getByRole('main');
+        scroller.scrollTop = 420;
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
+        expect(scroller.scrollTop).toBe(0);
+        expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
-        expect(review).toHaveTextContent('Chain');
+        expect(review).toHaveTextContent('Network');
         expect(review).toHaveTextContent('Bitcoin');
         expect(review).toHaveTextContent('From');
         expect(review).toHaveTextContent('bc1qse…ndersa');
@@ -690,5 +918,72 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
             .toBeInTheDocument();
         expect(screen.getByLabelText('Unsigned transaction hex')).toHaveValue(PSBT);
+    });
+
+    it('submits only one watcher build when the review form submits twice', async () => {
+        const build = deferred();
+        const messaging = mount({
+            walletMode: 'watcher',
+            overrides: { buildSendPsbtRequest: vi.fn(() => build.promise) },
+        });
+        await fillSendForm();
+        const review = await screen.findByRole('form', { name: 'Review payment' });
+
+        fireEvent.submit(review);
+        fireEvent.submit(review);
+        expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1);
+
+        build.resolve({ psbtHex: PSBT, fromAddress: FROM, chainId: CHAIN_ID });
+        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+            .toBeInTheDocument();
+    });
+
+    it('keeps the reviewed source fixed when the active-address lookup settles late', async () => {
+        const active = deferred();
+        const messaging = mount({
+            walletMode: 'watcher',
+            overrides: {
+                getAddressesByChain: vi.fn().mockResolvedValue({
+                    [CHAIN_ID]: [
+                        { id: 'active', address: FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' },
+                        { id: 'fallback', address: SAVED_LOOKALIKE, publicKey: '02cd', derivationPath: "m/84'/0'/0'/0/1", source: 'hd' },
+                    ],
+                }),
+                getActiveAddresses: vi.fn(() => active.promise),
+            },
+        });
+        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SAVED_LOOKALIKE));
+        await fillSendForm();
+        const review = await screen.findByRole('form', { name: 'Review payment' });
+        expect(review).toHaveTextContent('bc1q11…abcdef');
+
+        active.resolve({ [CHAIN_ID]: { id: 'active', address: FROM } });
+        await Promise.resolve();
+        expect(review).toHaveTextContent('bc1q11…abcdef');
+        fireEvent.click(within(review).getByRole('button', { name: 'Create transaction for signing' }));
+
+        await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ from: expect.objectContaining({ address: SAVED_LOOKALIKE }) }),
+        ));
+    });
+
+    it('does not fire completion UI effects after an in-flight send unmounts', async () => {
+        const build = deferred();
+        const vibrate = vi.fn();
+        vi.stubGlobal('navigator', { ...navigator, vibrate });
+        const messaging = mount({
+            walletMode: 'watcher',
+            overrides: { buildSendPsbtRequest: vi.fn(() => build.promise) },
+        });
+        await fillSendForm();
+        fireEvent.click(await screen.findByRole('button', { name: 'Create transaction for signing' }));
+        await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
+
+        messaging.unmountView();
+        build.resolve({ psbtHex: PSBT, fromAddress: FROM, chainId: CHAIN_ID });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(vibrate).not.toHaveBeenCalled();
     });
 });

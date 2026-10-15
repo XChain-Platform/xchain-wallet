@@ -69,7 +69,7 @@ describe('A-D route keyboard flows', () => {
             spending,
             screen.getByRole('button', { name: 'Rename Spending' }),
             screen.getByRole('button', { name: 'Add account' }),
-            screen.getByRole('button', { name: 'Manage account' }),
+            screen.getByRole('button', { name: 'Manage' }),
         ];
 
         for (const stop of stops) {

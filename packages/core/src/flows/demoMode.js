@@ -53,17 +53,41 @@ export const DEMO_DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
  * screen after every reload with a key they don't have. See above.
  */
 export function markDemoWallet(walletId, opts = {}) {
-    if (typeof walletId !== 'string' || !walletId) return;
-    const now = typeof opts.now === 'number' ? opts.now : Date.now();
-    const ttlMs = Number.isFinite(opts.ttlMs) && opts.ttlMs > 0
-        ? Math.floor(opts.ttlMs)
+    if (typeof walletId !== 'string' || !walletId.trim()) return;
+    const safeOpts = opts && typeof opts === 'object' ? opts : {};
+    const now = Number.isFinite(safeOpts.now) ? safeOpts.now : Date.now();
+    const ttlMs = Number.isFinite(safeOpts.ttlMs) && safeOpts.ttlMs > 0
+        ? Math.floor(safeOpts.ttlMs)
         : DEMO_DEFAULT_TTL_MS;
     try {
-        globalThis.localStorage?.setItem(STORAGE_KEY, walletId);
-        globalThis.localStorage?.setItem(TIMESTAMP_KEY, String(now));
-        globalThis.localStorage?.setItem(TTL_KEY, String(ttlMs));
-        if (typeof opts.password === 'string' && opts.password) {
-            globalThis.localStorage?.setItem(PASSWORD_KEY, opts.password);
+        const storage = globalThis.localStorage;
+        if (!storage) return;
+        const keys = [TIMESTAMP_KEY, TTL_KEY, PASSWORD_KEY, STORAGE_KEY];
+        const previous = new Map(keys.map((key) => [key, storage.getItem(key)]));
+        try {
+            // The wallet ID is the commit marker. Readers cannot observe new
+            // timing or password fields as belonging to a new demo until it lands.
+            storage.removeItem(STORAGE_KEY);
+            storage.setItem(TIMESTAMP_KEY, String(now));
+            storage.setItem(TTL_KEY, String(ttlMs));
+            if (typeof safeOpts.password === 'string' && safeOpts.password) {
+                storage.setItem(PASSWORD_KEY, safeOpts.password);
+            } else {
+                storage.removeItem(PASSWORD_KEY);
+            }
+            storage.setItem(STORAGE_KEY, walletId);
+        } catch {
+            // Restore the complete prior record when a multi-key write fails.
+            // Removing the commit marker first keeps any failed rollback inert.
+            try {
+                storage.removeItem(STORAGE_KEY);
+                for (const [key, value] of previous) {
+                    if (value === null) storage.removeItem(key);
+                    else storage.setItem(key, value);
+                }
+            } catch {
+                try { storage.removeItem(STORAGE_KEY); } catch { /* best-effort */ }
+            }
         }
     } catch { /* best-effort */ }
 }
@@ -104,8 +128,10 @@ export function getDemoWalletExpiry() {
         if (!tsRaw || !ttlRaw) return null;
         const createdAt = Number(tsRaw);
         const ttlMs = Number(ttlRaw);
-        if (!Number.isFinite(createdAt) || !Number.isFinite(ttlMs) || ttlMs <= 0) return null;
-        return { createdAt, ttlMs, expiresAt: createdAt + ttlMs };
+        const expiresAt = createdAt + ttlMs;
+        if (!Number.isFinite(createdAt) || !Number.isFinite(ttlMs)
+            || ttlMs <= 0 || !Number.isFinite(expiresAt)) return null;
+        return { createdAt, ttlMs, expiresAt };
     } catch {
         return null;
     }
@@ -124,7 +150,7 @@ export function isDemoWalletExpired(opts = {}) {
     if (!getDemoWalletId()) return false;
     const expiry = getDemoWalletExpiry();
     if (!expiry) return false;
-    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const now = Number.isFinite(opts?.now) ? opts.now : Date.now();
     return now >= expiry.expiresAt;
 }
 

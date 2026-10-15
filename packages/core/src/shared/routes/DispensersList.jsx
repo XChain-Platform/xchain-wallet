@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -21,10 +21,12 @@ import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const DISPENSER_REFRESH_MS = 20000;
 
 /**
  * "My dispensers": §40.7.1 / §40.7.2 owner-facing list view.
@@ -82,6 +84,17 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         /** @type {Record<string, null | { chainTime: number, chainTimeReadAtMs: number }>} */ ({}),
     );
 
+    // Lifecycle changes land independently of this route. Refreshing on the
+    // standard wallet cadence lets an open row become closing or terminal as
+    // soon as the explorer indexes the owner transaction.
+    useEffect(() => {
+        if (!addressesByChain || flowsLib.isDemoWallet(walletId)) return undefined;
+        return startVisibleInterval(
+            () => setDispensersReload((value) => value + 1),
+            DISPENSER_REFRESH_MS,
+        );
+    }, [addressesByChain, walletId]);
+
     useEffect(() => {
         let cancelled = false;
         setAddressesByChain(null);
@@ -128,9 +141,17 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         const chains = chainsWithAddresses;
         if (chains.length === 0) return;
 
-        const initial = {};
-        for (const cid of chains) initial[cid] = { loading: true, rows: [], error: null };
-        setDispensersByChain(initial);
+        setDispensersByChain((previous) => {
+            const initial = {};
+            for (const cid of chains) {
+                initial[cid] = {
+                    loading: true,
+                    rows: previous[cid]?.rows || [],
+                    error: null,
+                };
+            }
+            return initial;
+        });
 
         let cancelled = false;
 
@@ -276,11 +297,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         return states.some((s) => s.loading);
     }, [dispensersByChain]);
 
-    const loadErrors = useMemo(() => (
-        Object.entries(dispensersByChain)
-            .filter(([, s]) => s.error)
-            .map(([cid]) => chainRegistry.get(cid)?.displayName || cid)
-    ), [dispensersByChain]);
+    const hasLoadErrors = useMemo(
+        () => Object.values(dispensersByChain).some((state) => state.error),
+        [dispensersByChain],
+    );
 
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -364,25 +384,34 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     return wrap(
         <ListPage
             toolbar={(
-                <>
-                    <input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        className={local.search}
-                        placeholder="Search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search dispensers"
-                    />
-                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
-                </>
+                <div className={local.toolbar} style={{ flexWrap: 'wrap' }}>
+                    <div className={local.searchField}>
+                        <Input
+                            type="search"
+                            size="md"
+                            enterKeyHint="search"
+                            autoCapitalize="off"
+                            className={local.search}
+                            placeholder="Search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            aria-label="Search dispensers"
+                        />
+                    </div>
+                    <div className={local.searchField}>
+                        <NetworkFilterDropdown
+                            value={network}
+                            onChange={setNetwork}
+                            announceNetworkCount
+                        />
+                    </div>
+                </div>
             )}
         >
-            {loadErrors.length > 0 ? (
+            {hasLoadErrors ? (
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
@@ -394,14 +423,14 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         },
                     }}
                 >
-                    Couldn't load some dispensers. Failed networks: {loadErrors.join(', ')}. Try again.
+                    Couldn't load some dispensers. Try again.
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
-            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+            ) : hasLoadErrors && allRows.length === 0 ? (
                 null
             ) : visibleRows.length === 0 ? (
                 allRows.length === 0 ? (
@@ -423,21 +452,22 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     />
                 )
             ) : (
-                <div className={local.list} role="list">
+                <ul className={local.list}>
                     {visibleRows.map((row) => (
-                        <DispenserRow
-                            key={`${row.chainId}:${row.action_index}`}
-                            row={row}
-                            label={row.address ? dispenserLabels[row.address] : undefined}
-                            oracleFeeds={oracleFeedsFor(row.chainId, row)}
-                            cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
-                            nowMs={nowMs}
-                            chainClock={chainClocks[row.chainId] || null}
-                            onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
-                            allowRemoteImages={allowRemoteImages}
-                        />
+                        <li className={local.listItem} key={`${row.chainId}:${row.action_index}`}>
+                            <DispenserRow
+                                row={row}
+                                label={row.address ? dispenserLabels[row.address] : undefined}
+                                oracleFeeds={oracleFeedsFor(row.chainId, row)}
+                                cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
+                                nowMs={nowMs}
+                                chainClock={chainClocks[row.chainId] || null}
+                                onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
+                                allowRemoteImages={allowRemoteImages}
+                            />
+                        </li>
                     ))}
-                </div>
+                </ul>
             )}
         </ListPage>,
     );
@@ -448,7 +478,6 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
         : null;
-    const descriptor = chainRegistry.get(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
     // 'valid' forever, which dressed every dispenser - cancelled and drained
@@ -469,14 +498,12 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
         ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
         : status;
     return (
-        <Button
+        <ListRow
             type="button"
             className={local.row}
-            role="listitem"
             onClick={onSelect}
             aria-label={`Open ${row.give_tick || '?'} dispenser #${row.action_index ?? '?'}`}
-        >
-            <div className={local.iconWrap}>
+            leading={<span className={local.iconWrap}>
                 <span
                     className={local.iconLetter}
                     style={{ background: tickerColor(row.give_tick || '?'), color: '#FFFFFF' }}
@@ -501,21 +528,16 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                         src={chainIconUrl}
                         alt=""
                         aria-hidden="true"
-                    title={chainRegistry.get(row.chainId)?.displayName}
-                    className={local.chainOverlay}
-                    loading="lazy"
-                    decoding="async"
+                        className={local.chainOverlay}
+                        loading="lazy"
+                        decoding="async"
                     />
                 ) : null}
-            </div>
-            <div className={local.body}>
-                <div className={local.name}>
-                    {label ? `${label}: ` : ''}{row.give_tick || '?'}
-                </div>
-                <div className={local.subtitle}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-                </div>
-                <div className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</div>
+            </span>}
+            title={<span className={local.name}>{label ? `${label}: ` : ''}{row.give_tick || '?'}</span>}
+            subtitle={(
+                <span className={local.body}>
+                    <span className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</span>
                 {/* Escrow is only stated when it is known. The explorer's
                     dispenser LIST lane carries no escrow column (remaining is
                     derived per action, in the detail read path), so on real
@@ -524,20 +546,21 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     dispenser had not funded yet (D-40). Open the dispenser to
                     see its live balance. */}
                 {row.escrow_remaining != null && !isTerminal ? (
-                    <div className={local.subtitle}>
+                    <span className={local.subtitle}>
                         {`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}
-                    </div>
+                    </span>
                 ) : null}
-            </div>
-            <div className={local.trailing}>
+                </span>
+            )}
+            trailing={<span className={local.trailing}>
                 <span
                     className={`${local.status} ${local[`status_${status}`] || ''}`}
                     title={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
                 >
                     {badge}
                 </span>
-            </div>
-        </Button>
+            </span>}
+        />
     );
 }
 

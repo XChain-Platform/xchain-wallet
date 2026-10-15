@@ -31,8 +31,9 @@
 // to pass it silently restores the beacon. That asymmetry is why the weaker
 // control is the one that needs pinning.
 
-import { describe, it, expect } from 'vitest';
-import { tokenInfoFor } from '../../../packages/core/src/flows/tokenInfo.js';
+import { describe, it, expect, vi } from 'vitest';
+import { fetchTisBundle, tokenInfoFor } from '../../../packages/core/src/flows/tokenInfo.js';
+import { DEFAULT_FETCH_TIMEOUT_MS } from '../../../packages/core/src/shared/utils/fetchWithRetry.js';
 
 const ISSUER_URL = 'https://issuer.example/token.json';
 
@@ -66,6 +67,29 @@ function recordingFetch(body = TIS_JSON) {
 }
 
 describe('SSC-5 second control: metadataFetchEnabled gates the issuer-chosen fetch', () => {
+    it('aborts a hung issuer request at the shared fetch timeout', async () => {
+        vi.useFakeTimers();
+        const fetch = vi.fn((_url, { signal }) => new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(
+                Object.assign(new Error('aborted'), { name: 'AbortError' }),
+            ), { once: true });
+        }));
+
+        try {
+            const result = fetchTisBundle({ description: ISSUER_URL, fetch });
+            await vi.advanceTimersByTimeAsync((DEFAULT_FETCH_TIMEOUT_MS * 2) + 1_000);
+
+            await expect(result).resolves.toBeNull();
+            expect(fetch).toHaveBeenCalledTimes(2);
+            expect(fetch).toHaveBeenLastCalledWith(ISSUER_URL, {
+                redirect: 'follow',
+                signal: expect.any(AbortSignal),
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('does not expose an on-chain remote image when metadata fetching is off', async () => {
         const image = 'https://tracker.invalid/pixel.png?token=BEACON';
         const info = await tokenInfoFor({

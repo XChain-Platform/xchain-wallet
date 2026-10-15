@@ -39,22 +39,17 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 const SPOT_TTL_MS = 5 * 60 * 1000;
 const SPARKLINE_TTL_MS = 60 * 60 * 1000;
 
-// CoinGecko's coin-id namespace. All networks (mainnet / testnet /
-// regtest) map to the same id per coin. The price of Bitcoin is the
-// same regardless of which network the user is currently holding it
-// on. Testnet / regtest coins are economically worthless, but it's
-// still useful to surface "what would this be worth on mainnet" on
-// the TokenDetail page rather than showing nothing.
+function isFreshAge(ageMs, ttlMs) {
+    return ageMs >= 0 && ageMs <= ttlMs;
+}
+
+// CoinGecko's coin-id namespace. Only mainnet chains have a market
+// price. Demo wallets supply their own fixture prices before this
+// oracle is reached, while real testnet and regtest coins stay unpriced.
 const COINGECKO_ID_BY_CHAIN = {
     'bitcoin-mainnet': 'bitcoin',
-    'bitcoin-testnet': 'bitcoin',
-    'bitcoin-regtest': 'bitcoin',
     'litecoin-mainnet': 'litecoin',
-    'litecoin-testnet': 'litecoin',
-    'litecoin-regtest': 'litecoin',
     'dogecoin-mainnet': 'dogecoin',
-    'dogecoin-testnet': 'dogecoin',
-    'dogecoin-regtest': 'dogecoin',
 };
 
 /**
@@ -64,6 +59,7 @@ const COINGECKO_ID_BY_CHAIN = {
  * @property {number | null} change24hPct              percent, signed
  * @property {number[] | null} sparkline               historical price points (oldest → newest); only populated when includeSparkline
  * @property {number} fetchedAt                        epoch ms when this entry was cached
+ * @property {boolean} [stale]                         true when a failed refresh leaves an expired cached entry
  */
 
 /**
@@ -103,7 +99,13 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
         if (!Array.isArray(chainIds)) {
             throw new Error('getNativePrices: chainIds must be an array');
         }
-        const vsCurrency = String(fiatCurrency).toLowerCase();
+        if (chainIds.some((id) => typeof id !== 'string' || id.length === 0)) {
+            throw new Error('getNativePrices: chainIds must contain non-empty strings');
+        }
+        const vsCurrency = String(fiatCurrency).trim().toLowerCase();
+        if (!/^[a-z]{3}$/.test(vsCurrency)) {
+            throw new Error('getNativePrices: fiatCurrency must be a three-letter currency code');
+        }
         /** @type {Record<string, NativePriceEntry | null>} */
         const out = {};
 
@@ -128,7 +130,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
             const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
             if (!cached) { stale.push(lk); continue; }
             const ageMs = tNow - cached.fetchedAt;
-            if (ageMs > SPOT_TTL_MS) { stale.push(lk); continue; }
+            if (!isFreshAge(ageMs, SPOT_TTL_MS)) { stale.push(lk); continue; }
             out[lk.chainId] = cached;
         }
 
@@ -142,28 +144,35 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
                 const resp = await fetchWithRetry(fetch, url, { signal });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
-                for (const lk of stale) {
+                const entries = stale.map((lk) => {
                     const key = cacheKey(lk.chainId, vsCurrency);
                     const row = data?.[lk.coingeckoId];
+                    const priceFiat = numOrNull(row?.[vsCurrency]);
+                    if (priceFiat === null || priceFiat <= 0) {
+                        throw new Error(`CoinGecko returned no valid ${vsCurrency.toUpperCase()} price for ${lk.coingeckoId}`);
+                    }
                     /** @type {NativePriceEntry} */
                     const entry = {
-                        priceFiat: numOrNull(row?.[vsCurrency]),
+                        priceFiat,
                         marketCapFiat: numOrNull(row?.[`${vsCurrency}_market_cap`]),
                         change24hPct: numOrNull(row?.[`${vsCurrency}_24h_change`]),
                         sparkline: cache.get(key)?.sparkline ?? null,
                         fetchedAt: tNow,
                     };
+                    return { lk, key, entry };
+                });
+                for (const { lk, key, entry } of entries) {
                     cache.set(key, entry);
                     out[lk.chainId] = entry;
                 }
             } catch (err) {
                 if (signal?.aborted) throw err;
                 spotErr = err && err.message ? String(err.message) : String(err);
-                // Surface cached entries even on failure (better than blank
-                // panels). New stale chains stay absent from `out`.
                 for (const lk of stale) {
                     const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
-                    if (cached) out[lk.chainId] = cached;
+                    if (!cached) continue;
+                    cached.stale = true;
+                    out[lk.chainId] = cached;
                 }
             }
         }
@@ -172,44 +181,47 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
         // cached chart is missing or stale. Each chain costs one
         // request, so this is the expensive path; the 1-hour TTL means
         // a typical user pays it once per coin per session.
+        let sparklineErr = null;
         if (includeSparkline) {
             await Promise.all(lookups.map(async (lk) => {
                 const key = cacheKey(lk.chainId, vsCurrency);
                 const cached = cache.get(key);
                 const fetchedAt = sparklineFetchedAt.get(key);
                 if (cached?.sparkline && fetchedAt !== undefined
-                    && tNow - fetchedAt <= SPARKLINE_TTL_MS) return;
+                    && isFreshAge(tNow - fetchedAt, SPARKLINE_TTL_MS)) return;
                 try {
                     const url = `${COINGECKO_API_BASE}/coins/${encodeURIComponent(lk.coingeckoId)}/market_chart?vs_currency=${encodeURIComponent(vsCurrency)}&days=7`;
                     const resp = await fetchWithRetry(fetch, url, { signal });
                     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                     const data = await resp.json();
                     const series = Array.isArray(data?.prices)
-                        ? data.prices.map((pt) => Number(pt?.[1])).filter(Number.isFinite)
+                        ? data.prices.map((pt) => Number(pt?.[1])).filter((price) => Number.isFinite(price) && price > 0)
                         : null;
-                    if (series && series.length > 0) {
-                        const updated = {
-                            ...(cached ?? {
-                                priceFiat: null,
-                                marketCapFiat: null,
-                                change24hPct: null,
-                                fetchedAt: tNow - SPOT_TTL_MS - 1,
-                            }),
-                            sparkline: series,
-                        };
-                        cache.set(key, updated);
-                        sparklineFetchedAt.set(key, tNow);
-                        out[lk.chainId] = updated;
+                    if (!series || series.length === 0) {
+                        throw new Error(`CoinGecko returned no valid price history for ${lk.coingeckoId}`);
                     }
+                    const updated = {
+                        ...(cached ?? {
+                            priceFiat: null,
+                            marketCapFiat: null,
+                            change24hPct: null,
+                            fetchedAt: tNow - SPOT_TTL_MS - 1,
+                            stale: true,
+                        }),
+                        sparkline: series,
+                    };
+                    cache.set(key, updated);
+                    sparklineFetchedAt.set(key, tNow);
+                    out[lk.chainId] = updated;
                 } catch (err) {
                     if (signal?.aborted) throw err;
-                    // Sparkline-only failure leaves the spot data intact.
+                    sparklineErr ??= err && err.message ? String(err.message) : String(err);
                 }
             }));
         }
 
         const result = /** @type {PriceOracleResult} */ ({ prices: out });
-        if (spotErr) result.error = spotErr;
+        if (spotErr || sparklineErr) result.error = spotErr || sparklineErr;
         return result;
     }
 

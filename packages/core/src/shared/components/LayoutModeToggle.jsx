@@ -11,6 +11,8 @@
 import { useEffect, useId, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
+import { t } from '../../i18n/index.js';
+import { LAYOUT_MODE_STORAGE_KEY } from '../utils/layoutModeStorageKey.js';
 
 /**
  * Settings tile in the pancake drawer that lets the user pick how
@@ -32,7 +34,6 @@ import styles from './LayoutModeToggle.module.css';
  * the worker's storage listener applies it to the action button
  * the next time the user clicks.
  */
-const STORAGE_KEY = 'xchain.layoutMode';
 
 function isExtensionContext() {
     return typeof chrome !== 'undefined'
@@ -49,18 +50,26 @@ export function LayoutModeToggle() {
 
     useEffect(() => {
         if (!isExtensionContext()) return;
+        let active = true;
+        let storageChanged = false;
         setAvailable(true);
-        chrome.storage.local.get(STORAGE_KEY, (items) => {
-            const v = items?.[STORAGE_KEY];
-            if (v === 'popup' || v === 'sidepanel') setMode(v);
-        });
         const onChanged = (changes, area) => {
             if (area !== 'local') return;
-            const next = changes[STORAGE_KEY]?.newValue;
-            if (next === 'popup' || next === 'sidepanel') setMode(next);
+            if (!Object.prototype.hasOwnProperty.call(changes, LAYOUT_MODE_STORAGE_KEY)) return;
+            storageChanged = true;
+            const next = changes[LAYOUT_MODE_STORAGE_KEY]?.newValue;
+            if (active && (next === 'popup' || next === 'sidepanel')) setMode(next);
         };
         chrome.storage.onChanged.addListener(onChanged);
-        return () => chrome.storage.onChanged.removeListener(onChanged);
+        chrome.storage.local.get(LAYOUT_MODE_STORAGE_KEY, (items) => {
+            if (!active || storageChanged) return;
+            const v = items?.[LAYOUT_MODE_STORAGE_KEY];
+            if (v === 'popup' || v === 'sidepanel') setMode(v);
+        });
+        return () => {
+            active = false;
+            chrome.storage.onChanged.removeListener(onChanged);
+        };
     }, []);
 
     if (!available) return null;
@@ -68,14 +77,19 @@ export function LayoutModeToggle() {
     function pick(next) {
         if (next === mode) return;
         setMode(next);
-        chrome.storage.local.set({ [STORAGE_KEY]: next });
+        try {
+            const pending = chrome.storage.local.set({ [LAYOUT_MODE_STORAGE_KEY]: next });
+            if (typeof pending?.catch === 'function') void pending.catch(() => {});
+        } catch {
+            // Extension reloads can invalidate the storage context between render and click.
+        }
     }
 
     return (
         <div className={styles.wrap}>
-            <span id={labelId} className={styles.label}>Open as</span>
+            <span id={labelId} className={styles.label}>{t('components.layoutModeToggle.openAs')}</span>
             <span id={descriptionId} className={styles.description}>
-                Choose how the wallet opens from the extension toolbar.
+                {t('components.layoutModeToggle.chooseHowTheWalletOpens')}
             </span>
             <div
                 className={styles.buttons}
@@ -91,7 +105,7 @@ export function LayoutModeToggle() {
                     onClick={() => pick('popup')}
                 >
                     <Icon.HomeIcon />
-                    <span>Popup</span>
+                    <span>{t('components.layoutModeToggle.popup')}</span>
                 </button>
                 <button
                     type="button"
@@ -101,7 +115,7 @@ export function LayoutModeToggle() {
                     onClick={() => pick('sidepanel')}
                 >
                     <Icon.MoreIcon />
-                    <span>Sidebar</span>
+                    <span>{t('components.layoutModeToggle.sidebar')}</span>
                 </button>
             </div>
         </div>

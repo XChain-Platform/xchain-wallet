@@ -4,13 +4,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ScanRoute } from '../../../packages/core/src/shared/routes/ScanRoute.jsx';
 import { encodeXcwChunks } from '../../../packages/core/src/uri/psbtQr.js';
 
+const scanner = vi.hoisted(() => ({ onFrame: null }));
+
 vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     const actual = await importOriginal();
-    return { ...actual, QrScanner: () => null };
+    return {
+        ...actual,
+        QrScanner: ({ onFrame }) => {
+            scanner.onFrame = onFrame;
+            return null;
+        },
+    };
 });
 
 const RAW_TRANSACTION = '0200000001'
@@ -51,14 +59,35 @@ const ROUTING_CASES = [
         outcome: { kind: 'send', address: DOGE, amount: '12', chainId: 'dogecoin-mainnet' },
     },
     {
-        name: 'plain address',
+        name: 'plain Bitcoin address',
         input: BTC,
         outcome: { kind: 'send', address: BTC, chainId: 'bitcoin-mainnet' },
+    },
+    {
+        name: 'plain Litecoin address',
+        input: LTC,
+        outcome: { kind: 'send', address: LTC, chainId: 'litecoin-mainnet' },
+    },
+    {
+        name: 'plain Dogecoin address',
+        input: DOGE,
+        outcome: { kind: 'send', address: DOGE, chainId: 'dogecoin-mainnet' },
     },
     {
         name: 'uppercase bech32 address',
         input: BTC.toUpperCase(),
         outcome: { kind: 'send', address: BTC.toUpperCase(), chainId: 'bitcoin-mainnet' },
+    },
+    {
+        name: 'uppercase BIP21 QR with standard fields and an unknown optional parameter',
+        input: `BITCOIN:${BTC.toUpperCase()}?AMOUNT=0.25&LABEL=Coffee%20shop&MESSAGE=Order%2042&EXTRA=kept`,
+        outcome: {
+            kind: 'send',
+            address: BTC.toUpperCase(),
+            amount: '0.25',
+            memo: 'Order 42',
+            chainId: 'bitcoin-mainnet',
+        },
     },
     {
         name: 'legacy xchain send URI',
@@ -108,24 +137,34 @@ const ROUTING_CASES = [
 
 const EXPLANATION_CASES = [
     {
-        name: 'payment URI whose address belongs to another chain',
+        name: 'payment URI whose address belongs to another network',
         input: `bitcoin:${LTC}?amount=1`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
-        name: 'payment URI whose chain parameter contradicts its scheme',
+        name: 'payment URI whose network parameter contradicts its scheme',
         input: `bitcoin:${BTC}?chain=litecoin-mainnet`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
-        name: 'xchain payment whose address contradicts its chain',
+        name: 'xchain payment whose address contradicts its network',
         input: `xchain:LTC/send?to=${BTC}&amount=1`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'unsupported required BIP21 parameter',
         input: `bitcoin:${BTC}?req-something=1`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
+    },
+    {
+        name: 'uppercase unsupported required BIP21 parameter',
+        input: `BITCOIN:${BTC.toUpperCase()}?REQ-SOMETHING=1`,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
+    },
+    {
+        name: 'scientific-notation BIP21 amount',
+        input: `BITCOIN:${BTC.toUpperCase()}?AMOUNT=1E-8`,
+        message: /contains text the wallet doesn't know how to use.*scan a supported.*paste it below instead/i,
     },
     {
         name: 'address-shaped garbage',
@@ -135,12 +174,12 @@ const EXPLANATION_CASES = [
     {
         name: 'signed transaction hex',
         input: RAW_TRANSACTION,
-        message: /signed transaction.*can't broadcast raw transaction hex/i,
+        message: /signed transaction.*Broadcast transaction.*scan or paste it there/i,
     },
     {
         name: 'backup pointer',
         input: 'xchain-backup:1?loc=https%3A%2F%2Fexample.com%2Fwallet&name=Cold',
-        message: /backup pointer.*Import wallet.*Encrypted backup/i,
+        message: /encrypted-backup code.*Import wallet.*Encrypted backup/i,
     },
     {
         name: 'pairing code',
@@ -155,7 +194,7 @@ const EXPLANATION_CASES = [
     {
         name: 'private key',
         input: 'KwXGs3HkgjKA5exN3UiMQtGQakRrJ9zysFDa4rY4dcEdqeerF1tF',
-        message: /private key.*Import Wallet.*Import WIF/i,
+        message: /private key.*Import wallet.*Private key/i,
     },
     {
         name: 'recovery phrase',
@@ -176,7 +215,9 @@ const EXPLANATION_CASES = [
 
 function submit(input, onClassified = vi.fn()) {
     render(<ScanRoute onClassified={onClassified} onBack={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText('Or paste it here'), { target: { value: input } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Or paste it here' }), {
+        target: { value: input },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Use pasted text' }));
     return onClassified;
 }
@@ -184,6 +225,19 @@ function submit(input, onClassified = vi.fn()) {
 afterEach(() => cleanup());
 
 describe('ScanRoute classified results', () => {
+    it('applies only the first result when two frames arrive before rerender', () => {
+        const onClassified = vi.fn();
+        render(<ScanRoute onClassified={onClassified} onBack={vi.fn()} />);
+
+        act(() => {
+            scanner.onFrame(BTC);
+            scanner.onFrame(LTC);
+        });
+
+        expect(onClassified).toHaveBeenCalledOnce();
+        expect(onClassified).toHaveBeenCalledWith(expect.objectContaining({ address: BTC }));
+    });
+
     it.each(ROUTING_CASES)('routes $name to its destination', ({ input, outcome }) => {
         const onClassified = submit(input);
         expect(onClassified).toHaveBeenCalledOnce();

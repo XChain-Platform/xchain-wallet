@@ -84,6 +84,8 @@ describe('OrderbookPanel market display', () => {
         expect(priceHeader).toHaveAttribute('scope', 'col');
         expect(priceHeader.className).toContain('numeric');
         expect(bids.querySelectorAll('th[scope="col"]')).toHaveLength(3);
+        // The book stays a three-column table on a phone, never stacked rows.
+        expect(bids.className).toContain('keepColumns');
 
         expect(screen.getByText('Buy bids')).toBeInTheDocument();
         expect(screen.getByText('Sell asks')).toBeInTheDocument();
@@ -129,17 +131,52 @@ describe('OrderbookPanel market display', () => {
         expect(container).not.toHaveTextContent('NaN');
         expect(container).not.toHaveTextContent('undefined');
     });
+
+    it('does not let an older poll overwrite a newer order book', async () => {
+        const older = deferred();
+        const newer = deferred();
+        const getOrderbook = vi.fn()
+            .mockImplementationOnce(() => older.promise)
+            .mockImplementationOnce(() => newer.promise);
+        renderBook(getOrderbook);
+
+        fireEvent(document, new Event('visibilitychange'));
+        expect(getOrderbook).toHaveBeenCalledTimes(2);
+
+        await act(async () => newer.resolve({ bids: [['2', '4']], asks: [] }));
+        expect(await screen.findByTitle('2')).toBeInTheDocument();
+
+        await act(async () => older.resolve({ bids: [['1', '3']], asks: [] }));
+        expect(screen.getByTitle('2')).toBeInTheDocument();
+        expect(screen.queryByTitle('1')).toBeNull();
+    });
+
+    it('gives repeated price levels distinct React keys', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            renderBook(vi.fn().mockResolvedValue({
+                bids: [['1', '2'], ['1', '3']],
+                asks: [],
+            }));
+
+            expect(await screen.findAllByTitle('1')).toHaveLength(2);
+            expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
+        } finally {
+            consoleError.mockRestore();
+        }
+    });
 });
 
 describe('market data table semantics', () => {
-    it('stacks labeled cells below 600px', () => {
+    it('stacks labeled cells below 600px unless a table keeps its columns', () => {
         const css = readFileSync(
             'packages/core/src/shared/components/DataTable.module.css',
             'utf8',
         );
 
         expect(css).toMatch(/@media not all and \(min-width: 600px\)/);
-        expect(css).toMatch(/\.table \.cell\s*\{[\s\S]*display: grid/);
+        expect(css).toMatch(/\.table:not\(\.keepColumns\) \.cell\s*\{[\s\S]*display: grid/);
+        expect(css).toMatch(/\.keepColumns \.cell,[\s\S]*white-space: nowrap/);
         expect(css).toMatch(/content: attr\(data-label\)/);
     });
 
@@ -159,8 +196,36 @@ describe('market data table semantics', () => {
 
         const table = await screen.findByRole('table', { name: 'Recent trades' });
         expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(4);
+        expect(table.className).toContain('keepColumns');
+        // The Time heading sits over its right-aligned times.
+        expect(screen.getByRole('columnheader', { name: 'Time' }).className).toContain('numeric');
         expect(screen.getByRole('columnheader', { name: 'Price' }).className).toContain('numeric');
         expect(table.querySelector('td[data-label="Size (XCHAIN)"]').className).toContain('numeric');
+    });
+
+    it('gives repeated recent trades distinct React keys', async () => {
+        const repeated = {
+            action_index: 7,
+            type: 'buy',
+            price: '0.25',
+            amount: '12',
+            timestamp: 1_700_000_000,
+        };
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            render(
+                <MessagingProvider shell="web" messaging={{
+                    getMarketHistory: vi.fn().mockResolvedValue([repeated, { ...repeated }]),
+                }}>
+                    <RecentTradesPanel chainId="bitcoin-mainnet" tick1="XCHAIN" tick2="BTC" />
+                </MessagingProvider>,
+            );
+
+            expect(await screen.findAllByText('0.250000')).toHaveLength(2);
+            expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
+        } finally {
+            consoleError.mockRestore();
+        }
     });
 
     it('gives wallet trade history a caption, scoped headers, and stacked labels', async () => {

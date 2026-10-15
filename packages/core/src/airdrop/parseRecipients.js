@@ -39,11 +39,16 @@
 // paste artifacts), because a form that does not yet know its chain
 // still has to render something. Every real call site passes a chain.
 
-import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
+import {
+    isValidAddressAnyNetwork,
+    isValidAddressForChain,
+} from '../shared/utils/addressValidation.js';
 import { parseCsvRecords } from '../shared/utils/csv.js';
 
 const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
-const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase before testing.
+// Bech32 shape per BIP173: a human-readable part, the last `1` as separator, then at
+// least six data characters from the Bech32 charset. Tested against the lowercased value.
+const BECH32_SHAPE = /^[0-9a-z]+1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}$/;
 
 /**
  * Split a paste-box string into raw candidate strings. Handles line-
@@ -54,14 +59,25 @@ const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase bef
  * @returns {string[]}
  */
 export function parsePaste(text) {
+    return parsePasteEntries(text).map(({ value }) => value);
+}
+
+/**
+ * Parse pasted recipients while retaining each candidate's physical line.
+ * Comma-separated candidates on one row share that row's line number.
+ *
+ * @param {string} text
+ * @returns {Array<{ value: string, line: number }>}
+ */
+export function parsePasteEntries(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
-    // Split on any newline or comma. Keeps the split lightweight; we
-    // don't try to be a full CSV parser here.
-    const parts = text.split(/[\r\n,]+/g);
     const out = [];
-    for (const raw of parts) {
-        const trimmed = stripWrappingQuotes(raw.trim());
-        if (trimmed.length > 0) out.push(trimmed);
+    const lines = text.split(/\r\n|\r|\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+        for (const raw of lines[index].split(/,+/g)) {
+            const value = stripWrappingQuotes(raw.trim());
+            if (value.length > 0) out.push({ value, line: index + 1 });
+        }
     }
     return out;
 }
@@ -74,6 +90,17 @@ export function parsePaste(text) {
  * @returns {string[]}
  */
 export function parseCsv(text) {
+    return parseCsvEntries(text).map(({ value }) => value);
+}
+
+/**
+ * Parse first-column CSV recipients while retaining the physical line where
+ * each RFC 4180 record starts.
+ *
+ * @param {string} text
+ * @returns {Array<{ value: string, line: number }>}
+ */
+export function parseCsvEntries(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
     const rows = parseCsvRecords(text);
     const out = [];
@@ -84,7 +111,7 @@ export function parseCsv(text) {
     const start = firstContent + (firstCol === 'address' ? 1 : 0);
     for (let i = start; i < rows.length; i += 1) {
         const first = rows[i].cells[0].trim().replace(/^\uFEFF/, '');
-        if (first.length > 0) out.push(first);
+        if (first.length > 0) out.push({ value: first, line: rows[i].line });
     }
     return out;
 }
@@ -105,8 +132,10 @@ export function isPlausibleAddress(addr) {
     const isBech32Len = len === 42 || (len >= 14 && len <= 74 && s.includes('1'));
     if (!isP2pkhLen && !isBech32Len) return false;
     // Bech32 addresses are all-lowercase (or all-uppercase; wallets
-    // emit lowercase). Try lowercase match first.
-    if (BECH32_ALPHABET.test(s.toLowerCase())) return true;
+    // emit lowercase). Mixed case is never Bech32 (BIP173), and a string
+    // without the HRP-separator-data shape falls through to the Base58 check.
+    const lower = s.toLowerCase();
+    if ((s === lower || s === s.toUpperCase()) && BECH32_SHAPE.test(lower)) return true;
     if (BASE58_ALPHABET.test(s)) return true;
     return false;
 }
@@ -163,6 +192,12 @@ export function isRecipientForChain(addr, chain) {
  * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }}
  */
 export function classifyRecipients(candidates, chain) {
+    const classifier = createRecipientClassifier(chain, false);
+    for (const raw of candidates) classifier.add(raw);
+    return classifier.result();
+}
+
+function createRecipientClassifier(chain, includeLines) {
     /** @type {string[]} */
     const valid = [];
     /** @type {string[]} */
@@ -171,30 +206,83 @@ export function classifyRecipients(candidates, chain) {
     const wrongNetwork = [];
     const params = chainParams(chain);
     const seen = new Set();
+    const invalidLines = [];
+    const wrongNetworkLines = [];
     let duplicates = 0;
-    for (const raw of candidates) {
+    const add = (raw, line) => {
         const candidate = String(raw ?? '').trim();
-        if (!candidate) continue;
+        if (!candidate) return;
         // Bech32 is case-insensitive when the whole address uses one case.
-        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(candidate)
+        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/i.test(candidate)
             && (candidate === candidate.toLowerCase() || candidate === candidate.toUpperCase());
         const duplicateKey = bech32 ? candidate.toLowerCase() : candidate;
         if (seen.has(duplicateKey)) {
             duplicates += 1;
-            continue;
+            return;
         }
         seen.add(duplicateKey);
         if (isRecipientForChain(candidate, chain)) {
             valid.push(candidate);
-            continue;
+            return;
         }
         invalid.push(candidate);
+        if (includeLines) invalidLines.push({ address: candidate, line });
         // Only meaningful once a chain is known: it is the difference
         // between "this is not an address" and "this is an address for
         // somewhere else".
-        if (params && isPlausibleAddress(candidate)) wrongNetwork.push(candidate);
+        if (params && isValidAddressAnyNetwork(candidate)) {
+            wrongNetwork.push(candidate);
+            if (includeLines) wrongNetworkLines.push({ address: candidate, line });
+        }
+    };
+    const result = () => includeLines
+        ? { valid, invalid, duplicates, wrongNetwork, invalidLines, wrongNetworkLines }
+        : { valid, invalid, duplicates, wrongNetwork };
+    return { add, result };
+}
+
+/**
+ * Classify parsed entries and retain source locations for rejected rows.
+ * The canonical string arrays match `classifyRecipients`, so publishing and
+ * pricing use the same first-occurrence-wins duplicate rule as plain paste.
+ *
+ * @param {Array<{ value: string, line: number }>} entries
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
+ *   invalidLines: Array<{ address: string, line: number }>,
+ *   wrongNetworkLines: Array<{ address: string, line: number }> }}
+ */
+export function classifyRecipientEntries(entries, chain) {
+    const classifier = createRecipientClassifier(chain, true);
+    for (const entry of entries) classifier.add(entry?.value, entry?.line);
+    return classifier.result();
+}
+
+/**
+ * Classify a large parsed list in bounded chunks so input and paint tasks can
+ * run between batches. A cancelled classification returns null.
+ *
+ * @param {Array<{ value: string, line: number }>} entries
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @param {{ chunkSize?: number, yieldTask?: () => Promise<void>, shouldCancel?: () => boolean }} [options]
+ * @returns {Promise<ReturnType<typeof classifyRecipientEntries> | null>}
+ */
+export async function classifyRecipientEntriesAsync(entries, chain, options = {}) {
+    const rawChunkSize = Number(options.chunkSize);
+    const chunkSize = Number.isInteger(rawChunkSize) && rawChunkSize > 0 ? rawChunkSize : 250;
+    const yieldTask = options.yieldTask || (() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const shouldCancel = options.shouldCancel || (() => false);
+    const classifier = createRecipientClassifier(chain, true);
+
+    for (let index = 0; index < entries.length; index += 1) {
+        if (index > 0 && index % chunkSize === 0) {
+            await yieldTask();
+            if (shouldCancel()) return null;
+        }
+        const entry = entries[index];
+        classifier.add(entry?.value, entry?.line);
     }
-    return { valid, invalid, duplicates, wrongNetwork };
+    return classifier.result();
 }
 
 /**
@@ -222,22 +310,30 @@ export function reconcileStoredList(expected, stored) {
     const want = Array.isArray(expected) ? expected.map((a) => String(a ?? '').trim()) : [];
     const got = Array.isArray(stored) ? stored : [];
     const gotExact = new Set();
-    const gotLower = new Set();
+    const gotBech32 = new Set();
     for (const row of got) {
         const s = String(
             (row && typeof row === 'object' ? (row.address ?? row.item ?? '') : row) ?? '',
         ).trim();
         if (!s) continue;
         gotExact.add(s);
-        gotLower.add(s.toLowerCase());
+        if (isValidBech32Address(s)) gotBech32.add(s.toLowerCase());
     }
-    const missing = want.filter((a) => a && !gotExact.has(a) && !gotLower.has(a.toLowerCase()));
+    const missing = want.filter((a) => a
+        && !gotExact.has(a)
+        && !(isValidBech32Address(a) && gotBech32.has(a.toLowerCase())));
     return {
         expectedCount: want.length,
         storedCount: gotExact.size,
         missing,
         ok: missing.length === 0,
     };
+}
+
+function isValidBech32Address(address) {
+    const lower = address.toLowerCase();
+    return /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/.test(lower)
+        && isValidAddressAnyNetwork(address);
 }
 
 function stripWrappingQuotes(s) {

@@ -39,6 +39,35 @@
     --xc-space-6: 24px;
     --xc-space-8: 32px;
 
+    /* One vertical rhythm shared by form and list templates: sibling fields,
+       sections, section headers, and list rows. */
+    --xc-form-gap: var(--xc-space-4);
+    --xc-label-gap: var(--xc-space-1);
+    --xc-help-gap: var(--xc-space-1);
+    --xc-section-gap: var(--xc-space-4);
+    --xc-settings-row-gap: var(--xc-space-2);
+    --xc-section-header-gap: var(--xc-space-2);
+    --xc-list-row-padding: var(--xc-space-3);
+
+    /* Screen owns page-edge spacing so route content stays geometry-free. */
+    --xc-page-gutter: var(--xc-space-3);
+    --xc-page-top: var(--xc-space-3);
+
+    /* Every card (ui/Card.module.css) shares one border, fill, inset and
+       radius across content types, and a wide form card one width. */
+    --xc-card-pad: var(--xc-space-4);
+    --xc-card-radius: var(--xc-radius-md);
+    --xc-card-border: 1px solid var(--xc-border);
+    --xc-card-bg: var(--xc-surface-raised);
+    --xc-form-card-max-width: 560px;
+
+    /* Data and key-value tables share cell rhythm and column geometry. */
+    --xc-table-cell-padding-block: var(--xc-space-2);
+    --xc-table-cell-padding-inline: var(--xc-space-2);
+    --xc-table-label-width: 40%;
+    --xc-table-label-column: minmax(6.5rem, var(--xc-table-label-width));
+    --xc-table-row-divider: 1px solid var(--xc-border);
+
     /* Typography - platform fonts remain available when the web font fails. */
     --xc-font-sans: 'XChain Sans', 'XChain Sans Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
@@ -49,12 +78,41 @@
     --xc-text-xl: 1.25rem;
     --xc-text-2xl: 1.5rem;
 
+    /* Semantic type roles keep headings consistent across page templates,
+     * cards, and empty states without coupling components to raw tiers. */
+    --xc-type-page-title-size: var(--xc-text-lg);
+    --xc-type-page-title-weight: 700;
+    --xc-type-section-title-size: var(--xc-text-md);
+    --xc-type-section-title-weight: 700;
+    --xc-type-card-title-size: var(--xc-text-md);
+    --xc-type-card-title-weight: 600;
+    --xc-type-body-size: var(--xc-text-sm);
+    --xc-type-body-weight: 400;
+
+    /* Prose stays readable while its surrounding surface remains fluid. */
+    --xc-prose-max-width: 70ch;
+
     /* Icon sizes use one named scale across controls and navigation rows. */
     --xc-icon-xs: 14px;
     --xc-icon-sm: 16px;
     --xc-icon-md: 18px;
     --xc-icon-lg: 20px;
     --xc-icon-xl: 24px;
+
+    /* Identity and asset artwork use one size in each visual context. */
+    --xc-avatar-size-header: 28px;
+    --xc-avatar-size-list: 40px;
+    --xc-avatar-size-hero: 88px;
+    --xc-avatar-pip-header: 14px;
+    --xc-avatar-pip-list: 20px;
+    --xc-avatar-pip-hero: 32px;
+    /* The circles are fixed pixels while the initials follow the rem scale, so
+       a large text size (iOS Dynamic Type, browser zoom) would push two letters
+       past the clipped circle. The initials stop growing once they fill it. */
+    --xc-avatar-initials-header: min(var(--xc-text-xs), calc(var(--xc-avatar-size-header) * 0.4));
+    --xc-avatar-initials-list: min(var(--xc-text-md), calc(var(--xc-avatar-size-list) * 0.45));
+    --xc-avatar-initials-hero: 36px;
+    --xc-avatar-shape: var(--xc-radius-pill);
 
     /* Minimum interactive target (responsive-first, slice 2).
      *
@@ -75,9 +133,51 @@
     --xc-radius-xs: 2px;
     --xc-radius-sm: 4px;
     --xc-radius-md: 8px;
-    --xc-radius-control: 10px;
+    --xc-radius-control: var(--xc-control-radius);
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
+
+    /* Badges use one geometry scale regardless of semantic tone or theme. */
+    --xc-badge-height-sm: 24px;
+    --xc-badge-height-md: 32px;
+    --xc-badge-radius: var(--xc-radius-pill);
+    --xc-badge-font-size-sm: var(--xc-text-xs);
+    --xc-badge-font-size-md: var(--xc-text-sm);
+    --xc-badge-font-weight: 700;
+    --xc-badge-icon-size-sm: var(--xc-icon-sm);
+    --xc-badge-icon-size-md: var(--xc-icon-xl);
+    --xc-badge-gap: var(--xc-space-1);
+    --xc-badge-padding-inline-sm: var(--xc-space-2);
+    --xc-badge-padding-inline-md: var(--xc-space-3);
+
+    /* Controls share one measured scale across native and custom fields. */
+    --xc-control-h-sm: 28px;
+    --xc-control-h-md: 36px;
+    --xc-control-h-lg: 44px;
+    --xc-control-font-sm: 13px;
+    --xc-control-font-md: 14px;
+    --xc-control-font-lg: 16px;
+    --xc-control-pad-x-sm: 8px;
+    --xc-control-pad-x-md: 12px;
+    --xc-control-pad-x-lg: 16px;
+    --xc-button-pad-x-sm: 12px;
+    --xc-button-pad-x-md: 16px;
+    --xc-button-pad-x-lg: 20px;
+    --xc-control-icon-sm: 16px;
+    --xc-control-icon-md: 20px;
+    --xc-control-icon-lg: 24px;
+    --xc-control-line: 1.25;
+    --xc-control-radius: 8px;
+    --xc-control-hit-min: 24px;
+    --xc-control-font: var(--xc-control-font-md);
+    --xc-control-pad-x: var(--xc-control-pad-x-md);
+
+    /* Menus use one row measure across popovers, overflow actions, and
+     * navigation sheets. Content can wrap and grow beyond this minimum. */
+    --xc-menu-item-h: var(--xc-control-h-md);
+    --xc-menu-item-icon: var(--xc-icon-md);
+    --xc-menu-item-pad-block: var(--xc-space-2);
+    --xc-menu-item-pad-inline: var(--xc-control-pad-x);
 
     /* Shared stacking contexts stay ordered across every shell. */
     --xc-z-base: 1;
@@ -87,8 +187,14 @@
     --xc-z-modal: 1000;
     --xc-z-toast: 9999;
 
-    /* Motion - §5.4 transitions ≤ 200ms, no bouncy springs */
-    --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
+    /* Motion - §5.4 transitions stay at or below 200ms and avoid springs. */
+    --xc-motion-duration-fast: 120ms;
+    --xc-motion-duration-standard: 160ms;
+    --xc-motion-duration-ambient: 1400ms;
+    --xc-motion-ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+    --xc-motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    --xc-motion-ease-ambient: ease-in-out;
+    --xc-transition: var(--xc-motion-duration-standard) var(--xc-motion-ease-standard);
 
     /* Expensive paint effects stay tokenized so accessibility preferences and
      * low-power shells can replace them without changing desktop styling. */
@@ -107,24 +213,27 @@
     --xc-accent-primary-hover: #156690;
     --xc-accent-secondary: #7B2C8F;
     /* Accent and danger text stay close to their fill colours while clearing
-     * AA on the muted surface. The dark palette lifts them further because
+     * AA on the muted surface and on the tinted pill and hover fills. The dark palette lifts them further because
      * the fill shades fail AA as text on a dark card. Use these for `color:`,
      * and use the plain tokens for backgrounds and borders. */
-    --xc-accent-text: #1A77AA;
-    --xc-danger-fg: #DA2525;
+    --xc-accent-text: #156690;
+    --xc-danger-fg: #CC2020;
 
     /* Light theme - default */
     --xc-bg: #FFFFFF;
     --xc-bg-muted: #F5F6F8;
     --xc-surface: #FFFFFF;
     --xc-surface-raised: #FFFFFF;
-    /* Borders identify controls and regions against every theme surface, so
-     * both tiers clear the 3:1 non-text contrast floor. */
+    /* Borders identify controls and regions against every theme surface. */
     --xc-border: #818B9B;
-    --xc-border-strong: #727D8E;
+    --xc-border-strong: var(--xc-border);
     --xc-text: #0F172A;
     /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
+    /* Every select's arrow: the Network picker's chevron (ChevronDownIcon)
+       stroked in this palette's muted text color. Each palette block below
+       redefines it with its own muted color. */
+    --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%235F7086' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --xc-text-inverted: #FFFFFF;
 
     /* Labels sitting on semantic fills. Accent and danger use white; success
@@ -151,21 +260,46 @@
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
     --xc-success-fill: #146F34;
+    --xc-badge-multisig-classic-bg: #FEF3C7;
+    --xc-badge-multisig-classic-fg: #78350F;
+    --xc-badge-multisig-classic-border: #D97706;
+    --xc-badge-multisig-segwit-bg: #DBEAFE;
+    --xc-badge-multisig-segwit-fg: #1E3A8A;
+    --xc-badge-multisig-segwit-border: #3B82F6;
+    --xc-badge-multisig-taproot-bg: #EDE9FE;
+    --xc-badge-multisig-taproot-fg: #4C1D95;
+    --xc-badge-multisig-taproot-border: #8B5CF6;
     --xc-focus-ring: #0F172A;
-    /* Opacity and saturation make inactive controls distinct across neutral
-     * and semantic color pairs. */
-    --xc-disabled-opacity: 0.55;
+    /* Saturation communicates inactivity without alpha-compositing control
+     * borders below the non-text contrast floor. */
+    --xc-disabled-opacity: 1;
     --xc-disabled-saturation: 0.35;
+
+    /* Interactive primitives share semantic state colors so every theme can
+     * preserve the same border, selection, focus and disabled contracts. */
+    --xc-control-bg: var(--xc-bg);
+    --xc-control-bg-hover: var(--xc-bg-muted);
+    --xc-control-border: var(--xc-border);
+    --xc-control-border-hover: var(--xc-border-strong);
+    --xc-control-selected: var(--xc-accent-primary);
+    --xc-control-selected-text: var(--xc-on-accent);
+    --xc-control-focus-ring: var(--xc-focus-ring);
+    --xc-control-disabled-bg: var(--xc-bg-muted);
+    --xc-control-disabled-border: var(--xc-border-strong);
+    --xc-control-disabled-text: var(--xc-text-muted);
+    /* Three elevation levels cover cards, floating controls, and overlays. */
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-    --xc-shadow-header-menu: 0 8px 20px rgba(0, 0, 0, 0.18);
-    --xc-shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.15);
-    --xc-shadow-popover: 0 12px 30px rgba(0, 0, 0, 0.18);
     --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.35);
-    --xc-shadow-side-panel: -16px 0 40px rgba(0, 0, 0, 0.35);
-    --xc-shadow-bottom-sheet: 0 -8px 32px rgba(0, 0, 0, 0.18);
+    /* Semantic aliases keep surface intent readable while sharing recipes. */
+    --xc-shadow-header-menu: var(--xc-shadow-md);
+    --xc-shadow-toast: var(--xc-shadow-md);
+    --xc-shadow-popover: var(--xc-shadow-md);
+    --xc-shadow-side-panel: var(--xc-shadow-modal);
+    --xc-shadow-bottom-sheet: var(--xc-shadow-modal);
     --xc-shadow-surface-ring: 0 0 0 1.5px var(--xc-surface);
     --xc-shadow-accent-ring: 0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong));
+    --xc-shadow-selected-ring: inset 0 0 0 1px var(--xc-control-selected);
     --xc-shadow-focus-ring: 0 0 0 3px var(--xc-focus-ring);
     --xc-shadow-danger-focus-ring: 0 0 0 3px rgba(220, 38, 38, 0.2);
     --xc-shadow-nav-indicator: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
@@ -194,6 +328,93 @@
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
 }
 
+/* Semantic menus and menu-like navigation lists share one row contract.
+ * Feature styles continue to own popup placement and surface geometry. */
+:root [role="menu"],
+:root [data-xc-menu-list="rows"] {
+    gap: 0;
+}
+
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"],
+:root [data-xc-menu-list] [data-xc-menu-item] {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--xc-menu-item-h);
+    padding: var(--xc-menu-item-pad-block) var(--xc-menu-item-pad-inline);
+    gap: var(--xc-space-2);
+    justify-content: flex-start;
+    color: var(--xc-text);
+    text-align: start;
+}
+
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"],
+:root [data-xc-menu-list="rows"] [data-xc-menu-item] {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+:root [role="menu"] [role="menuitem"] > [aria-hidden="true"]:first-child,
+:root [role="menu"] [role="menuitemradio"] > [aria-hidden="true"]:first-child,
+:root [role="menu"] [role="menuitemcheckbox"] > [aria-hidden="true"]:first-child,
+:root [data-xc-menu-list] [data-xc-menu-item] > [aria-hidden="true"]:first-child {
+    flex: 0 0 var(--xc-menu-item-icon);
+    width: var(--xc-menu-item-icon);
+    height: var(--xc-menu-item-icon);
+}
+
+:root [role="menu"] [role="menuitem"] svg,
+:root [role="menu"] [role="menuitemradio"] svg,
+:root [role="menu"] [role="menuitemcheckbox"] svg,
+:root [data-xc-menu-list] [data-xc-menu-item] svg {
+    width: var(--xc-menu-item-icon);
+    height: var(--xc-menu-item-icon);
+}
+
+:root [role="menu"] > [role="menuitem"] + [role="menuitem"],
+:root [role="menu"] > li + li,
+:root [data-xc-menu-list="rows"] > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+:root [role="menu"] [role="menuitem"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [role="menu"] [role="menuitemradio"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [role="menu"] [role="menuitemcheckbox"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [data-xc-menu-list] [data-xc-menu-item]:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--xc-bg-muted);
+}
+
+:root [role="menu"] :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]):is([aria-current], [aria-checked="true"], [aria-selected="true"]),
+:root [data-xc-menu-list] [data-xc-menu-item][aria-current] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-text);
+    font-weight: 600;
+}
+
+:root [role="menu"] [role="menuitem"]:focus-visible,
+:root [role="menu"] [role="menuitemradio"]:focus-visible,
+:root [role="menu"] [role="menuitemcheckbox"]:focus-visible,
+:root [data-xc-menu-list] [data-xc-menu-item]:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] {
+    color: var(--xc-danger-fg);
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"]:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--xc-danger-bg);
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] svg {
+    color: currentColor;
+}
+
 /* The dvh form, only where the engine HAS dvh. It cannot sit in :root as a
  * second declaration the way a fallback pair normally would: a custom
  * property accepts any tokens, so the later declaration always wins the
@@ -204,6 +425,20 @@
 @supports (height: 100dvh) {
     :root {
         --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
+    }
+}
+
+@media (max-width: 480px) {
+    :root {
+        --xc-card-pad: var(--xc-space-3);
+    }
+}
+
+/* The narrowest phones keep the card inset to 8px so a two-column recovery
+   phrase grid still fits; every card narrows with it. */
+@media not all and (min-width: 360px) {
+    :root {
+        --xc-card-pad: var(--xc-space-2);
     }
 }
 
@@ -226,9 +461,9 @@
         --xc-surface: #151B28;
         --xc-surface-raised: #1B2231;
         --xc-border: #5F6D83;
-        --xc-border-strong: #718096;
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
+        --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         --xc-text-inverted: #0B0F17;
         --xc-on-success: #0B0F17;
         --xc-danger-bg: rgba(252, 165, 165, 0.14);
@@ -244,9 +479,19 @@
         --xc-warning: #F59E0B;
         --xc-success: #4ADE80;
         --xc-success-fill: #4ADE80;
+        --xc-badge-multisig-classic-bg: #3A260B;
+        --xc-badge-multisig-classic-fg: #FDE68A;
+        --xc-badge-multisig-classic-border: #F59E0B;
+        --xc-badge-multisig-segwit-bg: #0D2A4A;
+        --xc-badge-multisig-segwit-fg: #BFDBFE;
+        --xc-badge-multisig-segwit-border: #60A5FA;
+        --xc-badge-multisig-taproot-bg: #2E2350;
+        --xc-badge-multisig-taproot-fg: #DDD6FE;
+        --xc-badge-multisig-taproot-border: #A78BFA;
         --xc-focus-ring: #FFFFFF;
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+        --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
     }
 }
 
@@ -256,9 +501,9 @@
     --xc-surface: #151B28;
     --xc-surface-raised: #1B2231;
     --xc-border: #5F6D83;
-    --xc-border-strong: #718096;
     --xc-text: #E5EAF2;
     --xc-text-muted: #94A3B8;
+    --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --xc-text-inverted: #0B0F17;
     --xc-on-success: #0B0F17;
     --xc-danger-bg: rgba(252, 165, 165, 0.14);
@@ -274,9 +519,19 @@
     --xc-warning: #F59E0B;
     --xc-success: #4ADE80;
     --xc-success-fill: #4ADE80;
+    --xc-badge-multisig-classic-bg: #3A260B;
+    --xc-badge-multisig-classic-fg: #FDE68A;
+    --xc-badge-multisig-classic-border: #F59E0B;
+    --xc-badge-multisig-segwit-bg: #0D2A4A;
+    --xc-badge-multisig-segwit-fg: #BFDBFE;
+    --xc-badge-multisig-segwit-border: #60A5FA;
+    --xc-badge-multisig-taproot-bg: #2E2350;
+    --xc-badge-multisig-taproot-fg: #DDD6FE;
+    --xc-badge-multisig-taproot-border: #A78BFA;
     --xc-focus-ring: #FFFFFF;
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
 /* Tell the browser which palette its own widgets (scrollbars, native
@@ -298,6 +553,9 @@
  * back out of an OS preference the user does not want honoured here. */
 @media (prefers-reduced-motion: reduce) {
     :root:not([data-xc-reduced-motion="no-preference"]) {
+        --xc-motion-duration-fast: 0.01ms;
+        --xc-motion-duration-standard: 0.01ms;
+        --xc-motion-duration-ambient: 0.01ms;
         --xc-transition: 0ms;
         --xc-backdrop-filter: none;
         --xc-list-shadow: none;
@@ -317,6 +575,9 @@
 }
 
 :root[data-xc-reduced-motion="reduce"] {
+    --xc-motion-duration-fast: 0.01ms;
+    --xc-motion-duration-standard: 0.01ms;
+    --xc-motion-duration-ambient: 0.01ms;
     --xc-transition: 0ms;
     --xc-backdrop-filter: none;
     --xc-list-shadow: none;
@@ -327,6 +588,9 @@
 /* Native shells set this attribute when sustained GPU effects are too costly.
  * It reduces the same paint and motion work without changing user settings. */
 :root[data-xc-low-power="true"] {
+    --xc-motion-duration-fast: 0.01ms;
+    --xc-motion-duration-standard: 0.01ms;
+    --xc-motion-duration-ambient: 0.01ms;
     --xc-transition: 0ms;
     --xc-backdrop-filter: none;
     --xc-list-shadow: none;
@@ -388,9 +652,9 @@
         --xc-surface: #FFFFFF;
         --xc-surface-raised: #FFFFFF;
         --xc-border: #1F2937;
-        --xc-border-strong: #0F172A;
         --xc-text: #000000;
         --xc-text-muted: #1F2937;
+        --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%231F2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         --xc-danger: #B91C1C;
         --xc-info: #134B6E;
         --xc-info-text: #134B6E;
@@ -411,9 +675,9 @@
             --xc-surface: #050810;
             --xc-surface-raised: #0B0F17;
             --xc-border: #E5EAF2;
-            --xc-border-strong: #FFFFFF;
             --xc-text: #FFFFFF;
             --xc-text-muted: #E5EAF2;
+            --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23E5EAF2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
             --xc-danger: #FCA5A5;
             --xc-info: #93C5FD;
             --xc-info-text: #93C5FD;
@@ -437,9 +701,9 @@
         --xc-surface: #050810;
         --xc-surface-raised: #0B0F17;
         --xc-border: #E5EAF2;
-        --xc-border-strong: #FFFFFF;
         --xc-text: #FFFFFF;
         --xc-text-muted: #E5EAF2;
+        --xc-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23E5EAF2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         --xc-danger: #FCA5A5;
         --xc-info: #93C5FD;
         --xc-info-text: #93C5FD;
@@ -464,7 +728,6 @@
         --xc-surface: Canvas;
         --xc-surface-raised: Canvas;
         --xc-border: CanvasText;
-        --xc-border-strong: CanvasText;
         --xc-text: CanvasText;
         --xc-text-muted: GrayText;
         --xc-text-inverted: Canvas;
@@ -498,6 +761,9 @@ body {
     color: var(--xc-text);
     background: var(--xc-bg);
     -webkit-font-smoothing: antialiased;
+    /* Rotation must not inflate text independently of the responsive layout. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 
     /* Keep the app out from under the hardware. On an iPhone with a Dynamic
      * Island or a notch, the WebView is laid out edge to edge, so without this
@@ -536,6 +802,12 @@ body {
     box-sizing: border-box;
 }
 
+/* Paragraphs carry prose measure without narrowing their list, card, table,
+ * or form ancestors. Component rules can keep intentionally shorter copy. */
+:where(p) {
+    max-width: var(--xc-prose-max-width);
+}
+
 /* Controls and decorative glyphs behave as one touch target instead of
  * contributing label or icon fragments to a long-press selection. Wallet
  * data nested in a clickable row opts back into text selection in the
@@ -552,6 +824,23 @@ body {
 :where(svg[data-xc-icon]) {
     width: var(--xc-icon-size, var(--xc-icon-md));
     height: var(--xc-icon-size, var(--xc-icon-md));
+}
+
+:where(svg[data-xc-directional]) {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+:where([dir='rtl']) :where(svg[data-xc-directional]) {
+    transform: scaleX(-1);
+}
+
+:where(
+    input[type='number'],
+    input[inputmode='numeric'],
+    input[inputmode='decimal']
+) {
+    direction: ltr;
 }
 
 /* Machine-readable values remain directly selectable wherever they appear,
@@ -621,24 +910,66 @@ fieldset {
     select,
     textarea {
         font-size: 1rem !important;
+        font-size: var(--xc-control-font-md) !important;
     }
 }
 
-/* About thirty dropdowns are bare <select>s with no class (settings rows,
- * filters, pickers), and the UA default draws them as grey system widgets
- * that match nothing else on the screen. Give every class-less select the
- * Input field look. :where() keeps the specificity at zero, so a select's
- * own inline style or a later rule still wins. */
-:where(select:not([class])) {
-    padding: var(--xc-space-1) var(--xc-space-2);
+@media (pointer: coarse), (hover: none) {
+    :root {
+        --xc-control-h-sm: 36px;
+        --xc-control-h-md: 44px;
+        --xc-control-h-lg: 48px;
+        --xc-control-font-sm: 1rem;
+        --xc-control-font-md: 1rem;
+        --xc-control-font-lg: 1.0625rem;
+        --xc-control-hit-min: 44px;
+    }
+}
+
+/* Every dropdown, the shared Select and each native <select>, takes the
+ * Network picker's field look: its height, padding, border, radius and
+ * surface. :where() keeps the specificity at zero, so a sized Select's own
+ * height and padding still win. */
+:where(select) {
+    height: var(--xc-control-h-md, 36px);
+    padding-block: 0;
+    padding-inline: var(--xc-control-pad-x-md, 12px);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font-md, 14px);
+    line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background-color: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    min-height: 36px;
+    border-radius: var(--xc-control-radius, 8px);
     max-width: 100%;
+    cursor: pointer;
+}
+
+/* No select draws the browser's own arrow: each shows the Network picker's
+ * chevron at the inline end, with room kept so a long option never runs
+ * under it. The important declarations hold this when a component sets the
+ * background shorthand or its own padding. List boxes (multiple or size)
+ * keep their native look. */
+select:not([multiple]):not([size]) {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background-image: var(--xc-select-arrow) !important;
+    background-repeat: no-repeat !important;
+    background-size: 18px 18px !important;
+    background-position: right var(--xc-control-padding-x, var(--xc-control-pad-x-md, 12px)) center !important;
+    padding-inline-end: calc(var(--xc-control-padding-x, var(--xc-control-pad-x-md, 12px)) + 18px + var(--xc-space-2)) !important;
+}
+
+[dir='rtl'] select:not([multiple]):not([size]) {
+    background-position: left var(--xc-control-padding-x, var(--xc-control-pad-x-md, 12px)) center !important;
+}
+
+select:not([multiple]):not([size]):not(:disabled):not([aria-invalid='true']):hover {
+    border-color: var(--xc-accent-primary);
+}
+
+select:disabled {
+    cursor: not-allowed;
 }
 
 /* Keep one theme-aware keyboard indicator on native controls, links, and
@@ -705,7 +1036,7 @@ html.xc-focus-visible-fallback :where(
     filter: saturate(var(--xc-disabled-saturation));
 }
 
-:where(select:not([class])):focus {
+:where(select):focus {
     outline: none;
     border-color: var(--xc-accent-primary);
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
@@ -716,9 +1047,17 @@ html.xc-focus-visible-fallback :where(
         filter: none;
     }
 
-    :where(select:not([class])):focus {
+    :where(select):focus {
         outline: 2px solid Highlight;
         outline-offset: 2px;
+    }
+
+    /* The chevron image carries a fixed palette color, so system colors
+     * bring back the platform arrow, which follows the user's palette. */
+    select:not([multiple]):not([size]) {
+        -webkit-appearance: auto !important;
+        appearance: auto !important;
+        background-image: none !important;
     }
 }
 

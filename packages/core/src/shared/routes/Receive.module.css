@@ -1,123 +1,63 @@
 .assetCard {
-    display: flex;
+    display: block;
     align-items: center;
-    gap: var(--xc-space-3);
-    width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    margin-bottom: var(--xc-space-3);
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+    margin: 0 auto var(--xc-space-3);
     color: var(--xc-text);
-    font-family: inherit;
-    text-align: start;
     cursor: pointer;
     appearance: none;
-    transition: border-color 120ms ease, background-color 120ms ease;
+    transition: filter 120ms ease;
 }
 
 .assetCard:hover {
-    border-color: var(--xc-border-strong);
+    filter: brightness(0.96);
 }
 
 .assetCard:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) * 0.5);
 }
 
-.assetIconWrap {
-    position: relative;
-    flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
-}
-
-.assetIcon {
-    width: 48px;
-    height: 48px;
-    display: block;
-    object-fit: contain;
-    background: transparent;
-}
-
-.assetChainOverlay {
-    position: absolute;
-    bottom: -2px;
-    inset-inline-end: -2px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    /* raw-color-ok: fixed white preserves transparent chain artwork. */
-    background: #FFFFFF;
-    box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
-    object-fit: cover;
-    display: block;
-}
-
-.assetIconFallback {
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    font-weight: 700;
-    color: var(--xc-on-accent);
-    font-size: var(--xc-text-md);
-}
-
-.assetText {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.assetName {
-    font-size: var(--xc-text-md);
-    font-weight: 600;
-    color: var(--xc-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.assetSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-}
-
-.assetChevron {
-    flex: 0 0 auto;
-    color: var(--xc-text-muted);
-    font-size: 20px;
-    line-height: 1;
-}
-
+/* The QR card spans the form like the address field below it; only the code
+   inside is capped, so card, address and actions share one left edge. */
 .qrBox {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: var(--xc-space-3);
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    /* raw-color-ok: fixed white preserves QR scanner contrast. */
-    background: #FFFFFF;
-    border-radius: var(--xc-radius-md);
-    border: 1px solid var(--xc-border);
-    margin-bottom: var(--xc-space-3);
-    overflow: hidden;
+    margin: 0;
+    max-width: none;
 }
 
+.receiveQrDisplay {
+    --xc-qr-frame-size: 20rem;
+
+    margin-bottom: var(--xc-space-3);
+}
+
+/* The address field and QR actions span the form like every other field, so
+   they share its left edge in the wide card; the shared frame still caps the
+   QR itself at --xc-qr-frame-size. The doubled class outranks QrDisplay's
+   .stack cap whichever stylesheet the bundle emits last. */
+.receiveQrDisplay.receiveQrDisplay {
+    max-width: none;
+}
+
+.receiveQrDisplay > * {
+    width: 100%;
+    min-width: 0;
+}
+
+/* --xc-qr-fit-size is the height budget Receive measures from the route
+   scroller, so a short window shrinks the code until the address and the Copy
+   row fit under it. With room to spare the width cap is the smaller, and below a
+   scannable size Receive leaves it unset so the page scrolls instead. */
 .qrSurface {
     width: 100%;
-    max-width: 100%;
+    max-width: min(var(--xc-qr-frame-size), var(--xc-qr-fit-size, var(--xc-qr-frame-size)));
     min-width: 0;
+    margin-inline: auto;
 }
 
 .qr {
@@ -139,6 +79,14 @@
     justify-content: center;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
+}
+
+/* Keep the QR content column inside the route scroller's visible height while
+   its card, address field, and actions continue to share the same edges. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .qrSurface {
+        max-width: min(var(--xc-qr-frame-size), var(--xc-qr-fit-size, var(--xc-qr-frame-size)), calc(var(--xc-viewport-h, 100vh) - 11rem));
+    }
 }
 
 .addressBox {
@@ -169,10 +117,8 @@
     margin-bottom: var(--xc-space-3);
 }
 
-@media (max-width: 420px) {
-    .labelEditor {
-        grid-template-columns: 1fr;
-    }
+.labelEditor > * {
+    margin-bottom: 0;
 }
 
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
@@ -187,49 +133,45 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.requestRow {
-    display: flex;
-    gap: var(--xc-space-2);
-    flex-wrap: wrap;
-    margin-top: var(--xc-space-3);
-}
-
-.requestRow > * {
-    flex: 1 1 140px;
-    min-width: 140px;
-}
-
+/* Four equal secondary buttons in two columns: one height, one-line labels,
+   both outer edges on the form's edges. */
 .qrActions {
-    display: flex;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-3);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 0;
+    align-items: stretch;
 }
 
 .qrActions > * {
-    flex: 1 1 0;
+    width: 100%;
     min-width: 0;
+    box-sizing: border-box;
+    height: var(--xc-control-h-md);
+    min-height: var(--xc-control-h-md);
+    justify-content: center;
+    white-space: nowrap;
 }
 
-@media not all and (min-width: 480px) {
-    .qrActions {
-        flex-direction: column;
-    }
-
-    .qrActions > * {
-        flex-basis: auto;
-        width: 100%;
-    }
+.qrActions > * > span {
+    white-space: nowrap;
 }
 
-/* A row item beside the QR buttons stretches to their height, but in the
-   narrow column below 400px a bare link shrinks to its one text line (17px),
-   under the 24px pointer-target floor. State the floor instead. */
 .explorerLink {
+    composes: btn secondary md from '../../ui/Button.module.css';
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-height: var(--xc-tap-min);
     cursor: pointer;
+}
+
+.amountEditor button {
+    --xc-button-height: var(--xc-control-h-md);
+    --xc-button-font-size: var(--xc-control-font-md, 14px);
+    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
+    --xc-icon-size: var(--xc-control-icon-md, 20px);
+
+    min-height: var(--xc-control-h-md);
 }
 
 .generateAddressAction {
@@ -240,12 +182,9 @@
 
 /* §17.6 hardware receive-address confirmation block. */
 .hwVerify {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg-muted);
 }

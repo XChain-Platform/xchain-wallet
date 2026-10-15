@@ -18,19 +18,28 @@
 // back as change, and treats a failed decode as a LOUD state rather than
 // a missing line.
 //
-// Amounts stay in the chain's smallest unit (sats). The wallet cannot
-// convert without a descriptor for the PSBT's chain, and a guessed
-// conversion on a signing surface is worse than an honest raw number
-// (§3.5.5: never prettify what you cannot verify).
-
-import { AddressText } from '@xchain-wallet/core/ui';
+import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { describeUnreadableReason, isUnreadableActionReason } from './psbtDecodeReasons.js';
 import {
     exactNetworkFeeSats,
     formatExactSats,
     sumExactSats,
 } from '../../flows/psbtNetworkFee.js';
+import {
+    formatNativeBaseUnits,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
 import styles from './PsbtIntentPanel.module.css';
+import { t } from '../../i18n/index.js';
+
+function amountLabel(value, descriptor) {
+    const smallestUnits = formatExactSats(value);
+    if (smallestUnits === null) return null;
+    if (!descriptor) return `${smallestUnits} sats`;
+    const amount = formatNativeBaseUnits(value, descriptor);
+    const ticker = tickerForDescriptor(descriptor);
+    return amount === null || !ticker ? null : `${amount} ${ticker}`;
+}
 
 /**
  * The alert's first sentence for an action the wallet could not read. Names
@@ -54,7 +63,9 @@ function undecodedSentence(decodeError) {
  * @param {string} [props.signingAddress]         the address whose key will sign
  * @param {object|null} [props.decodedAction]     decodeActionFromPsbt intent, when the bytes decoded
  * @param {string|null} [props.decodeError]       why the action decode failed / was punted
+ * @param {string|null} [props.unavailableMessage] caller-facing reason the transaction is unavailable
  * @param {boolean} [props.loading]
+ * @param {object} [props.chainDescriptor]
  */
 export function PsbtIntentPanel({
     decomposed,
@@ -62,19 +73,24 @@ export function PsbtIntentPanel({
     signingAddress,
     decodedAction = null,
     decodeError = null,
+    unavailableMessage = null,
     loading = false,
+    chainDescriptor,
 }) {
     if (loading) {
-        return <p className={styles.actionIntent}>Decoding transaction…</p>;
+        return <p className={styles.actionIntent}>{t('components.psbtIntentPanel.decodingTransaction')}</p>;
     }
     if (!decomposed) {
         // Fail loud (§5.5): a transaction the wallet cannot even decompose is
         // exactly when the user most needs to be cautious.
         return (
-            <p className={styles.undecoded} role="alert" data-testid="psbt-undecodable">
-                This transaction could not be decoded, so the wallet cannot show you
-                what it does. Only continue if you trust where it came from.
-            </p>
+            <StatusMessage variant="warning" role="alert" testId="psbt-undecodable">
+                {unavailableMessage || (
+                    <>
+                        {t('components.psbtIntentPanel.thisTransactionCouldNotBe')}
+                    </>
+                )}
+            </StatusMessage>
         );
     }
 
@@ -104,14 +120,14 @@ export function PsbtIntentPanel({
                 // this is the case where the output set is the ONLY thing the
                 // user can verify.
                 <>
-                    <p className={styles.undecoded} role="alert" data-testid="psbt-action-undecoded">
+                    <StatusMessage variant="warning" role="alert" testId="psbt-action-undecoded">
                         {undecodedSentence(decodeError)}
-                        {' '}Verify the amounts and destinations below before you sign.
-                    </p>
+                        {' '}{t('components.psbtIntentPanel.verifyTheAmountsAndDestinations')}
+                    </StatusMessage>
                     {/* The raw decoder code stays available for support, but
                         outside the alert so a signer reads only plain words. */}
                     <details className={styles.details} data-testid="psbt-action-undecoded-details">
-                        <summary>Technical details</summary>
+                        <summary>{t('pending.detail.technicalDetails')}</summary>
                         <code>{decodeError}</code>
                     </details>
                 </>
@@ -120,35 +136,33 @@ export function PsbtIntentPanel({
                 // honest; an alert here would cry wolf on the common case and
                 // train the user to click through the warnings that matter.
                 <p className={styles.actionIntent} data-testid="psbt-action-none">
-                    Ordinary payment: this transaction carries no XChain action.
+                    {t('components.psbtIntentPanel.ordinaryPaymentThisTransactionCarries')}
                 </p>
             )}
 
             <div className={styles.section}>
                 <p className={styles.sectionLabel}>
-                    Inputs ({inputs.length}) - what this transaction spends
+                    {t('components.psbtIntentPanel.inputs')}{inputs.length}{t('components.psbtIntentPanel.whatThisTransactionSpends')}
                 </p>
                 {inputs.map((inp, i) => {
                     const isOwn = !!inp.address && own.has(inp.address);
                     const signs = !!inp.address && !!signingAddress && inp.address === signingAddress;
-                    const amount = formatExactSats(inp.value);
+                    const amount = amountLabel(inp.value, chainDescriptor);
                     const isUnknown = !inp.address || amount === null;
                     return (
                         <div className={styles.row} key={`in-${i}`} data-testid="psbt-input">
                             <span className={signs ? styles.tag : styles.tagMuted}>
                                 {isUnknown
-                                    ? 'Unknown input'
+                                    ? t('components.psbtIntentPanel.unknownInput')
                                     : signs
-                                        ? 'Signs with your key'
-                                        : isOwn ? 'Your address' : 'Other signer'}
+                                        ? t('components.psbtIntentPanel.signsWithYourKey')
+                                        : isOwn ? t('components.psbtIntentPanel.yourAddress') : t('components.psbtIntentPanel.otherSigner')}
                             </span>
                             {inp.address
                                 ? <span className={styles.addr}><AddressText address={inp.address} truncate={false} /></span>
-                                : <span className={styles.dataOutput}>(unknown source script)</span>}
+                                : <span className={styles.dataOutput}>{t('components.psbtIntentPanel.unknownSourceScript')}</span>}
                             <span className={styles.value}>
-                                {amount !== null
-                                    ? `${amount} sats`
-                                    : 'amount unknown'}
+                                {amount !== null ? amount : t('components.psbtIntentPanel.amountUnknown')}
                             </span>
                         </div>
                     );
@@ -157,21 +171,21 @@ export function PsbtIntentPanel({
 
             <div className={styles.section}>
                 <p className={styles.sectionLabel}>
-                    Outputs ({outputs.length}) - where the coins go
+                    {t('components.psbtIntentPanel.outputs')}{outputs.length}{t('components.psbtIntentPanel.whereTheCoinsGo')}
                 </p>
                 {outputs.map((o, i) => {
                     const isChange = !!o.address && own.has(o.address);
-                    const amount = formatExactSats(o.value);
+                    const amount = amountLabel(o.value, chainDescriptor);
                     return (
                         <div className={styles.row} key={`out-${i}`} data-testid="psbt-output">
                             <span className={isChange ? styles.tagMuted : styles.tag}>
-                                {isChange ? 'Change (back to you)' : 'Recipient'}
+                                {isChange ? t('components.psbtIntentPanel.changeBackToYou') : t('components.psbtIntentPanel.recipient')}
                             </span>
                             {o.address
                                 ? <span className={styles.addr}><AddressText address={o.address} truncate={false} /></span>
-                                : <span className={styles.dataOutput}>(data / non-address output)</span>}
+                                : <span className={styles.dataOutput}>{t('components.psbtIntentPanel.dataNonAddressOutput')}</span>}
                             <span className={styles.value}>
-                                {amount !== null ? `${amount} sats` : 'amount unknown'}
+                                {amount !== null ? amount : t('components.psbtIntentPanel.amountUnknown')}
                             </span>
                         </div>
                     );
@@ -179,21 +193,21 @@ export function PsbtIntentPanel({
             </div>
 
             <dl className={styles.totals}>
-                <dt className={styles.totalsLabel}>Leaving this wallet</dt>
+                <dt className={styles.totalsLabel}>{t('components.psbtIntentPanel.leavingThisWallet')}</dt>
                 <dd className={styles.totalsValue}>
-                    {leaving != null ? `${formatExactSats(leaving)} sats` : 'unavailable'}
+                    {leaving != null ? amountLabel(leaving, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
                 </dd>
-                <dt className={styles.totalsLabel}>Total in</dt>
+                <dt className={styles.totalsLabel}>{t('components.psbtIntentPanel.totalIn')}</dt>
                 <dd className={styles.totalsValue}>
-                    {totalIn != null ? `${formatExactSats(totalIn)} sats` : 'unavailable'}
+                    {totalIn != null ? amountLabel(totalIn, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
                 </dd>
-                <dt className={styles.totalsLabel}>Total out</dt>
+                <dt className={styles.totalsLabel}>{t('components.psbtIntentPanel.totalOut')}</dt>
                 <dd className={styles.totalsValue}>
-                    {totalOut != null ? `${formatExactSats(totalOut)} sats` : 'unavailable'}
+                    {totalOut != null ? amountLabel(totalOut, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
                 </dd>
-                <dt className={styles.totalsLabel}>Network fee</dt>
+                <dt className={styles.totalsLabel}>{t('send.networkFee')}</dt>
                 <dd className={styles.totalsValue}>
-                    {fee != null ? `${formatExactSats(fee)} sats` : 'unavailable'}
+                    {fee != null ? amountLabel(fee, chainDescriptor) : t('components.psbtIntentPanel.unavailable')}
                 </dd>
             </dl>
         </div>

@@ -36,7 +36,7 @@
 // sync without a refresh.
 
 import { useEffect, useRef, useState } from 'react';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     describeBiometric,
@@ -45,6 +45,7 @@ import {
     registerBiometricCredential,
 } from '../../../flows/biometricUnlock.js';
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 export function BiometricRow() {
     const { messaging } = useMessaging();
@@ -68,6 +69,15 @@ export function BiometricRow() {
         let cancelled = false;
         describeBiometric().then((described) => {
             if (!cancelled) setDescription(described);
+        }).catch(() => {
+            if (!cancelled) {
+                setDescription({
+                    supported: false,
+                    reason: 'Could not check biometric unlock on this device.',
+                    mechanism: 'device unlock',
+                    wrapNote: '',
+                });
+            }
         });
         return () => { cancelled = true; };
     }, []);
@@ -125,22 +135,12 @@ export function BiometricRow() {
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
-    const buttonStyle = {
-        background: 'var(--xc-surface-raised)',
-        color: 'var(--xc-text)',
-        border: '1px solid var(--xc-border-strong)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-1) var(--xc-space-3)',
-        fontSize: 'var(--xc-text-sm)',
-        cursor: 'pointer',
-    };
-
     if (description === null) {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Biometric unlock</span>
-                    <span style={ROW_HINT}>Checking this device…</span>
+                    <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
+                    <span style={ROW_HINT}>{t('settings.biometric.checkingThisDevice')}</span>
                 </div>
             </div>
         );
@@ -150,8 +150,8 @@ export function BiometricRow() {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Biometric unlock</span>
-                    <span style={ROW_HINT}>Not available. {description.reason}</span>
+                    <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
+                    <span style={ROW_HINT}>{t('settings.biometric.notAvailable')} {description.reason}</span>
                 </div>
             </div>
         );
@@ -162,28 +162,27 @@ export function BiometricRow() {
             <div style={{ ...ROW, alignItems: 'flex-start' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 'var(--xc-space-2)' }}>
                     <div>
-                        <span style={labelStyle}>Biometric unlock</span>
+                        <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
                         <span style={{ ...ROW_HINT, display: 'block' }}>
-                            Enabled. Use {description.mechanism} on the unlock screen. Re-enrol after
-                            changing the biometrics saved on this device.
+                            {t('settings.biometric.enabledUse')} {description.mechanism} {t('settings.biometric.onTheUnlockScreenRe')}
                         </span>
                     </div>
                     {error ? (
                         <StatusMessage
                             variant="error"
-                            recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                            recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
                         >
                             {error}
                         </StatusMessage>
                     ) : null}
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <button type="button" onClick={() => { setEnrolAction('reenrol'); setError(null); }} style={buttonStyle}>
-                        Re-enrol
-                    </button>
-                    <button type="button" onClick={handleDisable} style={buttonStyle} disabled={busy}>
-                        {busy ? 'Disabling…' : 'Disable'}
-                    </button>
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => { setEnrolAction('reenrol'); setError(null); }}>
+                        {t('settings.biometric.reEnrol')}
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDisable} disabled={busy}>
+                        {busy ? t('settings.biometric.disabling') : t('settings.biometric.disable')}
+                    </Button>
                 </div>
             </div>
         );
@@ -194,52 +193,48 @@ export function BiometricRow() {
         return (
             <form onSubmit={handleEnable} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <span style={labelStyle}>{isReenrol ? 'Re-enrol' : 'Enable'} biometric unlock</span>
+                    <span style={labelStyle}>{isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} {t('settings.biometric.biometricUnlock2')}</span>
                     <span style={ROW_HINT}>
-                        Confirm your current wallet password. {description.wrapNote}
+                        {t('settings.biometric.confirmYourCurrentWalletPassword')} {description.wrapNote}
                     </span>
                 </div>
-                <input
+                <Input
                     type="password"
+                    revealable
                     enterKeyHint="go"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    placeholder="Wallet password"
+                    placeholder={t('send.gated.passwordLabel')}
                     autoComplete="current-password"
-                    aria-label="Wallet password"
-                    style={{
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}
+                    aria-label={t('send.gated.passwordLabel')}
                 />
                 {error ? (
                     <StatusMessage
                         variant="error"
-                        recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                        recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
                     >
                         {error}
                     </StatusMessage>
                 ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                    <button
+                    <Button
                         type="button"
+                        size="sm"
+                        variant="ghost"
+                        icon={null}
                         onClick={() => { setEnrolAction(null); setPassword(''); setError(null); }}
-                        style={buttonStyle}
                         disabled={busy}
                     >
-                        Cancel
-                    </button>
-                    <button
+                        {t('common.cancel')}
+                    </Button>
+                    <Button
                         type="submit"
-                        style={{ ...buttonStyle, fontWeight: 600 }}
+                        size="sm"
+                        icon={null}
                         disabled={busy || password.length === 0}
                     >
-                        {busy ? 'Pairing…' : (isReenrol ? 'Re-enrol' : 'Enable')}
-                    </button>
+                        {busy ? t('settings.biometric.pairing') : (isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable'))}
+                    </Button>
                 </div>
             </form>
         );
@@ -248,18 +243,20 @@ export function BiometricRow() {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={labelStyle}>Biometric unlock</span>
+                <span style={labelStyle}>{t('settings.biometric.biometricUnlock')}</span>
                 <span style={ROW_HINT}>
-                    Use {description.mechanism} to unlock without typing your password.
+                    {t('settings.biometric.use')} {description.mechanism} {t('settings.biometric.toUnlockWithoutTypingYour')}
                 </span>
             </div>
-            <button
+            <Button
                 type="button"
+                size="sm"
+                variant="ghost"
+                icon={null}
                 onClick={() => setEnrolAction('enable')}
-                style={buttonStyle}
             >
-                Enable
-            </button>
+                {t('settings.biometric.enable')}
+            </Button>
         </div>
     );
 }

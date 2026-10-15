@@ -14,6 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -39,11 +40,10 @@ import {
     MESSAGE_ATTACHMENT_TYPES,
     serializeMessageContent,
 } from '../utils/messageContent.js';
-import { utf8ByteLength } from '../utils/memoLimit.js';
+import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-const MAX_MESSAGE_LENGTH = 1_048_576;
 
 // User-facing native ticker for a chain, used to label the network-fee
 // estimate on the review screen.
@@ -114,7 +114,30 @@ function pickFundingAddress(addrs, active) {
  *   succeeds; the host navigates (e.g. back to the thread) and surfaces its
  *   own confirmation.
  */
-export function ComposeMessage({
+export function ComposeMessage(props) {
+    const {
+        walletId,
+        chainId,
+        fromAddressId,
+        toAddress,
+        initialMessage,
+        fixedEncryption,
+    } = props;
+    const composeKey = JSON.stringify([
+        walletId,
+        chainId || null,
+        fromAddressId || null,
+        toAddress || null,
+        initialMessage || null,
+        fixedEncryption || null,
+    ]);
+    return <ComposeMessageForm key={composeKey} {...props} />;
+}
+
+// Prefill identity defines one draft. A new recipient or thread prefill gets a
+// fresh form instance, which also cancels recipient lookups and confirm flows
+// owned by the prior draft.
+function ComposeMessageForm({
     walletId,
     chainId: initialChainId,
     fromAddressId: initialFromAddressId,
@@ -125,6 +148,7 @@ export function ComposeMessage({
     onSent,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
 
@@ -163,9 +187,11 @@ export function ComposeMessage({
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [pubkeyState, setPubkeyState] = useState(
-        /** @type {'idle' | 'checking' | 'found' | 'missing'} */ ('idle'),
+        /** @type {'idle' | 'checking' | 'found' | 'missing' | 'error'} */ ('idle'),
     );
+    const [pubkeyError, setPubkeyError] = useState(/** @type {string | null} */ (null));
     const [sendUnencrypted, setSendUnencrypted] = useState(fixedEncryption === 'plaintext');
+    const [plaintextConfirmationPending, setPlaintextConfirmationPending] = useState(false);
     // Encryption choice when the recipient's pubkey is known: 'ecies' (default,
     // only the recipient can read) or 'ecdh' (a shared session key both parties
     // derive, so the sender can read their own sent messages too). ECDH needs
@@ -269,20 +295,32 @@ export function ComposeMessage({
         const addr = toAddress.trim();
         if (!destChainId || !addr || !isValidAddressAnyNetwork(addr)) {
             setPubkeyState('idle');
+            setPubkeyError(null);
             if (!fixedEncryption) setSendUnencrypted(false);
             return undefined;
         }
         let cancelled = false;
         setPubkeyState('checking');
+        setPubkeyError(null);
         const handle = setTimeout(() => {
             messaging.getRecipientPubkey({ chainId: destChainId, address: addr })
                 .then((pubkey) => {
                     if (cancelled) return;
                     setPubkeyState(pubkey ? 'found' : 'missing');
-                    if (pubkey && !fixedEncryption) setSendUnencrypted(false);
+                    setPubkeyError(null);
+                    if (pubkey && !fixedEncryption) {
+                        setSendUnencrypted(false);
+                        setPlaintextConfirmationPending(false);
+                    }
                 })
-                .catch(() => {
-                    if (!cancelled) setPubkeyState('missing');
+                .catch((err) => {
+                    if (cancelled) return;
+                    setPubkeyState('error');
+                    setPubkeyError(submitFailureMessage(err, {
+                        chainId: destChainId,
+                        verb: 'check the recipient encryption key',
+                        fallback: "Couldn't check the recipient's encryption key. Check your connection and try again.",
+                    }));
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
@@ -376,6 +414,20 @@ export function ComposeMessage({
         && Number.isFinite(selectedFeeEstimate.rateValue) && selectedFeeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
         : null;
+    const customFeeRate = Number(feePick.customRate);
+    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
+    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
+    const customFeeDecimals = Math.max(
+        0,
+        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
+    );
+    const feeValidationError = feePick.mode !== 'custom'
+        ? null
+        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
+            ? 'Enter a custom fee rate greater than zero.'
+            : customFeeDecimals > 8 || !customEstimate
+                ? 'Custom fee rate can have at most 8 decimal places.'
+                : null;
 
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
@@ -388,6 +440,7 @@ export function ComposeMessage({
         chainCoin: chainRegistry.get(chainId)?.coin,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(chainId)?.networkKind === 'mainnet',
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
         const value = coinToFiatExact(coinAmount, fiatRate);
@@ -408,10 +461,15 @@ export function ComposeMessage({
         () => serializeMessageContent(message, attachment),
         [message, attachment],
     );
-    const messageBytes = utf8ByteLength(message);
-    const wireMessageBytes = utf8ByteLength(wireMessage);
-    const messageLengthError = wireMessageBytes > MAX_MESSAGE_LENGTH
-        ? `${attachment ? 'Message and attachment are' : 'Message is'} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`
+    const messageMethod = sendUnencrypted
+        ? null
+        : (encryptionChoice === 'ecdh' && !hw ? 2 : 1);
+    const wireMessageBytes = messageWireByteLength(wireMessage, messageMethod);
+    const messageLengthSubject = sendUnencrypted
+        ? (attachment ? 'Message and attachment are' : 'Message is')
+        : (attachment ? 'Encrypted message and attachment are' : 'Encrypted message is');
+    const messageLengthError = wireMessageBytes > MAX_MESSAGE_BYTES
+        ? `${messageLengthSubject} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`
         : undefined;
 
     function handleAttachmentPick(event) {
@@ -459,7 +517,15 @@ export function ComposeMessage({
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
     const encryptionValue = sendUnencrypted ? 'plaintext' : encryptionChoice;
     function onEncryptionChange(value) {
-        if (value === 'plaintext') { setSendUnencrypted(true); return; }
+        if (value === 'plaintext') {
+            if (!fixedEncryption) {
+                setPlaintextConfirmationPending(true);
+                return;
+            }
+            setSendUnencrypted(true);
+            return;
+        }
+        setPlaintextConfirmationPending(false);
         setSendUnencrypted(false);
         setEncryptionChoice(value);
     }
@@ -584,9 +650,13 @@ export function ComposeMessage({
         }
         if (messageLengthError) return;
         if (addressInvalid) return;
+        if (feeValidationError) {
+            setSubmitError(feeValidationError);
+            return;
+        }
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
-        if (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking')) return;
+        if (!sendUnencrypted && pubkeyState !== 'found') return;
         setSubmitError(null);
         // On the confirm-page path the password is collected IN the modal, so
         // the credential guards below (which the legacy review stage relies on)
@@ -603,7 +673,8 @@ export function ComposeMessage({
         if (!fromAddress || !chainId || !toAddress.trim() || (!message.trim() && !attachment)) return;
         if (messageLengthError) return;
         if (addressInvalid) return;
-        if (!sendUnencrypted && pubkeyState === 'missing') return;
+        if (feeValidationError) return;
+        if (!sendUnencrypted && pubkeyState !== 'found') return;
         if (!hw && !signerReady && password.length === 0) return;
         if (hw && hwStatus !== 'available') return;
 
@@ -656,6 +727,7 @@ export function ComposeMessage({
             } else if (name === 'PubkeyNotFoundError') {
                 setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
                 setPubkeyState('missing');
+                setPubkeyError(null);
             } else {
                 // Same translation, and the same fallback, as the confirm path
                 // above. The helper's own header names this exact trap: a form
@@ -696,6 +768,10 @@ export function ComposeMessage({
     // rather than sending an (impossible to encrypt) message.
     async function handleRequestSession() {
         if (handshakeBusy || !fromAddress || !chainId || !toAddress.trim()) return;
+        if (feeValidationError) {
+            setHandshakeError(feeValidationError);
+            return;
+        }
         setHandshakeBusy(true);
         setHandshakeError(null);
         try {
@@ -725,7 +801,12 @@ export function ComposeMessage({
             setHandshakeSent(true);
         } catch (err) {
             if (!isUserRejection(err)) {
-                setHandshakeError(err?.message || 'Could not send the key request.');
+                setHandshakeError(submitFailureMessage(err, {
+                    chainId,
+                    coinTicker: nativeTicker,
+                    verb: 'send the key request',
+                    fallback: 'Could not send the key request. Check your connection and try again.',
+                }));
             }
         } finally {
             setHandshakeBusy(false);
@@ -740,7 +821,7 @@ export function ComposeMessage({
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -802,6 +883,7 @@ export function ComposeMessage({
             : (encryptionChoice === 'ecdh' && !hw ? 'ECDH' : 'ECIES');
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review message"
                 onSubmit={handleSubmit}
                 status={hw && submitError ? (
@@ -824,10 +906,14 @@ export function ComposeMessage({
                     Send an {unencrypted ? 'unencrypted' : 'encrypted'} message to this recipient.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={descriptor} size="sm" />
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -939,6 +1025,7 @@ export function ComposeMessage({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="New message"
             onSubmit={handleReview}
             status={submitError ? (
@@ -967,6 +1054,8 @@ export function ComposeMessage({
                     setToAddress(e.target.value);
                     setHandshakeSent(false);
                     setHandshakeError(null);
+                    setPubkeyError(null);
+                    setPlaintextConfirmationPending(false);
                     if (submitError) setSubmitError(null);
                 }}
                 onIconClick={() => setContactsPickerOpen(true)}
@@ -986,30 +1075,29 @@ export function ComposeMessage({
                 placeholder="Write your message…"
                 hint={messageLengthError
                     ? undefined
-                    : `${messageBytes.toLocaleString()} / ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`}
+                    : `${wireMessageBytes.toLocaleString()} / ${MAX_MESSAGE_BYTES.toLocaleString()}${sendUnencrypted ? ' bytes.' : ' encrypted bytes.'}`}
                 error={messageLengthError}
                 style={{ minHeight: '4rem' }}
             />
 
             <div>
-                <label htmlFor="message-attachment" style={{ display: 'block', fontWeight: 600, marginBottom: '0.35rem' }}>
-                    Attachment (optional)
-                </label>
-                <input
+                <Input
                     id="message-attachment"
                     type="file"
+                    label="Attachment"
+                    optional
                     accept={MESSAGE_ATTACHMENT_TYPES.join(',')}
                     onChange={handleAttachmentPick}
-                    aria-describedby="message-attachment-hint"
+                    hint={`PNG, JPEG, GIF, WebP, PDF, or plain text, up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.`}
+                    error={attachmentError}
                 />
-                <p id="message-attachment-hint" className={styles.hint}>
-                    PNG, JPEG, GIF, WebP, PDF, or plain text, up to {MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.
-                </p>
                 {attachment ? (
                     <p>
                         Attached: {attachment.name} ({attachment.size.toLocaleString()} bytes){' '}
-                        <button
+                        <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
                             onClick={() => {
                                 attachmentReadIdRef.current += 1;
                                 setAttachment(null);
@@ -1017,10 +1105,9 @@ export function ComposeMessage({
                             }}
                         >
                             Remove
-                        </button>
+                        </Button>
                     </p>
                 ) : null}
-                {attachmentError ? <p role="alert" style={{ color: 'var(--xc-danger-fg)' }}>{attachmentError}</p> : null}
             </div>
 
             {/* 3. Encryption. Locked (still visible) for thread replies: a
@@ -1032,6 +1119,32 @@ export function ComposeMessage({
                 options={encryptionOptions}
                 disabled={Boolean(fixedEncryption)}
             />
+            {plaintextConfirmationPending ? (
+                <div role="alert" style={{ marginTop: '0.5rem' }}>
+                    <p style={{ margin: '0 0 0.5rem' }}>
+                        Send this message as plain text? Anyone can read it on the blockchain.
+                    </p>
+                    <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        onClick={() => {
+                            setSendUnencrypted(true);
+                            setPlaintextConfirmationPending(false);
+                        }}
+                    >
+                        Send as plain text
+                    </Button>{' '}
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setPlaintextConfirmationPending(false)}
+                    >
+                        Keep encrypted
+                    </Button>
+                </div>
+            ) : null}
             {pubkeyState === 'checking' && encryptionValue !== 'plaintext' ? (
                 <p className={styles.hint} style={{ marginTop: '0.25rem' }}>
                     Looking up recipient's public key…
@@ -1043,25 +1156,16 @@ export function ComposeMessage({
                 </p>
             ) : null}
             {pubkeyState === 'missing' && encryptionValue !== 'plaintext' ? (
-                <div
-                    role="alert"
-                    style={{
-                        border: '1px solid var(--xc-warning)',
-                        borderRadius: '4px',
-                        padding: '0.5rem',
-                        marginTop: '0.25rem',
-                        fontSize: '0.85rem',
-                    }}
-                >
-                    <p style={{ margin: '0 0 0.5rem' }}>
+                <div>
+                    <StatusMessage variant="warning" role="alert">
                         We don't know the recipient's public key yet, so we can't encrypt. They need to
                         send a transaction first, or pick "Plain text" above.
-                    </p>
+                    </StatusMessage>
                     {handshakeSent ? (
-                        <p style={{ margin: 0 }} role="status">
-                            ✓ Key request sent. Once they respond or send any transaction, you can
+                        <StatusMessage variant="success">
+                            Key request sent. Once they respond or send any transaction, you can
                             message them encrypted.
-                        </p>
+                        </StatusMessage>
                     ) : (
                         <>
                             <Button
@@ -1078,17 +1182,15 @@ export function ComposeMessage({
                                 nothing on this stage rendered an error before,
                                 so a refused or failed key request looked like a
                                 button that does nothing. */}
-                            {handshakeError ? (
-                                <p
-                                    role="alert"
-                                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.8rem' }}
-                                >
-                                    {handshakeError}
-                                </p>
-                            ) : null}
+                            <StatusMessage variant="error">{handshakeError}</StatusMessage>
                         </>
                     )}
                 </div>
+            ) : null}
+            {pubkeyState === 'error' && encryptionValue !== 'plaintext' ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    {pubkeyError}
+                </StatusMessage>
             ) : null}
 
             {/* 4. Delivery network */}
@@ -1111,7 +1213,11 @@ export function ComposeMessage({
                     formatFiat={fiatForFee}
                     tiers={feeTiers}
                     value={feePick}
-                    onChange={setFeePick}
+                    onChange={(next) => {
+                        setFeePick(next);
+                        if (submitError) setSubmitError(null);
+                        if (handshakeError) setHandshakeError(null);
+                    }}
                     customEstimate={feePick.mode === 'custom' ? customEstimate : null}
                 />
             ) : null}

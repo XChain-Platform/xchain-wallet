@@ -9,11 +9,8 @@
 // contact legal@dankest.llc.
 
 
-// A tester's address book grew three rows for one person, one per chain,
-// and listed them in storage order. The model already holds many addresses
-// per contact; these pin that the screens now use it: name order by
-// default, a save under a known name joins that contact, and a one-tap
-// merge folds the duplicates an older wallet already saved.
+// Contacts keep one row per person and sort predictably. New duplicate names
+// are refused, while the merge action repairs duplicates already in a vault.
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
@@ -93,7 +90,7 @@ function mount(messaging, props = {}) {
 }
 
 const rowNames = () => within(screen.getByRole('list', { name: 'Contacts' }))
-    .getAllByRole('listitem').map((r) => (r.querySelector('[class*="rowName"]') ?? r).textContent.trim());
+    .getAllByRole('listitem').map((row) => within(row).getByRole('button').getAttribute('aria-label'));
 
 describe('ContactsList for one person with many addresses', () => {
     it('lists contacts A to Z whatever order the vault returns', async () => {
@@ -107,7 +104,7 @@ describe('ContactsList for one person with many addresses', () => {
         expect(rowNames()).toEqual(['zed', 'bob', 'Alice']);
     });
 
-    it('saves a new address under a known name into that contact', async () => {
+    it('refuses a new contact whose name is already in the address book', async () => {
         const messaging = makeMessaging([contact('j', 'JDog', '2026-01-01T00:00:00.000Z', [LTC])]);
         mount(messaging, {
             scanPrefill: { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', chainId: 'bitcoin-mainnet' },
@@ -116,12 +113,8 @@ describe('ContactsList for one person with many addresses', () => {
         await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'jdog' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(screen.getByText('Added to JDog.')).toBeTruthy());
-        const call = messaging.saveContact.mock.calls[0][0];
-        expect(call.input).toBeUndefined();
-        expect(call.record.id).toBe('j');
-        expect(call.record.entries.map((e) => e.address))
-            .toEqual(['ltc1qjdogltc', 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq']);
+        expect(await screen.findByText('A contact named "JDog" already exists.')).toBeTruthy();
+        expect(messaging.saveContact).not.toHaveBeenCalled();
         expect(messaging.store.size).toBe(1);
     });
 

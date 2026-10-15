@@ -56,7 +56,6 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {(path: string) => string} [getUrl]             chrome.runtime.getURL replacement
  * @property {BrokerWindowDeps} [windows]                    chrome.windows replacement
  * @property {{ onRemoved?: { addListener(fn: (tabId: number) => void): void } }} [tabs] chrome.tabs replacement
- * @property {{ onSuspend?: { addListener(fn: () => void): void } }} [runtime] chrome.runtime replacement
  * @property {{ setBadgeText?: (details: { text: string }) => Promise<void> | void }} [action] chrome.action replacement
  * @property {string} [approvalPath]                         default 'approval.html'
  * @property {{ width?: number, height?: number }} [windowSize]
@@ -92,11 +91,12 @@ export class ApprovalBroker {
                 globalThis.chrome?.windows
             );
         this._tabs = deps.tabs ?? globalThis.chrome?.tabs;
-        this._runtime = deps.runtime ?? globalThis.chrome?.runtime;
         this._action = deps.action ?? globalThis.chrome?.action;
         this._timeoutMs = deps.timeoutMs ?? APPROVAL_TIMEOUT_MS;
-        this._setTimer = deps.setTimer ?? setTimeout;
-        this._clearTimer = deps.clearTimer ?? clearTimeout;
+        // Wrapped, not stored bare: Chrome throws "Illegal invocation" when the
+        // global timer functions are called as methods of another object.
+        this._setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+        this._clearTimer = deps.clearTimer ?? ((id) => clearTimeout(id));
         this._approvalPath = deps.approvalPath ?? 'approval.html';
         this._windowSize = {
             width: deps.windowSize?.width ?? 400,
@@ -114,10 +114,6 @@ export class ApprovalBroker {
         if (this._tabs?.onRemoved?.addListener) {
             this._onTabRemoved = this._onTabRemoved.bind(this);
             this._tabs.onRemoved.addListener(this._onTabRemoved);
-        }
-        if (this._runtime?.onSuspend?.addListener) {
-            this._onRuntimeSuspend = this._onRuntimeSuspend.bind(this);
-            this._runtime.onSuspend.addListener(this._onRuntimeSuspend);
         }
     }
 
@@ -177,18 +173,47 @@ export class ApprovalBroker {
     _pendingSize() { return this._pending.size; }
 
     /**
+     * Reject approvals whose request origin matches a background-owned rule.
+     * Revoking or blocking a site uses this to make already-open prompts
+     * unactionable before the management request completes.
+     *
+     * @param {(origin: unknown) => boolean} matches
+     * @returns {Promise<number>}
+     */
+    async cancelOriginsMatching(matches) {
+        if (typeof matches !== 'function') {
+            throw new TypeError('ApprovalBroker.cancelOriginsMatching: matches is required');
+        }
+        const entries = [...this._pending.values()].filter((entry) => (
+            matches(entry.payload?.origin)
+        ));
+        await this._cancelEntries(entries);
+        return entries.length;
+    }
+
+    /**
      * Reject every parked approval and clear the toolbar badge.
      * Lock and wipe call this so requests from an ended session cannot remain
      * actionable or restore attention state after teardown.
      */
     async cancelAll() {
         const entries = [...this._pending.values()];
-        this._pending.clear();
-        this._queueBadgeUpdate();
+        await this._cancelEntries(entries);
+    }
 
-        await Promise.all(entries.map(async (entry) => {
+    async _cancelEntries(entries) {
+        const cancelled = [];
+        for (const entry of entries) {
+            if (this._pending.get(entry.id) !== entry) continue;
+            this._pending.delete(entry.id);
             this._clearTimer(entry.timeout);
             entry.deferred.resolve({ approved: false });
+            cancelled.push(entry);
+        }
+        if (cancelled.length === 0) return;
+        this._queueBadgeUpdate();
+
+        await Promise.all(cancelled.map(async (entry) => {
             if (entry.windowId == null || !this._windows?.remove) return;
             try {
                 await this._windows.remove(entry.windowId);
@@ -289,10 +314,6 @@ export class ApprovalBroker {
         for (const [id, entry] of this._pending) {
             if (entry.requesterTabId === tabId) this._rejectPending(id);
         }
-    }
-
-    _onRuntimeSuspend() {
-        void this.cancelAll();
     }
 
     /** @param {string} id */

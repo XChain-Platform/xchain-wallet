@@ -18,10 +18,9 @@
 // manager under the priceAlerts toggle, and the M4 sounds block.
 //
 // The permission row owns the one piece of delivery the user must grant:
-// the browser/OS notification permission (web + desktop renderer). It reads
-// `Notification.permission` live and is hidden where that API is absent
-// (e.g. the extension popup, whose delivery uses `chrome.notifications`,
-// granted via the manifest, no runtime prompt).
+// browser/OS notification permission on web and desktop, or the optional
+// Chrome notification permission in the extension. It refreshes the live
+// state without prompting; only its button requests access.
 //
 // The sounds block is a separate, top-level preference: `settings.sounds`
 // (never nested under `notifications`, so a single family pick doesn't
@@ -32,8 +31,8 @@
 // delivery seam to actually play a sound (ruling I-34b); it dispatches
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
-import { useEffect, useState } from 'react';
-import { Input } from '../../../ui/Input.jsx';
+import { useEffect, useRef, useState } from 'react';
+import { Button, EmptyState, Input, Select, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -47,53 +46,62 @@ import {
     SOUND_PREVIEW_EVENT,
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
-import { ROW, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
-
-const PERMISSION_BUTTON = {
-    background: 'var(--xc-accent, #3a7afe)',
-    color: 'var(--xc-on-accent)',
-    border: 'none',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-};
+import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 /**
  * Browser/OS notification-permission affordance. The extension requests and
  * removes its optional Chrome permission here, under a direct user gesture.
  */
-function PermissionRow() {
+function PermissionRow({ permission, setPermission }) {
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
         && typeof chromePermissions?.request === 'function'
         && typeof chromePermissions?.remove === 'function';
     const webSupported = typeof Notification !== 'undefined';
-    const [permission, setPermission] = useState(extensionSupported
-        ? 'checking'
-        : (webSupported ? Notification.permission : 'unsupported'));
     const [requestError, setRequestError] = useState(/** @type {string | null} */ (null));
     const [requesting, setRequesting] = useState(false);
+    const requestInFlight = useRef(false);
 
     useEffect(() => {
-        if (!extensionSupported) return undefined;
         let active = true;
-        chromePermissions.contains({ permissions: ['notifications'] })
-            .then((granted) => {
-                if (active) setPermission(granted ? 'granted' : 'default');
-            })
-            .catch(() => {
-                if (active) setRequestError('Could not check notification permission. Try again.');
-            });
-        return () => { active = false; };
-    }, [chromePermissions, extensionSupported]);
+        const refresh = () => {
+            if (extensionSupported) {
+                chromePermissions.contains({ permissions: ['notifications'] })
+                    .then((granted) => {
+                        if (active) {
+                            setPermission(granted ? 'granted' : 'default');
+                            setRequestError(null);
+                        }
+                    })
+                    .catch(() => {
+                        if (active) setRequestError('Could not check notification permission. Try again.');
+                    });
+            } else if (webSupported) {
+                setPermission(Notification.permission);
+                setRequestError(null);
+            }
+        };
+
+        refresh();
+        globalThis.addEventListener?.('focus', refresh);
+        globalThis.document?.addEventListener?.('visibilitychange', refresh);
+        chromePermissions?.onAdded?.addListener?.(refresh);
+        chromePermissions?.onRemoved?.addListener?.(refresh);
+        return () => {
+            active = false;
+            globalThis.removeEventListener?.('focus', refresh);
+            globalThis.document?.removeEventListener?.('visibilitychange', refresh);
+            chromePermissions?.onAdded?.removeListener?.(refresh);
+            chromePermissions?.onRemoved?.removeListener?.(refresh);
+        };
+    }, [chromePermissions, extensionSupported, setPermission, webSupported]);
 
     if (!extensionSupported && !webSupported) return null;
 
     const request = async () => {
-        if (requesting) return;
+        if (requestInFlight.current) return;
+        requestInFlight.current = true;
         setRequesting(true);
         setRequestError(null);
         try {
@@ -107,12 +115,14 @@ function PermissionRow() {
         } catch {
             setRequestError('Could not request notification permission. Check this app in your browser or system settings.');
         } finally {
+            requestInFlight.current = false;
             setRequesting(false);
         }
     };
 
     const revoke = async () => {
-        if (requesting || !extensionSupported) return;
+        if (requestInFlight.current || !extensionSupported) return;
+        requestInFlight.current = true;
         setRequesting(true);
         setRequestError(null);
         try {
@@ -122,6 +132,7 @@ function PermissionRow() {
         } catch {
             setRequestError('Could not revoke notification permission. Try again.');
         } finally {
+            requestInFlight.current = false;
             setRequesting(false);
         }
     };
@@ -136,25 +147,25 @@ function PermissionRow() {
             : 'Allowed. Use the categories below to choose which notifications you receive.';
         if (extensionSupported) {
             action = (
-                <button type="button" onClick={revoke} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
-                    {requesting ? 'Revoking…' : 'Revoke permission'}
-                </button>
+                <Button type="button" size="sm" icon={null} onClick={revoke} disabled={requesting} aria-busy={requesting}>
+                    {requesting ? t('settings.notifications.revoking') : t('settings.notifications.revokePermission')}
+                </Button>
             );
         }
     } else if (permission === 'denied') {
         hint = 'Notifications are blocked. Open your browser or system settings, find XChain Wallet, and allow notifications.';
     } else if (permission !== 'checking') {
         action = (
-            <button type="button" onClick={request} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
-                {requesting ? 'Requesting…' : (extensionSupported ? 'Allow notifications' : 'Request permission')}
-            </button>
+            <Button type="button" size="sm" icon={null} onClick={request} disabled={requesting} aria-busy={requesting}>
+                {requesting ? t('settings.notifications.requesting') : (extensionSupported ? t('settings.notifications.allowNotifications') : t('settings.notifications.requestPermission'))}
+            </Button>
         );
     }
 
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Desktop notifications</span>
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.notifications.desktopNotifications')}</span>
                 <span style={ROW_HINT}>{requestError || hint}</span>
             </div>
             {action}
@@ -165,64 +176,64 @@ function PermissionRow() {
 const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'txConfirmations',
-        label: 'Transaction confirmations',
-        hint: 'Notify on the first confirmation of a sent transaction.',
+        get label() { return t('settings.notifications.transactionConfirmations'); },
+        get hint() { return t('settings.notifications.notifyOnTheFirstConfirmation'); },
     },
     {
         key: 'incomingReceipts',
-        label: 'Incoming receipts',
-        hint: 'Notify when a watched address receives a transaction.',
+        get label() { return t('settings.notifications.incomingReceipts'); },
+        get hint() { return t('settings.notifications.notifyWhenAWatchedAddress'); },
     },
     {
         key: 'incomingPending',
-        label: 'Incoming pending payments',
-        hint: 'Notify as soon as a payment to a watched address is seen by the network, before it confirms.',
+        get label() { return t('settings.notifications.incomingPendingPayments'); },
+        get hint() { return t('settings.notifications.notifyAsSoonAsA'); },
         // Same v2-tolerant default as governancePolls: the watcher treats an
         // absent flag as ON, so a pre-flag settings record renders ON here too.
         defaultOn: true,
     },
     {
         key: 'messages',
-        label: 'Incoming messages',
-        hint: 'Notify when a watched address receives a message.',
+        get label() { return t('settings.notifications.incomingMessages'); },
+        get hint() { return t('settings.notifications.notifyWhenAWatchedAddress2'); },
     },
     {
         key: 'governancePolls',
-        label: 'Governance polls',
-        hint: 'Notify when a new poll opens for a token you hold. Binding polls (their result triggers a contract) are flagged.',
+        get label() { return t('settings.notifications.governancePolls'); },
+        get hint() { return t('settings.notifications.notifyWhenANewPoll'); },
         // The watcher treats an absent flag as ON (v2-tolerant default), so a
         // pre-flag settings record must render the toggle as ON too.
         defaultOn: true,
     },
     {
         key: 'deadlines',
-        label: 'Deadlines',
-        hint: 'Notify before one of your orders, swaps or dispensers expires, or a poll you created or voted in closes.',
+        get label() { return t('settings.notifications.deadlines'); },
+        get hint() { return t('settings.notifications.notifyBeforeOneOfYour'); },
         // Same v2-tolerant default as governancePolls: the watcher treats an
         // absent flag as ON, so a pre-flag settings record renders ON here too.
         defaultOn: true,
     },
     {
         key: 'dispenserEscrow',
-        label: 'Dispenser running low',
-        hint: 'Notify when a dispenser you run is nearly out of stock, so you can top it up before it turns buyers away.',
+        get label() { return t('settings.notifications.dispenserRunningLow'); },
+        get hint() { return t('settings.notifications.notifyWhenADispenserYou'); },
         // v2-tolerant default, like the sibling watcher flags.
         defaultOn: true,
     },
     {
         key: 'dispenserFills',
-        label: 'Dispenser fills',
-        hint: 'Notify when a dispenser you authored is hit.',
+        get label() { return t('settings.notifications.dispenserFills'); },
+        get hint() { return t('settings.notifications.notifyWhenADispenserYou2'); },
     },
     {
         key: 'orderFills',
-        label: 'Order fills',
-        hint: 'Notify when a DEX order you placed is matched.',
+        get label() { return t('settings.notifications.orderFills'); },
+        get hint() { return t('settings.notifications.notifyWhenADexOrder'); },
     },
     {
         key: 'priceAlerts',
-        label: 'Price alerts',
-        hint: 'Notify when a coin hits a price level you set.',
+        get label() { return t('settings.notifications.priceAlerts'); },
+        get hint() { return t('settings.notifications.notifyWhenACoinHits'); },
     },
 ]);
 
@@ -232,12 +243,22 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
  */
 export function NotificationsSection({ walletId } = {}) {
     const { settings, loading, error, update } = useSettings();
+    const chromePermissions = globalThis.chrome?.permissions;
+    const extensionSupported = typeof chromePermissions?.contains === 'function'
+        && typeof chromePermissions?.request === 'function'
+        && typeof chromePermissions?.remove === 'function';
+    const webSupported = typeof Notification !== 'undefined';
+    const [permission, setPermission] = useState(extensionSupported
+        ? 'checking'
+        : (webSupported ? Notification.permission : 'unsupported'));
     const [pendingKey, setPendingKey] = useState(/** @type {string | null} */ (null));
     const [toggleError, setToggleError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
+
+    const permissionBlocksDelivery = permission !== 'unsupported' && permission !== 'granted';
 
     const onToggle = async (key, label, next) => {
         setPendingKey(key);
@@ -255,22 +276,25 @@ export function NotificationsSection({ walletId } = {}) {
 
     return (
         <div style={STACK}>
-            <PermissionRow />
+            <PermissionRow permission={permission} setPermission={setPermission} />
             {NOTIFICATION_FLAGS.map((f) => (
                 <div key={f.key} style={STACK}>
-                    <ToggleRow
-                        label={f.label}
-                        hint={f.hint}
-                        checked={f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key])}
-                        disabled={pendingKey !== null}
-                        onChange={(v) => onToggle(f.key, f.label, v)}
-                    />
+                    <div style={ROW}>
+                        <Switch
+                            label={f.label}
+                            description={f.hint}
+                            checked={!permissionBlocksDelivery
+                                && (f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key]))}
+                            disabled={permissionBlocksDelivery || pendingKey !== null}
+                            onChange={(event) => onToggle(f.key, f.label, event.target.checked)}
+                        />
+                    </div>
                     <NotificationSaveError message={toggleError?.key === f.key ? toggleError.message : null} />
                     {f.key === 'priceAlerts' ? (
                         <PriceAlertsManager
                             walletId={walletId}
                             settings={settings}
-                            enabled={Boolean(settings.notifications.priceAlerts)}
+                            enabled={!permissionBlocksDelivery && Boolean(settings.notifications.priceAlerts)}
                         />
                     ) : null}
                 </div>
@@ -283,7 +307,7 @@ export function NotificationsSection({ walletId } = {}) {
 
 function NotificationSaveError({ message }) {
     return message ? (
-        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{message}</span>
+        <Status text={message} tone="error" />
     ) : null;
 }
 
@@ -345,14 +369,16 @@ function SoundsBlock({ settings, update }) {
 
     return (
         <div style={STACK}>
-            <ToggleRow
-                label="Notification sounds"
-                hint="Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply."
-                checked={enabled}
-                onChange={onToggle}
-            />
+            <div style={ROW}>
+                <Switch
+                    label={t('settings.notifications.notificationSounds')}
+                    description={t('settings.notifications.playASoundWithEach')}
+                    checked={enabled}
+                    onChange={(event) => onToggle(event.target.checked)}
+                />
+            </div>
             <NotificationSaveError
-                message={saveError === 'enabled' ? 'Could not save the notification sound setting. Try again.' : null}
+                message={saveError === 'enabled' ? t('settings.notifications.couldNotSaveTheNotification') : null}
             />
             {enabled ? (
                 <div style={MANAGER}>
@@ -363,38 +389,40 @@ function SoundsBlock({ settings, update }) {
                                 <div style={ALERT_ROW}>
                                     <span>{family.label}</span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                                        <select
-                                            style={SELECT}
-                                            aria-label={`${family.label} sound`}
+                                        <Select
+                                            aria-label={t('settings.notifications.sound', { label: family.label })}
                                             value={picked}
                                             onChange={(e) => onPick(family.key, e.target.value)}
                                         >
+                                            {/* Native options are the children required by the style-guide Select. */}
                                             {SOUND_PALETTE.map((s) => (
                                                 <option key={s.id} value={s.id}>{s.label}</option>
                                             ))}
-                                            <option value={SOUND_NONE}>No sound</option>
-                                        </select>
+                                            <option value={SOUND_NONE}>{t('settings.notifications.noSound')}</option>
+                                        </Select>
                                         {canPreview ? (
-                                            <button
+                                            <Button
                                                 type="button"
-                                                style={LINK_BTN}
-                                                aria-label={`Preview ${family.label} sound`}
+                                                size="sm"
+                                                variant="ghost"
+                                                icon={null}
+                                                aria-label={t('settings.notifications.previewSound', { label: family.label })}
                                                 disabled={picked === SOUND_NONE}
                                                 onClick={() => onPreview(picked)}
                                             >
-                                                Preview
-                                            </button>
+                                                {t('common.preview')}
+                                            </Button>
                                         ) : null}
                                     </span>
                                 </div>
                                 <NotificationSaveError
-                                    message={saveError === family.key ? 'Could not save this notification sound. Try again.' : null}
+                                    message={saveError === family.key ? t('settings.notifications.couldNotSaveThisNotification') : null}
                                 />
                             </div>
                         );
                     })}
                     <span style={ROW_HINT}>
-                        Sounds never arrive on their own: each one rides the notification it belongs to.
+                        {t('settings.notifications.soundsNeverArriveOnTheir')}
                     </span>
                 </div>
             ) : null}
@@ -436,38 +464,40 @@ function QuietHoursRow({ settings, update }) {
 
     return (
         <div style={STACK}>
-            <ToggleRow
-                label="Quiet hours"
-                hint="Pause all notifications, including price alerts, during a daily time window."
-                checked={qh.enabled === true}
-                onChange={onToggle}
-            />
+            <div style={ROW}>
+                <Switch
+                    label={t('settings.notifications.quietHours')}
+                    description={t('settings.notifications.pauseAllNotificationsIncludingPrice')}
+                    checked={qh.enabled === true}
+                    onChange={(event) => onToggle(event.target.checked)}
+                />
+            </div>
             <NotificationSaveError
-                message={saveError === 'enabled' ? 'Could not save quiet hours. Try again.' : null}
+                message={saveError === 'enabled' ? t('settings.notifications.couldNotSaveQuietHours') : null}
             />
             {qh.enabled ? (
                 <div style={MANAGER}>
                     <div style={ALERT_ROW}>
                         <Input
                             id="quiet-hours-start"
-                            label="From"
+                            label={t('send.fields.from')}
                             type="time"
                             value={qh.start}
                             onChange={(e) => onTimeChange('start', e.target.value)}
                         />
                         <Input
                             id="quiet-hours-end"
-                            label="To"
+                            label={t('send.fields.to')}
                             type="time"
                             value={qh.end}
                             onChange={(e) => onTimeChange('end', e.target.value)}
                         />
                     </div>
                     <span style={ROW_HINT}>
-                        {qh.start} to {qh.end} your device's local time, every day.
+                        {qh.start} {t('settings.notifications.to2')} {qh.end} {t('settings.notifications.yourDeviceSLocalTime')}
                     </span>
                     <NotificationSaveError
-                        message={saveError === 'start' || saveError === 'end' ? 'Could not save quiet hours. Try again.' : null}
+                        message={saveError === 'start' || saveError === 'end' ? t('settings.notifications.couldNotSaveQuietHours') : null}
                     />
                 </div>
             ) : null}
@@ -491,16 +521,6 @@ const ALERT_ROW = {
     gap: 'var(--xc-space-2)',
     fontSize: 'var(--xc-text-sm)',
 };
-const LINK_BTN = {
-    background: 'transparent',
-    border: 'none',
-    color: 'var(--xc-accent, #3a7afe)',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    fontSize: 'var(--xc-text-xs)',
-    padding: 0,
-};
-
 /**
  * Price-alert manager rendered under the priceAlerts toggle: the saved
  * alerts + an inline add form. Surfaces the two dependencies that keep an
@@ -530,13 +550,17 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
     const priceDataOff = settings?.privacy?.priceDataEnabled === false;
     const fiatCurrency = (typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency) || 'usd';
     const editingAlert = alerts.find((alert) => alert.id === editingId) || null;
+    const hasOriginalCurrencyAlert = alerts.some((alert) =>
+        String(alert.fiatCurrency || 'usd').toLowerCase() !== fiatCurrency.toLowerCase());
 
     if (!walletId || !supported) {
         return (
             <div style={MANAGER}>
-                <span style={ROW_HINT}>
-                    {!walletId ? 'Choose a wallet to manage price alerts.' : 'Price alerts are not supported in this app.'}
-                </span>
+                <EmptyState
+                    title={!walletId ? t('settings.notifications.noWalletSelected') : t('settings.notifications.priceAlertsUnavailable')}
+                    titleAs="p"
+                    body={!walletId ? t('settings.notifications.chooseAWalletToManage') : t('settings.notifications.priceAlertsAreNotSupported')}
+                />
             </div>
         );
     }
@@ -545,32 +569,36 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
         <div style={MANAGER}>
             {priceDataOff ? (
                 <span style={ROW_HINT}>
-                    Price alerts need <strong>Native coin price data</strong>, which is off. Turn it on in
-                    Settings → Privacy. Until then, alerts won’t fire.
+                    {t('settings.notifications.priceAlertsNeed')} <strong>{t('settings.notifications.nativeCoinPriceData')}</strong>{t('settings.notifications.whichIsOffTurnIt')}
                 </span>
             ) : !enabled ? (
-                <span style={ROW_HINT}>Turn on Price alerts above to start receiving these.</span>
+                <span style={ROW_HINT}>{t('settings.notifications.turnOnPriceAlertsAbove')}</span>
+            ) : null}
+
+            {hasOriginalCurrencyAlert ? (
+                <span style={ROW_HINT}>
+                    {t('settings.notifications.savedPriceAlertsKeepThe')}
+                </span>
             ) : null}
 
             {loading ? (
-                <span role="status" style={ROW_HINT}>Loading price alerts…</span>
+                <span role="status" style={ROW_HINT}>{t('settings.notifications.loadingPriceAlerts')}</span>
             ) : error ? (
-                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>
-                    Could not load price alerts.{' '}
-                    <button type="button" style={LINK_BTN} onClick={reload}>Try again</button>
-                </span>
+                <StatusMessage variant="error" recovery={{ label: t('common.tryAgain'), onAction: reload }}>
+                    {t('settings.notifications.couldNotLoadPriceAlerts')}
+                </StatusMessage>
             ) : alerts.length === 0 ? (
-                <span role="status" style={ROW_HINT}>No price alerts yet. Add one below.</span>
+                <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>
                         <span>
                             {coinLabelForChain(a.chainId)}{' '}
-                            {a.direction === 'above' ? 'rises above' : 'falls below'}{' '}
+                            {a.direction === 'above' ? t('settings.notifications.risesAbove') : t('settings.notifications.fallsBelow')}{' '}
                             {formatThreshold(a.targetFiat, a.fiatCurrency)}
                             {a.status === 'triggered' ? (
                                 <span style={ROW_HINT}>
-                                    {' · triggered'}
+                                    {t('settings.notifications.triggered')}
                                     {a.triggeredAt ? (
                                         <RelativeTime timestamp={a.triggeredAt}>
                                             {(when) => ` ${when}`}
@@ -581,42 +609,48 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                         </span>
                         <span style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                             {a.status === 'triggered' ? (
-                                <button
+                                <Button
                                     type="button"
-                                    style={LINK_BTN}
+                                    size="sm"
+                                    variant="ghost"
+                                    icon={null}
                                     disabled={busyId !== null}
                                     onClick={() => runAlertAction(a.id, () => rearm(a.id), setBusyId, setActionError)}
                                 >
-                                    Re-arm
-                                </button>
+                                    {t('settings.notifications.reArm')}
+                                </Button>
                             ) : null}
-                            <button
+                            <Button
                                 type="button"
-                                style={LINK_BTN}
+                                size="sm"
+                                variant="ghost"
+                                icon={null}
                                 disabled={busyId !== null}
-                                aria-label={`Edit ${coinLabelForChain(a.chainId)} price alert`}
+                                aria-label={t('settings.notifications.editPriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}
                                 onClick={() => { setEditingId(a.id); setActionError(null); }}
                             >
-                                Edit
-                            </button>
-                            <button
+                                {t('common.edit')}
+                            </Button>
+                            <Button
                                 type="button"
-                                style={LINK_BTN}
+                                size="sm"
+                                variant="danger"
+                                icon={null}
                                 disabled={busyId !== null}
-                                aria-label={`Delete ${coinLabelForChain(a.chainId)} price alert`}
+                                aria-label={t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}
                                 onClick={() => runAlertAction(a.id, async () => {
                                     await removeAlert(a.id);
                                     if (editingId === a.id) setEditingId(null);
                                 }, setBusyId, setActionError)}
                             >
-                                Delete
-                            </button>
+                                {t('settings.notifications.delete')}
+                            </Button>
                         </span>
                     </div>
                 ))
             )}
 
-            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>{actionError}</span> : null}
+            {actionError ? <Status text={actionError} tone="error" /> : null}
             {!loading && !error ? (
                 <PriceAlertForm
                     key={editingAlert?.id || 'new'}

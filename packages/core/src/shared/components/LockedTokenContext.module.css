@@ -1,8 +1,10 @@
 .wrap {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-3);
+    gap: var(--xc-label-gap);
+    /* No outer margin: the form around the field spaces it with --xc-form-gap,
+       the same as every Input, so a picker never adds its own gap on top. */
+    margin: 0;
 }
 
 .label {
@@ -12,20 +14,18 @@
 }
 
 .chip {
+    composes: card from '../../ui/Card.module.css';
     display: inline-flex;
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     align-self: flex-start;
 }
 
 .text {
     display: flex;
     flex-direction: column;
+    /* Two pixels keep the two text lines visually grouped. */
     gap: 2px;
     min-width: 0;
 }

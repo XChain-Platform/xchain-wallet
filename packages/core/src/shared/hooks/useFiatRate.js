@@ -27,22 +27,24 @@ import {
     refreshTokenFiatRate,
     subscribeFiatRates,
 } from '../../flows/priceLookup.js';
+import { defaultRegistry } from '../../registry/index.js';
 
 /**
  * @param {object} opts
  * @param {string | null | undefined} opts.chainCoin     coin family, e.g. 'bitcoin'
  * @param {string} [opts.fiatCurrency]                   default 'USD'
  * @param {boolean} [opts.allowCoingeckoFallback]        pass privacy.priceDataEnabled !== false
+ * @param {boolean} [opts.enabled]                       false suppresses cached rates and refreshes
  * @returns {import('../../flows/priceLookup.js').FiatRate | null}
  */
-export function useFiatRate({ chainCoin, fiatCurrency = 'USD', allowCoingeckoFallback = true } = {}) {
+export function useFiatRate({ chainCoin, fiatCurrency = 'USD', allowCoingeckoFallback = true, enabled = true } = {}) {
     const rate = useSyncExternalStore(
         subscribeFiatRates,
-        () => (chainCoin ? getFiatRate({ chainCoin, fiatCurrency }) : null),
+        () => (enabled && chainCoin ? getFiatRate({ chainCoin, fiatCurrency }) : null),
     );
 
     useEffect(() => {
-        if (!chainCoin) return;
+        if (!enabled || !chainCoin) return;
         const controller = new AbortController();
         refreshFiatRates({
             chainCoins: [chainCoin],
@@ -51,9 +53,9 @@ export function useFiatRate({ chainCoin, fiatCurrency = 'USD', allowCoingeckoFal
             signal: controller.signal,
         }).catch(() => { /* cache keeps its last value; UI shows no fiat */ });
         return () => controller.abort();
-    }, [chainCoin, fiatCurrency, allowCoingeckoFallback]);
+    }, [chainCoin, fiatCurrency, allowCoingeckoFallback, enabled]);
 
-    return rate;
+    return enabled ? rate : null;
 }
 
 /**
@@ -131,6 +133,7 @@ function classifyTick({ tick, nativeTicker }) {
  * @param {string | null | undefined} opts.nativeTicker  e.g. 'BTC'; unknown = fail closed
  * @param {string} [opts.fiatCurrency]                   default 'USD'
  * @param {boolean} [opts.allowCoingeckoFallback]        pass privacy.priceDataEnabled !== false
+ * @param {boolean} [opts.enabled]                       false suppresses cached rates and refreshes
  * @returns {import('../../flows/priceLookup.js').FiatRate | null}
  */
 export function useTickFiatRate({
@@ -139,19 +142,20 @@ export function useTickFiatRate({
     nativeTicker,
     fiatCurrency = 'USD',
     allowCoingeckoFallback = true,
+    enabled = true,
 } = {}) {
-    const coinRate = useFiatRate({ chainCoin, fiatCurrency, allowCoingeckoFallback });
+    const coinRate = useFiatRate({ chainCoin, fiatCurrency, allowCoingeckoFallback, enabled });
     const kind = classifyTick({ tick, nativeTicker });
     const isToken = kind === 'token';
 
     // Same store, so a landed token refresh re-renders exactly like a coin one.
     const tokenRate = useSyncExternalStore(
         subscribeFiatRates,
-        () => (isToken && chainCoin ? getTokenFiatRate({ chainCoin, tick, fiatCurrency }) : null),
+        () => (enabled && isToken && chainCoin ? getTokenFiatRate({ chainCoin, tick, fiatCurrency }) : null),
     );
 
     useEffect(() => {
-        if (!isToken || !chainCoin) return;
+        if (!enabled || !isToken || !chainCoin) return;
         const controller = new AbortController();
         refreshTokenFiatRate({
             chainCoin,
@@ -162,8 +166,9 @@ export function useTickFiatRate({
             signal: controller.signal,
         }).catch(() => { /* cache keeps its last value; UI shows no fiat */ });
         return () => controller.abort();
-    }, [isToken, chainCoin, tick, nativeTicker, fiatCurrency, allowCoingeckoFallback]);
+    }, [isToken, chainCoin, tick, nativeTicker, fiatCurrency, allowCoingeckoFallback, enabled]);
 
+    if (!enabled) return null;
     if (isToken) return tokenRate;
     return fiatRateForTick({ rate: coinRate, tick, nativeTicker });
 }
@@ -339,6 +344,7 @@ export function priceNativeRows(rows, ratesByCoin) {
         if (!row || row.kind !== 'native') return row;
         if (typeof row.fiatRate === 'number') return row;
         if (row.unavailable === 'all') return row;
+        if (defaultRegistry().get(row.chainId)?.networkKind !== 'mainnet') return row;
         const id = String(row.chainId || '');
         const dash = id.indexOf('-');
         const coin = dash > 0 ? id.slice(0, dash) : id;
@@ -376,6 +382,7 @@ export function priceTokenRows(rows, ratesByToken) {
     const out = rows.map((row) => {
         if (!row || row.kind === 'native') return row;
         if (typeof row.fiatRate === 'number') return row;
+        if (defaultRegistry().get(row.chainId)?.networkKind !== 'mainnet') return row;
         const id = String(row.chainId || '');
         const dash = id.indexOf('-');
         const coin = dash > 0 ? id.slice(0, dash) : id;

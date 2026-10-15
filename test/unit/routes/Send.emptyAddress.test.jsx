@@ -14,7 +14,7 @@
 // "Couldn't send. no spendable UTXOs found for the funding address."
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -62,10 +62,18 @@ function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalan
 afterEach(() => cleanup());
 
 describe('Send from an address holding no coin', () => {
-    it('shows a Receive action instead of the form when the selected chain is empty', async () => {
+    it('shows a Receive action instead of the form when the selected network is empty', async () => {
         const { onReceive } = mount('0');
 
-        expect(await screen.findByRole('heading', { name: /wallet has no coins to send yet/i }))
+        const heading = await screen.findByRole('heading', { name: 'Nothing to send yet' });
+        // The empty state is the page's content at full width: directly in
+        // the page body, with no card or dashed box around it.
+        const emptyState = heading.closest('[role="status"]');
+        expect(emptyState.parentElement).toBe(screen.getByRole('main'));
+        // Every empty state is unboxed, so the plain variant has no class of its own.
+        expect(emptyState.className).toMatch(/wrap/);
+        expect(screen.queryByRole('group', { name: 'Send' })).toBeNull();
+        expect(within(emptyState).getByText('Receive coins or tokens on this network before creating a payment.'))
             .toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Send' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
@@ -89,7 +97,7 @@ describe('Send from an address holding no coin', () => {
         mount('0', { walletBalancesError: true });
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { name: /wallet has no coins to send yet/i })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
     });
 });
 

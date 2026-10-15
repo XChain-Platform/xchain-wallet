@@ -21,7 +21,8 @@ const { wipeWalletStorage } = vi.hoisted(() => ({
     wipeWalletStorage: vi.fn(async () => {}),
 }));
 
-vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', () => ({
+vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', async (importOriginal) => ({
+    ...(await importOriginal()),
     wipeWalletStorage,
 }));
 
@@ -54,11 +55,11 @@ function mount(walletsAfterRemoval, overrides = {}) {
 
 async function removeActiveWallet() {
     fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
-    fireEvent.change(screen.getByLabelText('Confirm wallet name'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Confirm wallet name' }), {
         target: { value: ACTIVE_WALLET.name },
     });
     const confirm = screen.getByRole('button', { name: 'Remove wallet' });
-    expect(confirm.style.color).toBe('var(--xc-on-accent)');
+    expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
     await screen.findByText('Wallet removed.');
 }
@@ -80,20 +81,20 @@ describe('ThisWalletSection removal completion', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
 
-        expect(screen.getAllByText(ACTIVE_WALLET.name)
-            .some((element) => element.tagName === 'STRONG')).toBe(true);
+        expect(screen.getByRole('heading', { name: `Remove ${ACTIVE_WALLET.name}?` })).toBeTruthy();
         expect(screen.getByText(/Make sure you have a backup before continuing/)).toBeTruthy();
-        expect(screen.getByText(/encrypted seed is destroyed and cannot be recovered/)).toBeTruthy();
+        expect(screen.getByText(/encrypted seed is destroyed and can't be recovered/)).toBeTruthy();
     });
 
     it('submits an exact wallet-name confirmation with Enter', async () => {
         const { messaging } = mount([OTHER_WALLET]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
-        const confirmation = screen.getByLabelText('Confirm wallet name');
+        const confirmation = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         expect(screen.getByText('Remove Active Wallet?')).toBeTruthy();
-        expect(screen.getByText(/Removing this wallet deletes its accounts, addresses, signers, and pending transactions/)).toBeTruthy();
-        expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
+        expect(screen.getByText(/Its accounts, addresses, signers, and pending transactions will be deleted/)).toBeTruthy();
+        expect(screen.queryByText(/Removing this wallet/)).toBeNull();
+        expect(screen.getByText(/This can't be undone/)).toBeTruthy();
         expect(confirmation).toHaveAttribute('enterkeyhint', 'done');
         fireEvent.change(confirmation, { target: { value: ACTIVE_WALLET.name } });
         fireEvent.keyDown(confirmation, { key: 'Enter' });
@@ -110,7 +111,7 @@ describe('ThisWalletSection removal completion', () => {
             })),
         });
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
-        const input = screen.getByLabelText('Confirm wallet name');
+        const input = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         fireEvent.change(input, { target: { value: ACTIVE_WALLET.name } });
         fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
 
@@ -129,6 +130,10 @@ describe('ThisWalletSection removal completion', () => {
         writeBalanceCache(OTHER_WALLET.id, 'account-other', {
             balances: {}, activeByChain: {}, fetchedAt: 200,
         });
+        globalThis.localStorage.setItem(`xc:activeAccount:${ACTIVE_WALLET.id}`, 'account-active');
+        globalThis.localStorage.setItem(`xc:activeAccount:${OTHER_WALLET.id}`, 'account-other');
+        globalThis.localStorage.setItem(`xc:formdraft:send:${ACTIVE_WALLET.id}`, '{"amount":"1"}');
+        globalThis.localStorage.setItem(`xc:formdraft:send:${OTHER_WALLET.id}`, '{"amount":"2"}');
         const { messaging, reload } = mount([OTHER_WALLET]);
 
         await removeActiveWallet();
@@ -141,6 +146,10 @@ describe('ThisWalletSection removal completion', () => {
         expect(wipeWalletStorage).not.toHaveBeenCalled();
         expect(readBalanceCache(ACTIVE_WALLET.id, 'account-active')).toBeNull();
         expect(readBalanceCache(OTHER_WALLET.id, 'account-other')).not.toBeNull();
+        expect(globalThis.localStorage.getItem(`xc:activeAccount:${ACTIVE_WALLET.id}`)).toBeNull();
+        expect(globalThis.localStorage.getItem(`xc:formdraft:send:${ACTIVE_WALLET.id}`)).toBeNull();
+        expect(globalThis.localStorage.getItem(`xc:activeAccount:${OTHER_WALLET.id}`)).toBe('account-other');
+        expect(globalThis.localStorage.getItem(`xc:formdraft:send:${OTHER_WALLET.id}`)).toBe('{"amount":"2"}');
         writeBalanceCache(ACTIVE_WALLET.id, 'account-active', {
             balances: {}, activeByChain: {}, fetchedAt: 300,
         });
@@ -171,7 +180,7 @@ describe('ThisWalletSection removal completion', () => {
 
         await removeActiveWallet();
 
-        expect(await screen.findByText(/could not finish switching wallets: List failed/)).toBeTruthy();
+        expect(await screen.findByText(/couldn't finish switching wallets: List failed/)).toBeTruthy();
         expect(globalThis.localStorage.getItem('xc:activeWallet')).toBeNull();
         expect(reload).toHaveBeenCalledOnce();
         expect(wipeWalletStorage).not.toHaveBeenCalled();

@@ -52,11 +52,30 @@ class MainViewController: CAPBridgeViewController {
             action: #selector(handleEdgeBack(_:))
         )
         edgeBack.edges = .left
-        edgeBack.cancelsTouchesInView = false
+        // A committed edge Back owns its touch sequence, so the WebView cannot
+        // also activate or drag the sheet that the shared handler dismisses.
+        edgeBack.cancelsTouchesInView = true
         view.addGestureRecognizer(edgeBack)
+
+        let bootstrap = "window.__xchainNativeFontScale = \(nativeFontScale())"
+        webView?.configuration.userContentController.addUserScript(
+            WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(dynamicTypeDidChange),
+            name: UIContentSizeCategory.didChangeNotification,
+            object: nil
+        )
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        publishFontScale()
     }
 
     override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(XChainAppPlugin())
         bridge?.registerPluginInstance(XChainVaultPlugin())
         // SSC-4. Same silent-failure shape as the vault: without
         // this line the SPA finds no clipboard plugin, and a sensitive copy
@@ -77,6 +96,12 @@ class MainViewController: CAPBridgeViewController {
         // handler as the visible Back control instead.
         webView?.allowsBackForwardNavigationGestures = false
 
+        // Route bodies own vertical scrolling. Keep the document scroll view
+        // from rubber-banding far enough to expose WKWebView's native backing.
+        webView?.scrollView.bounces = false
+        webView?.scrollView.alwaysBounceVertical = false
+        webView?.scrollView.alwaysBounceHorizontal = false
+
         disableUnusedCapacitorPlugins()
         blockNativeHttpProxy()
     }
@@ -96,6 +121,24 @@ class MainViewController: CAPBridgeViewController {
     fileprivate func markShellReady() {
         launchCover?.removeFromSuperview()
         launchCover = nil
+    }
+
+    private func nativeFontScale() -> CGFloat {
+        UIFontMetrics.default.scaledValue(for: 16, compatibleWith: traitCollection) / 16
+    }
+
+    @objc private func dynamicTypeDidChange() {
+        publishFontScale()
+    }
+
+    private func publishFontScale() {
+        let scale = nativeFontScale()
+        webView?.evaluateJavaScript("""
+            window.__xchainNativeFontScale = \(scale);
+            window.dispatchEvent(new CustomEvent('xchain:native-font-scale', {
+              detail: { fontScale: \(scale) }
+            }));
+            """)
     }
 
     // MARK: - SSC-1, door 1: the plugin registry

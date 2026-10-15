@@ -28,8 +28,9 @@ import {
 } from '../../../schemas/settings.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
-import { INPUT, ROW, ROW_LABEL, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function UndoSendRow() {
     const { settings, update } = useSettings();
@@ -57,11 +58,13 @@ export function UndoSendRow() {
                 }}
             />
             <div style={ROW}>
-                <span style={ROW_LABEL}>{t('settings.undoSend.durationLabel')}</span>
+                <span style={ROW_TITLE}>{t('settings.undoSend.durationLabel')}</span>
                 <input
                     key={seconds}
                     type="number"
                     inputMode="numeric"
+                    enterKeyHint="done"
+                    autoComplete="off"
                     min={UNDO_SEND_SECONDS_MIN}
                     max={UNDO_SEND_SECONDS_MAX}
                     step={1}
@@ -78,6 +81,7 @@ export function UndoSendRow() {
                         });
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    onWheel={blurNumberInputOnWheel}
                     aria-label={t('settings.undoSend.durationAriaLabel')}
                     style={{ ...INPUT, width: 100, textAlign: 'right' }}
                 />

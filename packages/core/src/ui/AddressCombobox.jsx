@@ -8,17 +8,55 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
 import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
+import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
+import { t } from '../i18n/index.js';
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
     addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
 };
+
+function inspectClipboardPaste(value) {
+    const edges = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
+    const hiddenCharacters = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
+    const normalized = String(value ?? '').replace(edges, '');
+    const hidden = hiddenCharacters.test(normalized);
+    return hidden
+        ? {
+            ok: false,
+            value: normalized,
+            error: 'Pasted text contains hidden characters. Check it and try again.',
+        }
+        : { ok: true, value: normalized, error: null };
+}
+
+/**
+ * Keeps `--address-paste-width` on the field equal to the room the in-field
+ * Paste button really takes: its width plus its end inset on both sides,
+ * rounded up. The stylesheet's value is the default-text estimate; Paste
+ * grows with the text size (and with a longer translated label), and the
+ * icon action and the input's text both lay out against this width, so an
+ * estimate alone let the icon run into Paste at large text.
+ *
+ * @param {HTMLElement | null} wrap   the field's wrapper, which owns the property
+ * @param {HTMLElement | null} paste  the Paste button
+ * @returns {number | null} the width written, or null when nothing was measured
+ */
+export function syncPasteWidth(wrap, paste) {
+    if (!wrap || !paste) return null;
+    const width = paste.getBoundingClientRect().width;
+    if (!(width > 0)) return null;
+    const inset = Number.parseFloat(getComputedStyle(paste).insetInlineEnd);
+    const room = Math.ceil(width) + 2 * (Number.isFinite(inset) ? inset : 0);
+    wrap.style.setProperty('--address-paste-width', `${room}px`);
+    return room;
+}
 
 /**
  * AddressCombobox: destination input for Send / authoring forms, with
@@ -49,7 +87,7 @@ const ICONS = {
  *                             trailing button when set.
  *   - onIconClick           handler for the trailing icon button.
  *   - iconLabel             accessible label override for the icon button.
- *   - size                  'md' | 'lg'; forwarded to `<Input>`.
+ *   - size                  'sm' | 'md' | 'lg'; forwarded to `<Input>`.
  *   - everything else       forwarded to `<Input>` (label, hint, error,
  *                             placeholder, autoComplete, etc.).
  *
@@ -63,7 +101,7 @@ const ICONS = {
  * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
  */
-export const AddressCombobox = forwardRef(function AddressCombobox(
+export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombobox(
     {
         value,
         onChange,
@@ -79,6 +117,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
         style,
         onFocus: onInputFocus,
         onKeyDown: onInputKeyDown,
+        error,
         ...rest
     },
     ref,
@@ -86,8 +125,20 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const listboxId = useId();
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
+    const [pasteError, setPasteError] = useState('');
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const pasteSlotRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
+
+    useLayoutEffect(() => {
+        const wrap = containerRef.current;
+        const paste = pasteSlotRef.current?.querySelector('button') ?? null;
+        syncPasteWidth(wrap, paste);
+        if (!paste || typeof ResizeObserver !== 'function') return undefined;
+        const observer = new ResizeObserver(() => syncPasteWidth(wrap, paste));
+        observer.observe(paste);
+        return () => observer.disconnect();
+    }, []);
 
     const filtered = useMemo(
         () => filterSuggestions(suggestions, value),
@@ -145,7 +196,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
     ].filter(Boolean).join(' ');
 
@@ -162,14 +213,22 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 aria-controls={listboxId}
                 aria-autocomplete="list"
                 aria-activedescendant={activeId}
-                placeholder="Address"
+                placeholder={t('verifySignature.address')}
                 label={label}
                 size={size}
                 disabled={disabled}
+                dir="ltr"
                 autoComplete="off"
-                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                style={{
+                    // Room for Paste, and for the icon action beside it.
+                    paddingInlineEnd: IconComponent
+                        ? 'calc(var(--address-paste-width) + var(--address-control-height))'
+                        : 'var(--address-paste-width)',
+                    ...style,
+                }}
                 value={value}
                 onChange={(e) => {
+                    setPasteError('');
                     onChange(e);
                     setOpen(true);
                     setActiveIndex(-1);
@@ -197,6 +256,8 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     setOpen(true);
                     setActiveIndex(-1);
                 }}
+                pasteGuard
+                error={pasteError || error}
                 {...rest}
             />
             {IconComponent ? (
@@ -214,26 +275,31 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     <IconComponent />
                 </button>
             ) : null}
-            {/* After the in-field icon button so focus follows the visual order:
-                field, its trailing icon, then the paste control below it. */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+            <span className={styles.pasteAction} ref={pasteSlotRef}>
                 <ClipboardPasteButton
                     disabled={disabled}
+                    onMessage={(message) => { if (message) setPasteError(message); }}
                     onPaste={(text) => {
+                        const inspected = inspectClipboardPaste(text);
+                        if (!inspected.ok) {
+                            setPasteError(inspected.error);
+                            return;
+                        }
+                        setPasteError('');
                         const pasteEvent = {
-                            clipboardData: { getData: () => text },
+                            clipboardData: { getData: () => inspected.value },
                             defaultPrevented: false,
                             currentTarget: inputRef.current,
                             target: inputRef.current,
                             preventDefault() { this.defaultPrevented = true; },
                         };
                         onPaste?.(pasteEvent);
-                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: text } });
+                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: inspected.value } });
                         setOpen(true);
                         setActiveIndex(-1);
                     }}
                 />
-            </div>
+            </span>
             {showDropdown ? (
                 <ul
                     id={listboxId}
@@ -256,13 +322,13 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                             <span className={styles.label}>
                                 {s.label}
                                 <span className={styles.badge}>
-                                    {s.source === 'contact' ? 'Contact' : 'Recent'}
+                                    {s.source === 'contact' ? t('ui.addressCombobox.contact') : t('ui.addressCombobox.recent')}
                                 </span>
                             </span>
                             {s.sublabel ? (
                                 <span className={styles.sublabel}>{s.sublabel}</span>
                             ) : null}
-                            <span className={styles.sublabel}>{s.address}</span>
+                            <AddressText address={s.address} className={styles.sublabel} size="sm" focusable={false} />
                         </li>
                     ))}
                 </ul>

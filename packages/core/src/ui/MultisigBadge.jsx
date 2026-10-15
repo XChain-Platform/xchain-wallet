@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /*********************************************************************
  *
  * Copyright © 2025–2026 Dankest, LLC
@@ -34,9 +35,9 @@ export function MultisigBadge({ threshold, cosignerCount, scheme, size = 'md' })
     // aria/title so a reader reconciling against another wallet still gets it.
     const code = SCHEME_CODE[scheme];
     const aria = `${threshold} of ${cosignerCount} multisig (${SCHEME_DESCRIPTION[scheme] || scheme}${code ? `, ${code}` : ''})`;
-    const padX = size === 'sm' ? '0.25rem' : '0.4rem';
-    const padY = size === 'sm' ? '0.05rem' : '0.1rem';
-    const fontSize = size === 'sm' ? '0.7rem' : '0.78rem';
+    const height = size === 'sm' ? 'var(--xc-badge-height-sm)' : 'var(--xc-badge-height-md)';
+    const padX = size === 'sm' ? 'var(--xc-badge-padding-inline-sm)' : 'var(--xc-badge-padding-inline-md)';
+    const fontSize = size === 'sm' ? 'var(--xc-badge-font-size-sm)' : 'var(--xc-badge-font-size-md)';
     return (
         <span
             role="img"
@@ -46,20 +47,22 @@ export function MultisigBadge({ threshold, cosignerCount, scheme, size = 'md' })
             title={aria}
             style={{
                 display: 'inline-flex',
-                gap: '0.25rem',
+                boxSizing: 'border-box',
+                gap: 'var(--xc-badge-gap)',
                 alignItems: 'center',
-                padding: `${padY} ${padX}`,
+                height,
+                padding: `0 ${padX}`,
                 fontSize,
-                fontWeight: 600,
-                borderRadius: 4,
+                fontWeight: 'var(--xc-badge-font-weight)',
+                borderRadius: 'var(--xc-badge-radius)',
                 background: tone.bg,
                 color: tone.fg,
                 border: `1px solid ${tone.border}`,
-                lineHeight: 1.2,
+                lineHeight: 1,
                 whiteSpace: 'nowrap',
             }}
         >
-            <span>{threshold}-of-{cosignerCount}</span>
+            <span>{threshold}{t('ui.multisigBadge.of')}{cosignerCount}</span>
             <span style={{ opacity: 0.85 }}>{tag}</span>
         </span>
     );
@@ -91,7 +94,7 @@ const SCHEME_DESCRIPTION = {
 // Three distinct tones so a glance distinguishes scheme families
 // without the user having to read the tag.
 const SCHEME_TONE = {
-    'p2sh-multisig':  { bg: '#FEF3C7', fg: '#78350F', border: '#FCD34D' }, // amber (classic P2SH)
-    'p2wsh-multisig': { bg: '#DBEAFE', fg: '#1E3A8A', border: '#93C5FD' }, // blue (segwit)
-    'taproot-musig2': { bg: '#EDE9FE', fg: '#4C1D95', border: '#C4B5FD' }, // violet (taproot)
+    'p2sh-multisig':  { bg: 'var(--xc-badge-multisig-classic-bg)', fg: 'var(--xc-badge-multisig-classic-fg)', border: 'var(--xc-badge-multisig-classic-border)' },
+    'p2wsh-multisig': { bg: 'var(--xc-badge-multisig-segwit-bg)', fg: 'var(--xc-badge-multisig-segwit-fg)', border: 'var(--xc-badge-multisig-segwit-border)' },
+    'taproot-musig2': { bg: 'var(--xc-badge-multisig-taproot-bg)', fg: 'var(--xc-badge-multisig-taproot-fg)', border: 'var(--xc-badge-multisig-taproot-border)' },
 };

@@ -4,7 +4,7 @@
 // DiagnosticDetails render contract.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { DiagnosticDetails } from '../../../../packages/core/src/shared/components/DiagnosticDetails.jsx';
 import { LogConsole } from '../../../../packages/core/src/shared/components/LogConsole.jsx';
 import {
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     entries: [],
     copyText: vi.fn(async () => ({ ok: true })),
     clear: vi.fn(),
+    subscribe: vi.fn(() => vi.fn()),
 }));
 
 vi.mock('../../../../packages/core/src/shared/clipboard.js', () => ({
@@ -27,7 +28,7 @@ vi.mock('../../../../packages/core/src/shared/utils/logConsole.js', () => ({
         attach: vi.fn(),
         isAttached: vi.fn(() => true),
         entries: vi.fn(() => mocks.entries),
-        subscribe: vi.fn(() => vi.fn()),
+        subscribe: mocks.subscribe,
         clear: mocks.clear,
     },
 }));
@@ -36,6 +37,7 @@ beforeEach(() => {
     mocks.entries = [];
     mocks.copyText.mockClear();
     mocks.clear.mockClear();
+    mocks.subscribe.mockClear();
 });
 
 afterEach(() => {
@@ -158,6 +160,20 @@ describe('diagnostic text safety', () => {
         expect(container.textContent).not.toContain('summary-secret');
         expect(screen.getByText('Showing the first 200 of 1,205 findings.')).toBeTruthy();
     });
+
+    it('redacts secrets under quoted JSON keys', () => {
+        const { container } = render(
+            <DiagnosticDetails
+                summary='Result {"password":"summary-secret"}'
+                items={['{"password":"item-secret","seedPhrase":"phrase-secret"}']}
+            />,
+        );
+
+        expect(container.textContent).not.toContain('summary-secret');
+        expect(container.textContent).not.toContain('item-secret');
+        expect(container.textContent).not.toContain('phrase-secret');
+        expect(container.textContent.match(/\[REDACTED\]/g)).toHaveLength(3);
+    });
 });
 
 describe('DiagnosticDetails keepAddresses', () => {
@@ -184,6 +200,23 @@ describe('DiagnosticDetails keepAddresses', () => {
 });
 
 describe('LogConsole safety and controls', () => {
+    it('refreshes the buffer snapshot after installing its subscription', () => {
+        mocks.entries = [
+            { id: 1, timestamp: 1, level: 'log', source: 'one', message: 'initial' },
+        ];
+        mocks.subscribe.mockImplementationOnce(() => {
+            mocks.entries = [
+                { id: 2, timestamp: 2, level: 'log', source: 'two', message: 'arrived during mount' },
+            ];
+            return vi.fn();
+        });
+
+        render(<LogConsole />);
+
+        expect(screen.getByText('arrived during mount')).toBeTruthy();
+        expect(screen.queryByText('initial')).toBeNull();
+    });
+
     it('gives every compact console control a 24px pointer-target floor', () => {
         render(<LogConsole />);
 
@@ -214,7 +247,7 @@ describe('LogConsole safety and controls', () => {
     it('copies all redacted entries regardless of the active search and clears the buffer', async () => {
         mocks.entries = [
             { id: 1, timestamp: 1, level: 'log', source: 'one', message: 'searchable' },
-            { id: 2, timestamp: 2, level: 'error', source: 'two', message: 'password=hunter2' },
+            { id: 2, timestamp: 2, level: 'error', source: 'two', message: '{"password":"hunter2"}' },
         ];
         render(<LogConsole />);
         fireEvent.change(screen.getByLabelText('Search log messages'), { target: { value: 'searchable' } });
@@ -223,11 +256,52 @@ describe('LogConsole safety and controls', () => {
         await waitFor(() => expect(mocks.copyText).toHaveBeenCalledOnce());
         const copied = mocks.copyText.mock.calls[0][0];
         expect(copied).toContain('one: searchable');
-        expect(copied).toContain('two: password=[REDACTED]');
+        expect(copied).toContain('two: {"password":"[REDACTED]"}');
         expect(copied).not.toContain('hunter2');
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear log buffer' }));
         expect(mocks.clear).toHaveBeenCalledOnce();
         expect(screen.getByText(/No log entries yet/)).toBeTruthy();
+    });
+
+    it('handles a rejected clipboard write without an unhandled rejection', async () => {
+        mocks.copyText.mockRejectedValueOnce(new Error('clipboard failed'));
+        render(<LogConsole />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Copy all log entries' }));
+        });
+
+        expect(screen.getByRole('button', { name: 'Copy all log entries' }))
+            .toHaveTextContent('Copy failed: clipboard unavailable');
+    });
+
+    it('ignores an older copy result that settles after a newer attempt', async () => {
+        let resolveFirst;
+        let resolveSecond;
+        mocks.copyText
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+        render(<LogConsole />);
+
+        const copyButton = screen.getByRole('button', { name: 'Copy all log entries' });
+        fireEvent.click(copyButton);
+        fireEvent.click(copyButton);
+        await act(async () => { resolveSecond({ ok: true }); });
+        expect(copyButton).toHaveTextContent('Copied');
+
+        await act(async () => { resolveFirst({ ok: false }); });
+        expect(copyButton).toHaveTextContent('Copied');
+    });
+
+    it('clears copy feedback timers when unmounted', async () => {
+        vi.useFakeTimers();
+        const { unmount } = render(<LogConsole />);
+        fireEvent.click(screen.getByRole('button', { name: 'Copy all log entries' }));
+        await act(async () => {});
+
+        expect(vi.getTimerCount()).toBe(1);
+        unmount();
+        expect(vi.getTimerCount()).toBe(0);
     });
 });

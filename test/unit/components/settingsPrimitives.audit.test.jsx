@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let settings;
@@ -72,7 +73,14 @@ describe('shared settings row semantics', () => {
         cleanup();
         render(<DisplaySection />);
         const thresholdCopy = screen.getByText('Small-balance threshold').parentElement;
-        expect(thresholdCopy.parentElement.style.flexWrap).toBe('wrap');
+        // The threshold row is a grid that collapses to one column on phones
+        // (Settings widths ruling), so the wrap guarantee lives in the CSS module.
+        expect(thresholdCopy.parentElement.style.display).toBe('grid');
+        const displayCss = readFileSync(
+            'packages/core/src/shared/components/settings/DisplaySection.module.css',
+            'utf8',
+        );
+        expect(displayCss).toMatch(/@media \(max-width: 640px\)\s*\{[^}]*\.fieldRow[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
         expect(thresholdCopy.style.flex).toBe('1 1 280px');
         expect(thresholdCopy.style.minWidth).toBe('min(100%, 280px)');
     });
@@ -91,9 +99,9 @@ describe('shared settings row semantics', () => {
         const toggle = screen.getByRole('switch', { name: 'Protect previews' });
         expect(toggle.checked).toBe(true);
         expect(describedText(toggle)).toBe('Requires confirmation before opening a preview.');
-        expect(toggle.style.appearance).toBe('none');
-        expect(toggle.style.borderRadius).toBe('999px');
-        expect(toggle.style.backgroundColor).toBe('var(--xc-accent-primary)');
+        expect(toggle).toHaveAttribute('type', 'checkbox');
+        expect(toggle.className).toMatch(/input/);
+        expect(toggle.closest('label')).toHaveTextContent('Protect previews');
 
         fireEvent.click(screen.getByText('Protect previews'));
         expect(onChange).toHaveBeenCalledWith(false);
@@ -106,11 +114,29 @@ describe('shared settings row semantics', () => {
         const motion = screen.getByRole('combobox', { name: 'Reduced motion' });
         expect(describedText(theme)).toMatch(/follow your device setting/i);
         expect(describedText(motion)).toMatch(/device accessibility setting/i);
-        expect(theme.closest('div').style.flexWrap).toBe('wrap');
-        expect(motion.closest('div').style.flexWrap).toBe('wrap');
+        // The control sits in the row's end slot; the row itself wraps.
+        expect(theme.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');
+        expect(motion.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');
     });
 
-    it('disambiguates fee controls by chain and connects validation errors', () => {
+    it('keeps the saved appearance value and reports a failed update', async () => {
+        update = vi.fn(async () => {
+            throw new Error('appearance.save: E_STORAGE_WRITE');
+        });
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        render(<AppearanceSection />);
+
+        const theme = screen.getByRole('combobox', { name: 'Theme' });
+        fireEvent.change(theme, { target: { value: 'dark' } });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not save appearance settings. Try again.',
+        );
+        await waitFor(() => expect(theme).toHaveValue('system'));
+        consoleError.mockRestore();
+    });
+
+    it('disambiguates fee controls by network and connects validation errors', () => {
         settings = {
             ...createDefaultSettings(),
             fees: {
@@ -132,6 +158,10 @@ describe('shared settings row semantics', () => {
         expect(describedText(rate)).toContain('sat/vB');
         expect(describedText(bump)).toMatch(/raise the fee later/i);
         expect(bump.checked).toBe(true);
+        expect(bump).toHaveAttribute(
+            'aria-label',
+            'Bitcoin allow fee bump (Replace-by-Fee)',
+        );
 
         fireEvent.change(rate, { target: { value: '' } });
         fireEvent.blur(rate);
@@ -148,7 +178,7 @@ describe('settings actions and mode choices', () => {
         }));
         render(<DeveloperModeSection />);
 
-        const remove = await screen.findByRole('button', { name: 'Remove custom chain fork-regtest' });
+        const remove = await screen.findByRole('button', { name: 'Remove custom network fork-regtest' });
         expect(remove.className).toMatch(/danger/);
     });
 

@@ -25,22 +25,28 @@
  *
  */
 import { InfoTip } from './InfoTip.jsx';
+import { t } from '../i18n/index.js';
 
 /**
  * @param {object} props
  * @param {'verified' | 'failed' | 'unavailable' | 'pending'} props.status
  * @param {string | null} [props.reason]   light-client reason code, shown in the info tip
  * @param {'sm' | 'md'} [props.size]        default 'sm'
+ * @param {boolean} [props.details]          default true. Pass false where the
+ *   badge sits inside a button (a History or balance row): the info tip is a
+ *   button itself, and a button inside a button is invalid HTML whose inner
+ *   click also toggles the row. The badge's accessible name still carries the
+ *   full explanation, and the detail screens show the tip.
  */
-export function VerifiedBadge({ status, reason, size = 'sm' }) {
+export function VerifiedBadge({ status, reason, size = 'sm', details = true }) {
     const spec = BADGE_SPEC[status];
     if (!spec) return null;
 
     const reasonPhrase = reason ? humanizeReason(reason) : null;
     const title = spec.title + (reasonPhrase ? ` (${reasonPhrase})` : '');
-    const padX = size === 'sm' ? '0.25rem' : '0.4rem';
-    const padY = size === 'sm' ? '0.05rem' : '0.1rem';
-    const fontSize = size === 'sm' ? '0.7rem' : '0.78rem';
+    const height = size === 'sm' ? 'var(--xc-badge-height-sm)' : 'var(--xc-badge-height-md)';
+    const padX = size === 'sm' ? 'var(--xc-badge-padding-inline-sm)' : 'var(--xc-badge-padding-inline-md)';
+    const fontSize = size === 'sm' ? 'var(--xc-badge-font-size-sm)' : 'var(--xc-badge-font-size-md)';
     return (
         <span style={{ display: 'inline-flex', alignItems: 'center' }}>
             <span
@@ -50,23 +56,25 @@ export function VerifiedBadge({ status, reason, size = 'sm' }) {
                 data-status={status}
                 style={{
                     display: 'inline-flex',
-                    gap: '0.2rem',
+                    boxSizing: 'border-box',
+                    gap: 'var(--xc-badge-gap)',
                     alignItems: 'center',
-                    padding: `${padY} ${padX}`,
+                    height,
+                    padding: `0 ${padX}`,
                     fontSize,
-                    fontWeight: 600,
-                    borderRadius: 4,
+                    fontWeight: 'var(--xc-badge-font-weight)',
+                    borderRadius: 'var(--xc-badge-radius)',
                     background: spec.bg,
                     color: spec.fg,
                     border: `1px solid ${spec.border}`,
-                    lineHeight: 1.2,
+                    lineHeight: 1,
                     whiteSpace: 'nowrap',
                 }}
             >
                 <span aria-hidden="true">{spec.glyph}</span>
                 <span>{spec.label}</span>
             </span>
-            <InfoTip aria={`${spec.label} details`} label={title} />
+            {details ? <InfoTip aria={t('ui.verifiedBadge.details', { label: spec.label })} label={title} /> : null}
         </span>
     );
 }

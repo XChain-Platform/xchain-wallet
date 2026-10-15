@@ -72,7 +72,12 @@ function recordingMessaging(chainState) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
+        getWalletBalances: () => Promise.resolve({
+            [CHAIN]: [{
+                address: SOURCE.address,
+                balances: { tokens: [{ tick: 'JDOG', quantity: '10000000000', divisibility: 8 }] },
+            }],
+        }),
         getListByActionIndex: () => Promise.resolve(null),
         getAddressPreferences: answer('getAddressPreferences', chainState.prefs),
         getDispensersForAddress: answer('getDispensersForAddress', chainState.dispensers instanceof Error
@@ -201,7 +206,10 @@ describe('DispenserForm "Another address": format', () => {
             ));
             await drainMicrotasks();
         });
-        expect(utils.getByLabelText('Dispenser address').value).toBe('New dispenser address (generated at preview)');
+        expect(utils.getByLabelText('Dispenser address').value).toBe('');
+        expect(utils.getByLabelText('Dispenser address').getAttribute('placeholder')).toBe('New address, made at preview');
+        // The address shortener never runs on the placeholder sentence.
+        expect(utils.container.textContent).not.toMatch(/New di…/);
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
             await drainMicrotasks();
@@ -269,7 +277,7 @@ describe('DispenserForm "Another address": payload and confirm screen', () => {
         expect(note.textContent).toContain('returns to whichever one closes it');
 
         await domAct(async () => {
-            const approve = Array.from(utils.container.querySelectorAll('button'))
+            const approve = utils.getAllByRole('button')
                 .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
             if (!approve) throw new Error(`no enabled Approve button; page reads: ${utils.container.textContent}`);
             fireEvent.click(approve);

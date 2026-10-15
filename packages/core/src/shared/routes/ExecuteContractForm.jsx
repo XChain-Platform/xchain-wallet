@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -22,6 +23,7 @@ import {
     NATIVE_FEE_UNVERIFIED_NOTICE,
 } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -47,8 +49,10 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { compareDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -57,7 +61,7 @@ function isPositiveDecimal(value) {
     return /^\d+(?:\.\d+)?$/.test(text) && /[1-9]/.test(text);
 }
 
-function abiArgumentError(param, value) {
+function abiArgumentError(param, value, descriptor) {
     const name = param?.name || 'Argument';
     const type = String(param?.type || '').toLowerCase();
     const text = String(value ?? '').trim();
@@ -67,6 +71,17 @@ function abiArgumentError(param, value) {
     }
     if (type === 'amount' && !isPositiveDecimal(text)) {
         return `${name} must be a positive decimal amount.`;
+    }
+    if (type === 'amount') {
+        const precisionError = tokenAmountPrecisionError(text, {
+            divisibility: 8,
+            noun: name,
+        });
+        if (precisionError) return precisionError;
+    }
+    if (type === 'address' && (!descriptor?.coin || !descriptor?.networkKind
+        || !isValidAddressForChain(text, descriptor.coin, descriptor.networkKind))) {
+        return `${name} must be a valid address for ${descriptor?.displayName || 'this network'}.`;
     }
     if (type === 'number' && !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) {
         return `${name} must be a decimal number.`;
@@ -78,7 +93,10 @@ function abiArgumentError(param, value) {
         try {
             JSON.parse(text);
         } catch (err) {
-            return `${name} contains invalid JSON: ${err?.message || String(err)}`;
+            return userFacingMessage(
+                err,
+                `${name} contains invalid JSON. Check the syntax and try again.`,
+            );
         }
     }
     return null;
@@ -124,6 +142,7 @@ function abiArgumentError(param, value) {
  */
 export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -160,9 +179,14 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
+    const contractIdentityRef = useRef(`${chainId}\0${contractActionIndex}`);
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setFromAddressId(null);
+        setLoadError(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -177,13 +201,13 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 // operating address.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain can call the contract. Use Receive to generate one first.');
+                    setLoadError('No address on this network can call the contract. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -199,8 +223,24 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     // method the abi does NOT know keeps manual mode so the link's intent
     // is preserved verbatim.
     useEffect(() => {
-        if (typeof messaging.getContractByActionIndex !== 'function') return undefined;
         let cancelled = false;
+        const contractIdentity = `${chainId}\0${contractActionIndex}`;
+        if (contractIdentityRef.current !== contractIdentity) {
+            contractIdentityRef.current = contractIdentity;
+            setContractAbi(null);
+            setOwnerWithdraw(null);
+            setManualMode(false);
+            setMethod(initialMethod || '');
+            setParamsText(initialParamsText || '');
+            setAbiParamValues([]);
+            setDepositTick('');
+            setDepositQuantity('');
+            setFormError(null);
+            setSubmitError(null);
+            setResult(null);
+            setStage('form');
+        }
+        if (typeof messaging.getContractByActionIndex !== 'function') return undefined;
         messaging.getContractByActionIndex({ chainId, contractActionIndex })
             .then((resp) => {
                 if (cancelled) return;
@@ -322,6 +362,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         address: fromAddress?.address,
         tick: depositTick,
     });
+    const depositTokenInfo = useTokenInfo({
+        chainId,
+        tick: depositTick,
+        skip: !depositTick.trim(),
+    });
+    const depositDivisibility = depositTokenInfo?.divisibility ?? 8;
 
     // DEPOSIT first: the contract checks its balance rose when the call runs.
     async function composeBatchParams() {
@@ -412,7 +458,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: err?.message || 'Contract call failed.',
+                fallback: 'Contract call failed.',
             }));
         }
     }
@@ -438,9 +484,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const abiActive = Boolean(contractAbi) && !manualMode;
     const abiSpec = abiActive && method && contractAbi.methods[method] ? contractAbi.methods[method] : null;
     const abiParams = Array.isArray(abiSpec?.params) ? abiSpec.params : [];
-    const abiArgumentErrors = abiParams.map((param, index) => abiArgumentError(param, abiParamValues[index]));
-    const abiIncomplete = abiArgumentErrors.some(Boolean);
-
+    const abiArgumentErrors = abiParams.map((param, index) => abiArgumentError(
+        param,
+        abiParamValues[index],
+        descriptor,
+    ));
     function selectAbiMethod(name) {
         setMethod(name);
         const count = ((contractAbi.methods[name] || {}).params || []).length;
@@ -490,6 +538,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setFormError('No source address available.');
             return;
         }
+        if (!/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) {
+            setFormError('Contract ID must be a positive whole number.');
+            return;
+        }
         // The method name is the call itself; a blank one has no target.
         if (!method.trim()) {
             setFormError('Method name is required.');
@@ -534,6 +586,15 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 setFormError('Deposit amount must be a positive number.');
                 return;
             }
+            const precisionError = tokenAmountPrecisionError(q, {
+                divisibility: depositDivisibility,
+                tick: depositTick,
+                noun: 'Deposit amount',
+            });
+            if (precisionError) {
+                setFormError(precisionError);
+                return;
+            }
             if (depositBalance != null && compareDecimalStrings(q, depositBalance) === 1) {
                 setFormError(
                     `Deposit amount exceeds the ${formatWithThousands(depositBalance)} `
@@ -549,9 +610,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -620,7 +682,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'Contract call failed.',
+                        fallback: 'Contract call failed.',
                     }),
             );
             setStage('review');
@@ -628,6 +690,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -648,8 +712,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     : t('uri.intent.execute', { contract: contractActionIndex })}
         />
     );
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) {
@@ -697,6 +763,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('execute.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
@@ -718,9 +785,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             ? t('send.review.createUnsigned')
                             : isHwSource
                                 ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                                : (descriptor
-                                    ? t('execute.executeOn', { network: descriptor.displayName })
-                                    : t('execute.callContract'))}
+                                : t('execute.callContract')}
                     </Button>
                 )}
             >
@@ -736,10 +801,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     })}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -790,10 +857,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     PSBT leaves for a signer wallet, so the forfeiture terms are
                     stated here rather than only on the confirm page. */}
                 {nativeFee.payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                        <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                        <p>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -828,7 +895,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -884,6 +951,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('execute.callContract')}
             onSubmit={handleReview}
             noValidate
@@ -895,15 +963,13 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !method.trim() || (abiActive && abiIncomplete) || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
                     {singleEncode ? t('execute.callContract') : t('common.preview')}
                 </Button>
             )}
         >
             <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
-            {/* The target contract pins the network, so the field is single-option. */}
-            <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label={t('execute.caller')}
@@ -1000,10 +1066,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         label={t('execute.depositAmount')}
                         hint={t('execute.depositHint', {
                             contract: contractActionIndex,
-                            chain: descriptor?.displayName || t('send.rbf.thisChain'),
+                            chain: t('send.rbf.thisChain'),
                         })}
                         amount={depositQuantity}
                         tick={depositTick}
+                        divisibility={depositDivisibility}
                         onAmountFieldChange={(rawValue) => {
                             const stripped = String(rawValue).replace(/,/g, '');
                             if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;

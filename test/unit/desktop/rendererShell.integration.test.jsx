@@ -4,13 +4,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const boot = vi.hoisted(() => ({
     installErrorCapture: vi.fn(),
     installFiatRateSource: vi.fn(),
     setShellCapabilities: vi.fn(),
+    homeMounts: 0,
 }));
 
 vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({
@@ -86,9 +87,16 @@ vi.mock('@xchain-wallet/core/shared/hooks/useCoinpayObligations.js', () => ({
 }));
 vi.mock('../../../packages/desktop/renderer/deepLinkRoute.js', () => ({ useDeepLinks: () => {} }));
 
-vi.mock('@xchain-wallet/core/shared/routes/Home.jsx', () => ({
-    Home: () => <h1>Home screen</h1>,
-}));
+// Count Home mounts so a test can tell a remount from a re-render.
+vi.mock('@xchain-wallet/core/shared/routes/Home.jsx', async () => {
+    const { useEffect } = await import('react');
+    return {
+        Home: () => {
+            useEffect(() => { boot.homeMounts += 1; }, []);
+            return <h1>Home screen</h1>;
+        },
+    };
+});
 vi.mock('@xchain-wallet/core/shared/routes/Settings.jsx', () => ({
     Settings: () => <h1>Settings screen</h1>,
 }));
@@ -100,8 +108,6 @@ vi.mock('@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx', () =>
 vi.mock('@xchain-wallet/core/shared/components/ReachabilityBanner.jsx', () => ({
     ReachabilityBanner: () => null,
 }));
-vi.mock('@xchain-wallet/core/shared/components/DemoBanner.jsx', () => ({ DemoBanner: () => null }));
-vi.mock('@xchain-wallet/core/shared/components/NetworkBanner.jsx', () => ({ NetworkBanner: () => null }));
 
 import { App } from '../../../packages/desktop/renderer/App.jsx';
 
@@ -212,12 +218,98 @@ describe('desktop renderer shell', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
 
-        expect(await screen.findByText('IPC channel unavailable')).toBeInTheDocument();
+        // The failure is reported in plain copy; the raw IPC text stays off screen.
+        expect(await screen.findByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeInTheDocument();
+        expect(screen.queryByText('IPC channel unavailable')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        // The failed attempt clears the typed password; typing again re-enables submit.
+        expect(screen.getByLabelText('Password')).toBeEnabled();
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeEnabled();
         expect(bridge.sendMessage).toHaveBeenCalledWith({
             type: 'wallet.unlock',
             request: { password: 'secret' },
         });
+    });
+
+    it('applies an active-wallet event received while the wallet list is loading', async () => {
+        let resolveWalletList;
+        const walletList = new Promise((resolve) => { resolveWalletList = resolve; });
+        const sendMessage = vi.fn(async ({ type, request }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { state: 'unlocked', hasWallet: true, hasSession: true } };
+            }
+            if (type === 'wallet.list') return walletList;
+            if (type === 'account.list') {
+                return { ok: true, result: [{ id: `${request.walletId}-account`, index: 0 }] };
+            }
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+
+        render(<App />);
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({ type: 'wallet.list', request: undefined });
+        });
+
+        const onStateChange = window.xchainWalletWindow.onStateChange.mock.calls[0][0];
+        onStateChange({ kind: 'active-wallet', walletId: 'wallet-2' });
+        await act(async () => {
+            resolveWalletList({
+                ok: true,
+                result: [
+                    { id: 'wallet-1', name: 'Primary wallet' },
+                    { id: 'wallet-2', name: 'Second wallet' },
+                ],
+            });
+            await walletList;
+        });
+
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({
+                type: 'account.list',
+                request: { walletId: 'wallet-2' },
+            });
+        });
+    });
+
+    it('folds a sibling window settings change into this window and remounts on a network change', async () => {
+        const sendMessage = vi.fn(async ({ type, request }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { state: 'unlocked', hasWallet: true, hasSession: true } };
+            }
+            if (type === 'wallet.list') return { ok: true, result: [{ id: 'wallet-1', name: 'Primary wallet' }] };
+            if (type === 'account.list') return { ok: true, result: [{ id: `${request.walletId}-account`, index: 0 }] };
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+        const seen = [];
+        const onSettings = (event) => { seen.push(event.detail); };
+        window.addEventListener('xc:settings-changed', onSettings);
+        try {
+            render(<App />);
+            await waitFor(() => {
+                expect(sendMessage).toHaveBeenCalledWith({ type: 'account.list', request: { walletId: 'wallet-1' } });
+            });
+            await screen.findByRole('heading', { name: 'Home screen' });
+            await act(async () => {});
+            const mountsBefore = boot.homeMounts;
+            const onStateChange = window.xchainWalletWindow.onStateChange.mock.calls[0][0];
+
+            const themed = { theme: 'dark', activeNetwork: 'mainnet' };
+            act(() => { onStateChange({ kind: 'settings', settings: themed }); });
+            expect(seen).toEqual([themed]);
+            expect(boot.homeMounts).toBe(mountsBefore);
+
+            const moved = { theme: 'dark', activeNetwork: 'testnet' };
+            act(() => { onStateChange({ kind: 'network', settings: moved }); });
+            expect(seen).toEqual([themed, moved]);
+            await waitFor(() => { expect(boot.homeMounts).toBe(mountsBefore + 1); });
+
+            act(() => { onStateChange({ kind: 'settings', settings: [moved] }); });
+            expect(seen).toHaveLength(2);
+        } finally {
+            window.removeEventListener('xc:settings-changed', onSettings);
+        }
     });
 });

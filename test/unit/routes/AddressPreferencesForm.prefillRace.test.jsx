@@ -64,6 +64,7 @@ describe('AddressPreferencesForm keeps choices made before the prefill returns',
         const { resolvePrefill } = mountWithSlowPrefill();
 
         const destroy = await screen.findByRole('radio', { name: 'Destroy the fee (reduces supply)' });
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
         const memo = screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' });
         const openDispensers = screen.getByRole('radio', { name: 'Anyone may open a dispenser funded by this address' });
         fireEvent.click(destroy);

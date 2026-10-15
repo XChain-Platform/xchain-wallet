@@ -15,6 +15,7 @@ import { getSessionStatus } from '../../../packages/extension/src/popup/messagin
 import {
     BACKGROUND_INTERRUPTED_MESSAGE,
     RUNTIME_MESSAGE_TIMEOUT_MS,
+    RUNTIME_REQUEST_TIMEOUT_MS,
     sendMessage,
 } from '../../../packages/extension/src/shared/chromeMessaging.js';
 import { Router as ApprovalRouter } from '../../../packages/extension/src/approval/Router.jsx';
@@ -69,6 +70,32 @@ afterEach(() => {
 });
 
 describe('popup background connection recovery', () => {
+    it('applies a finite deadline to ordinary background requests', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        vi.stubGlobal('chrome', { runtime });
+        const request = sendMessage('wallet.list');
+        const rejection = expect(request).rejects.toMatchObject({ code: 'RUNTIME_TIMEOUT' });
+
+        await vi.advanceTimersByTimeAsync(RUNTIME_REQUEST_TIMEOUT_MS);
+
+        await rejection;
+    });
+
+    it('does not time out a user-authorized action while hardware may still be waiting', async () => {
+        let replyAction;
+        const runtime = {
+            lastError: undefined,
+            sendMessage: vi.fn((_message, callback) => { replyAction = callback; }),
+        };
+        vi.stubGlobal('chrome', { runtime });
+        const request = sendMessage('action.send.hw', { walletId: 'wallet-1' });
+
+        await vi.advanceTimersByTimeAsync(RUNTIME_REQUEST_TIMEOUT_MS);
+        replyAction({ ok: true, result: { txid: 'abc' } });
+
+        await expect(request).resolves.toEqual({ txid: 'abc' });
+    });
+
     it('shows reconnecting and recovers when the service worker restarts', async () => {
         const runtime = { lastError: undefined, sendMessage: vi.fn() };
         runtime.sendMessage
@@ -86,7 +113,7 @@ describe('popup background connection recovery', () => {
 
         renderHarness();
         await flushPromises();
-        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet...');
+        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet…');
 
         await vi.advanceTimersByTimeAsync(1);
         await flushPromises();
@@ -107,7 +134,7 @@ describe('popup background connection recovery', () => {
         renderHarness();
         await vi.advanceTimersByTimeAsync(RUNTIME_MESSAGE_TIMEOUT_MS);
         await flushPromises();
-        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet...');
+        expect(screen.getByRole('status')).toHaveTextContent('Reconnecting to wallet…');
 
         await vi.advanceTimersByTimeAsync(1);
         await flushPromises();
@@ -181,7 +208,7 @@ describe('service-worker interruption safety', () => {
         await flushPromises();
 
         expect(screen.getByRole('alert')).toHaveTextContent(
-            'This approval is no longer available. Close this window and try again from the site.',
+            'This approval was interrupted. Return to the site and try again.',
         );
         expect(screen.getByRole('alert')).not.toHaveTextContent('unknown id');
     });

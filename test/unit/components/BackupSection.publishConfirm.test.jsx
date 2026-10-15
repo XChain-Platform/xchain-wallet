@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
+import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = {
@@ -88,7 +89,7 @@ describe('BackupSection label publication confirmation', () => {
         const messaging = mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
-        await screen.findByLabelText('Publish chain');
+        await screen.findByLabelText('Publish network');
         expect(screen.getByText(/labels \+ contacts are encrypted/i).textContent)
             .toMatch(/stored on the blockchain[\s\S]*seed can decrypt them/);
         const action = screen.getByRole('button', { name: 'Publish' });
@@ -200,8 +201,36 @@ describe('BackupSection label publication confirmation', () => {
             fireEvent.click(await screen.findByTestId('confirm-approve'));
             fireEvent.click(await screen.findByRole('button', { name: 'Copy txid' }));
 
-            expect(await screen.findByText(/Copy is not available here/)).toBeTruthy();
+            expect(await screen.findByText(/Copy failed: the clipboard is unavailable/)).toBeTruthy();
         } finally {
+            if (prior) Object.defineProperty(navigator, 'clipboard', prior);
+            else delete navigator.clipboard;
+        }
+    });
+
+    it('announces a copied transaction id and restores the control label', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
+        const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        try {
+            mount();
+            fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+            fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+            fireEvent.click(await screen.findByTestId('confirm-approve'));
+
+            const button = await screen.findByRole('button', { name: 'Copy txid' });
+            fireEvent.click(button);
+
+            expect(await screen.findByRole('status')).toHaveTextContent('Copied');
+            expect(writeText).toHaveBeenCalledWith('label-txid');
+            expect(button).toHaveTextContent('Copied');
+            act(() => vi.advanceTimersByTime(1501));
+            expect(screen.queryByRole('status')).toBeNull();
+            expect(button).toHaveTextContent('Copy txid');
+        } finally {
+            vi.useRealTimers();
             if (prior) Object.defineProperty(navigator, 'clipboard', prior);
             else delete navigator.clipboard;
         }
@@ -231,5 +260,39 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(within(queued).getByRole('button', { name: 'Done' }));
         expect(await screen.findByText('Labels changed since the last publish')).toBeTruthy();
+    });
+});
+
+describe('AboutSection copy confirmation', () => {
+    it('announces copied diagnostics and restores the control label', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
+        const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        try {
+            render(
+                <MessagingProvider
+                    shell="web"
+                    messaging={{ getDiagnosticDump: vi.fn(async () => ({ version: 'test' })) }}
+                >
+                    <AboutSection />
+                </MessagingProvider>,
+            );
+
+            const button = screen.getByRole('button', { name: 'Copy diagnostics' });
+            fireEvent.click(button);
+
+            // The message row leads with its (aria-hidden) tone icon.
+            expect(await screen.findByRole('status')).toHaveTextContent(/^\W*Copied/);
+            expect(writeText).toHaveBeenCalledOnce();
+            expect(button).toHaveTextContent('Copied');
+            act(() => vi.advanceTimersByTime(1501));
+            expect(screen.queryByRole('status')).toBeNull();
+            expect(button).toHaveTextContent('Copy diagnostics');
+        } finally {
+            vi.useRealTimers();
+            if (prior) Object.defineProperty(navigator, 'clipboard', prior);
+            else delete navigator.clipboard;
+        }
     });
 });

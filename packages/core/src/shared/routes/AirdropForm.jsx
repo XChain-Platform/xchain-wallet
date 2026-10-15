@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { AddressField, AddressText, Button, ChainPicker, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -17,6 +17,7 @@ import {
     schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -24,6 +25,7 @@ import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
+    compareDecimalStrings,
     formatWithThousands,
     subtractDecimalStrings,
     tokenAmountPrecisionError,
@@ -62,6 +64,13 @@ import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
 import { MEMO_HINT } from '../utils/memoLimit.js';
 import { listLabel } from '../utils/listLabel.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
+import {
+    classifyRecipientEntries,
+    classifyRecipientEntriesAsync,
+    parseCsvEntries,
+    parsePasteEntries,
+} from '../../airdrop/parseRecipients.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -135,6 +144,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -172,9 +182,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     // 'paste' mode: paste/upload addresses -> new ADDRESS list (TYPE=2).
     const [pasteText, setPasteText] = useState('');
-    const [recipients, setRecipients] = useState(
-        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }} */
-        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
+    const [committedRecipients, setCommittedRecipients] = useState(
+        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[], invalidLines?: Array<{ address: string, line: number }> }} */
+        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [], invalidLines: [] }),
+    );
+    const [importedRecipientEntries, setImportedRecipientEntries] = useState(
+        /** @type {{ text: string, entries: Array<{ value: string, line: number }> } | null} */ (null),
     );
     const [showInvalid, setShowInvalid] = useState(false);
 
@@ -230,6 +243,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     );
     const [airdropTxid, setAirdropTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
+    const [indexReadError, setIndexReadError] = useState(/** @type {string | null} */ (null));
     const [hydrated, setHydrated] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -255,7 +269,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before airdropping.',
+                        'No addresses on any network yet. Use Receive to generate one before airdropping.',
                     );
                     return;
                 }
@@ -300,7 +314,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setTicksText(rec.recipients.join('\n'));
                 } else {
                     setSourceMode('paste');
-                    setRecipients({
+                    setCommittedRecipients({
                         valid: [...rec.recipients], invalid: [], duplicates: 0, wrongNetwork: [],
                     });
                 }
@@ -346,19 +360,66 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // the parser is what makes a mainnet address pasted into a regtest wallet
     // count as skipped instead of valid; without it the form only checked
     // length + charset and the chain silently dropped the address after the
-    // user had already paid for it. Split out as a plain object so the parse
-    // effect can depend on the two fields rather than the descriptor identity.
+    // user had already paid for it. Split out as a plain object so recipient
+    // classification depends on the two fields rather than descriptor identity.
     const recipientCoin = descriptor?.coin || null;
     const recipientNetwork = descriptor?.networkKind || null;
 
-    useEffect(() => {
-        if (stage !== 'compose') return;
-        const parts = airdropLib.parsePaste(pasteText);
-        setRecipients(airdropLib.classifyRecipients(
-            parts,
+    // Deferred parsing keeps textarea updates at input priority for large lists.
+    // Submit stays disabled until the deferred snapshot catches up.
+    const deferredPasteText = useDeferredValue(pasteText);
+    const deferredRecipientsPending = deferredPasteText !== pasteText;
+    const recipientEntries = useMemo(
+        () => (importedRecipientEntries?.text === deferredPasteText
+            ? importedRecipientEntries.entries
+            : parsePasteEntries(deferredPasteText)),
+        [deferredPasteText, importedRecipientEntries],
+    );
+    const immediateRecipients = useMemo(
+        () => (recipientEntries.length <= 1_000 ? classifyRecipientEntries(
+            recipientEntries,
             { coin: recipientCoin, network: recipientNetwork },
-        ));
-    }, [pasteText, stage, recipientCoin, recipientNetwork]);
+        ) : null),
+        [recipientEntries, recipientCoin, recipientNetwork],
+    );
+    const [largeRecipientResult, setLargeRecipientResult] = useState(
+        /** @type {{ entries: Array<{ value: string, line: number }> | null, coin: string | null, network: string | null, recipients: any }} */
+        ({ entries: null, coin: null, network: null, recipients: null }),
+    );
+    useEffect(() => {
+        if (immediateRecipients) {
+            setLargeRecipientResult((current) => (current.entries === null ? current : {
+                entries: null,
+                coin: null,
+                network: null,
+                recipients: null,
+            }));
+            return undefined;
+        }
+        if (stage !== 'compose' || sourceMode !== 'paste') return undefined;
+        let cancelled = false;
+        classifyRecipientEntriesAsync(
+            recipientEntries,
+            { coin: recipientCoin, network: recipientNetwork },
+            { shouldCancel: () => cancelled },
+        ).then((next) => {
+            if (!cancelled && next) setLargeRecipientResult({
+                entries: recipientEntries,
+                coin: recipientCoin,
+                network: recipientNetwork,
+                recipients: next,
+            });
+        });
+        return () => { cancelled = true; };
+    }, [recipientEntries, immediateRecipients, recipientCoin, recipientNetwork, stage, sourceMode]);
+    const largeRecipientsReady = largeRecipientResult.entries === recipientEntries
+        && largeRecipientResult.coin === recipientCoin
+        && largeRecipientResult.network === recipientNetwork;
+    const parsedRecipients = immediateRecipients
+        || (largeRecipientsReady ? largeRecipientResult.recipients : committedRecipients);
+    const recipientClassificationPending = !immediateRecipients && !largeRecipientsReady;
+    const recipientsPending = deferredRecipientsPending || recipientClassificationPending;
+    const recipients = stage === 'compose' ? parsedRecipients : committedRecipients;
 
     // Parse holder tickers with the same chain grammar as every token-list form.
     const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
@@ -389,7 +450,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 if (cancelled) return;
                 setExistingListDetail({
                     loading: false, kind: null, items: [], name: null,
-                    error: err?.message || 'Failed to load list.',
+                    error: readFailureMessage(err, 'load this list'),
                 });
             });
         return () => { cancelled = true; };
@@ -438,7 +499,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 return {
                     tick: t,
                     count: null,
-                    error: lastErr?.message || 'The explorer returned no explanation.',
+                    error: readFailureMessage(lastErr, `count holders of ${t}`),
                 };
             };
             Promise.all(previewTicks.map(countHolders))
@@ -525,6 +586,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             try {
                 const resp = await messaging.getActionByTxid({ chainId, txid: listTxid });
                 if (cancelled) return;
+                setIndexReadError(null);
                 const idx = extractActionIndex(resp);
                 if (idx) {
                     setListActionIndex(idx);
@@ -540,7 +602,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setStage('review-airdrop');
                 }
             } catch (err) {
-                // Keep polling through transient network errors.
+                if (!cancelled) {
+                    setIndexReadError(readFailureMessage(err, 'check whether the recipient list is indexed'));
+                }
             }
         };
         tick(); // fire once immediately
@@ -736,29 +800,33 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return multiplyDecimal(feeEstimate.coinAmount, sourceMode === 'existing' ? '1' : '2');
     }, [feeEstimate, sourceMode]);
 
+    const applyImportedRecipients = useCallback((text) => {
+        const entries = parseCsvEntries(text);
+        const normalized = entries.map(({ value }) => value).join('\n');
+        setImportedRecipientEntries({ text: normalized, entries });
+        setPasteText(normalized);
+    }, []);
+
     const handleFile = useCallback((event) => {
         const file = event.target?.files?.[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
             const text = typeof reader.result === 'string' ? reader.result : '';
-            const parts = airdropLib.parseCsv(text);
-            setPasteText(parts.join('\n'));
+            applyImportedRecipients(text);
         };
         reader.readAsText(file);
-    }, []);
+    }, [applyImportedRecipients]);
 
-    // Cluster P FOLLOWUP 2: drag-and-drop a CSV / TXT recipient list
-    // onto the textarea. Additive; the click-to-pick lane via the
-    // `<input type="file">` below stays the primary affordance.
+    // Recipient CSV and TXT files can be dropped onto the textarea while
+    // the file Input remains the primary affordance.
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
         readAs: 'text',
         onError: (msg) => setFormError(msg),
         onFile: ({ content }) => {
             const text = typeof content === 'string' ? content : '';
-            const parts = airdropLib.parseCsv(text);
-            setPasteText(parts.join('\n'));
+            applyImportedRecipients(text);
         },
     });
 
@@ -782,8 +850,15 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         }
         const amt = String(amountPer).trim();
-        if (!amt || Number(amt) <= 0) {
-            setFormError('Per-recipient amount must be a positive number.');
+        if (!amt) {
+            setFormError('Per-recipient amount is required.');
+            return;
+        }
+        const amountComparison = compareDecimalStrings(amt, '0');
+        if (amountComparison !== 1) {
+            setFormError(amountComparison === null
+                ? 'Per-recipient amount must be a positive decimal number.'
+                : 'Per-recipient amount must be greater than zero.');
             return;
         }
         // Keep each payout within the dropped token's on-chain decimal scale.
@@ -818,6 +893,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 setFormError('Choose an existing list first.');
                 return;
             }
+            if (!/^[1-9]\d*$/.test(listActionIndex)) {
+                setFormError('The selected list has an invalid action index. Choose the list again.');
+                return;
+            }
             setFormError(null);
             setStage('review-airdrop');
             return;
@@ -832,10 +911,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 setFormError('Add at least one token.');
                 return;
             }
+        } else if (recipientsPending) {
+            setFormError('Still checking the recipient list. Try again in a moment.');
+            return;
         } else if (recipients.valid.length === 0) {
             setFormError('Add at least one valid recipient address.');
             return;
         }
+        if (sourceMode === 'paste') setCommittedRecipients(recipients);
         setFormError(null);
         setStage('review-list');
     }
@@ -1179,9 +1262,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }
     }
 
-        const header = (
+    const headerBack = stage === 'review-list'
+        ? () => { setSubmitError(null); setStage('compose'); }
+        : stage === 'review-airdrop' && sourceMode === 'existing'
+            ? () => { setSubmitError(null); setStage('compose'); }
+            : onBack;
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={headerBack}
             title={stage === 'review-list' ? (sourceMode === 'holders' ? 'Review token list' : 'Review address list')
                     : stage === 'wait-index' ? 'Waiting for list to be indexed'
                         : stage === 'review-airdrop' ? 'Review airdrop'
@@ -1189,8 +1277,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 : `Airdrop tokens`}
         />
     );
+    // A review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={stage !== 'review-list' && stage !== 'review-airdrop'}
+        >
             {children}
         </Screen>
     );
@@ -1230,7 +1324,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1290,6 +1383,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     airdrop step. Safe to close the wallet; we'll resume from
                     Home when you reopen it.
                 </p>
+                {indexReadError ? (
+                    <StatusMessage variant="error" className={styles.error}>{indexReadError}</StatusMessage>
+                ) : null}
                 {slow ? (
                     <p className={styles.hint}>
                         This is taking longer than usual. Typical wait is 1–2
@@ -1308,6 +1404,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     if (stage === 'review-list') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review recipient list"
                 onSubmit={handleSignList}
                 status={(hw || singleEncode) && submitError ? (
@@ -1324,16 +1421,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     >
                         {hw
                             ? `Sign ${listNoun} on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign ${listNoun} on ${descriptor.displayName}` : `Sign ${listNoun}`)}
+                            : `Sign ${listNoun}`}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{listDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -1379,11 +1472,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     />
                 </dl>
                 {listDecoded && listDecoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {listDecoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <p className={styles.hint}>
                     Airdrop is a two-transaction flow. Step 1 broadcasts the
@@ -1435,6 +1528,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     if (stage === 'review-airdrop') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review airdrop"
                 onSubmit={handleSignAirdrop}
                 status={(hw || singleEncode) && submitError ? (
@@ -1458,23 +1552,25 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         >
                             {hw
                                 ? `Sign airdrop on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign airdrop on ${descriptor.displayName}` : 'Sign airdrop')}
+                                : 'Sign airdrop'}
                         </Button>
                     </>
                 )}
             >
                 <p className={styles.summary}>{airdropDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
                     {(airdropDecoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
+                        <DetailRow
+                            key={d.label}
+                            label={d.label}
+                            value={d.label === 'Per-recipient amount'
+                                ? `${d.value} ${token.trim().toUpperCase()}`
+                                : d.value}
+                        />
                     ))}
                     <dt className={styles.detailsLabel}>
                         {recipientPreview.kind === 'tick' ? 'Holders (current, not final)' : 'Recipients'}
@@ -1529,31 +1625,30 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     </Button>
                 ) : null}
                 {airdropDecoded && airdropDecoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {airdropDecoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {/* The chain kept fewer items than the wallet published.
                     Say so here, on the screen that prices step 2, because the
                     LIST was already paid for at the larger count and the AIRDROP
                     will only pay (and only be charged for) what survived. */}
                 {listReconcile && listReconcile.missing.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             The published list holds {listReconcile.storedCount} of the
                             {' '}{listReconcile.expectedCount} addresses you submitted:
                             {' '}{listReconcile.missing.length} {listReconcile.missing.length === 1 ? 'was' : 'were'}
                             {' '}rejected by the network, most often because
-                            {' '}{listReconcile.missing.length === 1 ? 'it is' : 'they are'} not
-                            {' '}{descriptor?.displayName || chainId} address
-                            {listReconcile.missing.length === 1 ? '' : 'es'}. This airdrop pays
+                            {' '}{listReconcile.missing.length === 1 ? 'it does' : 'they do'} not
+                            {' '}belong to the active network. This airdrop pays
                             {' '}{listReconcile.storedCount}. The rejected
                             {' '}{listReconcile.missing.length === 1 ? 'address' : 'addresses'}:
                             {' '}{listReconcile.missing.join(', ')}.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {/* PC-11 holder-snapshot honesty: a TICK list's holder set
                     binds at AIRDROP execution (when it confirms on-chain),
@@ -1562,8 +1657,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     settlement (e.g. by splitting a balance across more
                     addresses to collect more than one payout). */}
                 {recipientPreview.volatile ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             This airdrop pays every current holder of the underlying
                             token(s), not a fixed list of addresses. That holder set is
                             only locked in when the airdrop transaction confirms
@@ -1571,7 +1666,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             change (and be inflated) before then. It is an estimate, not
                             a guarantee of who gets paid or the final cost.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <p className={styles.hint}>
                     Airdrops have a protocol fee that grows with the number of
@@ -1678,13 +1773,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Token airdrop"
             onSubmit={handleComposeSubmit}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="submit" variant="primary">
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={sourceMode === 'paste' && recipientsPending}
+                >
                     {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
                 </Button>
             )}
@@ -1705,7 +1805,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         that control only renders when an address IS resolved.
                         Same shape as ListCreateForm / ControllerBindForm, which
                         have always reset here. */}
-                    <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
                 </>
             )}
 
@@ -1756,11 +1856,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 />
             )}
             {gatedDropNotice.gated ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {gatedTickWarningCopy(token, 'airdrop recipients')}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             <AmountField
                 label="Per-recipient amount"
@@ -1790,16 +1890,17 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
             {sourceMode === 'paste' ? (
                 <>
-                    <label
-                        className={styles.pickerLabel}
+                    <div
                         {...recipientsDrop.rootProps}
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
-                        Recipients
-                        <textarea
-                            className={styles.picker}
+                        <Textarea
+                            label="Recipients"
                             value={pasteText}
-                            onChange={(e) => setPasteText(e.target.value)}
+                            onChange={(e) => {
+                                setImportedRecipientEntries(null);
+                                setPasteText(e.target.value);
+                            }}
                             placeholder={recipientsDrop.isDragOver
                                 ? 'Drop the CSV / TXT file here'
                                 : 'Paste addresses, one per line or comma-separated.'}
@@ -1809,15 +1910,26 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             autoCorrect="off"
                             autoComplete="off"
                         />
-                    </label>
-                    <div className={styles.fromLine}>
-                        <input
+                    </div>
+                    {/* The browser's own file control sat in a grey box of
+                        its own; it now opens from an outlined button, the
+                        same pattern Publish file uses. */}
+                    <div>
+                        <Input
                             ref={fileInputRef}
                             type="file"
                             accept=".csv,.txt,text/csv,text/plain"
                             onChange={handleFile}
+                            style={{ display: 'none' }}
                             aria-label="Upload CSV of addresses"
                         />
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            Upload a CSV or text file
+                        </Button>
                     </div>
 
                     {pasteText.trim() ? (
@@ -1847,8 +1959,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             </Button>
                             {showInvalid ? (
                                 <ul>
-                                    {recipients.invalid.map((a, i) => (
-                                        <li key={i}><code>{a}</code></li>
+                                    {(recipients.invalidLines || recipients.invalid.map((address, index) => ({
+                                        address,
+                                        line: index + 1,
+                                    }))).map(({ address, line }) => (
+                                        <li key={`${line}:${address}`}>
+                                            Line {line}: <code>{address}</code>
+                                        </li>
                                     ))}
                                 </ul>
                             ) : null}
@@ -1859,13 +1976,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         typo, and calling it "invalid" hides what went wrong. Name
                         it, and name the chain this airdrop pays on. */}
                     {recipients.wrongNetwork.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for
                                 another network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'}
-                                {' '}skipped. This airdrop pays on
-                                {' '}{descriptor?.displayName || chainId}, which cannot deliver to
+                                {' '}skipped because this airdrop cannot deliver to
                                 {' '}{recipients.wrongNetwork.length === 1 ? 'it' : 'them'}.
                             </p>
                             <DiagnosticDetails
@@ -1873,20 +1989,19 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
-                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                    message: 'Does not belong to the active network.',
                                 }))}
                             />
-                        </div>
+                        </StatusMessage>
                     ) : null}
                 </>
             ) : null}
 
             {sourceMode === 'holders' ? (
                 <>
-                    <label className={styles.pickerLabel} htmlFor="airdrop-holder-ticks">Tokens (one per line)</label>
-                    <textarea
+                    <Textarea
                         id="airdrop-holder-ticks"
-                        className={styles.picker}
+                        label="Tokens (one per line)"
                         value={ticksText}
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
@@ -2073,7 +2188,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                 setRows(uniq);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load lists.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your lists'));
             });
         return () => { cancelled = true; };
     }, [chainId, addresses, messaging]);
@@ -2091,7 +2206,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         return wrap(
             <EmptyState
                 title="No published lists yet"
-                body="Address and token lists published from this chain appear here."
+                body="Address and token lists published from this network appear here."
             />,
         );
     }

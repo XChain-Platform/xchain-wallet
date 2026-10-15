@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { cleanup, render } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { RouteErrorBoundary } from '../../packages/core/src/shared/components/RouteErrorBoundary.jsx';
 import {
@@ -19,7 +19,10 @@ import {
     ROUTE_REGISTRY,
 } from '../../packages/core/src/shared/routeRegistry.js';
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 let savedResizeObserver;
 beforeAll(() => {
@@ -44,7 +47,7 @@ const pendingMessaging = new Proxy(
 );
 
 const noop = () => {};
-const MINIMAL_PROPS = {
+const MINIMAL_UNLOCKED_WALLET_PROPS = {
     walletId: 'wallet-1',
     accountId: 'account-1',
     chainId: 'bitcoin-mainnet',
@@ -93,9 +96,12 @@ describe('route registry consistency', () => {
         ].sort();
         expect(classified).toEqual(Object.keys(ROUTE_REGISTRY).sort());
     });
+});
 
+describe('registered route jsdom smoke', () => {
     for (const route of Object.values(ROUTE_REGISTRY)) {
-        it(`${route.id} renders a heading in the web shell`, async () => {
+        it(`${route.id} renders a heading without console errors in the web shell`, async () => {
+            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
             const importer = moduleImporter(route.component);
             expect(importer, `${route.component}.jsx is registered`).toBeTypeOf('function');
             const routeModule = await importer();
@@ -105,13 +111,14 @@ describe('route registry consistency', () => {
             const result = render(
                 <MessagingProvider shell="web" messaging={pendingMessaging}>
                     <RouteErrorBoundary>
-                        <Component {...MINIMAL_PROPS} {...route.minimalProps} />
+                        <Component {...MINIMAL_UNLOCKED_WALLET_PROPS} {...route.minimalProps} />
                     </RouteErrorBoundary>
                 </MessagingProvider>,
             );
 
             expect(result.queryByText('This screen could not be shown')).not.toBeInTheDocument();
             expect(result.container.querySelector('h1, h2, h3, h4, h5, h6')).not.toBeNull();
+            expect(consoleError).not.toHaveBeenCalled();
         });
     }
 });

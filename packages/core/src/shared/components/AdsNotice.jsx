@@ -8,7 +8,6 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 
@@ -20,36 +19,38 @@ import { t } from '../../i18n/index.js';
  * live in Settings -> ADS, the same shape FreeWallet desktop uses (operator
  * ruling 2026-10-12).
  *
- * The route supplies its own header classes so the notice matches the
+ * The route supplies its own content classes so the notice matches the
  * screens before it.
  *
  * @param {object} props
  * @param {() => void} props.onContinue
  * @param {boolean} props.isFull
  * @param {string} props.headClass
- * @param {string} props.titleClass
  * @param {string} props.subtitleClass
  * @param {string} props.actionsClass
+ * @param {boolean} [props.busy]
  */
-export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleClass, actionsClass }) {
-    const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
-
-    useEffect(() => {
-        headingRef.current?.focus();
-    }, []);
-
+export function AdsNotice({
+    onContinue,
+    isFull,
+    headClass,
+    subtitleClass,
+    actionsClass,
+    busy = false,
+}) {
     return (
         <>
-            <header className={headClass}>
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>{t('adsNotice.title')}</h1>
+            <div className={headClass}>
                 <p className={subtitleClass}>{t('adsNotice.subtitle')}</p>
-            </header>
+            </div>
             <ul style={{
                 margin: 0,
-                padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-2) var(--xc-space-5)',
-                background: 'var(--xc-surface-raised)',
-                border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-md)',
+                padding: 'var(--xc-card-pad)',
+                // The bullets hang in the extra start inset.
+                paddingInlineStart: 'calc(var(--xc-card-pad) + var(--xc-space-3))',
+                background: 'var(--xc-card-bg)',
+                border: 'var(--xc-card-border)',
+                borderRadius: 'var(--xc-card-radius)',
                 fontSize: 'var(--xc-text-sm)',
                 color: 'var(--xc-text-muted)',
                 display: 'flex',
@@ -67,6 +68,8 @@ export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleC
                     block={!isFull}
                     size={isFull ? undefined : 'sm'}
                     icon={<Icon.CheckIcon />}
+                    loading={busy}
+                    disabled={busy}
                 >
                     {t('adsNotice.continue')}
                 </Button>

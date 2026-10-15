@@ -16,18 +16,19 @@
 // AlertsOverlay.module.css for the alert-row styling.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
 import styles from '../components/AlertsOverlay.module.css';
 import { alertSeverityPresentation } from '../components/alertSeverity.js';
+import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 
 /**
  * @param {object} props
  * @param {() => void} props.onBack
  * @param {string} [props.walletId]
- * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, read?: boolean, action?: { label: string, onSelect: () => void } }>} [props.alerts]
+ * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, read?: boolean, action?: { label: string, onSelect: () => void | PromiseLike<void> } }>} [props.alerts]
  */
 export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const { shell } = useMessaging();
@@ -37,7 +38,8 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const emptyStateRef = useRef(null);
     const [pendingFocus, setPendingFocus] = useState(null);
     const [centerState, setCenterState] = useState(() => readAlertCenter(walletId));
-    const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alertVersion(alert)));
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alert.id));
     const unreadAlerts = visibleAlerts.filter((alert) => !alert.read && !centerState.read.has(alertVersion(alert)));
 
     useEffect(() => {
@@ -69,10 +71,30 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
         });
     };
 
-    const openAlert = (alert) => {
+    const openAlert = async (alert) => {
         markRead(alert);
-        alert.action?.onSelect();
+        try {
+            await alert.action?.onSelect();
+        } catch (_err) {
+            // Alert actions navigate outside this route, so their failures must not reject the click handler.
+        }
     };
+
+    if (notificationsOpen) {
+        const notificationsHeader = (
+            <PageHeader
+                onBack={() => setNotificationsOpen(false)}
+                title={t('alerts.notificationsTitle')}
+            />
+        );
+        return (
+            <Screen variant={variant} header={notificationsHeader}>
+                <ListPage>
+                    <NotificationsSection walletId={walletId} />
+                </ListPage>
+            </Screen>
+        );
+    }
 
     const toolbar = visibleAlerts.length > 0 ? (
         <div className={styles.controls}>
@@ -81,7 +103,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             </span>
             <Button
                 variant="secondary"
-                size="sm"
+                size="md"
                 icon={null}
                 disabled={unreadAlerts.length === 0}
                 onClick={() => {
@@ -99,7 +121,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             </Button>
             <Button
                 variant="ghost"
-                size="sm"
+                size="md"
                 icon={null}
                 data-alert-focus="clear"
                 onClick={() => {
@@ -108,7 +130,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                         ...centerState,
                         cleared: new Set([
                             ...centerState.cleared,
-                            ...visibleAlerts.map(alertVersion),
+                            ...visibleAlerts.map((alert) => alert.id),
                         ]),
                     });
                 }}
@@ -127,7 +149,13 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                         tabIndex={-1}
                         aria-label={t('alerts.empty')}
                     >
-                        <EmptyState title={t('alerts.empty.title')} body={t('alerts.empty.body')} />
+                        <EmptyState
+                            title={t('alerts.empty.title')}
+                            body={t('alerts.empty.body')}
+                            actionLabel={t('alerts.empty.action')}
+                            onAction={() => setNotificationsOpen(true)}
+                            actionIcon={<Icon.GearIcon />}
+                        />
                     </div>
                 ) : (
                     /* Safari needs an explicit list role because this class removes list styling. */

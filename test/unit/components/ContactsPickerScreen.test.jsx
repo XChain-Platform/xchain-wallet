@@ -10,6 +10,7 @@
 
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 
 vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ header, children }) => <div>{header}<main>{children}</main></div>,
@@ -23,6 +24,10 @@ vi.mock('@xchain-wallet/core/ui', () => ({
     EmptyState: ({ title, body, role, titleAs: Title = 'h2' }) => (
         <div data-testid="empty-state" role={role}><Title>{title}</Title>{body ? <p>{body}</p> : null}</div>
     ),
+    ListRow: ({ title, subtitle, onClick, ...props }) => (
+        <button type="button" onClick={onClick} {...props}>{title}{subtitle}</button>
+    ),
+    Input: ({ size, ...props }) => <input data-size={size} {...props} />,
     Icon: { UsersIcon: () => <span /> },
 }));
 
@@ -82,7 +87,7 @@ describe('ContactsPickerScreen empty and listing states', () => {
         expect(screen.getByText('Saved contacts with addresses appear here.')).toBeInTheDocument();
         expect(screen.getByTestId('list-page')).toContainElement(screen.getByTestId('empty-state'));
         expect(screen.getByTestId('empty-state')).not.toHaveAttribute('role');
-        expect(screen.queryByRole('textbox', { name: 'Search contacts' })).toBeNull();
+        expect(screen.queryByRole('searchbox', { name: 'Search contacts' })).toBeNull();
     });
 
     it('lists every saved address in case-insensitive contact-name order', () => {
@@ -102,6 +107,20 @@ describe('ContactsPickerScreen empty and listing states', () => {
             'bobD-bob',
         ]);
     });
+
+    it('uses distinct row keys when a contact repeats an address', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mount({
+            contacts: [{
+                id: 'alice',
+                name: 'Alice',
+                entries: [bitcoinEntry, { ...bitcoinEntry, label: 'Spending' }],
+            }],
+        });
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(2);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+    });
 });
 
 describe('ContactsPickerScreen filters', () => {
@@ -112,7 +131,9 @@ describe('ContactsPickerScreen filters', () => {
     ])('filters case-insensitively by %s', (_field, query, expectedAddress) => {
         mount();
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search contacts' }), {
+        const search = screen.getByRole('searchbox', { name: 'Search contacts' });
+        expect(search).toHaveAttribute('data-size', 'md');
+        fireEvent.change(search, {
             target: { value: query },
         });
         const rows = screen.getAllByRole('listitem');
@@ -122,7 +143,7 @@ describe('ContactsPickerScreen filters', () => {
 
     it('shows feedback when search matches no addresses', () => {
         mount();
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search contacts' }), {
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search contacts' }), {
             target: { value: 'not saved' },
         });
 
@@ -144,11 +165,13 @@ describe('ContactsPickerScreen filters', () => {
 });
 
 describe('ContactsPickerScreen selection and header', () => {
-    it('passes the exact selected entry to onPick once', () => {
+    it('passes the exact selected entry to onPick through native keyboard activation', async () => {
         const { props } = mount();
-        const row = screen.getByText('bc1-alice').closest('button');
+        const user = userEvent.setup();
+        const row = screen.getByRole('button', { name: /Alice.*bc1-alice/ });
 
-        fireEvent.click(row);
+        row.focus();
+        await user.keyboard('{Enter}');
         expect(props.onPick).toHaveBeenCalledOnce();
         expect(props.onPick.mock.calls[0]).toHaveLength(1);
         expect(props.onPick.mock.calls[0][0]).toBe(bitcoinEntry);

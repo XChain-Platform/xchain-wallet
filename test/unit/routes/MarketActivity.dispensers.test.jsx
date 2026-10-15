@@ -14,12 +14,16 @@
 // send. Rows here are shaped as the explorer's token lanes serve them.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 const ORACLE = 'bcrt1qoracleoracleoracleoracleoracleoracle';
 const offer = (idx, extra) => ({
@@ -71,15 +75,13 @@ describe('Marketplace on explorer-shaped rows', () => {
         expect(screen.getAllByText('100 XCHAIN remaining').length).toBe(2);
         expect(screen.queryByText(/7 XCHAIN per/)).toBeNull();
         expect(screen.queryByRole('button', { name: /5 XCHAIN per 0.01 BTC/ })).toBeNull();
-        expect(document.querySelector('button:disabled')).toBeNull();
+        expect(screen.queryAllByRole('button').filter((button) => button.disabled)).toHaveLength(0);
     });
 
     it('makes an offer a button only when the route supplies a working action', async () => {
         const onOpenDispenser = vi.fn();
         renderMarket({}, { onOpenDispenser });
-        const label = await screen.findByText('5 XCHAIN per 0.01 BTC');
-        const button = label.closest('button');
-        expect(button).not.toBeNull();
+        const button = await screen.findByRole('button', { name: /5 XCHAIN per 0.01 BTC/ });
         fireEvent.click(button);
         expect(onOpenDispenser).toHaveBeenCalledWith(expect.any(String), '20');
     });
@@ -109,6 +111,17 @@ describe('Marketplace on explorer-shaped rows', () => {
         renderMarket();
         expect(await screen.findByText('Sold 15 XCHAIN for 0.03 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/Sold 2 XCHAIN/)).toBeNull();
+    });
+
+    it('shows recent activity through the shared relative-time display', async () => {
+        const timestamp = DISPENSES[0].timestamp;
+        vi.spyOn(Date, 'now').mockReturnValue(timestamp * 1000 + 5 * 60_000);
+        renderMarket();
+
+        const sale = await screen.findByText('Sold 15 XCHAIN for 0.03 BTC');
+        const time = within(sale.closest('li')).getByText('5 minutes ago');
+        expect(time.tagName).toBe('TIME');
+        expect(time).toHaveAttribute('title', formatLocalDateTime(timestamp));
     });
 
     it('shows open DEX orders using explorer amount and coin fields', async () => {
@@ -153,10 +166,11 @@ describe('demo Marketplace feed', () => {
         const { dispenserRateLabel, isOpenDispenserSelling } = await import('../../../packages/core/src/shared/utils/dispenserPricing.js');
         const { dispenseIsValid } = await import('../../../packages/core/src/flows/dispenserQueries.js');
         const demo = synthesizeDemoMarketActivity('XCHAIN', { now: 1785186698000 });
-        expect(demo.offers.map(({ row }) => isOpenDispenserSelling(row, 'XCHAIN'))).toEqual([true, true]);
-        expect(demo.offers.map(({ row }) => dispenserRateLabel(row))).toEqual([
-            '1,000 XCHAIN per 0.02 BTC', '500 XCHAIN per 0.01 BTC',
-        ]);
+        const rare = synthesizeDemoMarketActivity('RAREPEPE', { now: 1785186698000 });
+        const pepecash = synthesizeDemoMarketActivity('PEPECASH', { now: 1785186698000 });
+        expect(rare.offers.map(({ row }) => isOpenDispenserSelling(row, 'RAREPEPE'))).toEqual([true]);
+        expect(rare.offers.map(({ row }) => dispenserRateLabel(row))).toEqual(['1 RAREPEPE per 0.005 BTC']);
+        expect(pepecash.offers.map(({ row }) => dispenserRateLabel(row))).toEqual(['500 PEPECASH per 5 XCP']);
         expect(demo.sales.every(({ row }) => dispenseIsValid(row) && Number(row.get_amount) > 0)).toBe(true);
         expect(demo.dexOrders.every(({ row }) => row.status === 'valid'
             && row.give_amount != null && row.get_amount != null
@@ -165,5 +179,53 @@ describe('demo Marketplace feed', () => {
             && row.swap_status === 'complete'
             && row.give_amount != null && row.get_amount != null
             && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
+    });
+
+    // Demo listings used ids no demo dispenser had, so every tap opened
+    // "Dispenser not found". Each listing must be a demo dispenser the detail
+    // page resolves on the same chain.
+    it('lists only demo dispensers the detail page resolves', async () => {
+        const { synthesizeDemoMarketActivity, synthesizeDemoDispensers } = await import('../../../packages/core/src/flows/demoFixtures.js');
+        const networks = [
+            ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet'],
+            ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'],
+        ];
+        const ticks = ['XCHAIN', 'RAREPEPE', 'PEPECASH', 'BANANE', 'EXAMPLE', 'MWEB', 'DOGI', 'WOW', 'NOSUCHTOKEN'];
+        let listed = 0;
+        for (const chainIds of networks) {
+            for (const tick of ticks) {
+                const { offers } = synthesizeDemoMarketActivity(tick, { chainIds });
+                for (const { chainId, row } of offers) {
+                    listed += 1;
+                    expect(chainIds).toContain(chainId);
+                    const resolved = synthesizeDemoDispensers(chainId, 'demo-owner')
+                        .find((r) => String(r.action_index) === String(row.action_index));
+                    expect(resolved, `${tick} #${row.action_index} on ${chainId}`).toBeTruthy();
+                    expect(resolved.give_tick).toBe(tick);
+                    expect(resolved.status).toBe('open');
+                }
+            }
+            // Every open demo dispenser shows on its token's market.
+            expect(synthesizeDemoMarketActivity('RAREPEPE', { chainIds }).offers.map(({ row }) => row.action_index)).toEqual(['4200981']);
+            expect(synthesizeDemoMarketActivity('MWEB', { chainIds }).offers.map(({ row }) => row.action_index)).toEqual(['2107744']);
+            expect(synthesizeDemoMarketActivity('DOGI', { chainIds }).offers.map(({ row }) => row.action_index)).toEqual(['7301556']);
+        }
+        expect(listed).toBeGreaterThan(0);
+    });
+});
+
+describe('Marketplace network scope', () => {
+    it('queries and badges only the active network', async () => {
+        const messaging = renderMarket({
+            getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'regtest' }),
+        });
+        expect(await screen.findByText('5 XCHAIN per 0.01 BTC')).toBeInTheDocument();
+        const asked = messaging.getDispensersForToken.mock.calls.map(([args]) => args.chainId);
+        expect(asked.length).toBeGreaterThan(0);
+        expect(asked.every((chainId) => chainId.endsWith('-regtest'))).toBe(true);
+        const selector = screen.getByRole('button', { name: /Change market/ });
+        const marks = [...selector.querySelectorAll('img')].map((img) => img.getAttribute('src'));
+        expect(marks.length).toBeGreaterThan(0);
+        expect(marks.every((src) => /regtest/.test(src))).toBe(true);
     });
 });

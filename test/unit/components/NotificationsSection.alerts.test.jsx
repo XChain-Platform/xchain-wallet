@@ -75,13 +75,55 @@ describe('notification categories and permission', () => {
             expect(screen.getByText(/Optional\. Allows XChain Wallet/)).toHaveTextContent(
                 'You can revoke access here at any time.',
             );
+            const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
+            expect(category).not.toBeChecked();
+            expect(category).toBeDisabled();
+            expect(request).not.toHaveBeenCalled();
             fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }));
 
             await waitFor(() => expect(request).toHaveBeenCalledWith({ permissions: ['notifications'] }));
+            await waitFor(() => expect(category).toBeChecked());
+            expect(category).toBeEnabled();
             fireEvent.click(await screen.findByRole('button', { name: 'Revoke permission' }));
 
             await waitFor(() => expect(remove).toHaveBeenCalledWith({ permissions: ['notifications'] }));
             expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(category).not.toBeChecked();
+            expect(category).toBeDisabled();
+        } finally {
+            globalThis.chrome = prior;
+        }
+    });
+
+    it('reflects an extension permission removed outside the settings row', async () => {
+        const prior = globalThis.chrome;
+        let granted = true;
+        const removedListeners = new Set();
+        const request = vi.fn(async () => true);
+        globalThis.chrome = {
+            permissions: {
+                contains: vi.fn(async () => granted),
+                request,
+                remove: vi.fn(async () => true),
+                onRemoved: {
+                    addListener: vi.fn((listener) => removedListeners.add(listener)),
+                    removeListener: vi.fn((listener) => removedListeners.delete(listener)),
+                },
+            },
+        };
+        try {
+            render(<NotificationsSection />);
+            expect(await screen.findByRole('button', { name: 'Revoke permission' })).toBeTruthy();
+            const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
+            expect(category).toBeChecked();
+
+            granted = false;
+            for (const listener of removedListeners) listener({ permissions: ['notifications'] });
+
+            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(category).not.toBeChecked();
+            expect(category).toBeDisabled();
+            expect(request).not.toHaveBeenCalled();
         } finally {
             globalThis.chrome = prior;
         }
@@ -96,6 +138,32 @@ describe('notification categories and permission', () => {
                 'Open your browser or system settings, find XChain Wallet, and allow notifications.',
             );
             expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
+            const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
+            expect(category).not.toBeChecked();
+            expect(category).toBeDisabled();
+            expect(globalThis.Notification.requestPermission).not.toHaveBeenCalled();
+        } finally {
+            globalThis.Notification = prior;
+        }
+    });
+
+    it('refreshes the effective toggle state when web permission is revoked', async () => {
+        const prior = globalThis.Notification;
+        const requestPermission = vi.fn();
+        globalThis.Notification = { permission: 'granted', requestPermission };
+        try {
+            render(<NotificationsSection />);
+            const category = screen.getByRole('switch', { name: 'Transaction confirmations' });
+            expect(category).toBeChecked();
+            expect(category).toBeEnabled();
+
+            globalThis.Notification.permission = 'denied';
+            fireEvent.focus(window);
+
+            await waitFor(() => expect(category).not.toBeChecked());
+            expect(category).toBeDisabled();
+            expect(screen.getByText(/Notifications are blocked/)).toBeTruthy();
+            expect(requestPermission).not.toHaveBeenCalled();
         } finally {
             globalThis.Notification = prior;
         }
@@ -117,6 +185,26 @@ describe('notification categories and permission', () => {
 });
 
 describe('price alert manager', () => {
+    it('keeps and labels an alert in its original currency after a display-currency switch', async () => {
+        settings = { ...settings, fiatCurrency: 'EUR' };
+        priceAlerts.alerts = [alertRecord({ fiatCurrency: 'usd' })];
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        const edit = screen.getByRole('button', { name: 'Edit Bitcoin price alert' });
+        expect(edit.closest('div')).toHaveTextContent('Bitcoin rises above $70,000');
+        expect(screen.getByText(/Saved price alerts keep the currency/)).toHaveTextContent(
+            'Delete and recreate an alert to use the current display currency.',
+        );
+        fireEvent.click(edit);
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
+            chainId: 'bitcoin-mainnet',
+            direction: 'above',
+            targetFiat: 70000,
+            fiatCurrency: 'usd',
+        }));
+    });
+
     it('distinguishes loading from an empty result', () => {
         priceAlerts.loading = true;
         render(<NotificationsSection walletId="wallet-1" />);
@@ -130,7 +218,7 @@ describe('price alert manager', () => {
         priceAlerts.error = 'storage failed';
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load price alerts.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load price alerts.');
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(priceAlerts.reload).toHaveBeenCalledTimes(1);
         expect(screen.queryByText(/No price alerts yet/)).toBeNull();
@@ -138,7 +226,9 @@ describe('price alert manager', () => {
 
     it('creates a price alert from the empty state', async () => {
         render(<NotificationsSection walletId="wallet-1" />);
-        expect(screen.getByText('No price alerts yet. Add one below.')).toBeTruthy();
+        expect(screen.getAllByRole('status').some(
+            (region) => region.textContent === 'No price alerts yetAdd one below.',
+        )).toBe(true);
 
         fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '71000' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
@@ -180,7 +270,7 @@ describe('price alert manager', () => {
 
         render(<NotificationsSection walletId="wallet-1" />);
 
-        const time = screen.getByText('2 min ago');
+        const time = screen.getByText('2 minutes ago');
         expect(time).toHaveAttribute('title', 'Jan 15, 2026, 3:58 AM PST');
     });
 

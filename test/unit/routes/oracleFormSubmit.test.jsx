@@ -110,7 +110,7 @@ function recordingMessaging({ feeds = [], feedsError = null, consumers = { suppo
     return { messaging, calls };
 }
 
-async function mountForm(opts = {}) {
+async function mountForm({ formProps = {}, ...opts } = {}) {
     const { messaging, calls } = recordingMessaging(opts);
     let utils;
     await domAct(async () => {
@@ -122,6 +122,7 @@ async function mountForm(opts = {}) {
                     walletId: 'w',
                     onBack() {},
                     initialChainId: 'bitcoin-mainnet',
+                    ...formProps,
                 }),
             ),
         );
@@ -157,11 +158,15 @@ async function preview(utils) {
 // Approve on the confirm page; a disabled Approve (the typed gate) is a no-op.
 async function clickSubmit(utils) {
     await domAct(async () => {
-        const btn = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => b.getAttribute('data-testid') === 'confirm-approve' && !b.disabled);
-        if (btn) fireEvent.click(btn);
+        const btn = utils.queryByRole('button', { name: 'Approve' });
+        if (btn && !btn.disabled) fireEvent.click(btn);
         await drainMicrotasks();
     });
+}
+
+function expectStoppedBeforeCompose(utils, calls, message) {
+    expect(utils.getByText(message)).toBeTruthy();
+    expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
 }
 
 describe('OracleForm submit payload', () => {
@@ -207,6 +212,30 @@ describe('OracleForm submit payload', () => {
         });
     });
 
+    it('ignores a requested publishing address the wallet does not own', async () => {
+        const { utils, calls } = await mountForm({
+            formProps: { initialFromAddress: 'bc1qnotinthiswallet' },
+        });
+        await fill(utils, { tick: 'PEPECASH', value: '0.05' });
+        await preview(utils);
+        await clickSubmit(utils);
+
+        const publish = calls.find((call) => call.method === 'oraclePriceAction');
+        expect(publish.args.from.address).toBe(HD_ADDRESS.address);
+        expect(calls.find((call) => call.method === 'oracleFeeds').args.address)
+            .toBe(HD_ADDRESS.address);
+    });
+
+    it('offers a published price as an action and prefills its values', async () => {
+        const { utils } = await mountForm({ feeds: liveFeed('0.05') });
+
+        fireEvent.click(utils.getByRole('button', { name: 'PEPECASH in USD' }));
+
+        expect(utils.getByRole('textbox', { name: /^Token ticker/ }).value).toBe('PEPECASH');
+        expect(utils.getByRole('textbox', { name: /^Price of one/ }).value).toBe('0.05');
+        expect(utils.getByRole('textbox', { name: /^Usage fee/ }).value).toBe('0.01');
+    });
+
     it('does not describe a failed feed read as an address with no published prices', async () => {
         const { utils } = await mountForm({ feedsError: new Error('explorer unavailable') });
         const shown = utils.container.textContent || '';
@@ -220,6 +249,70 @@ describe('OracleForm submit payload', () => {
         const shown = utils.container.textContent || '';
         expect(shown).toMatch(/has not published any prices yet/i);
         expect(calls.some((c) => c.method === 'oracleFeeds')).toBe(false);
+    });
+});
+
+describe('OracleForm pre-review validation', () => {
+    it.each([
+        ['', /Enter a positive price with at most 8 decimal places/i],
+        ['0', /Enter a positive price with at most 8 decimal places/i],
+        ['-0.1', /Enter a positive price with at most 8 decimal places/i],
+        ['1e-8', /Enter a positive price with at most 8 decimal places/i],
+        ['0.123456789', /Enter a positive price with at most 8 decimal places/i],
+        ['10000000000', /Enter a price below 10,000,000,000 with at most 8 decimal places/i],
+    ])('stops the invalid price %j before compose', async (value, message) => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { value });
+        await preview(utils);
+        expectStoppedBeforeCompose(utils, calls, message);
+    });
+
+    it.each([
+        ['^abc', /Token ticker can be a name, or \^ followed by the token's number/i],
+        ['BAD/TICK', /Token ticker can only use letters, numbers, dots/i],
+    ])('stops the malformed ticker or id %j before compose', async (tick, message) => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { tick });
+        await preview(utils);
+        expectStoppedBeforeCompose(utils, calls, message);
+    });
+
+    it.each([
+        ['-0.01'],
+        ['1.000000000000000001'],
+        ['0.0000000000000000001'],
+    ])('stops the invalid usage fee %j before compose', async (fee) => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { fee });
+        await preview(utils);
+        expectStoppedBeforeCompose(
+            utils,
+            calls,
+            /The usage fee is a fraction between 0 and 1/i,
+        );
+    });
+
+    it('stops an overlong UTF-8 memo before compose', async () => {
+        const { utils, calls } = await mountForm();
+        await fill(utils);
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText(/^Memo/), { target: { value: '€'.repeat(84) } });
+            await drainMicrotasks();
+        });
+        await preview(utils);
+        expectStoppedBeforeCompose(
+            utils,
+            calls,
+            /Memo is 252 bytes; the network accepts at most 250 bytes/i,
+        );
+    });
+
+    it('accepts zero as an explicit no-charge usage fee', async () => {
+        const { utils, calls } = await mountForm();
+        await fill(utils, { fee: '0' });
+        await preview(utils);
+        await clickSubmit(utils);
+        expect(calls.find((call) => call.method === 'oraclePriceAction').args.params.FEE).toBe('0');
     });
 });
 

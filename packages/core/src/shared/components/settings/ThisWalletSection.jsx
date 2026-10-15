@@ -11,47 +11,46 @@
 // ThisWalletSection (§35.1 This Wallet panel) owns wallet-level identity,
 // watch-only export, recovery-format upgrade and removal controls.
 
-import { useEffect, useState } from 'react';
-import { CopyButton } from '@xchain-wallet/core/ui';
+import { useEffect, useRef, useState } from 'react';
+import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
+import {
+    Button,
+    CopyButton,
+    FormSection,
+    Input,
+} from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { KeyQR } from '../KeyQR.jsx';
 import { useToast } from '../ToastHost.jsx';
+import { addressTypeLabel } from '../../utils/addressTypeLabel.js';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
-import { clearBalanceCache } from '../../utils/balanceCache.js';
-import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
-
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    cursor: 'pointer',
-};
-const DESTRUCTIVE_BTN = {
-    ...ACTION_BTN,
-    color: 'var(--xc-danger-fg)',
-    borderColor: 'var(--xc-danger-fg)',
-};
-const EXPORT_PANEL = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-};
-const XPUB_TEXT = {
-    fontFamily: 'var(--xc-font-mono, monospace)',
-    fontSize: 'var(--xc-text-xs)',
-    color: 'var(--xc-text)',
-    overflowWrap: 'anywhere',
-};
+import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
+import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
+import { SettingsActionRow, Status } from './_settingsPrimitives.jsx';
+import cardStyles from '../../../ui/Card.module.css';
+import styles from './ThisWalletSection.module.css';
+import { t } from '../../../i18n/index.js';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
+
+const chainRegistry = registryLib.defaultRegistry();
+
+// Name a chain as the network pickers do: display name, plus the network kind off mainnet.
+function chainDisplayName(chainId) {
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor?.displayName) return chainId;
+    return descriptor.networkKind && descriptor.networkKind !== 'mainnet'
+        ? `${descriptor.displayName} ${descriptor.networkKind}`
+        : descriptor.displayName;
+}
+
+// Head an exported key with plain names; the account path line keeps the technical detail.
+function publicKeyTitle(entry) {
+    const chain = chainDisplayName(entry.chainId);
+    return entry.addressType ? `${chain} (${addressTypeLabel(entry.addressType)})` : chain;
+}
 
 function isWrongPasswordError(err) {
     return err?.name === 'AeadAuthError' || err?.name === 'InvalidPasswordError';
@@ -63,7 +62,7 @@ function publicKeyEntries(result) {
     return keys
         .filter((key) => PUBLIC_EXTENDED_KEY_RE.test(key?.xpub || ''))
         .map((key) => ({
-            chainId: typeof key.chainId === 'string' ? key.chainId : 'Unknown chain',
+            chainId: typeof key.chainId === 'string' ? key.chainId : 'Unknown network',
             addressType: typeof key.addressType === 'string' ? key.addressType : '',
             path: typeof key.path === 'string' ? key.path : '',
             xpub: key.xpub,
@@ -109,15 +108,15 @@ export function ThisWalletSection({
         return (
             <Status
                 text={removeError
-                    ? `Wallet removed, but the app could not finish switching wallets: ${removeError}`
-                    : 'Wallet removed.'}
+                    ? t('settings.thisWallet.walletRemovedButTheApp', { removeError })
+                    : t('settings.thisWallet.walletRemoved')}
                 tone={removeError ? 'error' : undefined}
             />
         );
     }
 
     if (!activeWallet) {
-        return <Status text="No active wallet." />;
+        return <Status text={t('settings.thisWallet.noActiveWallet')} />;
     }
 
     const onConfirmRemove = async () => {
@@ -133,15 +132,9 @@ export function ThisWalletSection({
         try {
             await messaging.removeWallet({ walletId: activeWallet.id });
             removalSucceeded = true;
-            // Cluster U FOLLOWUP 5: drop the resume-last-view memory
-            // for this wallet so a future wallet that happens to reuse
-            // the same id (vanishingly unlikely with cuids, but the
-            // hygiene cost is zero) doesn't inherit a stale route.
             clearLastView(activeWallet.id);
-            clearBalanceCache(activeWallet.id);
-            // sweep this wallet's messaging read marks/unread
-            // counts too, or they orphan in localStorage forever.
             sweepMsgMemoryForWallet(activeWallet.id);
+            clearRemovedWalletStorage(activeWallet.id);
             setConfirmingRemove(false);
             setRemoved(true);
             if (typeof onWalletRemoved === 'function') {
@@ -200,34 +193,34 @@ export function ThisWalletSection({
     };
 
     return (
-        <div style={STACK}>
+        <div className={styles.stack}>
             <Row
-                label="Wallet"
+                label={t('settings.thisWallet.wallet')}
                 hint={activeWallet.name}
-                actionLabel={onOpenWalletPicker ? 'Switch / rename…' : null}
+                actionLabel={onOpenWalletPicker ? t('settings.thisWallet.switchRename') : null}
                 onClick={onOpenWalletPicker}
                 disabled={removing}
             />
             {/* Offer the upgrade only to the older 12-word format; a standard wallet has nothing to upgrade. */}
             {activeWallet.format === 'counterwallet-legacy' ? (
                 <Row
-                    label="Upgrade recovery phrase"
-                    hint="This wallet uses an older 12-word recovery phrase format. Open your wallets, choose this wallet's details, and pick Upgrade recovery phrase."
-                    actionLabel={onOpenWalletPicker ? 'Open wallets…' : null}
+                    label={t('walletDetails.upgradeRecovery')}
+                    hint={t('settings.thisWallet.thisWalletUsesAnOlder')}
+                    actionLabel={onOpenWalletPicker ? t('settings.thisWallet.openWallets') : null}
                     onClick={onOpenWalletPicker}
                     disabled={removing}
                 />
             ) : null}
             {activeWallet.format === 'wif-only' ? (
                 <Row
-                    label="Extended public keys"
-                    hint="Not available for a private-key-only wallet."
+                    label={t('settings.thisWallet.extendedPublicKeys')}
+                    hint={t('settings.thisWallet.notAvailableForAPrivate')}
                 />
             ) : exportStage === 'idle' ? (
                 <Row
-                    label="Extended public keys"
-                    hint="Export account-level public keys for a watch-only wallet."
-                    actionLabel="Export…"
+                    label={t('settings.thisWallet.extendedPublicKeys')}
+                    hint={t('settings.thisWallet.exportAccountLevelPublicKeys')}
+                    actionLabel={t('history.export.open')}
                     onClick={() => { setExportStage('password'); setExportError(null); }}
                 />
             ) : (
@@ -253,29 +246,26 @@ export function ThisWalletSection({
                     onConfirm={onConfirmRemove}
                 />
             ) : (
-                <div style={ROW}>
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Remove wallet</span>
-                        <span style={ROW_HINT}>
-                            Deletes the wallet and all linked records (accounts, addresses, signers,
-                            pending txs). The encrypted seed is destroyed; back up first if you need
-                            recovery.
-                        </span>
-                    </div>
-                    <button
-                        type="button"
+                <SettingsActionRow
+                    label={t('settings.thisWallet.removeWallet')}
+                    hint={t('settings.thisWallet.deletesTheWalletAndAll')}
+                >
+                    <Button
+                        variant="danger"
+                        size="sm"
+                        icon={null}
                         onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
-                        style={DESTRUCTIVE_BTN}
                     >
-                        Remove…
-                    </button>
-                </div>
+                        {t('settings.thisWallet.remove')}
+                    </Button>
+                </SettingsActionRow>
             )}
         </div>
     );
 }
 
 const MIN_WALLET_PASSWORD_LENGTH = 8;
+const passwordMismatch = () => t('settings.thisWallet.passwordsDoNotMatch');
 
 function ChangePasswordRow({ walletId, disabled }) {
     const { messaging } = useMessaging();
@@ -285,7 +275,29 @@ function ChangePasswordRow({ walletId, disabled }) {
     const [newPassword, setNewPassword] = useState('');
     const [confirmation, setConfirmation] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    // Each message names the field it is about, so it renders under that
+    // field; a failure that is about no one field stays in the form status.
+    const [error, setErrorState] = useState(
+        /** @type {{ field: 'current' | 'new' | 'confirm' | null, text: string } | null} */ (null),
+    );
+    const setError = (text, field = null) => {
+        if (text) focusAfterErrorRef.current = field || 'current';
+        setErrorState(text ? { field, text } : null);
+    };
+    // The fields are disabled while the change runs, which drops focus to the
+    // page. After a refusal the cursor goes back to the field to fix, with its
+    // text selected, the same way the Locked screen returns it.
+    const currentRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const newRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const confirmRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const focusAfterErrorRef = useRef(/** @type {'current' | 'new' | 'confirm' | null} */ (null));
+    useEffect(() => {
+        if (busy || !error || !focusAfterErrorRef.current) return;
+        const target = { current: currentRef, new: newRef, confirm: confirmRef }[focusAfterErrorRef.current];
+        focusAfterErrorRef.current = null;
+        target.current?.focus();
+        target.current?.select();
+    }, [busy, error]);
 
     const reset = () => {
         setCurrentPassword('');
@@ -303,19 +315,19 @@ function ChangePasswordRow({ walletId, disabled }) {
     const submit = async (event) => {
         event.preventDefault();
         if (!currentPassword) {
-            setError('Enter your current wallet password.');
+            setError('Enter your current wallet password.', 'current');
             return;
         }
         if (newPassword.length < MIN_WALLET_PASSWORD_LENGTH) {
-            setError(`New password must be at least ${MIN_WALLET_PASSWORD_LENGTH} characters.`);
+            setError(`New password must be at least ${MIN_WALLET_PASSWORD_LENGTH} characters.`, 'new');
             return;
         }
         if (newPassword !== confirmation) {
-            setError('Passwords do not match.');
+            setError(passwordMismatch(), 'confirm');
             return;
         }
         if (newPassword === currentPassword) {
-            setError('Choose a new password that differs from the current password.');
+            setError('Choose a new password that differs from the current password.', 'new');
             return;
         }
         if (typeof messaging?.changePassword !== 'function') {
@@ -325,26 +337,54 @@ function ChangePasswordRow({ walletId, disabled }) {
 
         setBusy(true);
         setError(null);
+        let result;
         try {
-            await messaging.changePassword({ walletId, currentPassword, newPassword });
-            reset();
-            setOpen(false);
-            showToast({ message: 'Wallet password changed.', variant: 'success' });
+            result = await messaging.changePassword({ walletId, currentPassword, newPassword });
         } catch (err) {
-            setError(isWrongPasswordError(err)
-                ? 'Current wallet password is incorrect.'
-                : (err?.message || 'Could not change the wallet password.'));
-        } finally {
+            if (isWrongPasswordError(err)) setError('Current wallet password is incorrect.', 'current');
+            else setError(err?.message || 'Could not change the wallet password.');
             setBusy(false);
+            return;
+        }
+
+        // The change is committed. A biometric enrolment wraps the unlock
+        // password as it was, so it would now release a password the wallet
+        // no longer opens with; retire it here, in the context that holds it.
+        // A failure is said on screen, never swallowed: the old password is
+        // still wrapped on this device until the enrolment goes.
+        let biometricCleared = false;
+        let biometricError = false;
+        try {
+            biometricCleared = await retireBiometricAfterPasswordChange(result);
+        } catch {
+            biometricError = true;
+        }
+        reset();
+        setOpen(false);
+        setBusy(false);
+        if (biometricError) {
+            showToast({
+                message: 'Wallet password changed, but biometric unlock could not be turned off. '
+                    + 'Turn it off in Settings, then turn it on again with the new password.',
+                variant: 'error',
+            });
+        } else if (biometricCleared) {
+            showToast({
+                message: 'Wallet password changed. Biometric unlock was turned off; '
+                    + 'turn it on again in Settings to use it with the new password.',
+                variant: 'success',
+            });
+        } else {
+            showToast({ message: 'Wallet password changed.', variant: 'success' });
         }
     };
 
     if (!open) {
         return (
             <Row
-                label="Wallet password"
-                hint="Change the password that protects this wallet's private keys."
-                actionLabel="Change…"
+                label={t('send.gated.passwordLabel')}
+                hint={t('settings.thisWallet.changeThePasswordThatProtects')}
+                actionLabel={t('settings.thisWallet.change')}
                 onClick={() => setOpen(true)}
                 disabled={disabled}
             />
@@ -355,79 +395,71 @@ function ChangePasswordRow({ walletId, disabled }) {
         setter(event.target.value);
         if (error) setError(null);
     };
+    const fieldError = (field) => (error?.field === field ? error.text : undefined);
+    // The mismatch shows while the confirmation is typed, keyed to its value
+    // so the field does not dismiss it as stale on the next keystroke.
+    const confirmError = confirmation && confirmation !== newPassword
+        ? passwordMismatch()
+        : fieldError('confirm');
 
     return (
-        <form onSubmit={submit} style={EXPORT_PANEL} aria-busy={busy}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>Change wallet password</div>
-            <div style={ROW_HINT}>
-                Use at least {MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger.
-                Keep it safe because it cannot be recovered.
-            </div>
-            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                Current wallet password
-                <input
+        <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} aria-busy={busy}>
+            <FormSection
+                title={t('settings.thisWallet.changeWalletPassword')}
+                description={t('settings.thisWallet.useAtLeastCharactersA', { MIN_WALLET_PASSWORD_LENGTH })}
+                className={cardStyles.card}
+            >
+                <Input
+                    ref={currentRef}
                     type="password"
+                    revealable
+                    label={t('settings.thisWallet.currentWalletPassword')}
                     value={currentPassword}
                     onChange={update(setCurrentPassword)}
-                    aria-label="Current wallet password"
+                    aria-label={t('settings.thisWallet.currentWalletPassword')}
                     autoComplete="current-password"
                     autoFocus
                     disabled={busy}
-                    style={PASSWORD_INPUT}
+                    error={fieldError('current')}
                 />
-            </label>
-            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                New wallet password
-                <input
+                <Input
+                    ref={newRef}
                     type="password"
+                    revealable
+                    label={t('settings.thisWallet.newWalletPassword')}
                     value={newPassword}
                     onChange={update(setNewPassword)}
-                    aria-label="New wallet password"
+                    aria-label={t('settings.thisWallet.newWalletPassword')}
                     autoComplete="new-password"
                     disabled={busy}
-                    style={PASSWORD_INPUT}
+                    error={fieldError('new')}
                 />
-            </label>
-            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                Confirm new wallet password
-                <input
+                <Input
+                    ref={confirmRef}
                     type="password"
+                    revealable
+                    label={t('settings.thisWallet.confirmNewWalletPassword')}
                     value={confirmation}
                     onChange={update(setConfirmation)}
-                    aria-label="Confirm new wallet password"
+                    aria-label={t('settings.thisWallet.confirmNewWalletPassword')}
                     autoComplete="new-password"
                     disabled={busy}
-                    style={PASSWORD_INPUT}
+                    error={confirmError}
+                    errorKey={confirmation}
                 />
-            </label>
-            {(confirmation && confirmation !== newPassword)
-                || error === 'Passwords do not match.' ? (
-                <Status text="Passwords do not match." tone="error" />
-            ) : null}
-            {error && error !== 'Passwords do not match.' ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={close} disabled={busy} style={ACTION_BTN}>Cancel</button>
-                <button type="submit" disabled={busy} style={ACTION_BTN}>
-                    {busy ? 'Changing password…' : 'Change password'}
-                </button>
-            </div>
+                {error && error.field === null ? <Status text={error.text} tone="error" /> : null}
+                <div className={styles.actions}>
+                    <Button type="button" variant="ghost" size="sm" icon={null} onClick={close} disabled={busy}>
+                        {t('common.cancel')}
+                    </Button>
+                    <Button type="submit" size="sm" icon={null} disabled={busy}>
+                        {busy ? t('settings.thisWallet.changingPassword') : t('settings.thisWallet.changePassword')}
+                    </Button>
+                </div>
+            </FormSection>
         </form>
     );
 }
-
-const PASSWORD_INPUT = {
-    display: 'block',
-    width: '100%',
-    boxSizing: 'border-box',
-    marginBlockStart: 'var(--xc-space-1)',
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-};
 
 function PublicKeyExport({
     stage,
@@ -441,96 +473,83 @@ function PublicKeyExport({
     onClose,
 }) {
     return (
-        <div style={EXPORT_PANEL}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
-                Extended public keys{accountName ? ` for ${accountName}` : ''}
-            </div>
-            <div style={ROW_HINT}>
-                An extended public key does not contain private keys and cannot spend funds.
-                Anyone with it can derive and monitor every address below that account path,
-                including future addresses. Share it only with a watch-only wallet you trust.
-            </div>
+        <FormSection
+            title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
+            description={t('settings.thisWallet.anExtendedPublicKeyDoes')}
+            className={cardStyles.card}
+        >
             {stage === 'password' ? (
-                <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
-                    <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                        Confirm wallet password
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(event) => onPasswordChange(event.target.value)}
-                            placeholder="Wallet password"
-                            autoComplete="current-password"
-                            autoFocus
-                            disabled={busy}
-                            style={{
-                                display: 'block',
-                                width: '100%',
-                                boxSizing: 'border-box',
-                                marginBlockStart: 'var(--xc-space-1)',
-                                background: 'var(--xc-bg)',
-                                color: 'var(--xc-text)',
-                                border: '1px solid var(--xc-border)',
-                                borderRadius: 'var(--xc-radius-sm)',
-                                padding: 'var(--xc-space-2) var(--xc-space-3)',
-                                fontSize: 'var(--xc-text-sm)',
-                                fontFamily: 'inherit',
-                            }}
-                        />
-                    </label>
+                <form onSubmit={onSubmit} className={styles.form}>
+                    <Input
+                        type="password"
+                        revealable
+                        label={t('settings.thisWallet.confirmWalletPassword')}
+                        value={password}
+                        onChange={(event) => onPasswordChange(event.target.value)}
+                        placeholder={t('send.gated.passwordLabel')}
+                        autoComplete="current-password"
+                        autoFocus
+                        disabled={busy}
+                    />
                     {error ? <Status text={error} tone="error" /> : null}
-                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                        <button type="button" onClick={onClose} style={ACTION_BTN} disabled={busy}>
-                            Cancel
-                        </button>
-                        <button type="submit" style={ACTION_BTN} disabled={busy}>
-                            {busy ? 'Exporting…' : 'Show public keys'}
-                        </button>
+                    <div className={styles.actions}>
+                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose} disabled={busy}>
+                            {t('common.cancel')}
+                        </Button>
+                        <Button type="submit" size="sm" icon={null} disabled={busy}>
+                            {busy ? t('settings.backup.exporting') : t('settings.thisWallet.showPublicKeys')}
+                        </Button>
                     </div>
                 </form>
             ) : (
                 <>
                     {entries.map((entry) => (
-                        <div key={`${entry.chainId}:${entry.path}`} style={EXPORT_PANEL}>
-                            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                                {entry.chainId}
-                                {entry.addressType ? ` (${entry.addressType})` : ''}
-                            </div>
-                            {entry.path ? <div style={ROW_HINT}>Account path: {entry.path}</div> : null}
-                            <div style={XPUB_TEXT}>{entry.xpub}</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                        <FormSection
+                            key={`${entry.chainId}:${entry.path}`}
+                            title={publicKeyTitle(entry)}
+                            description={entry.path ? t('settings.thisWallet.accountPath', { path: entry.path }) : undefined}
+                            headingLevel="h3"
+                        >
+                            <div className={styles.xpub}>{entry.xpub}</div>
+                            <div className={styles.qr}>
                                 <KeyQR
                                     value={entry.xpub}
                                     size={180}
-                                    alt={`QR code for ${entry.chainId} extended public key`}
+                                    alt={t('settings.thisWallet.qrCodeForExtendedPublic', { chainId: chainDisplayName(entry.chainId) })}
                                 />
                                 <CopyButton
                                     value={entry.xpub}
-                                    label="Copy extended public key"
+                                    label={t('settings.thisWallet.copyExtendedPublicKey')}
                                     sensitive
                                 />
                             </div>
-                        </div>
+                        </FormSection>
                     ))}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button type="button" onClick={onClose} style={ACTION_BTN}>Done</button>
+                    <div className={styles.actions}>
+                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose}>{t('common.done')}</Button>
                     </div>
                 </>
             )}
-        </div>
+        </FormSection>
     );
 }
 
 function Row({ label, hint, actionLabel, onClick, disabled = false }) {
     return (
-        <div style={ROW}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</span>
-                <span style={ROW_HINT}>{hint}</span>
-            </div>
+        <SettingsActionRow label={label} hint={hint}>
             {actionLabel && onClick ? (
-                <button type="button" onClick={onClick} style={ACTION_BTN} disabled={disabled}>{actionLabel}</button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
+                    onClick={onClick}
+                    disabled={disabled}
+                >
+                    {actionLabel}
+                </Button>
             ) : null}
-        </div>
+        </SettingsActionRow>
     );
 }
 
@@ -539,25 +558,17 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
     // Require the exact wallet name so accidental destructive clicks stay disabled.
     const matches = typed === walletName;
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-danger-fg)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-danger-fg)', fontWeight: 600 }}>
-                Remove {walletName}?
-            </div>
-            <div style={ROW_HINT}>
-                Removing this wallet deletes its accounts, addresses, signers, and pending transactions.
-                Make sure you have a backup before continuing. The encrypted seed is destroyed and
-                cannot be recovered. This cannot be undone. Type the wallet name{' '}
-                <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
-            </div>
-            <input
+        <FormSection
+            title={t('settings.thisWallet.remove2', { walletName })}
+            description={(
+                <>
+                    {t('settings.thisWallet.itsAccountsAddressesSignersAnd')}{' '}
+                    <strong className={styles.confirmName}>{walletName}</strong> {t('settings.thisWallet.toConfirm')}
+                </>
+            )}
+            className={cardStyles.card}
+        >
+            <Input
                 type="text"
                 enterKeyHint="done"
                 autoCapitalize="off"
@@ -569,39 +580,26 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     if (event.key === 'Enter' && matches && !busy) onConfirm();
                 }}
                 placeholder={walletName}
-                aria-label="Confirm wallet name"
+                aria-label={t('settings.thisWallet.confirmWalletName')}
                 autoFocus
                 disabled={busy}
-                style={{
-                    background: 'var(--xc-bg)',
-                    color: 'var(--xc-text)',
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                    padding: 'var(--xc-space-2) var(--xc-space-3)',
-                    fontSize: 'var(--xc-text-sm)',
-                    fontFamily: 'inherit',
-                }}
             />
             {error ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>
-                    Cancel
-                </button>
-                <button
+            <div className={styles.actions}>
+                <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
+                    {t('common.cancel')}
+                </Button>
+                <Button
                     type="button"
+                    variant="danger"
+                    size="sm"
+                    icon={null}
                     onClick={onConfirm}
                     disabled={!matches || busy}
-                    style={{
-                        ...DESTRUCTIVE_BTN,
-                        background: matches && !busy ? 'var(--xc-danger-fg)' : 'transparent',
-                        color: matches && !busy ? 'var(--xc-on-accent)' : 'var(--xc-danger-fg)',
-                        opacity: matches && !busy ? 1 : 0.6,
-                        cursor: matches && !busy ? 'pointer' : 'not-allowed',
-                    }}
                 >
-                    {busy ? 'Removing…' : 'Remove wallet'}
-                </button>
+                    {busy ? t('settings.thisWallet.removing') : t('settings.thisWallet.removeWallet')}
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }

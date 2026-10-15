@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -36,6 +37,7 @@ import { listLabel } from '../utils/listLabel.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -104,11 +106,19 @@ const REPOINT_TARGETS = [
  * @param {() => void} props.onDone
  * @param {Partial<Record<'issue-lists' | 'dispenser-lists' | 'order-lists', () => void>>} [props.repointHandlers]
  */
-export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandlers = {} }) {
+export function ListForkForm(props) {
+    const { walletId, listRef } = props;
+    const formKey = `${walletId}:${listRef.chainId}:${String(listRef.actionIndex)}`;
+    return <ListForkFormScreen key={formKey} {...props} />;
+}
+
+function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers = {} }) {
     const { chainId, actionIndex: oldIndex, type: listType, items: currentItems } = listRef;
+    const listActionIndexValid = /^[1-9][0-9]*$/.test(String(oldIndex));
     // true / false from the explorer, null when it does not say.
     const resolution = typeof listRef.editResolutionActive === 'boolean' ? listRef.editResolutionActive : null;
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isTick = String(listType) === '1';
@@ -150,6 +160,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     // Close re-entry before React renders the visible submitting state.
     const firstLegInFlightRef = useRef(false);
+    const secondLegInFlightRef = useRef(false);
     // The list's owner: undefined while resolving, null when it cannot be read.
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [listName, setListName] = useState(/** @type {string | null} */ (null));
@@ -177,7 +188,14 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             })
             .then((detail) => findListOwner({ detail, readList }))
             .then((o) => { if (!cancelled) setOwner(o); })
-            .catch(() => { if (!cancelled) setOwner(null); });
+            .catch((err) => {
+                if (!cancelled) {
+                    setLoadError(
+                        explorerReadFailure(err, `load list #${oldIndex}`)?.message
+                        || `Couldn't load list #${oldIndex}. Try again.`,
+                    );
+                }
+            });
         return () => { cancelled = true; };
     }, [chainId, oldIndex, listRef.source, listRef.parentIndex, messaging]);
 
@@ -196,7 +214,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (!(byChain?.[chainId] || []).length) {
-                    setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
             .catch(() => { if (!cancelled) setLoadError('Failed to load addresses.'); });
@@ -281,15 +299,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     useEffect(() => {
         if (stage === 'compose' && ownerRecord) setFromAddressId(ownerRecord.id);
     }, [ownerRecord, stage]);
-    // Warn when the wallet cannot sign as the owner (owner unknown: no claim).
-    const notOwnerWarning = owner && !ownerRecord && fromAddress && fromAddress.address !== owner
-        ? `List #${oldIndex} was created by ${shortAddress(owner)}, which is not an address in this wallet, so this edit is signed from ${shortAddress(fromAddress.address)}. Some chains accept an edit from any address today, but once owner-only list edits are active on this chain, only the list's creator can edit it and this edit would be invalid.`
+    const ownershipReason = owner && !ownerRecord
+        ? `List #${oldIndex} is owned by ${shortAddress(owner)}, which is not an address in this wallet. This wallet cannot edit it.`
         : null;
-    const notOwnerNotice = notOwnerWarning ? (
-        <div role="alert" className={styles.warnings}>
-            <p className={styles.warning}>{notOwnerWarning}</p>
-        </div>
-    ) : null;
 
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -501,7 +513,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
      * screen was opened with, else null. The network applies the edit to the
      * list's newest valid edit at that moment, so a change made in between
      * would be carried into this edit without the user ever seeing it.
-     * Best-effort: an unreadable list is no claim either way.
+     * An unreadable list blocks review because the form cannot establish the
+     * membership that this edit will change.
      *
      * @returns {Promise<string | null>}
      */
@@ -510,8 +523,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         let fresh;
         try {
             fresh = currentListItems(await messaging.getListByActionIndex({ chainId, actionIndex: String(oldIndex) }));
-        } catch {
-            return null;
+        } catch (err) {
+            return explorerReadFailure(err, `check list #${oldIndex}`)?.message
+                || `Couldn't check list #${oldIndex}. Try again.`;
         }
         if (!Array.isArray(fresh)) return null;
         const asKey = (xs) => xs.map(String).sort().join('\n');
@@ -522,7 +536,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
 
     async function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
+        if (ownershipReason) { setFormError(ownershipReason); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
+        if (feePick.mode === 'custom' && feePerKb === null) {
+            const rate = Number(feePick.customRate);
+            setFormError(rate > 0
+                ? 'Custom fee rate can have no more than 8 decimal places.'
+                : 'Custom fee rate must be greater than zero.');
+            return;
+        }
         if (additions.invalid.length > 0) {
             const noun = isTick
                 ? (additions.invalid.length === 1 ? 'token name' : 'token names')
@@ -625,24 +648,25 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
 
     async function handleSignSecond(event) {
         event.preventDefault();
-        if (submitting || !intermediateIndex) return;
+        if (submitting || secondLegInFlightRef.current || !intermediateIndex) return;
         const sizeError = listActionSizeError(secondActionSize);
         if (sizeError) { setSubmitError(sizeError); return; }
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        if (singleEncode) {
-            await runLegThroughConfirm(secondParams, (res) => {
-                const txid = res?.txid || res?.broadcast?.txid;
-                if (!txid) throw new Error('List fork broadcast did not return a txid.');
-                setTx2Txid(txid);
-                setPassword('');
-                setStage('repoint');
-            });
-            return;
-        }
+        secondLegInFlightRef.current = true;
         setSubmitting(true);
         setSubmitError(null);
         try {
+            if (singleEncode) {
+                await runLegThroughConfirm(secondParams, (res) => {
+                    const txid = res?.txid || res?.broadcast?.txid;
+                    if (!txid) throw new Error('List fork broadcast did not return a txid.');
+                    setTx2Txid(txid);
+                    setPassword('');
+                    setStage('repoint');
+                });
+                return;
+            }
             const from = sourceDescriptor();
             const base = { walletId, chainId, from, params: secondParams, payFeeInNativeCoin: nativeFee.flag, ...(feePerKb != null ? { feePerKb } : {}) };
             const res = hw
@@ -661,6 +685,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             }));
             if (!hw) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         } finally {
+            secondLegInFlightRef.current = false;
             setSubmitting(false);
         }
     }
@@ -676,11 +701,12 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'review-1' && stage !== 'review-2'}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
-    if (!addressesByChain) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (!addressesByChain || owner === undefined) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (ownershipReason) return wrap(<StatusMessage variant="warning">{ownershipReason}</StatusMessage>);
 
     // A leg signed but not broadcast stops the chain: the shared panel
     // says so and deliberately offers no retry (re-signing while a signed
@@ -698,7 +724,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -763,7 +789,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                             membership until someone repoints it at the new fork. Repoint from each consumer&apos;s
                             own edit screen:
                         </p>
-                        <ul className={styles.detailsList} style={{ display: 'block' }}>
+                        <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                             {REPOINT_TARGETS.map((t) => {
                                 const open = t.built ? repointHandlers[t.id] : undefined;
                                 return (
@@ -775,13 +801,13 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                                 );
                             })}
                         </ul>
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {resolution === false
                                     ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
-                                    : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                                    : `Unless list-edit resolution is active on this network, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
                             </p>
-                        </div>
+                        </StatusMessage>
                     </>
                 )}
 
@@ -823,6 +849,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     if (stage === 'review-2' && fromAddress) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list removal"
                 onSubmit={handleSignSecond}
                 noValidate
@@ -842,8 +869,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             >
                 <p className={styles.summary}>{secondDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
@@ -869,7 +896,6 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     <summary>Review removed items</summary>
                     <ul>{toRemove.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                 </details>
-                {notOwnerNotice}
                 <SignCredentials
                     unlocked={signerReady}
                     fromAddress={fromAddress}
@@ -904,13 +930,14 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         works fine in watcher mode).
                     </p>
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={() => setStage('compose')}>Back</Button>
+                        <Button variant="ghost" onClick={() => setStage('compose')}>Back</Button>
                     </div>
                 </>,
             );
         }
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list edit"
                 onSubmit={handleSignFirst}
                 noValidate
@@ -919,7 +946,18 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 ) : null}
                 actions={(
                     <>
-                        <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={submitting}>Back</Button>
+                        {/* preventDefault: the edit form reuses this button node as its
+                            submit button, so letting the click's default action run
+                            after the re-render would submit the edit form straight
+                            back into review. */}
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={(event) => { event.preventDefault(); setStage('compose'); }}
+                            disabled={submitting}
+                        >
+                            Back
+                        </Button>
                         <Button
                             type="submit"
                             variant="primary"
@@ -933,8 +971,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             >
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
@@ -986,7 +1024,6 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         <ul>{(needsAdd ? toAdd : toRemove).map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                     </details>
                 ) : null}
-                {notOwnerNotice}
                 {memoOnly ? (
                     <p className={styles.hint}>
                         Only the memo changes. The list keeps its {currentItems.length} member{currentItems.length === 1 ? '' : 's'};
@@ -1025,6 +1062,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Edit list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
@@ -1048,18 +1086,18 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             {fromAddress ? (
                 <p className={styles.hint}>Signed from <AddressText address={fromAddress.address} /></p>
             ) : null}
-            {notOwnerNotice}
-
             {currentItems.length > 0 ? (
                 <>
                     <span className={styles.fromLabel}>Current members (uncheck to remove)</span>
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
-                        {currentItems.map((item) => (
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
+                        {currentItems.map((item, index) => (
                             <li key={item} style={{ padding: '2px 0' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                                    <input type="checkbox" checked={keep.has(item)} onChange={() => toggleKeep(item)} />
-                                    <code>{item}</code>
-                                </label>
+                                <Checkbox
+                                    id={`fork-current-member-${index}`}
+                                    label={<code>{item}</code>}
+                                    checked={keep.has(item)}
+                                    onChange={() => toggleKeep(item)}
+                                />
                             </li>
                         ))}
                     </ul>
@@ -1068,18 +1106,17 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 <p className={styles.hint}>This list currently has no members.</p>
             )}
 
-            <label className={styles.pickerLabel} htmlFor="fork-add-items">
-                Add {isTick ? 'tokens' : 'addresses'} (one per line)
-            </label>
-            <textarea
+            <Textarea
                 id="fork-add-items"
-                className={styles.picker}
+                label={`Add ${isTick ? 'tokens' : 'addresses'} (one per line)`}
                 value={addText}
                 onChange={(e) => setAddText(e.target.value)}
                 rows={6}
+                autoComplete="off"
                 spellCheck={false}
                 autoCapitalize={isTick ? 'characters' : 'off'}
                 autoCorrect="off"
+                aria-required="false"
             />
             <p className={styles.hint}>
                 {toAdd.length} to add · {toRemove.length} to remove
@@ -1089,9 +1126,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 {toRemove.length + toAdd.length === 0 ? ' (no changes yet)' : ''}
             </p>
             {additions.invalid.length > 0 ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     Invalid {isTick ? 'token names' : 'addresses'}: {additions.invalid.join(', ')}
-                </p>
+                </StatusMessage>
             ) : null}
             {!isTick ? (
                 <p className={styles.hint}>

@@ -8,9 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Queued-broadcast rows name the chain in words, never by its internal id.
-// A user deciding whether to re-send a signed transaction reads this line,
-// so "Litecoin regtest" must show where "litecoin-regtest" used to.
+// Queued-broadcast rows retain the chain icon without repeating the chain or
+// network kind as row text.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
@@ -44,19 +43,22 @@ function entry(chainId) {
     return { id: `q-${chainId}`, chainId, summary: 'Send 1 XCP', signedAt: Date.now() };
 }
 
-describe('QueuedBroadcastBanner chain label', () => {
-    it('shows the chain display name instead of the raw chain id', async () => {
+describe('QueuedBroadcastBanner chain icon', () => {
+    it('does not render the coin, network kind, or raw chain id as text', async () => {
         queue = [entry('litecoin-regtest')];
         const { container } = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
         await screen.findByText('Send 1 XCP');
-        expect(container.textContent).toContain('Litecoin');
+        expect(container.querySelector('img')).toBeTruthy();
+        expect(container.textContent).not.toContain('Litecoin');
+        expect(container.textContent).not.toContain('regtest');
         expect(container.textContent).not.toContain('litecoin-regtest');
     });
 
-    it('falls back to the raw id only for a chain the registry does not know', async () => {
+    it('does not expose a raw id for a chain the registry does not know', async () => {
         queue = [entry('nochain-mainnet')];
         const { container } = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
         await screen.findByText('Send 1 XCP');
-        expect(container.textContent).toContain('nochain-mainnet');
+        expect(container.textContent).not.toContain('nochain-mainnet');
+        expect(container.textContent).toMatch(/Send 1 XCPsigned/);
     });
 });

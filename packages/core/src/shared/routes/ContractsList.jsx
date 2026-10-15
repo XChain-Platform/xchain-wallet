@@ -109,7 +109,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         let cancelled = false;
         setAddressesByChain(null);
         setAddressesError(null);
-        messaging.getAddressesByChain(walletId)
+        Promise.resolve()
+            .then(() => messaging.getAddressesByChain(walletId))
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
@@ -155,7 +156,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 .map((a) => a.address)
                 .filter((address) => typeof address === 'string' && address.length > 0);
             Promise.all(addrs.map((addr) =>
-                messaging.getContractsForSource({ chainId: cid, address: addr })
+                Promise.resolve()
+                    .then(() => messaging.getContractsForSource({ chainId: cid, address: addr }))
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
                     .catch((err) => ({ addr, error: err?.message || String(err) }))
             )).then((results) => {
@@ -175,6 +177,12 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         rows: uniq,
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
+                }));
+            }).catch((err) => {
+                if (cancelled) return;
+                setMyByChain((prev) => ({
+                    ...prev,
+                    [cid]: { loading: false, rows: [], error: err?.message || String(err) },
                 }));
             });
         }
@@ -204,12 +212,14 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             const ops = [];
             for (const addr of addrs) {
                 ops.push(
-                    messaging.getDepositsForAddress({ chainId: cid, address: addr })
+                    Promise.resolve()
+                        .then(() => messaging.getDepositsForAddress({ chainId: cid, address: addr }))
                         .then((resp) => ({ kind: 'deposit', rows: extractRows(resp) }))
                         .catch((err) => ({ error: err?.message || String(err) })),
                 );
                 ops.push(
-                    messaging.getWithdrawalsForAddress({ chainId: cid, address: addr })
+                    Promise.resolve()
+                        .then(() => messaging.getWithdrawalsForAddress({ chainId: cid, address: addr }))
                         .then((resp) => ({ kind: 'withdraw', rows: extractRows(resp) }))
                         .catch((err) => ({ error: err?.message || String(err) })),
                 );
@@ -263,6 +273,12 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
                 }));
+            }).catch((err) => {
+                if (cancelled) return;
+                setInteractionsByChain((prev) => ({
+                    ...prev,
+                    [cid]: { loading: false, rows: [], error: err?.message || String(err) },
+                }));
             });
         }
         return () => { cancelled = true; };
@@ -279,7 +295,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
         let cancelled = false;
         for (const cid of activeChains) {
-            messaging.getContractsBrowseAll({ chainId: cid })
+            Promise.resolve()
+                .then(() => messaging.getContractsBrowseAll({ chainId: cid }))
                 .then((resp) => {
                     if (cancelled) return;
                     const rows = extractRows(resp);
@@ -342,7 +359,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return wrap(
             <EmptyState
                 title="No supported address"
-                body="Contracts require an address on a chain that supports them."
+                body="Contracts require an address on a network that supports them."
             />,
         );
     }
@@ -352,6 +369,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             <div className={contractStyles.toolbarSearch}>
                 <Input
                     type="search"
+                    size="md"
                     placeholder="Filter by name or number"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -364,7 +382,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 onChange={setChainFilter}
             />
             {onDeploy ? (
-                <Button variant="primary" onClick={onDeploy}>
+                <Button variant="primary" size="md" onClick={onDeploy}>
                     + Publish contract
                 </Button>
             ) : null}
@@ -373,41 +391,28 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
     return wrap(
         <>
-            <Section title="My contracts (published by me)">
-                {activeChains.map((cid) => {
-                    const d = chainRegistry.get(cid);
-                    const state = myByChain[cid] || { loading: true, rows: [], error: null };
-                    const rows = applySearch(state.rows, searchQuery);
-                    return (
-                        <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
-                                    emptyTitle="No published contracts"
-                                    emptyText="Published contracts appear here after you publish one from an address on this chain."
-                                    emptyActionLabel={onDeploy ? 'Publish contract' : undefined}
-                                    onEmptyAction={onDeploy}
-                                    searchActive={searchQuery.trim().length > 0}
-                                    hasUnfilteredRows={state.rows.length > 0}
-                                    onRetry={retryContracts}
-                                    onOpenContract={onOpenContract}
-                                    renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
-                    );
-                })}
-            </Section>
-            <Section title="My interactions (deposits / withdrawals)">
-                {activeChains.map((cid) => {
-                    const d = chainRegistry.get(cid);
-                    const state = interactionsByChain[cid] || { loading: true, rows: [], error: null };
-                    const rows = applySearch(state.rows, searchQuery);
-                    return (
-                        <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
-                                    emptyTitle="No contract interactions"
-                                    emptyText={`${actionDisplayLabel('DEPOSIT')} and ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions appear here after an address on this chain interacts with a contract.`}
-                                    searchActive={searchQuery.trim().length > 0}
-                                    hasUnfilteredRows={state.rows.length > 0}
-                                    onRetry={retryContracts}
-                                    onOpenContract={onOpenContract}
-                                    renderRow={(row) => <InteractionRow row={row} chainId={cid} />} />
-                    );
-                })}
+            <ChainSection
+                title="My contracts (published by me)"
+                chains={activeChains}
+                statesByChain={myByChain}
+                searchQuery={searchQuery}
+                emptyTitle="No published contracts"
+                emptyText="Published contracts appear here after you publish one."
+                onRetry={retryContracts}
+                onOpenContract={onOpenContract}
+                renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
+            />
+            <ChainSection
+                title="My interactions (deposits / withdrawals)"
+                chains={activeChains}
+                statesByChain={interactionsByChain}
+                searchQuery={searchQuery}
+                emptyTitle="No contract interactions"
+                emptyText={`${actionDisplayLabel('DEPOSIT')} and ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions appear here after one of your addresses interacts with a contract.`}
+                onRetry={retryContracts}
+                onOpenContract={onOpenContract}
+                renderRow={(row, cid) => <InteractionRow row={row} chainId={cid} />}
+            >
                 {/* Keep the copy plain-language: this renders to end users, so no
                     SDK method names or internal shorthand (#2255). The technical
                     reason (SDK getExecutions is contract-scoped today) lives in
@@ -416,24 +421,18 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     Contract calls that don&apos;t move funds aren&apos;t listed
                     here yet. Open a contract to see its call history.
                 </p>
-            </Section>
-            <Section title="Browse all contracts">
-                {activeChains.map((cid) => {
-                    const d = chainRegistry.get(cid);
-                    const state = browseByChain[cid] || { loading: true, rows: [], error: null };
-                    const rows = applySearch(state.rows, searchQuery);
-                    return (
-                        <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
-                                    emptyTitle="No indexed contracts"
-                                    emptyText="Indexed contracts appear here after this chain's contract data loads."
-                                    searchActive={searchQuery.trim().length > 0}
-                                    hasUnfilteredRows={state.rows.length > 0}
-                                    onRetry={retryContracts}
-                                    onOpenContract={onOpenContract}
-                                    renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
-                    );
-                })}
-            </Section>
+            </ChainSection>
+            <ChainSection
+                title="Browse all contracts"
+                chains={activeChains}
+                statesByChain={browseByChain}
+                searchQuery={searchQuery}
+                emptyTitle="No indexed contracts"
+                emptyText="Indexed contracts appear here after contract data loads."
+                onRetry={retryContracts}
+                onOpenContract={onOpenContract}
+                renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
+            />
         </>,
         toolbar,
     );
@@ -448,33 +447,79 @@ function Section({ title, children }) {
     );
 }
 
+/**
+ * One section of the page across every chain the wallet can publish on.
+ * Chains that are loading, failed, or have rows get their own group; when
+ * none of them has anything to show, the section says so once at full
+ * width instead of repeating the same empty message under every chain. The
+ * message carries no button: the toolbar's Publish contract is the one way in.
+ */
+function ChainSection({
+    title,
+    chains,
+    statesByChain,
+    searchQuery,
+    emptyTitle,
+    emptyText,
+    onRetry,
+    onOpenContract,
+    renderRow,
+    children,
+}) {
+    const searchActive = searchQuery.trim().length > 0;
+    const groups = chains.map((cid) => {
+        const state = statesByChain[cid] || { loading: true, rows: [], error: null };
+        return { cid, state, rows: applySearch(state.rows, searchQuery) };
+    });
+    const shown = groups.filter(({ state, rows }) => state.loading || state.error || rows.length > 0);
+    const filteredOut = searchActive && groups.some(({ state }) => state.rows.length > 0);
+    return (
+        <Section title={title}>
+            {shown.length === 0 ? (
+                <EmptyState
+                    title={filteredOut ? 'No matching contracts' : emptyTitle}
+                    body={filteredOut ? 'Try a different name or number.' : emptyText}
+                    titleAs="p"
+                />
+            ) : shown.map(({ cid, state, rows }) => (
+                <ChainGroup key={cid} descriptor={chainRegistry.get(cid)} chainId={cid} state={{ ...state, rows }}
+                            onRetry={onRetry}
+                            onOpenContract={onOpenContract}
+                            renderRow={(row) => renderRow(row, cid)} />
+            ))}
+            {children}
+        </Section>
+    );
+}
+
 function ChainFilterBar({ chains, value, onChange }) {
     return (
-        <div role="tablist" aria-label="Chain filter" className={contractStyles.chainFilters}>
+        <div role="tablist" aria-label="Network filter" className={contractStyles.chainFilters}>
             <Button
                 type="button"
+                variant={value === 'all' ? 'primary' : 'secondary'}
+                size="md"
                 role="tab"
                 aria-selected={value === 'all'}
                 onClick={() => onChange('all')}
-                className={styles.entry}
-                style={{ padding: '0.25rem 0.5rem' }}
             >
                 All
             </Button>
             {chains.map((cid) => {
                 const d = chainRegistry.get(cid);
+                if (!d) return null;
                 return (
                     <Button
                         type="button"
+                        variant={value === cid ? 'primary' : 'secondary'}
+                        size="md"
                         role="tab"
                         key={cid}
                         aria-selected={value === cid}
                         aria-label={d?.displayName || cid}
                         onClick={() => onChange(cid)}
-                        className={styles.entry}
-                        style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
                     >
-                        {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
+                        <ChainBadge descriptor={d} size="sm" />
                     </Button>
                 );
             })}
@@ -482,29 +527,23 @@ function ChainFilterBar({ chains, value, onChange }) {
     );
 }
 
+/** One chain's rows, its loading skeleton, or its retryable error. */
 function ChainGroup({
     descriptor,
     chainId,
     state,
-    emptyTitle,
-    emptyText,
-    emptyActionLabel,
-    onEmptyAction,
-    searchActive,
-    hasUnfilteredRows,
     onRetry,
     onOpenContract,
     renderRow,
 }) {
-    const noSearchMatches = searchActive && hasUnfilteredRows && state.rows.length === 0;
     return (
         <section>
-            <SectionHeader
-                as="h3"
-                title={descriptor
-                    ? <ChainBadge descriptor={descriptor} size="sm" />
-                    : <span>{chainId}</span>}
-            />
+            {descriptor ? (
+                <SectionHeader
+                    as="h3"
+                    title={<ChainBadge descriptor={descriptor} size="sm" />}
+                />
+            ) : null}
             {state.loading ? (
                 <div role="status" aria-label={`Loading contracts on ${descriptor?.displayName || chainId}`}>
                     <Skeleton.List rows={3} />
@@ -517,32 +556,20 @@ function ChainGroup({
                             className={styles.entryDescription}
                             recovery={{ label: 'Try again', onAction: onRetry }}
                         >
-                            Couldn't load contracts on {descriptor?.displayName || chainId}. Try again.
+                            Couldn't load contracts. Try again.
                         </StatusMessage>
                     ) : null}
-                    {state.rows.length === 0 ? (
-                        state.error ? null : (
-                            <EmptyState
-                                title={noSearchMatches ? 'No matching contracts' : emptyTitle}
-                                body={noSearchMatches ? 'Try a different name or number.' : emptyText}
-                                actionLabel={noSearchMatches ? undefined : emptyActionLabel}
-                                onAction={noSearchMatches ? undefined : onEmptyAction}
-                                titleAs="p"
-                            />
-                        )
-                    ) : (
-                        state.rows.map((row, i) => (
-                            <Button
-                                key={String(rowKey(row)) + ':' + i}
-                                type="button"
-                                className={`${styles.entry} ${contractStyles.contractRow}`}
-                                aria-label={`Open ${contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}`}
-                                onClick={() => onOpenContract(chainId, String(rowKey(row)))}
-                            >
-                                {renderRow(row)}
-                            </Button>
-                        ))
-                    )}
+                    {state.rows.map((row, i) => (
+                        <Button
+                            key={String(rowKey(row)) + ':' + i}
+                            type="button"
+                            className={`${styles.entry} ${contractStyles.contractRow}`}
+                            aria-label={`Open ${contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}`}
+                            onClick={() => onOpenContract(chainId, String(rowKey(row)))}
+                        >
+                            {renderRow(row)}
+                        </Button>
+                    ))}
                 </>
             )}
         </section>

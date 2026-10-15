@@ -1,0 +1,59 @@
+.panel {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.form,
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.entry {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.active {
+    color: var(--xc-success, var(--xc-text));
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.compactSelect {
+    width: auto;
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
+}
+
+.compactSelect:disabled {
+    cursor: not-allowed;
+}
+
+.descriptor {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+}
+
+.startAction {
+    align-self: flex-start;
+}

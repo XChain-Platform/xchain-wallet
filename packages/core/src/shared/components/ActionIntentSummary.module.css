@@ -23,14 +23,18 @@
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
     font-size: var(--xc-text-sm);
 }
 
 .row {
     display: grid;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    column-gap: 0;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+}
+
+.row + .row {
+    border-top: var(--xc-table-row-divider);
 }
 
 .row dt {
@@ -43,39 +47,29 @@
     margin: 0;
     min-width: 0;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
     font-weight: 600;
-}
-
-.warnings {
-    list-style: none;
-    margin: 0;
-    padding: var(--xc-space-2);
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    background: var(--xc-warning-bg);
-    color: var(--xc-warning-text);
-    border-inline-start: 3px solid var(--xc-warning);
-    border-radius: var(--xc-radius-sm);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
 }
 
 .deltas {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
 }
 
 .delta {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
-    gap: var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    column-gap: 0;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+}
+
+.delta + .delta {
+    border-top: var(--xc-table-row-divider);
 }
 
 .deltaTick {
@@ -88,8 +82,11 @@
     font-family: var(--xc-font-mono);
     min-width: 0;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
 /* "could not be simulated" notes: never render as a confident number. */
@@ -99,7 +96,9 @@
     color: var(--xc-text-muted);
 }
 
-@media not all and (min-width: 400px) {
+/* Match the confirm page's phone breakpoint so padded 412px viewports stack
+   rows without relying on container-query support. */
+@media (max-width: 480px) {
     .row,
     .delta {
         grid-template-columns: minmax(0, 1fr);
@@ -109,22 +108,5 @@
     .row dd,
     .deltaValues {
         text-align: start;
-    }
-}
-
-/* ConfirmActionModal contains this summary by usable inline size, which also
-   catches padded 412px screens whose content column is narrower than 400px. */
-@supports (container-type: inline-size) {
-    @container not (min-width: 400px) {
-        .row,
-        .delta {
-            grid-template-columns: minmax(0, 1fr);
-            gap: var(--xc-space-1);
-        }
-
-        .row dd,
-        .deltaValues {
-            text-align: start;
-        }
     }
 }

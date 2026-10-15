@@ -20,8 +20,8 @@
 //   2. `composeAdminParams('lock', ...)` builds ISSUE VERSION=3 with
 //      one LOCK_* field per newly-checked flag, never re-sending a flag
 //      already locked on the token.
-//   3. Current lock state is read via useTokenInfo (getToken), scoped to
-//      'lock' as well as 'mint-settings'.
+//   3. Current lock and owner state is read via useTokenInfo (getToken)
+//      before every admin mode composes.
 //   4. Already-locked flags render checked and disabled (cannot be
 //      re-locked or unlocked); still-open flags are check-to-lock.
 //   5. `hasAnyNewLock` / `allLocksSet` gate both the review-step
@@ -110,13 +110,13 @@ assert.ok(
     'lock composer sets one LOCK_* field per checked flag, driven by LOCK_FLAGS (not a hardcoded pair)',
 );
 
-// --- 3. Current lock state via useTokenInfo, scoped to lock + mint-settings
+// --- 3. Current lock and owner state via useTokenInfo -------------------
 
 assert.ok(
-    /useTokenInfo\(\s*\{[^}]*skip:\s*mode !== 'mint-settings' && mode !== 'lock'/s.test(src),
-    "useTokenInfo call is scoped to 'mint-settings' and 'lock' modes",
+    /const assetInfo = useTokenInfo\(\{ chainId, tick: ticker \}\)/.test(src),
+    'every admin mode reads current token state before composing',
 );
-assert.ok(/const tokenLocks = assetInfo\?\.locks \|\| \{\}/.test(src), 'reads the shared tokenLocks object off assetInfo.locks');
+assert.ok(/const tokenLocks = currentAssetInfo\?\.locks \|\| \{\}/.test(src), 'reads the shared tokenLocks object for the current selection');
 
 // --- 4. Already-locked disabling + check-to-lock ------------------------
 

@@ -26,7 +26,11 @@
 // not survive. Both are plain JSON values, so they do.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
+
+const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
 /**
  * Most addresses one batch request may carry.
@@ -193,16 +197,77 @@ export function tokensFromBalances(balResp) {
         .filter((t) => t.tick);
 }
 
-// Human-scale decimal string -> atomic-unit integer string, BigInt-exact
-// (same conversion nativeFromAddress applies at fixed 8-decimal scale).
-// Fractional digits beyond `decimals` are truncated; anything that isn't a
-// plain non-negative decimal returns null so the caller can fall back.
+// Human-scale decimal string -> atomic-unit integer string, BigInt-exact.
+// Explorer aggregates can carry more fractional places than the asset allows,
+// so the boundary rounds half away from zero before applying the atomic scale.
 function atomicFromHumanAmount(amount, decimals) {
-    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(amount).trim());
-    if (!m) return null;
-    const d = Number.isFinite(decimals) && decimals > 0 ? Math.floor(decimals) : 0;
-    const frac = (m[2] || '').slice(0, d).padEnd(d, '0');
-    return (BigInt(m[1]) * 10n ** BigInt(d) + BigInt(frac || '0')).toString();
+    const scale = Number(decimals);
+    if (!Number.isInteger(scale) || scale < 0 || scale > 100) return null;
+    const rounded = roundDecimalString(amount, scale);
+    if (rounded === null) return null;
+    const atomic = decimalToBaseUnits(rounded, scale);
+    return atomic === null ? null : atomic.toString();
+}
+
+function subtractAtomic(quantity, debit) {
+    try {
+        const remaining = BigInt(String(quantity)) - BigInt(String(debit));
+        return (remaining > 0n ? remaining : 0n).toString();
+    } catch {
+        return String(quantity);
+    }
+}
+
+/**
+ * Project locally committed sends onto explorer balances that still describe
+ * the pre-send chain state. Terminal and indexed records contribute nothing,
+ * so a failed or dropped send restores the fetched balance and confirmation
+ * cannot subtract the same spend twice.
+ *
+ * @param {Record<string, AddressBalancesEntry[]>} byChain
+ * @param {Array<import('../schemas/pendingTx.js').PendingTx>} pendingTxs
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {Record<string, AddressBalancesEntry[]>}
+ */
+export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
+    if (!byChain || !Array.isArray(pendingTxs)) return byChain;
+    for (const pending of pendingTxs) {
+        if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
+        const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
+        const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
+        for (const entry of entries) {
+            if (entry?.address !== pending.fromAddress || !entry.balances) continue;
+            const native = entry.balances.native;
+            const nativeTick = String(native?.tick || '').toUpperCase();
+            let appliedExactNativeDebit = false;
+            if (native && /^\d+$/.test(String(pending.nativeDebitSats ?? ''))) {
+                native.quantity = subtractAtomic(native.quantity, pending.nativeDebitSats);
+                appliedExactNativeDebit = true;
+            }
+            const debits = Array.isArray(pending.balanceDebits) && pending.balanceDebits.length > 0
+                ? pending.balanceDebits
+                : (pending.tick && pending.amount != null
+                    ? [{ tick: pending.tick, amount: pending.amount }]
+                    : []);
+            for (const debit of debits) {
+                const tick = String(debit?.tick || '').toUpperCase();
+                if (!tick) continue;
+                if (native && tick === nativeTick) {
+                    if (!appliedExactNativeDebit) {
+                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8);
+                        if (atomic !== null) native.quantity = subtractAtomic(native.quantity, atomic);
+                    }
+                    continue;
+                }
+                for (const token of Array.isArray(entry.balances.tokens) ? entry.balances.tokens : []) {
+                    if (String(token?.tick || '').toUpperCase() !== tick) continue;
+                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0);
+                    if (atomic !== null) token.quantity = subtractAtomic(token.quantity, atomic);
+                }
+            }
+        }
+    }
+    return byChain;
 }
 
 // D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger
@@ -405,11 +470,21 @@ export async function addressMempool({ sdkRegistry, chainId, address, opts }) {
 export async function indexerWatermark({ sdkRegistry, chainId }) {
     if (!sdkRegistry) throw new Error('indexerWatermark: sdkRegistry is required');
     if (!chainId) throw new Error('indexerWatermark: chainId is required');
-    const sdk = sdkRegistry.get(chainId);
+    let sdk;
+    try {
+        sdk = sdkRegistry.get(chainId);
+    } catch {
+        return { chainId, watermark: null };
+    }
     if (!sdk || typeof sdk.getStatus !== 'function') {
         return { chainId, watermark: null };
     }
-    const status = await sdk.getStatus();
+    let status;
+    try {
+        status = await sdk.getStatus();
+    } catch {
+        return { chainId, watermark: null };
+    }
     const lastBlock = status && typeof status === 'object' ? status.last_block : null;
     if (!lastBlock || typeof lastBlock !== 'object') {
         return { chainId, watermark: null };
@@ -774,5 +849,11 @@ export async function walletBalances({
             result[cid] = perChunk.flat();
         }),
     );
-    return result;
+    let pendingTxs = [];
+    try {
+        pendingTxs = await vault.pendingTxs.list();
+    } catch {
+        pendingTxs = [];
+    }
+    return applyPendingBalanceDeltas(result, pendingTxs, chainRegistry);
 }

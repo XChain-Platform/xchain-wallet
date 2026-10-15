@@ -8,12 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon, Input } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 const VARIANTS = ['primary', 'secondary', 'ghost', 'danger', 'success'];
 const LABELS = { primary: 'Send', secondary: 'Receive', ghost: 'Cancel', danger: 'Delete', success: 'Approve' };
 const row = { display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' };
+const sizeRow = { ...row, alignItems: 'flex-start' };
 const stack = { display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' };
 const tag = { fontSize: 11, color: 'var(--xc-text-muted)', minWidth: 72 };
 
@@ -24,12 +25,12 @@ export function ButtonsSection() {
             id="buttons"
             title="Buttons"
             tag="CANONICAL · Button"
-            kicker="Every button-shaped control is a <Button>. Five variants, two sizes, a loading state that also disables, and an icon picked from the label unless you pass one."
+            kicker="Every button-shaped control is a <Button>. Five variants, three shared control sizes, a loading state that also disables, and an icon picked from the label unless you pass one."
         >
             <Guidance
-                what={<>Props: <code>variant</code> (<code>primary</code> | <code>secondary</code> | <code>ghost</code> | <code>danger</code> | <code>success</code>), <code>size</code> (<code>md</code> 36px | <code>sm</code> 28px), <code>block</code> (full width), <code>loading</code> (spinner, disabled, <code>aria-busy</code>), <code>disabled</code>, <code>type</code> (default <code>button</code>, so it never submits by accident), <code>icon</code> (a node, or <code>null</code> for no icon).</>}
+                what={<>Props: <code>variant</code> (<code>primary</code> | <code>secondary</code> | <code>ghost</code> | <code>danger</code> | <code>success</code>), <code>size</code> (<code>sm</code> 28px | <code>md</code> 36px | <code>lg</code> 44px, stepping up to 36/44/48px on touch), <code>block</code> (full width), <code>loading</code> (spinner, disabled, <code>aria-busy</code>), <code>disabled</code>, <code>type</code> (default <code>button</code>, so it never submits by accident), <code>icon</code> (a node, or <code>null</code> for no icon). The same module exports <code>Spinner</code>, the loading indicator a busy Button overlays, for inline progress such as a preflight check.</>}
                 when={<>Primary: the one action the screen exists for. Secondary: a second real action. Ghost: back out, cancel, less-used actions. Danger: destroys or spends irreversibly. Success: approve or confirm a pending request.</>}
-                sizing={<>Labels never wrap; shorten a long label instead. In a FormPage action row buttons grow to share the row and wrap onto a new line; put the primary last.</>}
+                sizing={<>The visual heights are <code>sm</code> 28px, <code>md</code> 36px, and <code>lg</code> 44px with a mouse, and 36px, 44px, and 48px on touch. A touch <code>sm</code> button extends its hit area to 44px, so compact buttons need enough space around them. In a FormPage action row buttons grow to share the row and wrap onto a new line; put the primary last.</>}
                 doRule={<>✓ One primary per screen · <code>type="submit"</code> only on the form's submit · <code>loading</code> while the action runs</>}
                 dontRule={<>✗ A styled <code>&lt;div&gt;</code> or <code>&lt;a&gt;</code> as a button · two primaries side by side · a variant name that does not exist (it renders unstyled)</>}
             />
@@ -39,11 +40,18 @@ export function ButtonsSection() {
 <Button variant="danger" size="sm" icon={null}>Delete</Button>
 <Button block variant="secondary" icon={<Icon.ReceiveIcon />}>Receive</Button>`}
             </Markup>
-            <LiveExample label="Variants at both sizes">
+            <LiveExample label="Buttons align with fields at sm, md, and lg">
                 <div style={stack}>
-                    {['md', 'sm'].map((size) => (
-                        <div key={size} style={row}>
+                    {['sm', 'md', 'lg'].map((size) => (
+                        <div key={size} style={sizeRow}>
                             <span style={tag}>size="{size}"</span>
+                            <Input
+                                aria-label={`${size} input`}
+                                size={size}
+                                value={`Input ${size}`}
+                                readOnly
+                                style={{ width: 140 }}
+                            />
                             {VARIANTS.map((v) => (
                                 <Button key={v} variant={v} size={size} onClick={noop}>{LABELS[v]}</Button>
                             ))}

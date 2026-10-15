@@ -20,9 +20,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import React from 'react';
-import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { History, detailActionLabel } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 
 const CHAIN = 'litecoin-regtest';
@@ -135,6 +134,19 @@ function panelIn(region) {
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+
+/**
+ * The decoded output line reading "<amount> to <address>". The address keeps
+ * both ends on screen and the whole value in its title.
+ */
+function outputLine(container, amount, address) {
+    const short = `${address.slice(0, 6)}…${address.slice(-6)}`;
+    return within(container).getAllByRole('listitem').find((li) => (
+        li.textContent.startsWith(`${amount} to ${short}`)
+        && li.querySelector(`[title="${address}"]`)
+    )) || null;
+}
+
 describe('History row labels a pending transaction by state', () => {
     it('never prints the word "unconfirmed" at the user', async () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
@@ -179,7 +191,7 @@ describe('History pending detail branch', () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
         const panel = panelIn(region);
-        expect(within(panel).getByText(en['pending.detail.notValidated'])).toBeTruthy();
+        expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
         expect(within(panel).getByText('Held by the network, waiting for a block')).toBeTruthy();
         // Nothing on the page may claim acceptance before an indexer has
         // seen the block: a mempool row is pre-validation.
@@ -192,8 +204,8 @@ describe('History pending detail branch', () => {
         // one output's amount with another output's destination.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(`+100 XCHAIN to ${OURS}`)).toBeTruthy();
-        expect(within(region).getByText(`+7 SPARE to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(region, `+100 XCHAIN`, OURS)).toBeTruthy();
+        expect(outputLine(region, `+7 SPARE`, THEIRS)).toBeTruthy();
     });
 
     it('shows raw segments for an action it cannot decode, and invents no amounts', async () => {
@@ -217,7 +229,34 @@ describe('History pending detail branch', () => {
             'Taken from this wallet\'s own record of the send. '
             + 'The network hasn\'t reported the transaction data yet.',
         )).toBeTruthy();
-        expect(within(panel).getByText(`-100 XCHAIN to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(panel, `-100 XCHAIN`, THEIRS)).toBeTruthy();
+        expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy address' }))
+            .toHaveTextContent(/^Copy$/);
+    });
+
+    it('names an incoming transfer Receive in the action chip', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        const region = await openRow(view, 'seen');
+        const chip = within(region).getByText('Receive', { selector: 'span[class*="actionTag"]' });
+        expect(chip).toBeTruthy();
+        expect(within(region).queryByText('Send', { selector: 'span[class*="actionTag"]' })).toBeNull();
+    });
+
+    it('names an outgoing transfer Send in the action chip', async () => {
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()] });
+        const region = await openRow(view, 'not-seen');
+        expect(within(region).getByText('Send', { selector: 'span[class*="actionTag"]' })).toBeTruthy();
+        expect(within(panelIn(region)).getByText(/record of the send\./)).toBeTruthy();
+    });
+
+    it('labels the action by direction only for plain transfers', () => {
+        expect(detailActionLabel({ action: 'SEND' }, 'in')).toBe('Receive');
+        expect(detailActionLabel({ action: 'SEND' }, 'out')).toBe('Send');
+        expect(detailActionLabel({ action: 'SEND' }, 'self')).toBe('Send');
+        expect(detailActionLabel({ action: 'SEND' }, null)).toBe('Send');
+        // A non-transfer keeps its protocol name whichever way it points.
+        expect(detailActionLabel({ action: 'ISSUE' }, 'in')).toBe('Issue');
+        expect(detailActionLabel({ action: 'DISPENSER' }, 'out')).toBe('Dispenser');
     });
 
     it('upgrades the open detail in place when the transaction confirms', async () => {
@@ -226,7 +265,7 @@ describe('History pending detail branch', () => {
         // the user is reading changes key underneath them.
         const { messaging, view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(en['pending.detail.notValidated'])).toBeTruthy();
+        expect(within(region).getByText('Pending, not yet validated by the service.')).toBeTruthy();
 
         messaging.getAddressMempool.mockResolvedValue([]);
         messaging.getAddressHistory.mockResolvedValue([confirmedRow(SEEN_HASH)]);
@@ -238,7 +277,7 @@ describe('History pending detail branch', () => {
         window.dispatchEvent(new Event('focus'));
 
         await waitFor(() => {
-            expect(screen.queryByText(en['pending.detail.notValidated'])).toBeNull();
+            expect(screen.queryByText('Pending, not yet validated by the service.')).toBeNull();
         });
         // Same view, still open, now showing the confirmed form.
         const upgraded = screen.getByRole('region', { name: 'Action detail' });
@@ -319,6 +358,25 @@ describe('History offers replacement only where it can still work', () => {
         expect(replaceTx.mock.calls[1][0]).not.toHaveProperty('preview');
     });
 
+    it('plainly reports a send that confirms after fee review', async () => {
+        const replaceTx = vi.fn()
+            .mockResolvedValueOnce({
+                originalFee: '0.00001',
+                replacementFee: '0.00002',
+                feeIncrease: '0.00001',
+            })
+            .mockRejectedValueOnce(new Error('This transaction is already confirmed.'));
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
+        const region = await openRow(view, 'not-seen');
+        fireEvent.click(within(region).getByText('More'));
+        fireEvent.click(within(region).getByText('Speed up'));
+
+        const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
+        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+
+        expect(await within(region).findByText('This transaction is already confirmed.')).toBeTruthy();
+    });
+
     it('withdraws the offer once the transaction has been replaced', async () => {
         const { view } = mountHistory({
             pendingTxs: [staleLocalSend({
@@ -386,7 +444,7 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed on the network')).toBeTruthy();
-        expect(within(panel).getByText(`-30 LTC to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(panel, `-30 LTC`, THEIRS)).toBeTruthy();
         expect(within(panel).queryByText(/has not reported the transaction data yet/)).toBeNull();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
     });

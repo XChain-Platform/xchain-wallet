@@ -51,6 +51,22 @@ export const VIEWPORTS = [
  * one that fails first. The boundary widths still get exercised by the
  * cheap tier assertions, which is where an off-by-one would show.
  */
+/**
+ * LG K51 emulation for specs that walk a whole journey on the phone the
+ * operator tests on: a 360 CSS px wide touch screen at 2x density running
+ * the device's Chrome 102. Spread into `test.use()`; the default chromium
+ * project then runs the spec at this size, so no separate project is needed.
+ */
+export const LG_K51 = {
+    viewport: { width: 360, height: 800 },
+    screen: { width: 360, height: 800 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    userAgent: 'Mozilla/5.0 (Linux; Android 10; LM-K500) AppleWebKit/537.36 '
+        + '(KHTML, like Gecko) Chrome/102.0.5005.125 Mobile Safari/537.36',
+};
+
 export const WALK_VIEWPORTS = VIEWPORTS.filter(
     (vp) => vp.name === 'popup 360' || vp.name === 'tablet 768' || vp.name === 'desktop 1280',
 );
@@ -157,6 +173,9 @@ export function undersizedTargets(page, min = TAP_MIN_PX) {
 
             let box = el.getBoundingClientRect();
             if (box.width === 0 || box.height === 0) continue;
+            // A 1px clipped box is the visually hidden pattern (the skip
+            // link): it becomes a target only once it takes focus.
+            if (box.width <= 1 && box.height <= 1) continue;
 
             // A wrapping <label> activates the control, so it IS the target.
             const label = el.closest('label');

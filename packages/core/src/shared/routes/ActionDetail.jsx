@@ -14,12 +14,13 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { DetailCard } from './History.jsx';
+import { DetailCard, detailTransferDirection } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -78,7 +79,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     // explorer can carry the transaction before it has a
                     // block, and swapping to that would lose the pending
                     // detail for nothing.
-                    if (built && Number(built.blockIndex) > 0) setConfirmed(built);
+                    if (built && Number(built.blockIndex) > 0) {
+                        setConfirmed({ ...built, detailContext: entryProp.detailContext });
+                    }
                 })
                 .catch(() => { /* transient; the next tick tries again */ });
         };
@@ -129,7 +132,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     [pKey]: {
                         loading: false,
                         action: null,
-                        error: err?.message || String(err),
+                        error: userFacingMessage(err, 'Could not load the linked action. Try again.'),
                     },
                 });
             });
@@ -175,16 +178,27 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
 
     const descriptor = entry.chainId ? chainRegistry.get(entry.chainId) : null;
     const iconUrl = descriptor ? branding.chainIconSmallUrl(descriptor.id) : null;
+    const rawActionIndex = String(entry.actionIndex ?? '').trim();
+    const actionIndexLabel = /^\d+$/.test(rawActionIndex)
+        ? BigInt(rawActionIndex).toLocaleString('en-US')
+        : '';
+    // A transfer is named by its direction, as its History row is: the
+    // protocol calls both sides SEND, and an incoming one titled "Send"
+    // reads as money leaving the wallet.
+    const direction = detailTransferDirection(entry, entry.detailContext?.walletAddresses);
+    const titleAction = direction === 'in' ? actionDisplayLabel('RECEIVE')
+        : direction === 'out' || direction === 'self' ? actionDisplayLabel('SEND')
+        : actionDisplayLabel(entry.action);
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel={t('actionDetail.back')}
-            title={isPending
+            title={isPending || !actionIndexLabel
                 // A pending action has no index, and the fallback here
                 // rendered it as "#0", an index that belongs to a real
                 // action on every chain.
-                ? actionDisplayLabel(entry.action)
-                : `${actionDisplayLabel(entry.action)} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
+                ? titleAction
+                : `${titleAction} #${actionIndexLabel}`}
             titleIcon={iconUrl ? (
                 <img
                     src={iconUrl}
@@ -214,8 +228,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 <DetailCard
                     entry={entry}
                     peerCache={peerCache}
-                    chainTip={chainTip}
-                    indexerWatermark={indexerWatermark}
+                    chainTip={chainTip ?? entry.detailContext?.chainTip}
+                    indexerWatermark={indexerWatermark ?? entry.detailContext?.indexerWatermark}
+                    walletAddresses={entry.detailContext?.walletAddresses}
                     walletId={walletId}
                     networkAvailable={browserOnline}
                     onDismissFailed={typeof messaging?.dismissFailedPendingTx === 'function'

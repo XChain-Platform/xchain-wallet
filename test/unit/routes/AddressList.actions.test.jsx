@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { AddressList } from '../../../packages/core/src/shared/routes/AddressList.jsx';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet', format: 'bip39' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
@@ -61,6 +62,20 @@ function mount(messaging, props = {}) {
 afterEach(() => cleanup());
 
 describe('Address detail actions', () => {
+    it('middle-truncates card addresses while keeping the full value available on focus and copy', async () => {
+        mount(messagingWith());
+
+        const address = await screen.findByLabelText(ADDRESS);
+        expect(address).toHaveTextContent(`${ADDRESS.slice(0, 6)}…${ADDRESS.slice(-6)}`);
+
+        const setData = vi.fn();
+        fireEvent.copy(address, { clipboardData: { setData } });
+        expect(setData).toHaveBeenCalledWith('text/plain', ADDRESS);
+
+        fireEvent.focus(address);
+        expect(address).toHaveTextContent(ADDRESS);
+    });
+
     it('shows address fiat balances in the selected currency', async () => {
         mount(messagingWith({
             getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'regtest', fiatCurrency: 'EUR' }),
@@ -89,10 +104,9 @@ describe('Address detail actions', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
 
-        expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
-        const notifications = screen.getByRole('status', { name: 'Notifications' });
-        expect(notifications).toHaveTextContent('Copied');
-        expect(screen.getAllByText('Copied')).toHaveLength(1);
+        expect(await screen.findByRole('button', { name: 'Copied: address' })).toBeInTheDocument();
+        // The button announces its own result in a polite status region.
+        expect(screen.getAllByText('Copied: address')).toHaveLength(2);
     });
 
     it('reports clipboard failure and does not switch the button to Copied', async () => {
@@ -105,7 +119,9 @@ describe('Address detail actions', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
 
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
+        await waitFor(() => expect(
+            screen.getByRole('alert'),
+        ).toHaveTextContent('Copy failed: the clipboard is unavailable.'));
         expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Copied' })).toBeNull();
     });
@@ -147,6 +163,15 @@ describe('Address detail actions', () => {
         await waitFor(() => expect(messaging.setAddressLabel).toHaveBeenCalledWith('addr-1', 'Savings'));
         expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('Savings');
         expect(screen.getByRole('status', { name: 'Notifications' })).toHaveTextContent('Address label saved.');
+    });
+
+    it('titles the detail card once, with no single-tab strip repeating it', async () => {
+        mount(messagingWith());
+        fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
+
+        expect(await screen.findByRole('heading', { name: 'About' })).toBeInTheDocument();
+        expect(screen.queryByRole('tablist')).toBeNull();
+        expect(screen.queryByRole('tab', { name: 'About' })).toBeNull();
     });
 
     it('does not offer to activate the address that is already active', async () => {
@@ -217,6 +242,43 @@ describe('Address detail actions', () => {
         expect(screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` })).toBeInTheDocument();
     });
 
+    it('keeps style-guide search and menu controls available by role', async () => {
+        mount(messagingWith());
+
+        const search = await screen.findByRole('textbox', { name: 'Search addresses' });
+        expect(search).toHaveAttribute('type', 'search');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
+        expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+            'Add address',
+            'Generate at index (advanced)',
+            'Import address',
+        ]);
+    });
+
+    it('renders picker actions with shared list-row interaction styles', async () => {
+        const onSelect = vi.fn();
+        mount(messagingWith(), {
+            pickerMode: true,
+            pickerActions: [{
+                key: 'new',
+                label: 'New dispenser address',
+                sublabel: 'Generate an address',
+                onSelect,
+            }],
+        });
+
+        const action = await screen.findByRole('button', {
+            name: 'New dispenser address Generate an address',
+        });
+        expect(action).toHaveClass(listRowStyles.row, listRowStyles.interactive);
+        expect(action).toHaveAttribute('type', 'button');
+        expect(action).toHaveAttribute('aria-busy', 'false');
+
+        fireEvent.click(action);
+        expect(onSelect).toHaveBeenCalledOnce();
+    });
+
     it('bounds thousands of addresses and keeps the list scroller anchored while expanding', async () => {
         const records = Array.from({ length: 5_000 }, (_, index) => ({
             id: `addr-${index}`,
@@ -251,7 +313,7 @@ describe('Address detail actions', () => {
         expect(screen.queryByRole('button', { name: 'Show more addresses' })).toBeNull();
     });
 
-    it('labels every address row with its chain and non-mainnet kind', async () => {
+    it('uses chain icons without rendering coin or network-kind row text', async () => {
         mount(messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({
                 [CHAIN]: [{ id: 'btc', address: ADDRESS, source: 'hd', role: 'receive' }],
@@ -261,7 +323,12 @@ describe('Address detail actions', () => {
 
         const bitcoinRow = await screen.findByRole('button', { name: `View address ${ADDRESS}` });
         const dogecoinRow = screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` });
-        expect(bitcoinRow).toHaveTextContent(/Bitcoin\s+regtest/i);
-        expect(dogecoinRow).toHaveTextContent(/Dogecoin\s+regtest/i);
+        expect(bitcoinRow).toHaveClass(listRowStyles.row, listRowStyles.interactive);
+        expect(dogecoinRow).toHaveClass(listRowStyles.row, listRowStyles.interactive);
+        expect(bitcoinRow).toHaveAttribute('aria-busy', 'false');
+        expect(bitcoinRow.querySelector('img')).toBeTruthy();
+        expect(dogecoinRow.querySelector('img')).toBeTruthy();
+        expect(bitcoinRow).not.toHaveTextContent(/Bitcoin|regtest|testnet|not mainnet/i);
+        expect(dogecoinRow).not.toHaveTextContent(/Dogecoin|regtest|testnet|not mainnet/i);
     });
 });

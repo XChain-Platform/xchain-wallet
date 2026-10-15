@@ -8,7 +8,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { deepLinkRoute } from '../../../packages/desktop/renderer/deepLinkRoute.js';
+import {
+    claimedDeepLinkRoute,
+    deepLinkRoute,
+    INVALID_DEEP_LINK_MESSAGE,
+} from '../../../packages/desktop/renderer/deepLinkRoute.js';
 import { isAcceptableDeepLink } from '../../../packages/web/src/deeplinks/nativeDeepLinks.js';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -83,8 +87,13 @@ assert.match(
 );
 assert.match(
     webApp,
-    /const route = deepLinkRoute\(raw, APP_CHAIN_REGISTRY\);\s*if \(!route\) return;/,
-    'an unknown path must not replace Home with an unrecognized view',
+    /const route = claimedDeepLinkRoute\(raw, APP_CHAIN_REGISTRY\);[\s\S]*?route\.view === 'deep-link-error'[\s\S]*?setDeepLinkNotice\(route\.message\);[\s\S]*?return;/,
+    'an unknown claimed path must show an error without selecting an unrecognized view',
+);
+assert.deepEqual(
+    claimedDeepLinkRoute('not-a-wallet-link', registry),
+    { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE },
+    'a malformed claimed payload must become the fixed plain error',
 );
 
 console.log('native link router contract smoke OK');

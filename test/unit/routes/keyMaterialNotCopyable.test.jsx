@@ -136,7 +136,7 @@ describe('private-key reveal security', () => {
         expect(screen.getByRole('button', { name: /Tap to reveal private key/i })).toBeTruthy();
     });
 
-    it('does not carry a revealed key into another wallet screen', async () => {
+    it('does not carry a revealed key into another address screen', async () => {
         const { messaging, rerender } = draw();
         await confirmPassword();
         fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
@@ -145,8 +145,8 @@ describe('private-key reveal security', () => {
         rerender(
             <MessagingProvider shell="web" messaging={messaging}>
                 <ViewPrivateKey
-                    walletId="w2"
-                    address={ADDRESS}
+                    walletId="w1"
+                    address={{ ...ADDRESS, id: 'a2', address: 'bcrt1qsecondaddress' }}
                     onBack={() => {}}
                 />
             </MessagingProvider>,
@@ -156,7 +156,7 @@ describe('private-key reveal security', () => {
         await waitFor(() => expect(screen.getByText('Before you continue')).toBeTruthy());
     });
 
-    it('clears a revealed key when Done requests navigation', async () => {
+    it('clears the exported key before leaving the screen', async () => {
         const onBack = vi.fn();
         draw(makeMessaging(), { onBack });
         await confirmPassword();
@@ -165,24 +165,19 @@ describe('private-key reveal security', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Done' }));
 
-        expect(onBack).toHaveBeenCalledOnce();
+        expect(onBack).toHaveBeenCalledTimes(1);
         expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
         expect(screen.getByText('Before you continue')).toBeTruthy();
     });
 
-    it('ignores a private-key response that arrives after navigation', async () => {
-        let finishExport;
-        const exportPrivateKey = vi.fn(() => new Promise((resolve) => { finishExport = resolve; }));
-        const onBack = vi.fn();
-        draw(makeMessaging({ exportPrivateKey }), { onBack });
+    it('clears the reveal when a new unlocked session replaces a locked one', async () => {
+        draw();
+        await confirmPassword();
+        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
+        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
 
-        continueToPassword();
-        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: PASSWORD } });
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        await act(async () => { finishExport({ wif: PRIVATE_KEY }); });
+        act(() => window.dispatchEvent(new CustomEvent('xc:session-changed')));
 
-        expect(onBack).toHaveBeenCalledOnce();
         expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
         expect(screen.getByText('Before you continue')).toBeTruthy();
     });

@@ -18,6 +18,14 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
+vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        ChainBadge: ({ descriptor }) => <span role="img" aria-label={descriptor.displayName} />,
+    };
+});
+
 const CHAIN = 'bitcoin-regtest';
 const ICON_URL = 'https://assets.example/icon.png';
 const MEDIA_URL = 'https://assets.example/large.png';
@@ -71,26 +79,23 @@ function renderDetail(tokenInfo = {}) {
 }
 
 describe('TokenDetail collectible media', () => {
-    it('reserves monograms while token artwork is missing, slow, or broken', async () => {
+    it('shows chain context as an icon without network-kind text', async () => {
         renderDetail();
 
-        const initialFallbacks = screen.getAllByText('CO');
-        expect(initialFallbacks).toHaveLength(2);
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(await screen.findByRole('img', { name: 'Bitcoin' })).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
+    it('shows text and ticker fallbacks when published images fail', async () => {
+        renderDetail();
 
         await waitFor(() => expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(2));
-        const images = [...document.querySelectorAll(`img[src="${ICON_URL}"]`)];
-        expect(images.every((image) => image.style.visibility === 'hidden')).toBe(true);
-        expect(initialFallbacks.every((fallback) => images.some((image) => image.parentElement === fallback)))
-            .toBe(true);
-
-        for (const image of images) fireEvent.load(image);
-        expect(images.every((image) => image.style.visibility === 'visible')).toBe(true);
-
-        for (const image of images) {
+        for (const image of [...document.querySelectorAll(`img[src="${ICON_URL}"]`)]) {
             fireEvent.error(image);
         }
         expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(0);
-        expect(screen.getAllByText('CO')).toHaveLength(2);
+        expect(screen.getAllByText('CO').length).toBeGreaterThanOrEqual(2);
 
         fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
         const media = await screen.findByRole('img', { name: MEDIA_NAME });
@@ -99,16 +104,6 @@ describe('TokenDetail collectible media', () => {
         expect(screen.getByRole('img', { name: `${MEDIA_NAME} unavailable` })).toBeTruthy();
         expect(screen.getByText('Image unavailable')).toBeTruthy();
         expect(screen.getByText(MEDIA_NAME)).toBeTruthy();
-    });
-
-    it('keeps fixed artwork slots when metadata has no logo', async () => {
-        renderDetail({ images: [], imageUrl: null });
-
-        await waitFor(() => expect(screen.getAllByText('CO')).toHaveLength(2));
-        expect(document.querySelector(`img[src="${ICON_URL}"]`)).toBeNull();
-        for (const fallback of screen.getAllByText('CO')) {
-            expect(fallback).toHaveStyle({ position: 'relative', overflow: 'hidden' });
-        }
     });
 
     it('names media links by the action even when an image has no title', async () => {

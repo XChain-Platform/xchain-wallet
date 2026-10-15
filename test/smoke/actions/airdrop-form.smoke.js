@@ -129,8 +129,8 @@ assert.ok(/import \{ useDropZone \} from '\.\.\/hooks\/useDropZone\.js'/.test(sr
     'AirdropForm imports useDropZone for additive drag-and-drop');
 assert.ok(/const recipientsDrop = useDropZone\(\{[\s\S]*?accept:\s*\[[^\]]*'\.csv'[^\]]*'\.txt'[^\]]*\][\s\S]*?onFile:/m.test(src),
     'recipientsDrop accepts .csv/.txt and wires onFile to airdropLib.parseCsv');
-assert.ok(/airdropLib\.parseCsv\(text\)/.test(src),
-    'recipientsDrop reuses airdropLib.parseCsv to fill the recipients textarea');
+assert.ok(/parseCsvEntries\(text\)/.test(src),
+    'recipientsDrop retains CSV source lines while filling the recipients textarea');
 assert.ok(/\{\.\.\.recipientsDrop\.rootProps\}/.test(src),
     'recipientsDrop.rootProps spreads onto the recipients label so the drop target is visible');
 assert.ok(/recipientsDrop\.isDragOver\s*\?\s*'Drop the CSV \/ TXT file here'/.test(src),
@@ -208,8 +208,8 @@ assert.ok(/POLL_INTERVAL_MS\s*=\s*10_?000/.test(src), 'poll interval is 10 secon
 
 // --- 6b. Network-aware wiring at the call sites ---------------
 
-assert.ok(/classifyRecipients\(\s*\n?\s*parts,\s*\n?\s*\{\s*coin: recipientCoin, network: recipientNetwork\s*\}/m.test(src),
-    'AirdropForm passes the ACTIVE chain to classifyRecipients');
+assert.ok(/classifyRecipientEntries\(\s*\n?\s*recipientEntries,\s*\n?\s*\{\s*coin: recipientCoin, network: recipientNetwork\s*\}/m.test(src),
+    'AirdropForm passes the active chain to line-aware recipient classification');
 assert.ok(/const recipientCoin = descriptor\?\.coin/.test(src)
     && /const recipientNetwork = descriptor\?\.networkKind/.test(src),
     'AirdropForm derives the recipient chain from the active chain descriptor');
@@ -221,6 +221,12 @@ assert.ok(/listReconcile \? listReconcile\.storedCount : recipients\.valid\.leng
     'the recipient count that prices step 2 prefers the chain-stored count');
 assert.ok(/recipients\.wrongNetwork\.length > 0/.test(src),
     'AirdropForm calls out wrong-network recipients separately from garbage');
+assert.ok(/useDeferredValue\(pasteText\)/.test(src)
+    && /classifyRecipientEntriesAsync/.test(src)
+    && /recipientsPending/.test(src),
+    'AirdropForm chunks long-list classification and gates review while it catches up');
+assert.ok(/Line \{line\}:/.test(src),
+    'AirdropForm labels invalid recipients with their source lines');
 
 // --- 7. Core flow guard-rails -----------------------------------------
 

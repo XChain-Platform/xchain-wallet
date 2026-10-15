@@ -14,6 +14,7 @@ import {
     refreshFirmwareManifest,
     resolveActiveFirmwareManifest,
 } from '../../../packages/core/src/flows/firmwareManifestRefresh.js';
+import { DEFAULT_FETCH_TIMEOUT_MS } from '../../../packages/core/src/shared/utils/fetchWithRetry.js';
 
 const manifest = {
     schema: 'firmware-manifest/1',
@@ -43,6 +44,7 @@ describe('refreshFirmwareManifest', () => {
         expect(fetch).toHaveBeenCalledWith('https://example.test/manifest.json', {
             method: 'GET',
             headers: { Accept: 'application/json' },
+            signal: expect.any(AbortSignal),
         });
         expect(verify).toHaveBeenCalledWith(envelope, 'public-key');
         await expect(cache.get(FIRMWARE_MANIFEST_CACHE_KEY)).resolves.toEqual({
@@ -86,6 +88,35 @@ describe('refreshFirmwareManifest', () => {
 
         expect(result).toEqual({ ok: false, reason: 'signature' });
         expect(cache.put).not.toHaveBeenCalled();
+    });
+
+    it('aborts a hung manifest request at the shared fetch timeout', async () => {
+        vi.useFakeTimers();
+        const fetch = vi.fn((_url, { signal }) => new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(
+                Object.assign(new Error('aborted'), { name: 'AbortError' }),
+            ), { once: true });
+        }));
+
+        try {
+            const result = refreshFirmwareManifest({
+                fetch,
+                verify: vi.fn(),
+                cache: { put: vi.fn() },
+                url: 'https://example.test/manifest.json',
+                publicKey: 'public-key',
+            });
+            await vi.advanceTimersByTimeAsync((DEFAULT_FETCH_TIMEOUT_MS * 2) + 1_000);
+
+            await expect(result).resolves.toMatchObject({
+                ok: false,
+                reason: 'network',
+                error: { name: 'NetworkTimeoutError' },
+            });
+            expect(fetch).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 

@@ -74,7 +74,7 @@ function mount({ settings, prefill } = {}) {
 }
 
 const fromField = () => screen.getByLabelText(/^From$/);
-const rbfSwitch = () => screen.getByLabelText('Allow a higher network fee later');
+const rbfSwitch = () => screen.getByRole('switch', { name: 'Allow a higher network fee later' });
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

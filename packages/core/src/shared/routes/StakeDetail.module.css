@@ -12,36 +12,10 @@
     margin: calc(var(--xc-space-2) - var(--xc-space-4)) 0 var(--xc-space-3);
 }
 
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
+.quickActions > button,
+.quickActionMoreWrap > button {
     padding: var(--xc-space-3) var(--xc-space-1);
-    display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-}
-
-.quickAction:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
 }
 
 .quickActionIcon {
@@ -61,7 +35,7 @@
     align-self: stretch;
 }
 
-.quickActionMoreWrap > .quickAction {
+.quickActionMoreWrap > button {
     flex: 1 1 auto;
     width: 100%;
 }
@@ -81,29 +55,8 @@
     flex-direction: column;
 }
 
-.quickActionMoreItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    cursor: pointer;
-}
-
-.quickActionMoreItem:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickActionMoreItem:disabled {
-    color: var(--xc-text-muted);
-    cursor: default;
+.quickActionMoreMenu > button {
+    justify-content: flex-start;
 }
 
 /* Tab strip, shaped like the home tabs. */
@@ -136,36 +89,24 @@
 /* Tab-panel rows (reward events, delegations, positions, slashes):
    one card, hairline dividers. */
 .eventList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
-.eventRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
+.eventList li + li {
     border-top: 1px solid var(--xc-border);
-    font-size: var(--xc-text-sm);
-}
-
-.eventList li:first-child .eventRow {
-    border-top: none;
 }
 
 .eventAmount {
     font-weight: 600;
     min-width: 0;
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .eventMeta {
@@ -180,6 +121,8 @@
     white-space: nowrap;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Slash events read as warnings. */
@@ -188,6 +131,8 @@
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--xc-danger-fg);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Status pill in the hero, tinted per state (mirrors the list chips). */
@@ -222,12 +167,6 @@
     .tabBar {
         gap: var(--xc-space-3);
         overflow-x: auto;
-    }
-
-    .eventRow {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: var(--xc-space-1);
     }
 
     .eventAmount,

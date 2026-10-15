@@ -54,8 +54,8 @@ assert.match(formSrc, /export function SignMessageForm/, 'exports SignMessageFor
 assert.match(formSrc, /messaging\.signMessageRequest/, 'calls messaging.signMessageRequest');
 assert.match(formSrc, /messaging\.getAddressesByChain/, 'loads chain/address map');
 assert.match(formSrc, /<ChainPicker/, 'uses ChainPicker for chain selection');
-assert.match(formSrc, /<select[\s\S]*aria-label="Address"/, 'has address select');
-assert.match(formSrc, /<textarea/, 'has message textarea');
+assert.match(formSrc, /<Select[\s\S]*aria-label="Address"/, 'uses the kit address select');
+assert.match(formSrc, /<Textarea/, 'uses the kit message textarea');
 // slice 5: the password moved ONTO the confirm page (§5.5 message
 // variant) and the form's inline copy is deleted, so the form must NOT ask
 // for it - collecting it twice would be the drift this slice removes.

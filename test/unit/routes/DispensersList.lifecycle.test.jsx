@@ -16,7 +16,7 @@
 // terminal row must not claim tokens are "in escrow".
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispensersList } from '../../../packages/core/src/shared/routes/DispensersList.jsx';
@@ -39,12 +39,12 @@ const ROWS = [
     },
 ];
 
-function mount({ rows = ROWS, lifecycle, tipRead } = {}) {
+function mount({ rows = ROWS, lifecycle, tipRead, getDispensersForSource } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ id: 'a1', address: OWNER, source: 'hd' }],
         }),
-        getDispensersForSource: vi.fn().mockResolvedValue({ data: rows }),
+        getDispensersForSource: getDispensersForSource || vi.fn().mockResolvedValue({ data: rows }),
         ...(lifecycle ? { getDispenserLifecycle: lifecycle } : {}),
         ...(tipRead ? { getChainTipBlockTime: tipRead } : {}),
     };
@@ -67,8 +67,10 @@ afterEach(() => cleanup());
 describe('DispensersList lifecycle badges', () => {
     it('badges each row with its lifecycle state, never the action validity', async () => {
         mount();
-        expect(await screen.findByText('open')).toBeInTheDocument();
-        expect(screen.getByText('cancelled')).toBeInTheDocument();
+        const openRow = await screen.findByRole('button', { name: 'Open JAVIERTEST dispenser #40' });
+        const cancelledRow = screen.getByRole('button', { name: 'Open JAVIERTEST dispenser #31' });
+        expect(within(openRow).getByText('open')).toBeInTheDocument();
+        expect(within(cancelledRow).getByText('cancelled')).toBeInTheDocument();
         expect(screen.queryByText('valid')).not.toBeInTheDocument();
     });
 
@@ -76,6 +78,25 @@ describe('DispensersList lifecycle badges', () => {
         mount();
         expect(await screen.findByText(/48 JAVIERTEST in escrow/)).toBeInTheDocument();
         expect(screen.queryByText(/0 JAVIERTEST in escrow/)).not.toBeInTheDocument();
+    });
+
+    it('refreshes a mounted list so an indexed close updates the status', async () => {
+        vi.useFakeTimers();
+        const closing = { ...ROWS[0], current_status: 'cancelling' };
+        const getDispensersForSource = vi.fn()
+            .mockResolvedValueOnce({ data: [ROWS[0]] })
+            .mockResolvedValue({ data: [closing] });
+        mount({ getDispensersForSource });
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        expect(screen.getByText('open')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(20000);
+        });
+        expect(getDispensersForSource).toHaveBeenCalledTimes(2);
+        expect(screen.getByText('Closing')).toBeInTheDocument();
+        expect(screen.queryByText('open')).not.toBeInTheDocument();
+        vi.useRealTimers();
     });
 });
 

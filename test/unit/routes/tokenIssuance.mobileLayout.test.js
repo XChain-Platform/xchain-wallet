@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
+const readSource = (path) => readFileSync(join(root, path), 'utf8');
 const readCss = (path) => readFileSync(join(root, path), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -40,14 +41,75 @@ const routeStyles = [
     'packages/core/src/shared/routes/IssueTokenForm.module.css',
 ];
 
+const migratedRoutes = [
+    'packages/core/src/shared/routes/TokenWizard.jsx',
+    'packages/core/src/shared/routes/CrossChainSwapForm.jsx',
+    'packages/core/src/shared/routes/CrossChainOrderForm.jsx',
+];
+
 describe('token issuance mobile layout', () => {
+    it.each(migratedRoutes)('%s uses kit controls except documented native checkbox and radio inputs', (path) => {
+        const source = readSource(path);
+        expect(source).not.toMatch(/<(?:button|select|textarea)\b/);
+
+        const nativeInputs = source.match(/<input\b[\s\S]*?\/>/g) || [];
+        for (const input of nativeInputs) {
+            expect(input).toMatch(/type="(?:checkbox|radio)"/);
+        }
+        expect(source.match(/Native (?:checkbox|radio) remains because the UI kit has no/g) || [])
+            .toHaveLength(nativeInputs.length);
+    });
+
+    it('uses shared fields, sections, and result actions for cross-chain authoring', () => {
+        const wizard = readSource(migratedRoutes[0]);
+        const swap = readSource(migratedRoutes[1]);
+        const order = readSource(migratedRoutes[2]);
+
+        expect(wizard).toMatch(/<ListRow[\s\S]*?className={styles\.templateCard}[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/);
+        expect(wizard).toMatch(/<AddressField\s+label="Transfer ownership to \(optional\)"/);
+        expect(wizard).toMatch(/<FormSection\s+title="Locks \(permanent\)"/);
+        expect(wizard).toMatch(/<SectionHeader title="Token issued"/);
+        expect(wizard).toMatch(/<CopyButton value={txid} label="Copy transaction ID"/);
+
+        for (const source of [swap, order]) {
+            expect(source).toMatch(/<AddressField\s+label="Receive at"/);
+            expect(source).toMatch(/<SectionHeader title="Cross-chain (?:swap|order) broadcast"/);
+            expect(source).toMatch(/<CopyButton value={txid} label="Copy transaction ID"/);
+        }
+    });
+
+    it('renders template ListRows as bordered cards without an empty icon gutter', () => {
+        const wizard = readSource(migratedRoutes[0]);
+        const css = readCss(routeStyles[0]);
+        const listRowCss = readCss('packages/core/src/ui/ListRow.module.css');
+
+        expect(wizard).not.toMatch(/<ListRow[\s\S]*?leading=/);
+        expect(ruleBody(css, '.templateCard')).toMatch(/border:\s*1px solid var\(--xc-border-strong\)/);
+        expect(ruleBody(css, '.templateCard')).toMatch(/background:\s*var\(--xc-surface\)/);
+        expect(ruleBody(listRowCss, '.title')).toMatch(/color:\s*var\(--xc-text\)/);
+        expect(ruleBody(listRowCss, '.subtitle')).toMatch(/color:\s*var\(--xc-text-muted\)/);
+    });
+
+    it('keeps template cards one-up on phones and two-up on wide screens', () => {
+        const css = readCss(routeStyles[0]);
+        const wide = mediaBlock(css, '(min-width: 480px)');
+
+        expect(ruleBody(css, '.templateGrid')).toMatch(/grid-template-columns:\s*1fr/);
+        expect(ruleBody(wide, '.templateGrid')).toMatch(
+            /grid-template-columns:\s*repeat\(2, 1fr\)/,
+        );
+    });
+
     it.each(routeStyles)('%s keeps review text inside its grid track', (path) => {
         const css = readCss(path);
         expect(ruleBody(css, '.detailsList')).toMatch(
-            /grid-template-columns:\s*minmax\(0, max-content\)\s+minmax\(0, 1fr\)/,
+            /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/,
         );
         expect(ruleBody(css, '.detailsValue')).toMatch(/min-width:\s*0/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(ruleBody(css, '.detailsValue')).toMatch(/text-align:\s*end/);
+        expect(ruleBody(css, '.detailsValue')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+        expect(css).toContain('border-top: var(--xc-table-row-divider);');
         expect(ruleBody(css, '.summary')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
@@ -77,5 +139,12 @@ describe('token issuance mobile layout', () => {
         expect(ruleBody(css, '.tickItem')).toMatch(/flex-wrap:\s*wrap/);
         expect(ruleBody(css, '.tickItemName')).toMatch(/min-width:\s*0/);
         expect(ruleBody(css, '.tickItemName')).toMatch(/overflow-wrap:\s*anywhere/);
+    });
+});
+
+describe('token wizard template cards', () => {
+    it('starts every card at the top, whatever its neighbour in the row holds', () => {
+        const css = readCss('packages/core/src/shared/routes/TokenWizard.module.css');
+        expect(ruleBody(css, '.templateGrid .templateCard')).toMatch(/align-items:\s*flex-start/);
     });
 });

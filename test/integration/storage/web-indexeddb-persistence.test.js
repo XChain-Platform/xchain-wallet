@@ -405,9 +405,11 @@ describe('web vault persistence: kdfParams in localStorage', () => {
         expect(await new WebMetaBackend().load()).toBeNull();
     });
 
-    it('falls back to absent metadata when the stored JSON is corrupt', async () => {
+    it('refuses corrupt metadata instead of reading it as no wallet', async () => {
+        // The IndexedDB ciphertext may still need these exact KDF parameters,
+        // so malformed metadata surfaces as corruption rather than absence.
         globalThis.localStorage.setItem(DEFAULT_META_KEY, '{not json');
-        await expect(new WebMetaBackend().load()).resolves.toBeNull();
+        await expect(new WebMetaBackend().load()).rejects.toMatchObject({ name: 'VaultCorruptError' });
     });
 
     it('clears the metadata', async () => {
@@ -417,14 +419,14 @@ describe('web vault persistence: kdfParams in localStorage', () => {
         expect(await meta.load()).toBeNull();
     });
 
-    it('falls back to absent metadata when there is no localStorage', async () => {
+    it('reports metadata storage as unavailable when there is no localStorage', async () => {
         const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
         Object.defineProperty(globalThis, 'localStorage', {
             value: undefined,
             configurable: true,
         });
         try {
-            await expect(new WebMetaBackend().load()).resolves.toBeNull();
+            await expect(new WebMetaBackend().load()).rejects.toMatchObject({ name: 'VaultUnavailableError' });
         } finally {
             if (original) Object.defineProperty(globalThis, 'localStorage', original);
             else delete globalThis.localStorage;

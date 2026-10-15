@@ -23,6 +23,7 @@ import {
     AddressText,
     EmptyState,
     ListPage,
+    ListRow,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -47,7 +48,10 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
 
     useEffect(() => {
         let cancelled = false;
-        messaging.listCoSignerAccounts({ walletId })
+        setAccounts(null);
+        setError(null);
+        Promise.resolve()
+            .then(() => messaging.listCoSignerAccounts({ walletId }))
             .then((list) => { if (!cancelled) setAccounts(Array.isArray(list) ? list : []); })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load agent accounts.'); });
         return () => { cancelled = true; };
@@ -63,18 +67,19 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
 
     return wrap(
         <ListPage
-            intro={(
-                <>
-                    Agent accounts let an automated agent share a 2-of-2 address with
-                    this wallet. This wallet signs each request automatically when it
-                    fits the policy you set, and asks you to approve it. Bitcoin-only
-                    at launch.
-                </>
-            )}
             toolbar={accounts.length > 0
                 ? <Button variant="primary" onClick={onProvision}>New agent account</Button>
                 : null}
         >
+            {accounts.length > 0 ? (
+                <details>
+                    <summary>How agent accounts work</summary>
+                    <p className={styles.hint}>
+                        An automated agent shares a 2-of-2 address with this wallet. Requests that fit your policy
+                        are signed after your approval.
+                    </p>
+                </details>
+            ) : null}
             {accounts.length === 0 ? (
                 <EmptyState
                     title="No agent accounts yet"
@@ -88,37 +93,23 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                         const descriptor = chainRegistry.get(a.chainId);
                         return (
                             <li key={a.id} style={{ marginBottom: 'var(--xc-space-2)' }}>
-                                <button
+                                <ListRow
                                     type="button"
                                     onClick={() => onOpen(a.id)}
-                                    style={{
-                                        display: 'flex',
-                                        width: '100%',
-                                        gap: 'var(--xc-space-2)',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        padding: 'var(--xc-space-3)',
-                                        border: '1px solid var(--xc-border)',
-                                        borderRadius: 'var(--xc-radius-md)',
-                                        background: 'var(--xc-surface-raised)',
-                                        cursor: 'pointer',
-                                        textAlign: 'left',
-                                    }}
-                                >
-                                    <span style={{ minWidth: 0 }}>
-                                        <strong style={{ display: 'block' }}>{a.name}</strong>
-                                        <AddressText address={a.aggregateAddress} truncate />
-                                    </span>
-                                    <span style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexShrink: 0 }}>
-                                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-                                        <span style={{
-                                            fontSize: '0.8em',
-                                            color: a.enabled ? 'var(--xc-success, green)' : 'var(--xc-text-muted)',
-                                        }}>
-                                            {a.enabled ? 'Active' : 'Disabled'}
+                                    title={a.name}
+                                    subtitle={<AddressText address={a.aggregateAddress} truncate />}
+                                    trailing={(
+                                        <span style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexShrink: 0 }}>
+                                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
+                                            <span style={{
+                                                fontSize: '0.8em',
+                                                color: a.enabled ? 'var(--xc-success, green)' : 'var(--xc-text-muted)',
+                                            }}>
+                                                {a.enabled ? 'Active' : 'Disabled'}
+                                            </span>
                                         </span>
-                                    </span>
-                                </button>
+                                    )}
+                                />
                             </li>
                         );
                     })}

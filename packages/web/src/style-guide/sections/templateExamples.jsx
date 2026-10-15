@@ -20,11 +20,26 @@ import styles from './templateExamples.module.css';
 
 const noop = () => {};
 
+const GUTTER_GUIDE_STYLE = {
+    /* safe-area-backdrop: a content-free overlay that only draws the gutter lines. */
+    position: 'fixed',
+    insetBlock: 0,
+    insetInline: 'var(--xc-page-gutter)',
+    borderInline: '1px solid var(--xc-accent-primary)',
+    pointerEvents: 'none',
+    zIndex: 'var(--xc-z-sticky)',
+};
+
+function PageGutterGuide() {
+    return <div data-page-gutter-guide aria-hidden="true" style={GUTTER_GUIDE_STYLE} />;
+}
+
 /** A one-section form: Verify signature, as the app renders it. */
 export function ExampleFormScreen({ withError = false }) {
     const [address, setAddress] = useState('');
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Verify signature" />}>
+            <PageGutterGuide />
             <FormPage
                 label="Verify signature"
                 onSubmit={(e) => e.preventDefault()}
@@ -55,6 +70,7 @@ export function ExampleFormScreen({ withError = false }) {
 export function ExampleSectionedFormScreen() {
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Issue token" />}>
+            <PageGutterGuide />
             <FormPage
                 sectioned
                 label="Issue token"
@@ -96,13 +112,14 @@ const ROWS = [
 export function ExampleListScreen() {
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Payments due" />}>
+            <PageGutterGuide />
             <ListPage
                 intro="Coin payments your matched DEX orders are waiting on."
                 toolbar={(
                     <>
                         <input type="search" className={styles.search} aria-label="Search payments" placeholder="Search" />
-                        <select className={styles.select} aria-label="Filter by chain" defaultValue="all">
-                            <option value="all">All chains</option>
+                        <select className={styles.select} aria-label="Filter by network" defaultValue="all">
+                            <option value="all">All networks</option>
                             <option value="btc">Bitcoin</option>
                         </select>
                         <Button size="sm" variant="secondary" onClick={noop}>Refresh</Button>
@@ -139,11 +156,12 @@ export function ExampleListScreen() {
 export function ExampleEmptyScreen() {
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Governance" />}>
+            <PageGutterGuide />
             <ListPage>
                 <EmptyState
                     icon={<Icon.HandshakeIcon />}
                     title="No polls yet"
-                    body="Create the first poll on this chain."
+                    body="Create the first poll on this network."
                     actionLabel="Create poll"
                     onAction={noop}
                 />

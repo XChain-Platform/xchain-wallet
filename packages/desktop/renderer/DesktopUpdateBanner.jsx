@@ -34,11 +34,24 @@
 // getting that wrong silences the next one too.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import { t } from '../../core/src/i18n/index.js';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+// A floating card over the current page, with side margins, rather than a
+// full-width bar that pushes the scroll area down.
 const WRAP = {
+    position: 'fixed',
+    // Fixed content does not inherit the body's safe-area padding, so each
+    // logical inset is the largest of the app's page gutter and the physical
+    // safe-area margins.
+    insetBlockStart: 'max(var(--xc-page-top), env(safe-area-inset-top, 0px))',
+    insetInline: 'max(var(--xc-page-gutter), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))',
+    zIndex: 'var(--xc-z-modal)',
+    maxInlineSize: '480px',
+    margin: '0 auto',
+    boxShadow: 'var(--xc-shadow-popover)',
     display: 'flex',
     alignItems: 'flex-start',
     gap: 'var(--xc-space-2)',
@@ -50,14 +63,6 @@ const WRAP = {
     color: 'var(--xc-text)',
 };
 
-const LINK_BUTTON = {
-    background: 'none',
-    border: 'none',
-    color: 'var(--xc-text-muted)',
-    cursor: 'pointer',
-    fontSize: 'var(--xc-text-sm)',
-};
-
 /**
  * @returns {{ onEvent: (cb: (e: any) => void) => () => void, install: (action?: string) => Promise<any> } | null}
  */
@@ -67,11 +72,14 @@ function updaterBridge() {
 }
 
 export function DesktopUpdateBanner() {
-    // 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'verifying' | 'ready' | 'restart-blocked' | 'error'
+    // 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'verifying' | 'ready' | 'restart-blocked' | 'install-failed' | 'error'
     const [state, setState] = useState('idle');
     const [version, setVersion] = useState(/** @type {string | null} */ (null));
     const [progress, setProgress] = useState(/** @type {number | null} */ (null));
     const [dismissed, setDismissed] = useState(false);
+    // Why a verified update failed to install: 'read-only' | 'permission' | null.
+    // Main sends one of a fixed set of words and anything else is ignored.
+    const [installCause, setInstallCause] = useState(/** @type {string | null} */ (null));
     const operationInProgress = useRef(/** @type {null | 'check' | 'download' | 'restart'} */ (null));
     const retryAction = useRef(/** @type {'check' | 'download' | 'restart'} */ ('check'));
 
@@ -171,8 +179,20 @@ export function DesktopUpdateBanner() {
             .then((result) => {
                 operationInProgress.current = null;
                 if (result?.ok) return;
-                if (action === 'restart' && result?.retryable) setState('restart-blocked');
-                else setState('error');
+                if (action === 'restart') {
+                    const cause = result?.cause;
+                    if (cause === 'read-only' || cause === 'permission') {
+                        setInstallCause(cause);
+                        setState('install-failed');
+                        return;
+                    }
+                    setInstallCause(null);
+                    if (result?.retryable) {
+                        setState('restart-blocked');
+                        return;
+                    }
+                }
+                setState('error');
             })
             .catch(() => {
                 operationInProgress.current = null;
@@ -203,6 +223,15 @@ export function DesktopUpdateBanner() {
                 {state === 'restart-blocked' ? (
                     t('desktopUpdate.restartBlocked')
                 ) : null}
+                {state === 'install-failed' ? (
+                    installCause === 'read-only'
+                        ? 'The update was verified but could not be installed because XChain Wallet is '
+                          + 'running from a read-only location. Move the app to your Applications or '
+                          + 'programs folder, open it from there, and try again.'
+                        : 'The update was verified but could not be installed because this account '
+                          + 'does not have permission to replace the app. Run it from a location you '
+                          + 'can write to, or ask an administrator, and try again.'
+                ) : null}
                 {state === 'error' && retryAction.current === 'check' ? (
                     t('desktopUpdate.checkError')
                 ) : null}
@@ -211,29 +240,35 @@ export function DesktopUpdateBanner() {
                 ) : null}
             </div>
             {state === 'available' ? (
-                <button type="button" onClick={() => runAction('download')} style={LINK_BUTTON}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('download')}>
                     {t('desktopUpdate.download')}
-                </button>
+                </Button>
             ) : null}
             {state === 'ready' || state === 'restart-blocked' ? (
-                <button type="button" onClick={() => runAction('restart')} style={LINK_BUTTON}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
                     {t('desktopUpdate.restart')}
-                </button>
+                </Button>
+            ) : null}
+            {state === 'install-failed' && installCause !== 'read-only' ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
+                    {t('desktopUpdate.retry')}
+                </Button>
             ) : null}
             {state === 'error' ? (
-                <button type="button" onClick={() => runAction(retryAction.current)} style={LINK_BUTTON}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction(retryAction.current)}>
                     {t('desktopUpdate.retry')}
-                </button>
+                </Button>
             ) : null}
             {['checking', 'downloading', 'verifying'].includes(state) ? null : (
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setDismissed(true)}
                     aria-label={t('desktopUpdate.dismissLabel')}
-                    style={LINK_BUTTON}
                 >
                     {t('desktopUpdate.dismiss')}
-                </button>
+                </Button>
             )}
         </div>
     );

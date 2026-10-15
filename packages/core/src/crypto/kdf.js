@@ -122,7 +122,14 @@ export function validateKdfParams(params) {
  * @returns {Uint8Array}
  */
 export function deriveMasterKey(password, params) {
+    assertPassword(password);
     return deriveWithJs(password, checkedSalt(params), params);
+}
+
+function assertPassword(password) {
+    if (typeof password !== 'string') {
+        throw new TypeError('kdf: password must be a string');
+    }
 }
 
 /** Validate params (the DoS ceilings) and return the decoded salt bytes. */
@@ -246,7 +253,10 @@ function nativeVerified(provider) {
 async function verifiedNative() {
     const provider = nativeArgon2id;
     if (provider === null) return null;
-    return (await nativeVerified(provider)) ? provider : null;
+    const verified = await nativeVerified(provider);
+    // Registration can change while the asynchronous check runs. Do not send
+    // a wallet password to a provider after its lifecycle ends.
+    return verified && nativeArgon2id === provider ? provider : null;
 }
 
 /**
@@ -261,8 +271,9 @@ async function verifiedNative() {
  * @returns {Promise<Uint8Array>}
  */
 export async function deriveMasterKeyAsync(password, params) {
+    assertPassword(password);
     const salt = checkedSalt(params);
-    const provider = typeof password === 'string' ? await verifiedNative() : null;
+    const provider = await verifiedNative();
     if (provider !== null) {
         const key = await callNative(provider, {
             password,

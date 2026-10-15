@@ -14,9 +14,13 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, act as domAct, fireEvent, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+
+const pickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
 
 afterEach(() => cleanup());
 
@@ -41,31 +45,31 @@ async function mountWith(accounts, overrides = {}) {
     return utils;
 }
 
-/** The row button whose title contains `name`. */
-function rowFor(container, name) {
-    return Array.from(container.querySelectorAll('button'))
-        .find((b) => (b.textContent || '').includes(name));
+/** The row button whose accessible name starts with `name`. */
+function rowFor(name) {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return screen.getByRole('button', { name: new RegExp(`^${escapedName}`) });
 }
 
 describe('AccountPicker row subtitle', () => {
     it('shows an unnamed account by its one-based name with no index subtitle', async () => {
-        const { container } = await mountWith([{ id: 'a1', index: 0, name: '' }]);
-        const row = rowFor(container, 'Account 1');
+        await mountWith([{ id: 'a1', index: 0, name: '' }]);
+        const row = rowFor('Account 1');
         expect(row).toBeTruthy();
         expect(row.textContent).not.toMatch(/BIP44|index|Account 0/i);
     });
 
     it('keeps the numbered name under a custom name', async () => {
-        const { container } = await mountWith([{ id: 'a3', index: 2, name: 'Savings' }]);
-        const row = rowFor(container, 'Savings');
+        await mountWith([{ id: 'a3', index: 2, name: 'Savings' }]);
+        const row = rowFor('Savings');
         expect(row.textContent).toContain('Account 3');
         expect(row.children).toHaveLength(1);
         expect(row.firstElementChild.children).toHaveLength(2);
     });
 
     it('does not repeat a name that already equals the numbered one', async () => {
-        const { container } = await mountWith([{ id: 'a2', index: 1, name: 'Account 2' }]);
-        const row = rowFor(container, 'Account 2');
+        await mountWith([{ id: 'a2', index: 1, name: 'Account 2' }]);
+        const row = rowFor('Account 2');
         expect(row.textContent.match(/Account 2/g)).toHaveLength(1);
     });
 
@@ -82,26 +86,28 @@ describe('AccountPicker row subtitle', () => {
         const onRenameAccount = vi.fn();
         await mountWith([account], { onRenameAccount });
 
-        fireEvent.click(document.querySelector('[aria-label="Rename Savings"]'));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename Savings' }));
 
         expect(onRenameAccount).toHaveBeenCalledWith(account);
     });
 
-    it('marks the current account and puts add and manage actions in the footer', async () => {
+    it('marks the current account and pins add and manage actions in the footer, as Wallets does', async () => {
         const account = { id: 'a3', index: 2, name: 'Savings' };
         const onAddAccount = vi.fn();
         const onRenameAccount = vi.fn();
-        const { container } = await mountWith([account], {
+        await mountWith([account], {
             activeAccountId: account.id,
             onAddAccount,
             onRenameAccount,
         });
 
-        expect(rowFor(container, account.name)).toHaveAttribute('aria-current', 'true');
+        expect(rowFor(account.name)).toHaveAttribute('aria-current', 'true');
         const add = screen.getByRole('button', { name: 'Add account' });
-        const manage = screen.getByRole('button', { name: 'Manage account' });
+        const manage = screen.getByRole('button', { name: 'Manage' });
         expect(add.closest('footer')).toBeTruthy();
         expect(manage.closest('footer')).toBeTruthy();
+        expect(add.closest('main')).toBeNull();
+        expect(pickerCss).toMatch(/\.footerActions button > span:last-child\s*{[^}]*white-space:\s*nowrap/);
 
         fireEvent.click(add);
         fireEvent.click(manage);
@@ -109,15 +115,27 @@ describe('AccountPicker row subtitle', () => {
         expect(onRenameAccount).toHaveBeenCalledWith(account);
     });
 
+    it('renders the row edit affordance as an icon-only kit button', async () => {
+        await mountWith(
+            [{ id: 'a1', index: 0, name: 'Savings' }],
+            { onRenameAccount: () => {} },
+        );
+
+        const rename = screen.getByRole('button', { name: 'Rename Savings' });
+        expect(rename).toHaveClass(buttonStyles.iconOnly);
+        expect(rename.querySelector('svg[data-xc-icon]')).toBeInTheDocument();
+        expect(rename.querySelectorAll(':scope > span')).toHaveLength(1);
+    });
+
     it('switches an inactive account and returns through the supplied route', async () => {
         const onSwitch = vi.fn();
         const onBack = vi.fn();
-        const { container } = await mountWith(
+        await mountWith(
             [{ id: 'a2', index: 1, name: 'Savings' }],
             { activeAccountId: 'a1', onSwitch, onBack },
         );
 
-        fireEvent.click(rowFor(container, 'Savings'));
+        fireEvent.click(rowFor('Savings'));
 
         expect(onSwitch).toHaveBeenCalledWith('a2');
         expect(onBack).toHaveBeenCalledOnce();
@@ -127,13 +145,13 @@ describe('AccountPicker row subtitle', () => {
         const account = { id: 'a2', index: 1, name: 'Savings' };
         const onSwitch = vi.fn();
         const onBack = vi.fn();
-        const { container } = await mountWith([account], {
+        await mountWith([account], {
             activeAccountId: account.id,
             onSwitch,
             onBack,
         });
 
-        fireEvent.click(rowFor(container, account.name));
+        fireEvent.click(rowFor(account.name));
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onSwitch).not.toHaveBeenCalled();

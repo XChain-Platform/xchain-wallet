@@ -364,18 +364,24 @@ export function registerBridgeHandlers(host, opts = {}) {
     // rejected promise, which is why the page shim can NOT blanket-wrap every
     // method in the result envelope.
     register('bridge.getAccounts', async (req, deps) => {
-        const site = await requireSite(deps.vault, req);
-        return accountRecordsFor(deps.vault, site.permissions.accounts);
+        const site = await requireReadSite(deps, req);
+        const accounts = await deps.vault.accounts.list();
+        const current = await requireCurrentReadSite(deps, req, site.id);
+        return accountRecordsFrom(accounts, current.permissions.accounts);
     });
 
     register('bridge.getAddresses', async (req, deps) => {
-        const site = await requireSite(deps.vault, req);
+        const site = await requireReadSite(deps, req);
         assertChainPermitted(site, req.chainId);
         const descriptor = deps.chainRegistry.get(req.chainId);
         if (!descriptor) throw bridgeError('UNKNOWN_CHAIN', req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
 
         const all = await deps.vault.addresses.list();
-        const accountIds = new Set(site.permissions.accounts);
+        const current = await requireCurrentReadSite(deps, req, site.id);
+        assertChainPermitted(current, req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
+        const accountIds = new Set(current.permissions.accounts);
         const filtered = all.filter(
             (a) =>
                 a.chain === descriptor.coin &&
@@ -394,8 +400,9 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     register('bridge.getBalances', async (req, deps) => {
-        const site = await requireSite(deps.vault, req);
+        const site = await requireReadSite(deps, req);
         assertChainPermitted(site, req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
         // Ensure the requested address is one the site is permitted to see.
         const ok = await siteHasAddress(deps.vault, site, req.chainId, req.address, deps.chainRegistry);
         if (!ok) throw bridgeError('ADDRESS_NOT_PERMITTED', req.address);
@@ -404,12 +411,25 @@ export function registerBridgeHandlers(host, opts = {}) {
         // Passing that straight through handed dApps an object where the
         // published type says array, with none of the seven Balance fields
         // under the names the type gives them.
-        return balanceRecordsFrom(await addressBalances({
+        const balances = await addressBalances({
             sdkRegistry: deps.sdkRegistry,
             chainRegistry: deps.chainRegistry,
             chainId: req.chainId,
             address: req.address,
-        }));
+        });
+        const current = await requireCurrentReadSite(deps, req, site.id);
+        assertChainPermitted(current, req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
+        if (!await siteHasAddress(
+            deps.vault,
+            current,
+            req.chainId,
+            req.address,
+            deps.chainRegistry,
+        )) {
+            throw bridgeError('ADDRESS_NOT_PERMITTED', req.address);
+        }
+        return balanceRecordsFrom(balances);
     });
 
     register('bridge.getSupportedChains', async (req, deps) => {
@@ -440,8 +460,9 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     register('bridge.getActiveChains', async (req, deps) => {
-        await requireSite(deps.vault, req);
+        const site = await requireReadSite(deps, req);
         const settings = await deps.vault.settings.get();
+        await requireCurrentReadSite(deps, req, site.id);
         if (!settings) return [];
         // "Active" = any chain that has seeded per-chain state (feeStrategy,
         // ADS, etc). Matches what seedSettings populates at createWallet.
@@ -499,19 +520,23 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signMessage');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        const signWalletId = decision.walletId ?? walletId;
-        // Seed the cache from this real approval so the NEXT localhost sign
-        // can auto-sign. Inert unless auto-sign is enabled.
-        rememberSignPassword(req.origin, settings, signWalletId, decision);
         const result = await invokeSignMessage(deps, {
             ...req,
-            walletId: signWalletId,
+            // The vault record owns the signing key. The approval window's
+            // wallet picker is presentation state and cannot redirect a
+            // request for one address to another wallet.
+            walletId,
             password: decision.password,
         });
+        const success = signMessageSuccess(req, result);
+        // Cache credentials and widen permissions only after signing produced
+        // a valid result. A bad password or signer failure must leave no state
+        // that changes how the next request is authorized.
+        rememberSignPassword(req.origin, settings, walletId, decision);
         if (!site.permissions.canSignMessage && decision.savePermanent) {
             await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
         }
-        return signMessageSuccess(req, result);
+        return success;
     });
 
     register('bridge.signAction', async (req, deps) => {
@@ -553,21 +578,24 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        const signingPaths = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
+        const resolved = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
         const signed = await signPsbtFlow({
             vault: deps.vault,
-            walletId: decision.walletId,
+            walletId: resolved.walletId,
             password: decision.password,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
             psbtHex: req.psbtHex,
-            signingPaths,
+            signingPaths: resolved.signingPaths,
         });
         // SignPsbtSuccess: signedPsbtHex always, txHex only when the wallet
         // finalized, txid only when it broadcast. Copied field by field rather
         // than spread so an internal field the signer grows later cannot leak
         // to a page by default.
+        if (typeof signed?.signedPsbtHex !== 'string' || signed.signedPsbtHex.length === 0) {
+            throw bridgeError('UNREACHABLE', 'signPsbt returned no signed PSBT');
+        }
         return {
             ok: true,
             signedPsbtHex: signed?.signedPsbtHex,
@@ -633,15 +661,16 @@ export function registerBridgeHandlers(host, opts = {}) {
                 inputs: req.inputs,
             },
         });
+        if (!validCoSignOutcome(outcome)) {
+            throw bridgeError('UNREACHABLE', 'coSign returned an invalid outcome');
+        }
         // Both CoSignApprovedSuccess and CoSignRefused are `ok: true`: a policy
         // refusal is a well-formed answer to a well-formed request, distinct
         // from a BridgeErrorResult, so the flow's own `approved` flag carries
         // through unchanged and only the missing `ok` is added.
         return {
             ok: true,
-            ...(outcome && typeof outcome === 'object'
-                ? outcome
-                : { approved: false, reason: 'INTERNAL_ERROR' }),
+            ...outcome,
         };
     });
 
@@ -983,25 +1012,26 @@ async function executeSignAction(req, deps, ctx) {
     if (!decision?.approved) throw new UserRejectedError('signAction');
     if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
 
-    // savePermanent is a single-action affordance (the per-action prompt's
-    // "always allow" checkbox). A reused groupDecision (parallel) never offers
-    // it, and a cache-synthesized decision never sets it, so neither can
-    // silently escalate a site to 'always'.
-    if (!preDecision && !fromCache && decision.savePermanent) {
-        await updateSitePermissions(deps.vault, site, {
-            canSignAction: {
-                ...site.permissions.canSignAction,
-                [actionName]: 'always',
-            },
-        }, { events });
-    }
-
-    // Seed the cache from a fresh single-action approval so the next localhost
-    // sign can auto-sign. Skipped for a parallel batch (preDecision) and for a
-    // decision that itself came from the cache. Inert unless auto-sign is on.
-    if (!preDecision && !fromCache && typeof rememberSignPassword === 'function') {
-        rememberSignPassword(req.origin, settings, decision.walletId ?? walletId, decision);
-    }
+    const finish = async (submitted) => {
+        const success = signActionSuccess(req.chainId, submitted);
+        // savePermanent is a single-action affordance. Persist it only after
+        // the approved action returns a valid success, so a signer or broadcast
+        // failure cannot silently authorize the next attempt.
+        if (!preDecision && !fromCache && decision.savePermanent) {
+            await updateSitePermissions(deps.vault, site, {
+                canSignAction: {
+                    ...site.permissions.canSignAction,
+                    [actionName]: 'always',
+                },
+            }, { events });
+        }
+        // The password cache follows the same commit point. A failed unlock
+        // must prompt again rather than replaying a known-bad credential.
+        if (!preDecision && !fromCache && typeof rememberSignPassword === 'function') {
+            rememberSignPassword(req.origin, settings, walletId, decision);
+        }
+        return success;
+    };
 
     // dApp-controlled params spread FIRST, trusted keys after: the approval
     // popup and assertChainPermitted validated req.chainId, so params must
@@ -1017,6 +1047,14 @@ async function executeSignAction(req, deps, ctx) {
     // BroadcastFailedError recovery. Re-applying it after the spread
     // forces every bridge-driven spend to keep tracking on regardless of
     // what the caller sent.
+    //
+    // verifyBuiltTx is trusted for the same reason, and it is what closes the
+    // gap between this approval and the bytes signed. The user approved the
+    // intent above; the PSBT is built afterwards by the encoder service, and
+    // until this flag the flow signed whatever came back. With it the built
+    // PSBT is held to the confirm pipeline's tamper checks (outputs, action
+    // bytes, carrier scripts) against the values approved, and a mismatch is
+    // refused unsigned with the same plain message the in-app confirm shows.
     //
     // The published param vocabulary is not the flow's. bridge-spec's
     // SendActionParams / SweepActionParams carry fromAddress / toAddress /
@@ -1044,14 +1082,15 @@ async function executeSignAction(req, deps, ctx) {
             tick: sendTick,
             amount: sendAmount,
             vault: deps.vault,
-            walletId: decision.walletId ?? walletId,
+            walletId,
             password: decision.password,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
             trackPendingTx: true,
+            verifyBuiltTx: true,
         });
-        return signActionSuccess(req.chainId, submitted);
+        return finish(submitted);
     }
     if (actionName === 'SWEEP') {
         // SweepActionParams' optional single-asset `asset` has no consumer:
@@ -1063,14 +1102,15 @@ async function executeSignAction(req, deps, ctx) {
             from: fromSource,
             to: toAddress,
             vault: deps.vault,
-            walletId: decision.walletId ?? walletId,
+            walletId,
             password: decision.password,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             trackPendingTx: true,
+            verifyBuiltTx: true,
             chainId: req.chainId,
         });
-        return signActionSuccess(req.chainId, submitted);
+        return finish(submitted);
     }
     throw bridgeError('UNREACHABLE', 'supported action fell through');
 }
@@ -1287,6 +1327,9 @@ function connectSuccess(accounts, permissions) {
 
 /** SignMessageSuccess (§43.2). `signedMessage` is the exact bytes signed. */
 function signMessageSuccess(req, result) {
+    if (typeof result?.signature !== 'string' || result.signature.length === 0) {
+        throw bridgeError('UNREACHABLE', 'signMessage returned no signature');
+    }
     return {
         ok: true,
         address: req.address,
@@ -1308,6 +1351,9 @@ function signMessageSuccess(req, result) {
  * bridge-spec now declares the field optional for this reason.
  */
 function signActionSuccess(chainId, submitted) {
+    if (typeof submitted?.txid !== 'string' || submitted.txid.length === 0) {
+        throw bridgeError('UNREACHABLE', 'signAction returned no transaction id');
+    }
     const raw = submitted?.actionIndex ?? submitted?.action_index;
     const actionIndex = Number(raw);
     return {
@@ -1363,6 +1409,10 @@ function balanceRecordsFrom(shape) {
  */
 async function accountRecordsFor(vault, accountIds) {
     const all = await vault.accounts.list();
+    return accountRecordsFrom(all, accountIds);
+}
+
+function accountRecordsFrom(all, accountIds) {
     const ids = new Set(Array.isArray(accountIds) ? accountIds : []);
     return (ids.size > 0 ? all.filter((a) => ids.has(a.id)) : all)
         .map((a) => ({ id: a.id, name: a.name }));
@@ -1388,6 +1438,23 @@ async function requireSite(vault, req) {
     return site;
 }
 
+// Reads do not update the site record. A read-side put can race a revocation
+// delete and recreate the grant, so each read instead verifies the same site
+// still exists after its asynchronous vault or network work completes.
+async function requireReadSite(deps, req) {
+    assertOrigin(req);
+    await assertNotBlocked(req, deps);
+    const site = await findConnectedSite(deps.vault, req.origin);
+    if (!site) throw bridgeError('NOT_CONNECTED', req.origin);
+    return site;
+}
+
+async function requireCurrentReadSite(deps, req, siteId) {
+    const site = await requireReadSite(deps, req);
+    if (site.id !== siteId) throw bridgeError('NOT_CONNECTED', req.origin);
+    return site;
+}
+
 async function touchLastUsed(vault, site) {
     await vault.connectedSites.put({
         ...site,
@@ -1400,6 +1467,15 @@ function assertChainPermitted(site, chainId) {
     const chains = site.permissions?.chains ?? [];
     if (chains.length === 0) return;  // empty list = all permitted (per §43.3)
     if (!chains.includes(chainId)) {
+        throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
+    }
+}
+
+async function assertChainOnActiveNetwork(deps, chainId) {
+    const settings = await deps.vault.settings.get().catch(() => null);
+    if (!settings) throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
+    const active = filterChainIdsByActiveNetwork([chainId], settings, deps.chainRegistry);
+    if (!active.includes(chainId)) {
         throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
     }
 }
@@ -1519,10 +1595,23 @@ async function walletIdForAddress(vault, addressOrId) {
     const all = await vault.addresses.list();
     const match = all.find((a) => a.id === addressOrId || a.address === addressOrId);
     if (!match) return undefined;
-    if (match.signerId) return match.signerId;
+    const softwareSource = match.source === undefined
+        || match.source === 'hd' || match.source === 'imported-wif';
+    // A software address's signerId is its wallet id, but an add-mode restore
+    // re-mints the wallet id and leaves signerId naming the source device's
+    // wallet. Trust it only when that wallet is in this vault; otherwise the
+    // account (or the importing wallet) still names the owner.
+    let wallets = null;
+    if (match.signerId) {
+        if (!softwareSource) return match.signerId;
+        wallets = await vault.wallets.list();
+        if (wallets.some((w) => w.id === match.signerId)) return match.signerId;
+    }
     if (!match.accountId) {
-        const wallets = await vault.wallets.list();
-        return wallets[0]?.id;
+        wallets ??= await vault.wallets.list();
+        const importer = wallets.find((w) => Array.isArray(w.importedKeys)
+            && w.importedKeys.some((k) => k?.addressId === match.id));
+        return importer?.id ?? wallets[0]?.id;
     }
     const account = await vault.accounts.get(match.accountId);
     return account?.walletId;
@@ -1619,7 +1708,7 @@ async function resolveBridgeSigningPaths(deps, site, chainId, entries) {
         ? all.filter((a) => a.chain === descriptor.coin && a.network === descriptor.networkKind)
         : [];
     const accountIds = new Set(site?.permissions?.accounts ?? []);
-    return entries.map((entry) => {
+    const resolved = entries.map((entry) => {
         const addr = typeof entry.address === 'string' && entry.address.length > 0
             ? onChain.find((a) => a.address === entry.address) ?? null
             : onChain.find((a) => a.derivationPath === entry.derivationPath) ?? null;
@@ -1629,14 +1718,42 @@ async function resolveBridgeSigningPaths(deps, site, chainId, entries) {
         if (accountIds.size > 0 && !(addr.accountId && accountIds.has(addr.accountId))) {
             throw bridgeError('ADDRESS_NOT_PERMITTED', entry.address ?? entry.derivationPath ?? '');
         }
-        return {
+        return { entry, addr };
+    });
+    const walletIds = new Set((await Promise.all(
+        resolved.map(({ addr }) => walletIdForAddress(deps.vault, addr.id)),
+    )).filter(Boolean));
+    if (walletIds.size !== 1) {
+        throw bridgeError('INVALID_PARAMS', 'signingPaths must resolve to exactly one wallet');
+    }
+    return {
+        walletId: [...walletIds][0],
+        signingPaths: resolved.map(({ entry, addr }) => ({
             inputIndex: entry.inputIndex,
             // The identical mapping the sign-in and signMessage paths use.
             path: addr.derivationPath ?? undefined,
             addressId: addr.derivationPath ? undefined : addr.id,
             ...(entry.sighashType !== undefined ? { sighashType: entry.sighashType } : {}),
-        };
-    });
+        })),
+    };
+}
+
+function validCoSignOutcome(outcome) {
+    if (!outcome || typeof outcome !== 'object' || typeof outcome.approved !== 'boolean') {
+        return false;
+    }
+    if (!outcome.approved) return typeof outcome.reason === 'string' && outcome.reason.length > 0;
+    const single = ['publicNonce', 'sig', 'msg'].every(
+        (field) => typeof outcome[field] === 'string' && outcome[field].length > 0,
+    );
+    const multiple = Array.isArray(outcome.signatures) && outcome.signatures.length > 0
+        && outcome.signatures.every((signature) => (
+            Number.isInteger(signature?.index)
+            && ['publicNonce', 'sig', 'msg'].every(
+                (field) => typeof signature[field] === 'string' && signature[field].length > 0,
+            )
+        ));
+    return single || multiple;
 }
 
 async function invokeSignMessage(deps, req) {

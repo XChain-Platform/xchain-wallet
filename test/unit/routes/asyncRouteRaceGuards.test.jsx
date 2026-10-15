@@ -75,6 +75,32 @@ describe('async route parameter races', () => {
         expect(screen.queryByText('OLD')).toBeNull();
     });
 
+    it('clears the previous wallet watchlist before the next request resolves', async () => {
+        const newRequest = deferred();
+        const messaging = messagingWith({
+            getMarkets: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn(({ walletId }) => (
+                walletId === 'old-wallet'
+                    ? Promise.resolve([{ id: 'old', chainId: CHAIN, tick1: 'BTC', tick2: 'OLD' }])
+                    : newRequest.promise
+            )),
+        });
+        const props = {
+            selectedAsset: { chainId: CHAIN, tick: 'BTC' },
+            onChangeAsset() {},
+            onOpenMarket() {},
+        };
+        const view = render(route(MarketsList, messaging, { ...props, walletId: 'old-wallet' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }));
+        expect(await screen.findByText('OLD')).toBeInTheDocument();
+
+        view.rerender(route(MarketsList, messaging, { ...props, walletId: 'new-wallet' }));
+
+        expect(screen.queryByText('OLD')).toBeNull();
+        expect(screen.getByText('Empty watchlist')).toBeInTheDocument();
+        await act(async () => newRequest.resolve([]));
+    });
+
     it.each([
         ['bets', MyBets, 'bets'],
         ['orders', MyOrdersView, 'getOrdersForAddress'],

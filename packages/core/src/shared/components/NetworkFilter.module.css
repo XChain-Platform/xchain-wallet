@@ -2,41 +2,59 @@
     position: relative;
     box-sizing: border-box;
     width: 100%;
-    min-width: 0;
+    min-width: min(10rem, 100%);
+}
+
+.sm {
+    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
+    --network-filter-font: var(--xc-control-font-sm);
+    --xc-icon-size: var(--xc-icon-sm);
+    --network-filter-icon-size: var(--xc-icon-size);
+}
+
+.md {
+    --network-filter-control-height: var(--xc-control-h-md, 36px);
+    --network-filter-font: var(--xc-control-font-md);
+    --xc-icon-size: var(--xc-icon-md);
+    --network-filter-icon-size: var(--xc-icon-size);
+}
+
+.lg {
+    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
+    --network-filter-font: var(--xc-control-font-lg);
+    --xc-icon-size: var(--xc-icon-md);
+    --network-filter-icon-size: var(--xc-icon-size);
 }
 
 .trigger {
-    appearance: none;
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
-    display: flex;
-    align-items: center;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-control);
-    color: var(--xc-text);
-    cursor: pointer;
     text-align: start;
-    transition: background var(--xc-transition), border-color var(--xc-transition);
 }
 
-.trigger:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-text-muted);
+/* The size classes publish the control height, so a filter beside a field
+   of the same size matches it in height and corner shape. The wrap prefix
+   outranks the kit Chip's own height whatever order the modules load in. */
+.wrap .trigger {
+    height: var(--network-filter-control-height, var(--xc-control-h-sm));
+    border-radius: var(--xc-control-radius);
+    font-size: var(--network-filter-font, var(--xc-control-font-sm));
+    font-weight: 400;
 }
 
-.trigger:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+/* With no filter on, the trigger paints on the field surface like the
+   Network picker and every Select. The pressed fill stays the sign that a
+   filter is on, and the Chip's hover rule still outranks this one. */
+.wrap .idle {
+    background: var(--xc-surface);
 }
 
 .triggerIcon {
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: var(--network-filter-icon-size, var(--xc-icon-md));
+    height: var(--network-filter-icon-size, var(--xc-icon-md));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -47,8 +65,8 @@
 }
 
 .triggerIcon img {
-    width: 20px;
-    height: 20px;
+    width: 100%;
+    height: 100%;
     display: block;
 }
 
@@ -61,22 +79,20 @@
 }
 
 .triggerLabel {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
+    font-weight: inherit;
+    font-size: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.triggerSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
 .triggerCaret {
     flex: 0 0 auto;
     color: var(--xc-text-muted);
-    font-size: 12px;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* ───── Popover ───── */
@@ -127,6 +143,8 @@
     padding: var(--xc-space-1) 0;
     overflow-y: auto;
     flex: 1 1 auto;
+    min-height: 0;
+    overscroll-behavior: contain;
 }
 
 .item {
@@ -161,9 +179,10 @@
 }
 
 .itemIcon {
+    --xc-icon-size: var(--xc-icon-md);
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -174,8 +193,8 @@
 }
 
 .itemIcon img {
-    width: 20px;
-    height: 20px;
+    width: 100%;
+    height: 100%;
     display: block;
 }
 
@@ -188,6 +207,8 @@
 
 .itemTicker {
     flex: 0 0 auto;
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

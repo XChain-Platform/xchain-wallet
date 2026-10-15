@@ -26,14 +26,15 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChainBadge, useReducedMotion } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { defaultRegistry } from '../../registry/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useToast } from './ToastHost.jsx';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import styles from './QueuedBroadcastBanner.module.css';
+import { t } from '../../i18n/index.js';
 
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 /**
  * @param {object} props
@@ -57,14 +58,61 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const prevOverallRef = useRef(/** @type {string | null} */ (null));
     const lastPromptedAtRef = useRef(/** @type {number} */ (0));
     const bannerRef = useRef(/** @type {HTMLElement | null} */ (null));
+    const mountedRef = useRef(false);
+    const currentInputRef = useRef({ messaging, walletId });
+    const refreshRequestRef = useRef(0);
+    const actionRef = useRef(/** @type {object | null} */ (null));
+    const queueWalletRef = useRef(walletId);
+    const normalizedQueueRef = useRef({ source: null, shown: /** @type {any[]} */ ([]) });
+    currentInputRef.current = { messaging, walletId };
+    if (queueWalletRef.current !== walletId) {
+        queueWalletRef.current = walletId;
+        refreshRequestRef.current += 1;
+        normalizedQueueRef.current = { source: null, shown: [] };
+        actionRef.current = null;
+        // React retries this render before commit, so queued sends never cross
+        // the wallet boundary while the replacement list is in flight.
+        setQueue([]);
+        setBusyId(null);
+        setBusyKind(null);
+        setError(null);
+    }
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            refreshRequestRef.current += 1;
+        };
+    }, []);
 
     // Re-list the queue; resolves the list shown, or null when it could not be read.
     const refresh = useCallback(async () => {
         if (!walletId || typeof messaging?.listQueuedBroadcasts !== 'function') return null;
+        const requestId = ++refreshRequestRef.current;
         try {
             const list = await messaging.listQueuedBroadcasts({ walletId });
-            const shown = Array.isArray(list) ? list : [];
-            setQueue(shown);
+            let shown = normalizedQueueRef.current.shown;
+            if (normalizedQueueRef.current.source !== list) {
+                if (Array.isArray(list)) {
+                    const seenIds = new Set();
+                    shown = list.filter((entry) => {
+                        if (seenIds.has(entry?.id)) return false;
+                        seenIds.add(entry?.id);
+                        return true;
+                    });
+                } else {
+                    shown = [];
+                }
+                normalizedQueueRef.current = { source: list, shown };
+            }
+            const current = currentInputRef.current;
+            if (mountedRef.current
+                && current.messaging === messaging
+                && current.walletId === walletId
+                && refreshRequestRef.current === requestId) {
+                setQueue(shown);
+            }
             return shown;
         } catch (_err) {
             // The list endpoint is read-only; failures here surface
@@ -74,12 +122,15 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     }, [messaging, walletId]);
 
     useEffect(() => {
-        refresh();
+        void refresh();
         if (intervalMs > 0) {
-            const id = setInterval(refresh, intervalMs);
-            return () => clearInterval(id);
+            const id = setInterval(() => { void refresh(); }, intervalMs);
+            return () => {
+                clearInterval(id);
+                refreshRequestRef.current += 1;
+            };
         }
-        return undefined;
+        return () => { refreshRequestRef.current += 1; };
     }, [refresh, intervalMs]);
 
     // Reconnection prompt: fire once per offline|degraded → normal
@@ -110,52 +161,66 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                     });
                 }
             },
-            durationMs: 12_000,
         });
     }, [reachabilityOverall, queue.length, reducedMotion, showToast]);
 
     if (queue.length === 0) return null;
 
     async function broadcast(id) {
-        if (busyId) return;
+        if (actionRef.current) return;
+        const action = { messaging, walletId };
+        actionRef.current = action;
         setBusyId(id);
         setBusyKind('send');
         setError(null);
         try {
             await messaging.broadcastQueuedRequest({ walletId, id });
+            if (!isCurrentAction(action)) return;
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
             showToast({ message: 'Transaction sent.', variant: 'success' });
         } catch (err) {
+            if (!isCurrentAction(action)) return;
             // Re-list first: the host removes the entry before it throws on a
             // permanent rejection or a refused claim, so the row may be gone.
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             const outcome = queuedBroadcastFailure(err, list, id);
             if (outcome.removed) {
                 // The row is gone, so tell the user in a toast rather than under a list without it.
                 if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
-                showToast({ message: outcome.message, variant: 'error', durationMs: 12_000 });
+                showToast({ message: outcome.message, variant: 'error' });
             } else {
                 setError(outcome.message);
             }
         } finally {
-            setBusyId(null);
-            setBusyKind(null);
+            if (actionRef.current === action) actionRef.current = null;
+            if (mountedRef.current) {
+                setBusyId(null);
+                setBusyKind(null);
+            }
         }
     }
     async function discard(id) {
-        if (busyId) return;
+        if (actionRef.current) return;
+        const action = { messaging, walletId };
+        actionRef.current = action;
         setBusyId(id);
         setBusyKind('remove');
         setError(null);
         try {
             await messaging.discardQueuedRequest({ walletId, id });
+            if (!isCurrentAction(action)) return;
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
             showToast({ message: 'Transaction removed from the queue.' });
         } catch (_err) {
+            if (!isCurrentAction(action)) return;
             // Re-list so a row the host already removed does not linger.
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             const removed = Array.isArray(list) && !list.some((entry) => entry?.id === id);
             if (removed) {
                 showToast({ message: 'Transaction removed from the queue.' });
@@ -165,9 +230,19 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                     : 'Could not confirm whether this transaction was removed. Check the queue again.');
             }
         } finally {
-            setBusyId(null);
-            setBusyKind(null);
+            if (actionRef.current === action) actionRef.current = null;
+            if (mountedRef.current) {
+                setBusyId(null);
+                setBusyKind(null);
+            }
         }
+    }
+
+    function isCurrentAction(action) {
+        const current = currentInputRef.current;
+        return mountedRef.current
+            && current.messaging === action.messaging
+            && current.walletId === action.walletId;
     }
 
     return (
@@ -180,7 +255,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                 id={titleId}
                 className={styles.title}
             >
-                Waiting to send ({queue.length})
+                {t('components.queuedBroadcastBanner.waitingToSend')}{queue.length})
             </div>
             <ul className={styles.list}>
                 {queue.map((entry) => (
@@ -188,7 +263,9 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                         <div className={styles.summary}>
                             <span className={styles.summaryText}>{entry.summary}</span>
                             <span className={styles.meta}>
-                                {chainLabel(entry.chainId)} · signed {ageString(entry.signedAt)}
+                                {chainBadge(entry.chainId)}
+                                {chainRegistry.get(entry.chainId) ? ' · ' : ''}
+                                {t('components.queuedBroadcastBanner.signed')} {ageString(entry.signedAt)}
                             </span>
                             {/* A resumed claim is a send the wallet had already handed to
                                 the network when it was interrupted, so it may have landed.
@@ -198,8 +275,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 the action on this path that can spend twice. */}
                             {entry.resumedClaim ? (
                                 <span className={styles.meta}>
-                                    Sending was interrupted, so this may already have been
-                                    sent. Sending it again is safe and cannot pay twice.
+                                    {t('components.queuedBroadcastBanner.sendingWasInterruptedSoThis')}
                                 </span>
                             ) : null}
                         </div>
@@ -211,12 +287,12 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 disabled={busyId !== null}
                                 data-queued-send
                                 aria-label={busyId === entry.id && busyKind === 'send'
-                                    ? `Sending: ${entry.summary}`
-                                    : `Send now: ${entry.summary}`}
+                                    ? t('components.queuedBroadcastBanner.sending', { summary: entry.summary })
+                                    : t('components.queuedBroadcastBanner.sendNow', { summary: entry.summary })}
                             >
                                 {busyId === entry.id
-                                    ? 'Sending…'
-                                    : (entry.resumedClaim ? 'Try sending again' : 'Send now')}
+                                    ? t('settings.developer.sending')
+                                    : (entry.resumedClaim ? t('components.queuedBroadcastBanner.trySendingAgain') : t('components.queuedBroadcastBanner.sendNow2'))}
                             </button>
                             <button
                                 type="button"
@@ -224,10 +300,10 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 onClick={() => discard(entry.id)}
                                 disabled={busyId !== null}
                                 aria-label={busyId === entry.id && busyKind === 'remove'
-                                    ? `Removing from queue: ${entry.summary}`
-                                    : `Remove from queue: ${entry.summary}`}
+                                    ? t('components.queuedBroadcastBanner.removingFromQueue', { summary: entry.summary })
+                                    : t('components.queuedBroadcastBanner.removeFromQueue', { summary: entry.summary })}
                             >
-                                {busyId === entry.id && busyKind === 'remove' ? 'Removing…' : 'Remove'}
+                                {busyId === entry.id && busyKind === 'remove' ? t('settings.thisWallet.removing') : t('send.recipient.remove')}
                             </button>
                         </div>
                     </li>
@@ -271,6 +347,17 @@ export function queuedBroadcastFailure(err, list, id) {
         };
     }
     if (kind === 'transient') {
+        const retryAfterMs = err && typeof err === 'object'
+            ? Number(/** @type {any} */ (err).retryAfterMs)
+            : NaN;
+        if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+            const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
+            return {
+                removed,
+                message: 'Sending failed, and the transaction is still queued. '
+                    + `Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+            };
+        }
         return {
             removed,
             message: 'Sending failed, and the transaction is still queued. '
@@ -283,11 +370,9 @@ export function queuedBroadcastFailure(err, list, id) {
     };
 }
 
-// Name the chain the way every other screen does (the raw id shows only
-// when the registry has no entry for it).
-function chainLabel(chainId) {
+function chainBadge(chainId) {
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    return descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId;
+    return descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null;
 }
 
 function ageString(signedAt) {

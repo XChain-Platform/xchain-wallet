@@ -25,6 +25,8 @@
 
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import qrStyles from '../../ui/QrDisplay.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -32,7 +34,7 @@ import QRCode from 'qrcode';
  * @param {number} [props.size]   pixel width (default 200)
  * @param {string} [props.alt]    accessibility label (default 'QR code')
  */
-export function KeyQR({ value, size = 200, alt = 'QR code' }) {
+export function KeyQR({ value, size = 200, alt = t('components.keyQR.qrCode') }) {
     const [dataUrl, setDataUrl] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
@@ -55,20 +57,27 @@ export function KeyQR({ value, size = 200, alt = 'QR code' }) {
 
     if (!dataUrl) return null;
     return (
-        <img
-            src={dataUrl}
-            alt={alt}
-            width={size}
-            height={size}
+        <div
+            className={qrStyles.frame}
             style={{
-                display: 'block',
-                width: '100%',
-                maxWidth: size,
-                height: 'auto',
-                aspectRatio: '1 / 1',
-                background: '#FFFFFF',
-                borderRadius: 'var(--xc-radius-md)',
+                '--xc-qr-frame-size': `calc(${size}px + (2 * var(--xc-space-3)))`,
             }}
-        />
+        >
+            <img
+                src={dataUrl}
+                alt={alt}
+                width={size}
+                height={size}
+                style={{
+                    display: 'block',
+                    width: '100%',
+                    maxWidth: size,
+                    height: 'auto',
+                    aspectRatio: '1 / 1',
+                    background: '#FFFFFF',
+                    borderRadius: 'var(--xc-radius-sm)',
+                }}
+            />
+        </div>
     );
 }

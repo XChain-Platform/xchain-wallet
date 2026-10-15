@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { copyText } from '../../clipboard.js';
+import { nativePlatformName } from '../../nativeShell.js';
 import {
     LICENSE_FILE,
     LICENSE_NAME,
@@ -37,32 +38,21 @@ import {
     isUpdateNoticeEnabled,
     setUpdateNoticeEnabled,
 } from '../../../flows/directUpdate.js';
-import { ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_LABEL,
+    ROW_VALUE,
+    STACK,
+    ToggleRow,
+} from './_settingsPrimitives.jsx';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import {
     redactDiagnosticText,
     sanitizeDiagnosticValue,
 } from '../../../flows/diagnosticDump.js';
+import { t } from '../../../i18n/index.js';
 
-const ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    fontSize: 'var(--xc-text-sm)',
-};
-const ROW_LABEL = { color: 'var(--xc-text-muted)' };
-const ROW_VALUE = { color: 'var(--xc-text)', fontWeight: 500 };
 const ROW_VALUE_MUTED = { color: 'var(--xc-text-muted)', fontStyle: 'italic' };
-const STACK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
-};
 const PARAGRAPHS = {
     display: 'flex',
     flexDirection: 'column',
@@ -70,12 +60,6 @@ const PARAGRAPHS = {
 };
 const PARAGRAPH = { margin: 0 };
 const PROBLEM_REPORT_URL = 'https://github.com/XChain-Platform/xchain-wallet/issues/new';
-
-function buildProblemReportUrl(diagnostics) {
-    const url = new URL(PROBLEM_REPORT_URL);
-    url.searchParams.set('body', `### Redacted diagnostics\n\n\`\`\`json\n${diagnostics}\n\`\`\``);
-    return url.toString();
-}
 
 export function AboutSection() {
     const { shell, messaging } = useMessaging();
@@ -86,9 +70,9 @@ export function AboutSection() {
     const [preview, setPreview] = useState(/** @type {string | null} */ (null));
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState(false);
-    const [reportBusy, setReportBusy] = useState(false);
     const [licenseOpen, setLicenseOpen] = useState(false);
     const [diagnosticMeta, setDiagnosticMeta] = useState(null);
+    const copyResetRef = useRef(null);
     // Read once at mount: the provider is installed at shell boot, before any
     // settings route can render, so this cannot go stale within a session.
     const [updateLane] = useState(() => hasDirectUpdateLane());
@@ -97,6 +81,8 @@ export function AboutSection() {
     // re-running the same fetch, so the error surface offers a one-click
     // "Try again" against whichever action last failed.
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
+
+    useEffect(() => () => clearTimeout(copyResetRef.current), []);
 
     async function fetchDump() {
         if (typeof messaging?.getDiagnosticDump !== 'function') {
@@ -117,8 +103,6 @@ export function AboutSection() {
             setDiagnosticMeta({
                 platform,
                 buildHash: typeof buildHash === 'string' ? buildHash : null,
-                buildProfile: prepared.build?.profile || null,
-                network: prepared.settings?.activeNetwork || null,
             });
             setPreview(JSON.stringify(prepared, null, 2));
         }).catch(() => {});
@@ -127,6 +111,7 @@ export function AboutSection() {
 
     async function handleCopyDiagnostics() {
         if (busy) return;
+        clearTimeout(copyResetRef.current);
         setBusy(true);
         setStatus(null);
         setError(null);
@@ -138,7 +123,8 @@ export function AboutSection() {
             if (!ok) {
                 throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
             }
-            setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
+            setStatus(t('settings.about.copiedBytes', { bytes: text.length }));
+            copyResetRef.current = setTimeout(() => setStatus(null), 1500);
             haptic.tap();
         } catch (err) {
             retryRef.current = handleCopyDiagnostics;
@@ -173,59 +159,38 @@ export function AboutSection() {
         }
     }
 
-    async function handleReportProblem() {
-        if (reportBusy) return;
-        setReportBusy(true);
+    function handleReportProblem() {
         setError(null);
         retryRef.current = null;
-        const reportWindow = globalThis.open?.('about:blank', '_blank') ?? null;
-        if (reportWindow) reportWindow.opener = null;
         try {
-            const text = preview ?? (await fetchDump());
-            if (preview === null) setPreview(text);
-            const reportUrl = buildProblemReportUrl(text);
-            if (reportWindow) reportWindow.location.replace(reportUrl);
-            else globalThis.location.assign(reportUrl);
+            globalThis.open?.(PROBLEM_REPORT_URL, '_blank', 'noopener,noreferrer');
         } catch (err) {
-            reportWindow?.close();
             retryRef.current = handleReportProblem;
             setError(err?.message || 'Could not open the problem report.');
             haptic.error();
-        } finally {
-            setReportBusy(false);
         }
     }
 
     return (
         <div style={STACK}>
             <p style={{ ...PARAGRAPH, color: 'var(--xc-text-muted)', lineHeight: 1.5 }}>
-                A self-custodial wallet for the XChain Platform. Current chain support:
-                {' '}Bitcoin, Litecoin, and Dogecoin.
+                {t('settings.about.aSelfCustodialWalletFor')}
+                {' '}{t('settings.about.bitcoinLitecoinAndDogecoin')}
             </p>
-            <Row label="Version">
+            <Row label={t('settings.about.version')}>
                 <span style={ROW_VALUE}>{WALLET_VERSION}</span>
             </Row>
-            <Row label="Build identifier">
+            <Row label={t('settings.about.buildIdentifier')}>
                 <span style={diagnosticMeta?.buildHash ? ROW_VALUE : ROW_VALUE_MUTED}>
-                    {diagnosticMeta?.buildHash || 'not available'}
+                    {diagnosticMeta?.buildHash || t('settings.about.notAvailable')}
                 </span>
             </Row>
-            <Row label="Build profile">
-                <span style={diagnosticMeta?.buildProfile ? ROW_VALUE : ROW_VALUE_MUTED}>
-                    {diagnosticMeta?.buildProfile || 'not available'}
-                </span>
-            </Row>
-            <Row label="Platform">
+            <Row label={t('settings.about.platform')}>
                 <span style={ROW_VALUE}>
-                    {diagnosticMeta?.platform || runtimeNativePlatform() || (shell === 'popup' ? 'extension' : shell)}
+                    {diagnosticMeta?.platform || platformLabel(shell)}
                 </span>
             </Row>
-            <Row label="Network">
-                <span style={diagnosticMeta?.network ? ROW_VALUE : ROW_VALUE_MUTED}>
-                    {diagnosticMeta?.network || 'not available'}
-                </span>
-            </Row>
-            <Row label="Update channel">
+            <Row label={t('settings.about.updateChannel')}>
                 <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
             </Row>
             {/* §6 / D4: only a directly-installed build has to look
@@ -235,7 +200,7 @@ export function AboutSection() {
                 this row does not exist rather than existing greyed out. */}
             {updateLane ? (
                 <ToggleRow
-                    label="Check for new versions"
+                    label={t('settings.about.checkForNewVersions')}
                     hint={
                         'Checks our download site once a day and alerts you to new versions.'
                         + ' It does not download or install them or send wallet data.'
@@ -247,7 +212,7 @@ export function AboutSection() {
                     }}
                 />
             ) : null}
-            <Row label="License">
+            <Row label={t('settings.about.license')}>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
                     {/* Cluster J FOLLOWUP 5: surface the full LICENSE.md
@@ -255,12 +220,12 @@ export function AboutSection() {
                         repo on GitHub to read what they're agreeing to. */}
                     <Button
                         size="sm"
-                        variant="ghost"
+                        variant="secondary"
                         onClick={() => setLicenseOpen((open) => !open)}
                         aria-expanded={licenseOpen}
                         aria-controls="full-license-text"
                     >
-                        {licenseOpen ? 'Hide full text' : 'Show full text'}
+                        {licenseOpen ? t('settings.about.hideFullText') : t('settings.about.showFullText')}
                     </Button>
                 </div>
             </Row>
@@ -295,33 +260,33 @@ export function AboutSection() {
                     }}
                 />
             ) : null}
-            <Row label="Notice">
+            <Row label={t('settings.about.notice')}>
                 <DocLink path={NOTICE_FILE} label={NOTICE_FILE} />
             </Row>
-            <Row label="Reproducible build">
-                <DocLink path={REPRODUCIBLE_BUILD_DOC} label="Verification procedure" />
+            <Row label={t('settings.about.reproducibleBuild')}>
+                <DocLink path={REPRODUCIBLE_BUILD_DOC} label={t('settings.about.verificationProcedure')} />
             </Row>
-            <Row label="Verify a release">
+            <Row label={t('settings.about.verifyARelease')}>
                 {/* Cluster T FOLLOWUP 2: end-user verification recipe (key import ->
                     manifest download -> GPG verify -> artifact hash check). */}
-                <DocLink path={VERIFY_RELEASE_DOC} label="Verification recipe" />
+                <DocLink path={VERIFY_RELEASE_DOC} label={t('settings.about.verificationRecipe')} />
             </Row>
-            <Row label="Release signatures">
+            <Row label={t('settings.about.releaseSignatures')}>
                 {RELEASE_SIGNATURES_PUBLISHED ? (
-                    <DocLink path={RELEASE_SIGNATURES_DOC} label="GPG fingerprint" />
+                    <DocLink path={RELEASE_SIGNATURES_DOC} label={t('settings.about.gpgFingerprint')} />
                 ) : (
-                    <span style={ROW_VALUE_MUTED}>not yet published</span>
+                    <span style={ROW_VALUE_MUTED}>{t('settings.about.notYetPublished')}</span>
                 )}
             </Row>
-            <Row label="Disclosure policy">
+            <Row label={t('settings.about.disclosurePolicy')}>
                 {SECURITY_PUBLISHED ? (
                     <DocLink path={SECURITY_FILE} label={SECURITY_FILE} />
                 ) : (
-                    <span style={ROW_VALUE_MUTED}>not yet published</span>
+                    <span style={ROW_VALUE_MUTED}>{t('settings.about.notYetPublished')}</span>
                 )}
             </Row>
-            <Row label="Diagnostics">
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
+            <Row label={t('settings.about.diagnostics')}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center', justifyContent: 'flex-end' }}>
                     <Button
                         size="sm"
                         variant="ghost"
@@ -331,7 +296,7 @@ export function AboutSection() {
                         aria-expanded={previewOpen}
                         aria-controls="diagnostic-dump-preview"
                     >
-                        {previewOpen ? 'Hide preview' : 'Show preview'}
+                        {previewOpen ? t('settings.about.hidePreview') : t('settings.about.showPreview')}
                     </Button>
                     <Button
                         size="sm"
@@ -340,19 +305,17 @@ export function AboutSection() {
                         loading={busy}
                         disabled={busy}
                     >
-                        Copy diagnostics
+                        {status ? t('history.copy.copied') : t('settings.about.copyDiagnostics')}
                     </Button>
                 </div>
             </Row>
-            <Row label="Feedback">
+            <Row label={t('settings.about.feedback')}>
                 <Button
                     size="sm"
                     variant="secondary"
                     onClick={handleReportProblem}
-                    loading={reportBusy}
-                    disabled={reportBusy}
                 >
-                    Report a problem
+                    {t('settings.about.reportAProblem')}
                 </Button>
             </Row>
             {previewOpen && preview !== null ? (
@@ -374,15 +337,11 @@ export function AboutSection() {
                     {preview}
                 </pre>
             ) : null}
-            {status ? (
-                <div role="status" aria-live="polite" style={{ ...ROW_VALUE_MUTED, padding: 'var(--xc-space-2) var(--xc-space-3)' }}>
-                    {status}
-                </div>
-            ) : null}
+            {status ? <StatusMessage variant="success">{status}</StatusMessage> : null}
             {error ? (
                 <StatusMessage
                     variant="error"
-                    recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                    recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
                 >
                     {error}
                 </StatusMessage>
@@ -391,11 +350,25 @@ export function AboutSection() {
     );
 }
 
+// When a narrow row wraps its value under the label, the value keeps to the
+// row end, where every other Settings control sits.
+const ROW_END = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    marginInlineStart: 'auto',
+    minWidth: 0,
+    maxWidth: '100%',
+    textAlign: 'end',
+};
+
 function Row({ label, children }) {
     return (
         <div style={ROW}>
             <span style={ROW_LABEL}>{label}</span>
-            {children}
+            <div style={ROW_END}>{children}</div>
         </div>
     );
 }
@@ -415,10 +388,15 @@ function DocLink({ path, label }) {
     const href = isUrl
         ? path
         : `https://github.com/XChain-Platform/xchain-wallet/blob/main/${path}`;
+    // A row's only value, not a link inside a sentence, so it takes the
+    // shared 24px pointer-target floor.
     const style = {
         color: 'var(--xc-text)',
         fontFamily: 'var(--xc-font-mono, monospace)',
         fontSize: 'var(--xc-text-xs)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        minHeight: 'var(--xc-tap-min)',
     };
     return (
         <a
@@ -432,44 +410,31 @@ function DocLink({ path, label }) {
     );
 }
 
+/** Shell name for display; a Capacitor build reports its OS, not the "web" shell it wraps. */
+function platformLabel(shell) {
+    return nativePlatformName() || (shell === 'popup' ? 'extension' : shell);
+}
+
 function prepareDiagnosticDump(dump, shell) {
     const sanitized = sanitizeDiagnosticValue(dump);
     const report = sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
         ? sanitized
         : {};
-    const fallbackPlatform = shell === 'popup' ? 'extension' : shell;
+    const platform = platformLabel(shell);
     const wallet = report.wallet && typeof report.wallet === 'object' ? report.wallet : {};
     const build = report.build && typeof report.build === 'object' ? report.build : {};
     const buildId = build.buildId || runtimeBuildHash();
-    const buildProfile = runtimeBuildProfile() || build.profile || 'default';
-    const platform = runtimeNativePlatform() || wallet.platform || fallbackPlatform;
     return {
         ...report,
         wallet: {
             ...wallet,
-            version: WALLET_VERSION,
-            platform,
+            version: wallet.version || WALLET_VERSION,
+            platform: wallet.platform || platform,
         },
-        build: Object.keys(build).length > 0 || buildId || buildProfile
-            ? {
-                ...build,
-                ...(buildId ? { buildId } : {}),
-                ...(buildProfile ? { profile: buildProfile } : {}),
-            }
+        build: Object.keys(build).length > 0 || buildId
+            ? { ...build, ...(buildId ? { buildId } : {}) }
             : null,
     };
-}
-
-function runtimeNativePlatform() {
-    const capacitor = globalThis.Capacitor;
-    if (capacitor?.isNativePlatform?.() !== true) return null;
-    const platform = capacitor.getPlatform?.();
-    return platform === 'android' || platform === 'ios' ? platform : 'native';
-}
-
-function runtimeBuildProfile() {
-    if (typeof document === 'undefined') return null;
-    return document.querySelector('meta[name="xchain-build-profile"]')?.content || null;
 }
 
 function runtimeBuildHash() {

@@ -75,6 +75,33 @@ describe('DesktopUpdateBanner', () => {
         expect(screen.queryByRole('button', { name: /restart to update/i })).toBeNull();
     });
 
+    it('floats over the page with side margins instead of spanning the full width', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        const card = screen.getByRole('status');
+        expect(card.style.position).toBe('fixed');
+        expect(card.style.insetInline).toContain('safe-area-inset-left');
+        expect(card.style.insetInline).toContain('safe-area-inset-right');
+        expect(card.style.maxInlineSize).not.toBe('');
+        expect(card.style.left).toBe('');
+        expect(card.style.right).toBe('');
+    });
+
+    it('keeps the floating card inside the device safe-area insets', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        const card = screen.getByRole('status');
+        // Logical insets keep the card mirrored in RTL while still clearing
+        // both physical side cutouts.
+        expect(card.style.insetBlockStart).toContain('env(safe-area-inset-top');
+        expect(card.style.insetInline).toContain('env(safe-area-inset-left');
+        expect(card.style.insetInline).toContain('env(safe-area-inset-right');
+    });
+
     it('shows no version at all rather than a version the feed made up', () => {
         const bridge = installBridge();
         render(React.createElement(DesktopUpdateBanner));

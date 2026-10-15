@@ -10,19 +10,15 @@
 
 // What "Add Wallet" actually leaves you looking at.
 //
-// Written because a regtest spec assumed the obvious thing and was wrong: after
-// walking the whole add-wallet flow - name, password, recovery phrase, the
-// verification challenge - the app comes back on the wallet you STARTED from,
-// with the new one merely present in the picker. `CreateWallet mode="add"`
-// finishes by calling App's `refresh`, which resets the view to home and
-// re-reads the session but never touches `activeWalletId`.
+// After walking the whole add-wallet flow - name, password, recovery phrase,
+// the verification challenge - the app switches to the wallet just added, so
+// the user sees the result of what they created rather than the wallet they
+// started from.
 //
-// This test does not judge that. It pins it, for two reasons. First, the
-// behaviour was invisible: nothing on screen says "created", and the only
-// evidence is a wallet name in the nav that most users are not watching.
-// Second, whichever way it should behave, a silent change of mind here is
-// exactly the kind that breaks a multi-wallet flow somewhere far away - which
-// is how it was found.
+// This test pins that, for two reasons. First, the switch is the only on-screen
+// evidence that the add worked: nothing else says "created". Second, a silent
+// change here is exactly the kind that breaks a multi-wallet flow somewhere far
+// away.
 //
 // No chain, no funds, no signing: this is a shell-state question, so it runs on
 // the dev-server venue.
@@ -38,6 +34,11 @@ const KDF_STEP_MS = kdfStepTimeout();
 
 const PASSWORD = 'add-wallet-activation';
 
+// The condensed header names the active wallet as text, not as a button.
+function activeWallet(page, name) {
+    return page.getByRole('region', { name: 'App header' }).getByText(`Wallet: ${name}`);
+}
+
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
     const dialog = page.getByRole('dialog', { name: 'Command palette' });
@@ -52,7 +53,7 @@ async function gotoPalette(page, title) {
 }
 
 test.describe('adding a second wallet', () => {
-    test('creates the wallet but leaves the first one active', async ({ page }) => {
+    test('creates the wallet and makes it the active one', async ({ page }) => {
         await createWallet(page, { password: PASSWORD, name: 'First Wallet' });
         await expect(unlockedShell(page)).toBeVisible();
 
@@ -63,23 +64,19 @@ test.describe('adding a second wallet', () => {
         });
         await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
-        // THE FACT: the app is back on the wallet it started from.
-        await expect(page.getByRole('button', { name: /First Wallet/ }).first(),
-            'after adding a wallet the app should still show the first one as active')
+        // THE FACT: the app is now on the wallet it just added.
+        await expect(activeWallet(page, 'Second Wallet'),
+            'after adding a wallet the app should show the new one as active')
             .toBeVisible({ timeout: 30_000 });
 
-        // ...and the new wallet does exist, which is the half that makes the
-        // above merely surprising rather than broken. Without this assertion a
-        // silently-failed creation would look identical.
+        // ...and the first wallet is still there to switch back to.
         await gotoPalette(page, 'Switch wallet');
-        await expect(page.getByRole('button', { name: /Second Wallet/ }).first(),
-            'the newly added wallet is not in the picker, so it was never created')
+        await expect(page.getByRole('button', { name: /First Wallet/ }).first(),
+            'the original wallet is missing from the picker')
             .toBeVisible({ timeout: 30_000 });
-
-        // And it can be switched to, which is the user's actual path forward.
-        await page.getByRole('button', { name: /Second Wallet/ }).first().click();
-        await expect(page.getByRole('button', { name: /Second Wallet/ }).first(),
-            'switching to the newly added wallet did not take')
+        await page.getByRole('button', { name: /First Wallet/ }).first().click();
+        await expect(activeWallet(page, 'First Wallet'),
+            'switching back to the first wallet did not take')
             .toBeVisible({ timeout: 30_000 });
     });
 
@@ -105,7 +102,7 @@ test.describe('adding a second wallet', () => {
 
         await gotoPalette(page, 'Switch wallet');
         await page.getByRole('button', { name: /Second Wallet/ }).first().click();
-        await expect(page.getByRole('button', { name: /Second Wallet/ }).first())
+        await expect(activeWallet(page, 'Second Wallet'))
             .toBeVisible({ timeout: 30_000 });
 
         await page.reload();
@@ -114,12 +111,12 @@ test.describe('adding a second wallet', () => {
         const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
         await unlock.or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: KDF_STEP_MS });
         if (await unlock.count() > 0) {
-            await page.getByLabel('Password').fill(PASSWORD);
+            await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
             await unlock.click();
             await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
         }
 
-        await expect(page.getByRole('button', { name: /Second Wallet/ }).first(),
+        await expect(activeWallet(page, 'Second Wallet'),
             'after a reload the app is no longer on the wallet the user switched to')
             .toBeVisible({ timeout: 30_000 });
     });

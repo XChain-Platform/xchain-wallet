@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
@@ -13,11 +13,14 @@ import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetai
 import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
 import { StakeNew } from '../../../packages/core/src/shared/routes/StakeNew.jsx';
 import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
+import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const PUBKEY = 'a'.repeat(64);
+const VALID_ADDRESS = 'bc1qdevmockabcdef';
 const ADDRESS_ROW = {
     id: 'addr-1',
     address: ADDRESS,
@@ -88,6 +91,27 @@ function withMessaging(child, methods = messaging()) {
 afterEach(() => cleanup());
 
 describe('staking chooser and list read states', () => {
+    it('does not repeat a staking row network kind beside its chain overlay', async () => {
+        const chainId = 'bitcoin-regtest';
+        withMessaging(
+            <StakingList walletId="w" onOpenStake={() => {}} onNewStake={() => {}} onBack={() => {}} />,
+            messaging({
+                getAddressesByChain: vi.fn().mockResolvedValue({ [chainId]: [ADDRESS_ROW] }),
+                getStakesForAddress: vi.fn().mockResolvedValue([{
+                    action_index: 1,
+                    amount: '10',
+                    status: 'valid',
+                    _ownerAddress: ADDRESS,
+                }]),
+            }),
+        );
+
+        await screen.findByRole('listitem');
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+        // The chain filter stays (operator ruling); it names chains, never network kinds.
+        expect(screen.getByRole('button', { name: 'Filter by network' })).toBeInTheDocument();
+    });
+
     it('surfaces an address read failure instead of presenting an empty chooser', async () => {
         withMessaging(
             <StakeNew walletId="w" onPickValidator={() => {}} onPickContract={() => {}} onBack={() => {}} />,
@@ -110,6 +134,39 @@ describe('staking chooser and list read states', () => {
 
         expect(await screen.findByText(/Couldn't load some staking data/)).toBeInTheDocument();
         expect(screen.queryByText(/Nothing staked yet/)).toBeNull();
+    });
+
+    it('turns indexer internals into plain staking-list copy', async () => {
+        const internal = new Error('getStakesForAddress: request failed with status code 500 at https://indexer.invalid/api/stakes');
+        withMessaging(
+            <StakingList walletId="w" onOpenStake={() => {}} onNewStake={() => {}} onBack={() => {}} />,
+            messaging({
+                getStakesForAddress: vi.fn().mockRejectedValue(internal),
+                getDelegationsForAddress: vi.fn().mockRejectedValue(internal),
+                getRewardsForAddress: vi.fn().mockRejectedValue(internal),
+            }),
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load validator stakes. Something went wrong. Try again.");
+        expect(alert).not.toHaveTextContent('indexer.invalid');
+        expect(alert).not.toHaveTextContent('getStakesForAddress');
+    });
+
+    it('does not show an unverified claimable total when the claim ledger fails', async () => {
+        const internal = new Error('getRewardClaimsForAddress: request failed at https://indexer.invalid/api/claims');
+        withMessaging(
+            <StakingList walletId="w" onOpenStake={() => {}} onNewStake={() => {}} onBack={() => {}} />,
+            messaging({
+                getRewardsForAddress: vi.fn().mockResolvedValue([{ amount: '10' }]),
+                getRewardClaimsForAddress: vi.fn().mockRejectedValue(internal),
+            }),
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load claimed staking rewards. Something went wrong. Try again.");
+        expect(screen.queryByText(/ready to claim/)).toBeNull();
+        expect(alert).not.toHaveTextContent('indexer.invalid');
     });
 });
 
@@ -150,6 +207,66 @@ describe('stake detail state', () => {
 });
 
 describe('stake amount and review state', () => {
+    it('validates empty, zero, and over-precision amounts before composing', async () => {
+        const methods = messaging();
+        withMessaging(
+            <StakeForm walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            methods,
+        );
+
+        const submit = await screen.findByRole('button', { name: 'Stake' });
+        expect(submit).toBeEnabled();
+
+        fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '-1' } });
+        expect(await screen.findByText(/Enter a valid decimal amount/)).toBeInTheDocument();
+
+        fireEvent.click(submit);
+        expect(await screen.findByText('Enter an amount to stake.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '0' } });
+        fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
+        fireEvent.click(submit);
+        expect(await screen.findByText('Amount must be greater than zero.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '1.123456789' } });
+        fireEvent.click(submit);
+        expect(await screen.findByText('Amount can have at most 8 decimal places.')).toBeInTheDocument();
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('validates an empty signing key before composing', async () => {
+        const methods = messaging();
+        withMessaging(
+            <StakeForm walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            methods,
+        );
+
+        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+        expect(await screen.findByText('Enter the signing public key.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: 'not-hex' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+        expect(await screen.findByText(/exactly 64 hexadecimal characters/)).toBeInTheDocument();
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('blocks review when an invalid custom fee would be omitted from the STAKE build', async () => {
+        const methods = messaging();
+        withMessaging(
+            <StakeForm walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            methods,
+        );
+        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+
+        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('rejects more than the known XCHAIN balance and clears the error on edit', async () => {
         withMessaging(
             <StakeForm walletId="w" chainId={CHAIN} onBack={() => {}} />,
@@ -182,19 +299,43 @@ describe('stake amount and review state', () => {
             <StakeForm walletId="w" chainId={CHAIN} onBack={onBack} />,
             messaging({ getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }) }),
         );
-        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
+        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1.23000000' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        expect(await screen.findByText(/Stake 1 XCHAIN for signing public key/)).toBeInTheDocument();
+        expect(await screen.findByText(/Stake 1.23000000 XCHAIN for signing public key/)).toBeInTheDocument();
+        expect(screen.getByText('After 6 BTC blocks')).toBeInTheDocument();
+        expect(screen.getByText('Network fee')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
-        expect(screen.getByLabelText(/^Amount/)).toHaveValue('1');
+        expect(screen.getByLabelText(/^Amount/)).toHaveValue('1.23000000');
         expect(screen.getByLabelText('Signing public key')).toHaveValue(PUBKEY);
     });
 });
 
 describe('staking action load and review state', () => {
+    it('validates an empty and zero amount before composing', async () => {
+        const methods = messaging({
+            getRewardsForAddress: vi.fn().mockResolvedValue([{ amount: '10' }]),
+        });
+        withMessaging(
+            <StakingActionForm mode="claim-rewards" walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            methods,
+        );
+        await screen.findByText('10 XCHAIN available');
+        const amount = screen.getByLabelText(/^Amount/);
+        const submit = screen.getByRole('button', { name: 'Claim rewards' });
+
+        fireEvent.change(amount, { target: { value: '' } });
+        fireEvent.click(submit);
+        expect(await screen.findByText('Enter an amount.')).toBeInTheDocument();
+
+        fireEvent.change(amount, { target: { value: '0' } });
+        fireEvent.click(submit);
+        expect(await screen.findByText('Amount must be greater than zero.')).toBeInTheDocument();
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('surfaces a failed available-balance read instead of loading forever', async () => {
         withMessaging(
             <StakingActionForm mode="claim-rewards" walletId="w" chainId={CHAIN} onBack={() => {}} />,
@@ -207,6 +348,40 @@ describe('staking action load and review state', () => {
         expect(screen.getByRole('button', { name: 'Claim rewards' })).toBeDisabled();
     });
 
+    it('does not treat a failed claim-ledger read as no prior claims', async () => {
+        const internal = new Error('getRewardClaimsForAddress: request failed at https://indexer.invalid/api/claims');
+        withMessaging(
+            <StakingActionForm mode="claim-rewards" walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            messaging({
+                getRewardsForAddress: vi.fn().mockResolvedValue([{ amount: '10' }]),
+                getRewardClaimsForAddress: vi.fn().mockRejectedValue(internal),
+            }),
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load the available staking balance. Something went wrong. Try again.");
+        expect(screen.getByText('Unavailable')).toBeInTheDocument();
+        expect(alert).not.toHaveTextContent('indexer.invalid');
+        expect(screen.getByRole('button', { name: 'Claim rewards' })).toBeDisabled();
+    });
+
+    it('blocks review when an invalid custom fee would be omitted from the COLLECT build', async () => {
+        const methods = messaging({
+            getRewardsForAddress: vi.fn().mockResolvedValue([{ amount: '10' }]),
+        });
+        withMessaging(
+            <StakingActionForm mode="claim-rewards" walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            methods,
+        );
+        await screen.findByText('10 XCHAIN available');
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+
+        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('returns from watcher review to the populated action form', async () => {
         const onBack = vi.fn();
         withMessaging(
@@ -217,13 +392,14 @@ describe('staking action load and review state', () => {
             }),
         );
         await screen.findByText('10 XCHAIN available');
-        fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '4.50000000' } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        expect(await screen.findByText(/Claim 4 XCHAIN/)).toBeInTheDocument();
+        expect(await screen.findByText(/Claim 4.50000000 XCHAIN/)).toBeInTheDocument();
+        expect(screen.getByText('Network fee')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
-        expect(screen.getByLabelText(/^Amount/)).toHaveValue('4');
+        expect(screen.getByLabelText(/^Amount/)).toHaveValue('4.50000000');
     });
 
     it('clears an amount validation error when the amount changes', async () => {
@@ -238,6 +414,98 @@ describe('staking action load and review state', () => {
 
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '5' } });
         await waitFor(() => expect(screen.queryByText(/Amount exceeds/)).toBeNull());
+    });
+});
+
+describe('delegation validation and review state', () => {
+    function delegationMessaging(overrides = {}) {
+        return messaging({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ ...ADDRESS_ROW, address: VALID_ADDRESS }],
+            }),
+            ...overrides,
+        });
+    }
+
+    it('validates an empty signing key before composing', async () => {
+        const methods = delegationMessaging();
+        withMessaging(
+            <DelegationActionForm mode="delegate" walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            methods,
+        );
+
+        const submit = await screen.findByRole('button', { name: 'Delegate signing key' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        expect(await screen.findByText('Enter the new signing public key.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('New signing pubkey'), { target: { value: 'not-hex' } });
+        fireEvent.click(submit);
+        expect(await screen.findByText(/exactly 64 hex characters/)).toBeInTheDocument();
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a plain indexer error when the revoke key cannot be prefilled', async () => {
+        const internal = new Error('getDelegationsForAddress: request failed at https://indexer.invalid/api/delegations');
+        withMessaging(
+            <DelegationActionForm mode="revoke" walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            delegationMessaging({
+                getDelegationsForAddress: vi.fn().mockRejectedValue(internal),
+            }),
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load the current delegation. Something went wrong. Try again.");
+        expect(alert).toHaveTextContent('Enter the signing public key manually.');
+        expect(alert).not.toHaveTextContent('indexer.invalid');
+    });
+
+    it('blocks custom fee rates that would be omitted or exceed the supported range', async () => {
+        const methods = delegationMessaging();
+        withMessaging(
+            <DelegationActionForm mode="delegate" walletId="w" chainId={CHAIN} onBack={() => {}} />,
+            methods,
+        );
+        fireEvent.change(await screen.findByLabelText('New signing pubkey'), { target: { value: PUBKEY } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+
+        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+
+        for (const rate of ['0', '-1']) {
+            fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
+            fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+            expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        }
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        expect(await screen.findByText('Custom network fee rate can have at most 8 decimal places.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        expect(await screen.findByText("Custom network fee rate is above this network's supported maximum.")).toBeInTheDocument();
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('returns from review with the exact signing key preserved', async () => {
+        const onBack = vi.fn();
+        withMessaging(
+            <DelegationActionForm mode="delegate" walletId="w" chainId={CHAIN} onBack={onBack} />,
+            delegationMessaging({
+                getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            }),
+        );
+        const key = 'B'.repeat(64);
+        fireEvent.change(await screen.findByLabelText('New signing pubkey'), { target: { value: key } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByText(key.toLowerCase())).toBeInTheDocument();
+        expect(screen.getByText('Network fee')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(onBack).not.toHaveBeenCalled();
+        expect(screen.getByLabelText('New signing pubkey')).toHaveValue(key);
     });
 });
 
@@ -298,9 +566,14 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 }),
             );
 
-            const rewardWhen = await screen.findByText('block 98');
-            expect(rewardWhen.closest('div')?.className).toMatch(/eventRow/);
-            expect(rewardWhen.closest('div')).toHaveTextContent('987,654,321.12345678 XCHAIN');
+            const rewardList = await screen.findByRole('list', { name: 'Reward events' });
+            const rewardItem = within(rewardList).getByRole('listitem');
+            const rewardRow = rewardItem.querySelector(`.${listRowStyles.row}`);
+            expect(rewardRow).toBeInTheDocument();
+            expect(rewardItem).toHaveTextContent('987,654,321.12345678 XCHAIN');
+            expect(within(rewardItem).getByText('block 98')).toBeInTheDocument();
+            expect(within(rewardItem).queryByRole('button')).toBeNull();
+            expect(within(rewardItem).queryByRole('link')).toBeNull();
 
             cleanup();
             withMessaging(
@@ -334,14 +607,9 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 'packages/core/src/shared/routes/StakingList.module.css',
             ), 'not all and (min-width: 400px)');
             expect(ruleBody(listNarrow, '.row')).toMatch(
-                /grid-template-columns:\s*40px\s+minmax\(0, 1fr\)/,
+                /grid-template-columns:\s*var\(--xc-control-h-md\)\s+minmax\(0, 1fr\)/,
             );
             expect(ruleBody(listNarrow, '.trailing')).toMatch(/grid-column:\s*2/);
-
-            const detailNarrow = mediaBlock(readCss(
-                'packages/core/src/shared/routes/StakeDetail.module.css',
-            ), 'not all and (min-width: 400px)');
-            expect(ruleBody(detailNarrow, '.eventRow')).toMatch(/flex-direction:\s*column/);
 
             const amountNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/components/AmountField.module.css',

@@ -130,11 +130,51 @@ describe('ContractsList ownership and empty actions', () => {
             contractMessaging({ getContractsForSource }),
         );
 
-        expect(await screen.findByText("Couldn't load contracts on Bitcoin. Try again.")).toBeInTheDocument();
+        expect(await screen.findByText("Couldn't load contracts. Try again.")).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('private transport detail');
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await waitFor(() => expect(getContractsForSource).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+    });
+
+    it('says an empty section once, not once per chain', async () => {
+        const messaging = contractMessaging({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ address: ADDRESS }],
+                'litecoin-testnet': [{ address: 'tltc1qaudit000000000000000000000000000000' }],
+            }),
+        });
+        mount(
+            <ContractsList walletId="w" onBack={() => {}} onDeploy={() => {}} onOpenContract={() => {}} />,
+            messaging,
+        );
+
+        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryAllByRole('status', { name: /Loading contracts/ })).toHaveLength(0));
+        expect(screen.getAllByText('No published contracts')).toHaveLength(1);
+        expect(screen.getAllByText('No contract interactions')).toHaveLength(1);
+        expect(screen.getAllByText('No indexed contracts')).toHaveLength(1);
+        // Both chains were asked, so the single message stands for both.
+        expect(messaging.getContractsBrowseAll).toHaveBeenCalledWith({ chainId: 'litecoin-testnet' });
+        expect(messaging.getContractsBrowseAll).toHaveBeenCalledWith({ chainId: CHAIN });
+    });
+
+    it('drops empty chains beside a chain with rows', async () => {
+        mount(
+            <ContractsList walletId="w" onBack={() => {}} onOpenContract={() => {}} />,
+            contractMessaging({
+                getAddressesByChain: vi.fn().mockResolvedValue({
+                    [CHAIN]: [{ address: ADDRESS }],
+                    'litecoin-testnet': [{ address: 'tltc1qaudit000000000000000000000000000000' }],
+                }),
+                getContractsBrowseAll: vi.fn().mockImplementation(({ chainId } = {}) => Promise.resolve({
+                    data: chainId === CHAIN ? [{ action_index: '12', status: 'valid', meta_name: 'Escrow' }] : [],
+                })),
+            }),
+        );
+
+        expect(await screen.findByRole('button', { name: 'Open Escrow (C:BTC:12)' })).toBeInTheDocument();
+        expect(screen.queryByText('No indexed contracts')).not.toBeInTheDocument();
     });
 
     it('does not query contracts for malformed address entries', async () => {

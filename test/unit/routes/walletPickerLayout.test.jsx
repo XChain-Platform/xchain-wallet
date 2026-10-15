@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { WalletDetails } from '../../../packages/core/src/shared/routes/WalletDetails.jsx';
 import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPicker.jsx';
 
 afterEach(() => cleanup());
@@ -21,9 +22,8 @@ describe('WalletPicker row layout', () => {
             origin: 'demo',
             format: 'bip39',
         };
-        let view;
         await act(async () => {
-            view = render(
+            render(
                 <MessagingProvider
                     shell="popup"
                     messaging={{ listWallets: () => Promise.resolve([wallet]) }}
@@ -39,9 +39,7 @@ describe('WalletPicker row layout', () => {
             await Promise.resolve();
         });
 
-        const row = Array.from(view.container.querySelectorAll('button'))
-            .find((button) => button.textContent.includes(wallet.name));
-        expect(row).toBeTruthy();
+        const row = screen.getByRole('button', { name: new RegExp(`^${wallet.name}`) });
         expect(row.children).toHaveLength(1);
         expect(row.firstElementChild.children).toHaveLength(2);
         expect(row.firstElementChild.textContent).toContain('Demo wallet · BIP39');
@@ -55,6 +53,9 @@ describe('WalletPicker row layout', () => {
         expect(nameRule).toMatch(/overflow:\s*hidden/);
         expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
         expect(nameRule).toMatch(/white-space:\s*nowrap/);
+        // The identity ring is a box-shadow; the clip box must leave room for it on every side.
+        expect(nameRule).toMatch(/padding-inline:\s*var\(--xc-space-1\)/);
+        expect(nameRule).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
     });
 
     it('marks the current wallet and keeps add and manage actions in the footer', async () => {
@@ -78,14 +79,74 @@ describe('WalletPicker row layout', () => {
             await Promise.resolve();
         });
 
-        expect(document.querySelector('button[aria-current="true"]')).toHaveTextContent('Primary');
+        expect(screen.getByRole('button', { current: true })).toHaveTextContent('Primary');
         const add = screen.getByRole('button', { name: 'Add wallet' });
         const manage = screen.getByRole('button', { name: 'Manage wallet' });
         expect(add.closest('footer')).toBeTruthy();
         expect(manage.closest('footer')).toBeTruthy();
 
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const footerButtonRule = /\.footerActions button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(footerButtonRule).toMatch(/min-height:\s*var\(--xc-control-h-md, 40px\)/);
+        expect(footerButtonRule).not.toMatch(/--xc-tap-min/);
+
         fireEvent.click(manage);
         expect(onShowDetails).toHaveBeenCalledWith(wallet.id);
+    });
+
+    it('sizes the wallet-details control from the kit icon-button size', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const menuButtonRule = /\.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+
+        expect(menuButtonRule).toMatch(/width:\s*var\(--xc-button-height\)/);
+        expect(menuButtonRule).toMatch(/height:\s*var\(--xc-button-height\)/);
+        expect(menuButtonRule).not.toMatch(/(?:width|height):\s*32px/);
+    });
+
+    it('keeps the row action in place while it is pressed', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const menuButtonRule = /\.rowWrap \.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        // The kit's :active rule sets transform, so a translate used for
+        // centring is dropped on press and the release misses the button.
+        expect(menuButtonRule).not.toMatch(/transform\s*:/);
+        expect(menuButtonRule).toMatch(/inset-block:\s*0/);
+        expect(menuButtonRule).toMatch(/margin-block:\s*auto/);
+    });
+
+    it('renders the wallet-details glyph in the kit icon slot', async () => {
+        const wallet = { id: 'wallet-1', name: 'Primary', format: 'bip39' };
+        await act(async () => {
+            render(
+                <MessagingProvider
+                    shell="popup"
+                    messaging={{ listWallets: () => Promise.resolve([wallet]) }}
+                >
+                    <WalletPicker
+                        activeWalletId={wallet.id}
+                        onSwitch={() => {}}
+                        onAddWallet={() => {}}
+                        onShowDetails={() => {}}
+                        onBack={() => {}}
+                    />
+                </MessagingProvider>,
+            );
+            await Promise.resolve();
+        });
+
+        const details = screen.getByRole('button', { name: 'Wallet details for Primary' });
+        // A glyph passed as a label child is squeezed by the label padding
+        // into a sliver; the icon slot sizes it from the kit icon scale.
+        expect(details.querySelector('[aria-hidden="true"] > svg')).toBeTruthy();
+        expect(details.children).toHaveLength(1);
     });
 
     it('labels imported-key wallets accurately', async () => {
@@ -110,6 +171,55 @@ describe('WalletPicker row layout', () => {
         );
 
         expect(await screen.findByText('Imported key')).toBeTruthy();
+    });
+
+    it('uses distinct React keys when a malformed list repeats an id', async () => {
+        const duplicateIdWallets = [
+            { id: 'wallet-1', name: 'First', format: 'bip39' },
+            { id: 'wallet-1', name: 'Duplicate', format: 'bip39' },
+        ];
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            render(
+                <MessagingProvider
+                    shell="popup"
+                    messaging={{ listWallets: () => Promise.resolve(duplicateIdWallets) }}
+                >
+                    <WalletPicker
+                        activeWalletId={null}
+                        onSwitch={() => {}}
+                        onAddWallet={() => {}}
+                        onBack={() => {}}
+                    />
+                </MessagingProvider>,
+            );
+
+            expect(await screen.findByText('Duplicate')).toBeTruthy();
+            const keyWarnings = consoleError.mock.calls.filter(([message]) => (
+                String(message).includes('same key')
+            ));
+            expect(keyWarnings).toHaveLength(0);
+        } finally {
+            consoleError.mockRestore();
+        }
+    });
+
+    it('renders a synchronous wallet-list failure as an error', async () => {
+        render(
+            <MessagingProvider
+                shell="popup"
+                messaging={{ listWallets: () => { throw new Error('transport unavailable'); } }}
+            >
+                <WalletPicker
+                    activeWalletId={null}
+                    onSwitch={() => {}}
+                    onAddWallet={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('transport unavailable')).toBeTruthy();
     });
 });
 
@@ -180,5 +290,111 @@ describe('WalletPicker switching', () => {
 
         expect(onSwitch).not.toHaveBeenCalled();
         expect(onBack).toHaveBeenCalledTimes(2);
+    });
+
+    it('admits only one wallet switch before React commits the busy state', async () => {
+        let finishSwitch;
+        const onSwitch = vi.fn(() => new Promise((resolve) => {
+            finishSwitch = resolve;
+        }));
+        mountPicker(onSwitch);
+        const savings = await screen.findByRole('button', { name: /Savings/ });
+
+        act(() => {
+            savings.click();
+            savings.click();
+        });
+
+        expect(onSwitch).toHaveBeenCalledOnce();
+        await act(async () => finishSwitch());
+    });
+});
+
+describe('WalletDetails layout', () => {
+    it('leaves the gaps between its actions to the list page', async () => {
+        const wallet = { id: 'wallet-1', name: 'Legacy', format: 'counterwallet-legacy' };
+        render(
+            <MessagingProvider
+                shell="popup"
+                messaging={{
+                    listWallets: () => Promise.resolve([wallet]),
+                    listAccounts: () => Promise.resolve([]),
+                }}
+            >
+                <WalletDetails
+                    walletId={wallet.id}
+                    onBack={() => {}}
+                    onRename={() => {}}
+                    onMigrateToBip39={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        const rename = await screen.findByRole('button', { name: 'Rename wallet' });
+        const upgrade = screen.getByRole('button', { name: /Upgrade/ });
+        // Extra inline margins on top of the page gap spaced the buttons
+        // unevenly (8 px more above one, 12 px more above the next).
+        for (const button of [rename, upgrade]) {
+            expect(button.parentElement.getAttribute('style')).toBeNull();
+        }
+    });
+});
+
+describe('WalletDetails wallet changes', () => {
+    it('hides the prior wallet until the requested wallet finishes loading', async () => {
+        const firstWallet = { id: 'wallet-1', name: 'First', format: 'bip39' };
+        const secondWallet = { id: 'wallet-2', name: 'Second', format: 'bip39' };
+        let resolveSecond;
+        const messaging = {
+            listWallets: vi.fn()
+                .mockResolvedValueOnce([firstWallet])
+                .mockImplementationOnce(() => new Promise((resolve) => {
+                    resolveSecond = resolve;
+                })),
+            listAccounts: vi.fn().mockResolvedValue([]),
+        };
+        const onRename = vi.fn();
+        const view = render(
+            <MessagingProvider shell="popup" messaging={messaging}>
+                <WalletDetails
+                    walletId={firstWallet.id}
+                    onBack={() => {}}
+                    onRename={onRename}
+                />
+            </MessagingProvider>,
+        );
+        expect(await screen.findByText(firstWallet.name)).toBeTruthy();
+
+        view.rerender(
+            <MessagingProvider shell="popup" messaging={messaging}>
+                <WalletDetails
+                    walletId={secondWallet.id}
+                    onBack={() => {}}
+                    onRename={onRename}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.queryByRole('button', { name: 'Rename wallet' })).not.toBeInTheDocument();
+        await waitFor(() => expect(resolveSecond).toBeTypeOf('function'));
+        resolveSecond([secondWallet]);
+        expect(await screen.findByText(secondWallet.name)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Rename wallet' }));
+        expect(onRename).toHaveBeenCalledWith(secondWallet);
+    });
+
+    it('renders a synchronous wallet-detail load failure as an error', async () => {
+        render(
+            <MessagingProvider
+                shell="popup"
+                messaging={{
+                    listWallets: () => { throw new Error('detail transport unavailable'); },
+                    listAccounts: () => { throw new Error('account transport unavailable'); },
+                }}
+            >
+                <WalletDetails walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('detail transport unavailable')).toBeTruthy();
     });
 });

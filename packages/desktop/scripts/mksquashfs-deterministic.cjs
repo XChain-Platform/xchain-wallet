@@ -152,6 +152,23 @@ if (rawEpoch !== undefined && (!Number.isInteger(epoch) || epoch < 0 || epoch > 
 // inode table. Stamped depth-first so a directory is set after the entries
 // inside it, and via lutimes for symlinks so the link's own timestamp is
 // pinned rather than its target's.
+//
+// THE SAME WALK PINS MODES, which the inode table also records. The
+// v0.341.3 reproduce check found both AppImages differing in nothing but
+// the 1024x1024 icon's mode (0644 from CI, 0664 from a checkout made under
+// umask 002): the stage copies build/icon.png with whatever mode the host
+// checkout gave it. The rule is scripts/deterministic-modes.cjs's
+// canonicalMode, repeated here because this file is installed ALONE into
+// the shimmed toolset and cannot require a sibling. The smoke asserts the
+// two agree. Mode first, mtime second: a chmod never moves an mtime, but
+// keeping the order fixed means nothing has to argue that it does not.
+function canonicalMode(mode) {
+    const special = mode & 0o7000;
+    const owner = (mode >> 6) & 0o7;
+    const shared = owner & 0o5;
+    return special | (owner << 6) | (shared << 3) | shared;
+}
+
 function stampTree(entryPath) {
     let stats;
     try {
@@ -162,6 +179,17 @@ function stampTree(entryPath) {
     if (stats.isDirectory()) {
         for (const child of fs.readdirSync(entryPath)) {
             stampTree(path.join(entryPath, child));
+        }
+    }
+    if (!stats.isSymbolicLink()) {
+        const current = stats.mode & 0o7777;
+        const wanted = canonicalMode(current);
+        if (current !== wanted) {
+            try {
+                fs.chmodSync(entryPath, wanted);
+            } catch (error) {
+                fail(`cannot set mode on ${entryPath}: ${error.message}`);
+            }
         }
     }
     try {

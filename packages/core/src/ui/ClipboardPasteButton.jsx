@@ -5,6 +5,8 @@
 
 import { useState } from 'react';
 import { Button } from './Button.jsx';
+import { StatusMessage } from './StatusMessage.jsx';
+import { t } from '../i18n/index.js';
 
 const DENIED_MESSAGE = 'Clipboard access was denied. Paste manually instead.';
 const UNAVAILABLE_MESSAGE = 'Clipboard access is unavailable. Paste manually instead.';
@@ -23,14 +25,23 @@ export const MAX_CLIPBOARD_PASTE_LENGTH = 1_048_576;
  * @param {boolean} [props.disabled]
  * @param {string} [props.label]
  * @param {number} [props.maxLength]
+ * @param {(message: string) => void} [props.onMessage]  when given, a clipboard
+ *   failure is handed to the owner ('' clears it) instead of rendering beside
+ *   the button; used where the button sits inside a field box.
  */
 export function ClipboardPasteButton({
     onPaste,
     disabled = false,
-    label = 'Paste from clipboard',
+    label = t('ui.clipboardPasteButton.pasteFromClipboard'),
     maxLength = MAX_CLIPBOARD_PASTE_LENGTH,
+    onMessage,
 }) {
-    const [message, setMessage] = useState('');
+    const [ownMessage, setOwnMessage] = useState('');
+    const setMessage = (text) => {
+        if (onMessage) onMessage(text);
+        else setOwnMessage(text);
+    };
+    const message = onMessage ? '' : ownMessage;
 
     const paste = async () => {
         const readText = globalThis.navigator?.clipboard?.readText;
@@ -66,13 +77,9 @@ export function ClipboardPasteButton({
                 disabled={disabled}
                 aria-label={label}
             >
-                Paste
+                {t('ui.clipboardPasteButton.paste')}
             </Button>
-            {message ? (
-                <span role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }}>
-                    {message}
-                </span>
-            ) : null}
+            <StatusMessage variant="error">{message}</StatusMessage>
         </span>
     );
 }

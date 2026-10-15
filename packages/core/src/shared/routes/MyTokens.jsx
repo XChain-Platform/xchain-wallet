@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+    Button,
     Screen,
     PageHeader,
     Input,
@@ -18,6 +19,7 @@ import {
     ListPage,
     EmptyState,
     StatusMessage,
+    ListRow,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -174,15 +176,18 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             title="My tokens"
             titleIcon={<Icon.TokenIcon />}
             trailing={
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     className={styles.issueButton}
                     onClick={onIssue}
                     aria-label="Issue new token"
                     title="Issue new token"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             }
         />
     );
@@ -201,6 +206,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         />
                     </div>
                     <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
+                        {/* Raw buttons preserve the segmented radio control semantics. */}
                         <button
                             type="button"
                             role="radio"
@@ -210,6 +216,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         >
                             All
                         </button>
+                        {/* Raw buttons preserve the segmented radio control semantics. */}
                         <button
                             type="button"
                             role="radio"
@@ -279,40 +286,38 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <ul className={styles.list} role="list">
                         {filteredTokens.map((row) => (
                             <li key={`${row.chainId}:${row.tick}`}>
-                                <button
-                                    type="button"
+                                <ListRow
                                     className={styles.row}
                                     onClick={() => onSelectTick(row.tick, row.chainId, row)}
                                     aria-label={`Open ${row.tick} token details`}
-                                >
-                                    <span className={styles.rowChain} aria-hidden="true">
+                                    leading={<span className={styles.rowChain} aria-hidden="true">
                                         <TickerIcon chainId={row.chainId} tick={row.tick} size={40} />
-                                    </span>
-                                    <span className={styles.rowText}>
+                                    </span>}
+                                    title={(
                                         <span className={styles.rowTick}>
                                             {/* A bridged copy reads as its bare
                                                 name plus an origin badge; the
                                                 rooted wire name is on hover. */}
-                                            <BridgeOriginTick
-                                                tick={row.tick}
-                                                localCoin={coinFromChainId(row.chainId)}
-                                            />
+                                            <span className={styles.rowTickName} title={row.tick}>
+                                                <BridgeOriginTick
+                                                    tick={row.tick}
+                                                    localCoin={coinFromChainId(row.chainId)}
+                                                />
+                                            </span>
                                             {row.locked ? (
                                                 <span className={styles.lockedBadge} title="Supply locked">
                                                     <Icon.LockIcon />
                                                 </span>
                                             ) : null}
                                         </span>
-                                        {row.description ? (
-                                            <span className={styles.rowDescription}>
-                                                {row.description}
-                                            </span>
-                                        ) : null}
-                                    </span>
-                                    <span className={styles.rowChevron} aria-hidden="true">
-                                        <Icon.ForwardIcon />
-                                    </span>
-                                </button>
+                                    )}
+                                    subtitle={row.description ? (
+                                        <span className={styles.rowDescription}>
+                                            {row.description}
+                                        </span>
+                                    ) : undefined}
+                                    chevron={<Icon.ForwardIcon />}
+                                />
                             </li>
                         ))}
                     </ul>

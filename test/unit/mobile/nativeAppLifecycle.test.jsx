@@ -81,6 +81,38 @@ afterEach(async () => {
 });
 
 describe('Capacitor app resume', () => {
+    it('ignores document lifecycle events outside a verified native shell', () => {
+        globalThis.Capacitor = { Plugins: {} };
+        const onBackground = vi.fn();
+        render(provider(
+            makeMessaging(0),
+            <LifecycleHarness onBackground={onBackground} />,
+        ));
+
+        document.dispatchEvent(new Event('pause'));
+
+        expect(onBackground).not.toHaveBeenCalled();
+    });
+
+    it('uses Capacitor document lifecycle events when the narrow App plugin has no state event', async () => {
+        globalThis.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+        const messaging = makeMessaging(0);
+        const onBackground = vi.fn();
+        const onResume = vi.fn();
+        const view = render(provider(
+            messaging,
+            <LifecycleHarness onBackground={onBackground} onResume={onResume} />,
+        ));
+
+        act(() => document.dispatchEvent(new Event('pause')));
+        expect(view.getByTestId('private-screen')).toHaveTextContent('covered');
+        act(() => document.dispatchEvent(new Event('resume')));
+
+        expect(onBackground).toHaveBeenCalledTimes(1);
+        expect(onResume).toHaveBeenCalledTimes(1);
+        expect(view.getByTestId('private-screen')).toHaveTextContent('balances');
+    });
+
     it.each([
         { awayMs: MINUTE, locks: 0, refreshes: 1 },
         { awayMs: 10 * MINUTE, locks: 1, refreshes: 0 },

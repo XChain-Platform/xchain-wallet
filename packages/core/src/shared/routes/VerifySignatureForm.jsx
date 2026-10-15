@@ -21,11 +21,12 @@
 // from the registry rather than the wallet, since verification has no
 // dependency on what the wallet knows.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
     Input,
+    Textarea,
     ChainPicker,
     FormPage,
     PageHeader,
@@ -76,13 +77,21 @@ export function VerifySignatureForm({ onBack }) {
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(/** @type {null | 'valid' | 'invalid' | 'malformed'} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const requestGenerationRef = useRef(0);
+    const requestPendingRef = useRef(false);
+
+    function clearSettledFeedback() {
+        requestGenerationRef.current += 1;
+        setResult(null);
+        setError(null);
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (busy) return;
+        if (requestPendingRef.current) return;
         setError(null);
         setResult(null);
-        if (!chainId) { setError('Pick a chain.'); return; }
+        if (!chainId) { setError('Pick a network.'); return; }
         if (address.trim().length === 0) { setError('Enter an address.'); return; }
         if (message.length === 0) { setError('Enter the original message.'); return; }
         if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
@@ -92,6 +101,9 @@ export function VerifySignatureForm({ onBack }) {
             setError('Signature verification is not available in this app.');
             return;
         }
+        const requestGeneration = requestGenerationRef.current + 1;
+        requestGenerationRef.current = requestGeneration;
+        requestPendingRef.current = true;
         setBusy(true);
         try {
             const r = await messaging.verifyMessageRequest({
@@ -100,10 +112,15 @@ export function VerifySignatureForm({ onBack }) {
                 message,
                 signature: normalizedSignature,
             });
-            setResult(r?.valid ? 'valid' : 'invalid');
+            if (requestGenerationRef.current === requestGeneration) {
+                setResult(r?.valid ? 'valid' : 'invalid');
+            }
         } catch {
-            setError('Could not verify this signature. Check the chain, address, message, and signature.');
+            if (requestGenerationRef.current === requestGeneration) {
+                setError('Could not verify this signature. Check the network, address, message, and signature.');
+            }
         } finally {
+            requestPendingRef.current = false;
             setBusy(false);
         }
     }
@@ -123,31 +140,15 @@ export function VerifySignatureForm({ onBack }) {
     // Shown just above the Verify button by FormPage's status slot.
     const status = (error || result) ? (
         <>
-            {error ? (
-                <div role="alert" style={{
-                    color: 'var(--xc-danger-fg)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}>
-                    {error}
-                </div>
-            ) : null}
+            <StatusMessage variant="error">{error}</StatusMessage>
             {result ? (
-                <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                        padding: 'var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        background: 'var(--xc-surface)',
-                        border: `1px solid ${result === 'valid' ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
-                        color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger)',
-                        fontWeight: 600,
-                    }}
-                >
+                // A verdict is a result, not a failure, so a failed check keeps
+                // the polite status role while it takes the error tone.
+                <StatusMessage variant={result === 'valid' ? 'success' : 'error'} role="status">
                     {result === 'valid' ? t('verifySignature.valid') : null}
                     {result === 'invalid' ? t('verifySignature.invalid') : null}
                     {result === 'malformed' ? t('verifySignature.malformed') : null}
-                </div>
+                </StatusMessage>
             ) : null}
         </>
     ) : disabledReason ? (
@@ -165,8 +166,7 @@ export function VerifySignatureForm({ onBack }) {
                     value={chainId || ''}
                     onChange={(nextChainId) => {
                         setChainId(nextChainId);
-                        setResult(null);
-                        if (error) setError(null);
+                        clearSettledFeedback();
                     }}
                     label={t('send.fields.chain')}
                 />
@@ -174,74 +174,29 @@ export function VerifySignatureForm({ onBack }) {
             <Input
                 label={t('verifySignature.address')}
                 value={address}
-                onChange={(e) => { setAddress(e.target.value); setResult(null); if (error) setError(null); }}
+                onChange={(e) => { setAddress(e.target.value); clearSettledFeedback(); }}
                 autoComplete="off"
                 placeholder={t('verifySignature.addressPlaceholder')}
             />
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="verify-message"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    {t('verifySignature.message')}
-                </label>
-                <textarea
-                    id="verify-message"
-                    value={message}
-                    onChange={(e) => { setMessage(e.target.value); setResult(null); if (error) setError(null); }}
-                    placeholder={t('verifySignature.messagePlaceholder')}
-                    rows={5}
-                    aria-label={t('verifySignature.message')}
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                        fontFamily: 'inherit',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="verify-signature"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    {t('verifySignature.signature')}
-                </label>
-                <textarea
-                    id="verify-signature"
-                    value={signature}
-                    onChange={(e) => { setSignature(e.target.value); setResult(null); if (error) setError(null); }}
-                    placeholder={t('verifySignature.signaturePlaceholder')}
-                    rows={3}
-                    aria-label={t('verifySignature.signature')}
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono)',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
+            <Textarea
+                id="verify-message"
+                label={t('verifySignature.message')}
+                value={message}
+                onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
+                placeholder={t('verifySignature.messagePlaceholder')}
+                rows={5}
+                aria-label={t('verifySignature.message')}
+            />
+            <Textarea
+                id="verify-signature"
+                label={t('verifySignature.signature')}
+                value={signature}
+                onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
+                placeholder={t('verifySignature.signaturePlaceholder')}
+                rows={3}
+                aria-label={t('verifySignature.signature')}
+                style={{ fontFamily: 'var(--xc-font-mono)' }}
+            />
         </>
     );
 

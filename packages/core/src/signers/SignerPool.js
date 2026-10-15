@@ -97,6 +97,21 @@ export class SignerPool {
     constructor() {
         /** @type {Map<string, import('./SoftwareSigner.js').SoftwareSigner>} */
         this._signers = new Map();
+        this._session = 0;
+        this._nextMutation = 1;
+        /** @type {Map<string, number>} */
+        this._walletMutations = new Map();
+    }
+
+    _beginMutation(walletId) {
+        const mutation = this._nextMutation++;
+        this._walletMutations.set(walletId, mutation);
+        return { session: this._session, mutation };
+    }
+
+    _isCurrent(walletId, token) {
+        return token.session === this._session
+            && token.mutation === this._walletMutations.get(walletId);
     }
 
     /**
@@ -106,15 +121,16 @@ export class SignerPool {
      *
      * @param {object} opts
      * @param {import('../storage/Vault.js').Vault} opts.vault
-     * @param {string} opts.password
+     * @param {string} [opts.password]   required for wallets whose KDF differs from masterKeyKdfParams
      * @param {string} [opts.bip39Passphrase]   the §15.6 25th word, applied only to wallets that
      *   have none stored yet, and checked against each one's stored addresses
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
-     * @param {Uint8Array} [opts.masterKey]   a key the caller already derived from THIS `password`
-     *   under `masterKeyKdfParams` (the vault key, at unlock). Handed to every wallet whose own
-     *   kdfParams equal those, so that wallet skips its Argon2id round; any other wallet derives
-     *   as usual. Never copied, kept or zeroed here: each signer copies it, the caller zeroes it
+     * @param {Uint8Array} [opts.masterKey]   a key already derived under `masterKeyKdfParams`
+     *   (the vault key, at unlock). Handed to every wallet whose own kdfParams equal those, so
+     *   that wallet skips its Argon2id round without needing the password; any other wallet
+     *   derives from password when one is supplied. Never copied, kept or zeroed here: each
+     *   signer copies it, the caller zeroes it
      * @param {import('../crypto/kdf.js').KdfParams} [opts.masterKeyKdfParams]  the params `masterKey`
      *   was derived with; required with it
      * @returns {Promise<PopulateSummary>}
@@ -130,8 +146,11 @@ export class SignerPool {
             pooled: [], skipped: [], passphraseMatched: [], passphraseMismatch: [], passphraseMismatchNames: [],
             passphraseCaptureNeeded: [], passphraseCaptureNames: [],
         };
+        const session = this._session;
         const wallets = await vault.wallets.list();
+        if (this._session !== session) return summary;
         for (const w of wallets) {
+            const token = this._beginMutation(w.id);
             // A stored passphrase (§15.6) makes the password the only secret this
             // needs, so the wallets left out here are the legacy records that
             // hold none yet. A passphrase supplied by the caller still pools one:
@@ -148,26 +167,41 @@ export class SignerPool {
                 summary.passphraseCaptureNames.push(w.name || '');
                 continue;
             }
+            const hasMatchingMasterKey = masterKey !== undefined
+                && kdfParamsEqual(w.kdfParams, masterKeyKdfParams);
+            // A restored desktop session holds the vault key, not the user's
+            // password. It can reopen wallets sealed with that same key, while
+            // wallets with independent KDF params stay out of the pool and
+            // trigger the normal unlock fallback at the network switch.
+            if (!hasMatchingMasterKey
+                && (typeof password !== 'string' || password.length === 0)) {
+                summary.skipped.push(w.id);
+                continue;
+            }
             let signer;
             try {
                 signer = await unlockWalletRecord({
                     wallet: w,
                     password,
-                    // Same password and identical params derive the same key,
-                    // so the caller's one serves; anything else derives its own.
-                    masterKey: masterKey !== undefined && kdfParamsEqual(w.kdfParams, masterKeyKdfParams)
-                        ? masterKey
-                        : undefined,
+                    // Identical params make the supplied key valid for this
+                    // wallet; anything else derives from the password.
+                    masterKey: hasMatchingMasterKey ? masterKey : undefined,
                     bip39Passphrase,
                     chainRegistry,
                     sdkRegistry,
                 });
             } catch {
+                if (token.session !== this._session) break;
                 // Bad password for this wallet, or other unlock
                 // failure; skip it. The op-level fallback (password
                 // prompt) will surface the real error if the user
                 // tries to use that wallet.
                 summary.skipped.push(w.id);
+                continue;
+            }
+            if (!this._isCurrent(w.id, token)) {
+                try { signer.lock(); } catch { /* best-effort */ }
+                if (token.session !== this._session) break;
                 continue;
             }
             // Only a TYPED passphrase is worth verifying. The ownership check
@@ -177,6 +211,11 @@ export class SignerPool {
             // wallet on a spurious miss.
             if (awaitingCapture) {
                 const owns = await seedOwnsStoredAddresses(vault, w, signer);
+                if (!this._isCurrent(w.id, token)) {
+                    try { signer.lock(); } catch { /* best-effort */ }
+                    if (token.session !== this._session) break;
+                    continue;
+                }
                 if (owns === false) {
                     try { signer.lock(); } catch { /* best-effort */ }
                     summary.passphraseMismatch.push(w.id);
@@ -224,6 +263,7 @@ export class SignerPool {
         if (typeof bip39Passphrase !== 'string' || bip39Passphrase.length === 0) {
             throw new Error('SignerPool.captureOne: bip39Passphrase is required');
         }
+        const token = this._beginMutation(wallet.id);
         const signer = await unlockWalletRecord({
             wallet,
             password,
@@ -233,7 +273,13 @@ export class SignerPool {
         });
         let record;
         try {
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
             const owns = await seedOwnsStoredAddresses(vault, wallet, signer);
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
             if (owns !== true) throw new PassphraseMismatchError([wallet.name]);
             // The signer owns this key and zeroes it at lock(); never clear it here.
             const encryptedPassphrase = await encryptWalletPassphrase({
@@ -241,7 +287,13 @@ export class SignerPool {
                 passphrase: bip39Passphrase,
             });
             record = { ...wallet, encryptedPassphrase };
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
             await vault.wallets.put(record);
+            if (!this._isCurrent(wallet.id, token)) {
+                throw new Error('SignerPool.captureOne: signer unlock was cancelled');
+            }
         } catch (e) {
             // Nothing half-done leaves this method: a failed capture leaves no
             // pooled signer and no live master key, whatever the reason.
@@ -269,6 +321,7 @@ export class SignerPool {
      * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
      */
     async unlockOne({ wallet, password, bip39Passphrase = '', chainRegistry, sdkRegistry }) {
+        const token = this._beginMutation(wallet.id);
         const signer = await unlockWalletRecord({
             wallet,
             password,
@@ -276,6 +329,10 @@ export class SignerPool {
             chainRegistry,
             sdkRegistry,
         });
+        if (!this._isCurrent(wallet.id, token)) {
+            try { signer.lock(); } catch { /* best-effort */ }
+            throw new Error('SignerPool.unlockOne: signer unlock was cancelled');
+        }
         const existing = this._signers.get(wallet.id);
         if (existing) {
             try { existing.lock(); } catch { /* best-effort */ }
@@ -303,6 +360,7 @@ export class SignerPool {
      * @param {string} walletId
      */
     evict(walletId) {
+        this._walletMutations.set(walletId, this._nextMutation++);
         const signer = this._signers.get(walletId);
         if (!signer) return;
         try { signer.lock(); } catch { /* best-effort */ }
@@ -315,6 +373,8 @@ export class SignerPool {
      * session.
      */
     lockAll() {
+        this._session += 1;
+        this._walletMutations.clear();
         for (const signer of this._signers.values()) {
             try { signer.lock(); } catch { /* best-effort */ }
         }

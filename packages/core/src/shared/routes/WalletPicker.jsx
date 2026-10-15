@@ -8,11 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useEffect, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
 import { WalletIdentity } from '../components/WalletIdentity.jsx';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -47,6 +48,7 @@ export function WalletPicker({
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [switchingWalletId, setSwitchingWalletId] = useState(/** @type {string | null} */ (null));
     const [switchError, setSwitchError] = useState(/** @type {string | null} */ (null));
+    const switchingRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -54,26 +56,29 @@ export function WalletPicker({
             setError('messaging.listWallets is not available in this shell.');
             return undefined;
         }
-        messaging.listWallets()
+        Promise.resolve()
+            .then(() => messaging.listWallets())
             .then((list) => { if (!cancelled) setWallets(Array.isArray(list) ? list : []); })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load wallets.'); });
         return () => { cancelled = true; };
     }, [messaging]);
 
     async function handleSelect(walletId, active) {
-        if (switchingWalletId) return;
+        if (switchingRef.current) return;
         if (active) {
             onBack();
             return;
         }
+        switchingRef.current = true;
         setSwitchingWalletId(walletId);
         setSwitchError(null);
         try {
             await onSwitch(walletId);
             onBack();
         } catch (err) {
-            setSwitchError(err?.message || 'Failed to switch wallets.');
+            setSwitchError(userFacingMessage(err, 'Could not switch wallets. Try again.'));
         } finally {
+            switchingRef.current = false;
             setSwitchingWalletId(null);
         }
     }
@@ -117,21 +122,19 @@ export function WalletPicker({
                     <div className={styles.entryDescription}>{t('common.loading')}</div>
                 ) : wallets.length === 0 ? (
                     <EmptyState title={t('walletPicker.emptyTitle')} body={t('walletPicker.emptyBody')} />
-                ) : wallets.map((w) => {
+                ) : wallets.map((w, index) => {
                     const active = w.id === activeWalletId;
                     const walletName = w.name || 'Unnamed wallet';
                     return (
-                        <div key={w.id} className={pickerStyles.rowWrap}>
-                            <button
-                                type="button"
+                        <div key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
+                            <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => handleSelect(w.id, active)}
                                 disabled={switching}
                                 aria-busy={switchingWalletId === w.id ? 'true' : undefined}
                                 aria-current={active ? 'true' : undefined}
-                            >
-                                <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
+                                title={(
                                     <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
                                         {active ? (
                                             <span className={pickerStyles.currentMark} aria-hidden="true">
@@ -142,24 +145,26 @@ export function WalletPicker({
                                             <WalletIdentity wallet={w} active={active} />
                                         </span>
                                     </span>
-                                    {w.format ? (
-                                        <span className={styles.entryDescription}>
-                                            {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
-                                            {w.format === 'counterwallet-legacy'
-                                                ? t('walletPicker.legacy')
-                                                : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
-                                            {/* A stored passphrase (passphraseStored) unlocks on the
-                                                password alone, so it earns no badge here; only a legacy
-                                                record still owed its one-time capture does, and the badge
-                                                names the unlock screen as where that happens. */}
-                                            {w.passphraseEnabled && !w.passphraseStored ? t('walletPicker.passphraseNeeded') : ''}
-                                        </span>
-                                    ) : null}
-                                </span>
-                            </button>
+                                )}
+                                subtitle={w.format ? (
+                                    <span className={styles.entryDescription}>
+                                        {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
+                                        {w.format === 'counterwallet-legacy'
+                                            ? t('walletPicker.legacy')
+                                            : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
+                                        {/* A stored passphrase (passphraseStored) unlocks on the
+                                            password alone, so it earns no badge here; only a legacy
+                                            record still owed its one-time capture does, and the badge
+                                            names the unlock screen as where that happens. */}
+                                        {w.passphraseEnabled && !w.passphraseStored ? t('walletPicker.passphraseNeeded') : ''}
+                                    </span>
+                                ) : null}
+                            />
                             {onShowDetails ? (
-                                <button
+                                <Button
                                     type="button"
+                                    icon={<Icon.InfoIcon />}
+                                    variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('walletPicker.detailsFor', { wallet: walletName })}
                                     title={t('walletDetails.title')}
@@ -168,9 +173,7 @@ export function WalletPicker({
                                         e.stopPropagation();
                                         onShowDetails(w.id);
                                     }}
-                                >
-                                    <Icon.InfoIcon />
-                                </button>
+                                />
                             ) : null}
                         </div>
                     );

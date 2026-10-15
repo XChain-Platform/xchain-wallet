@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 import { NETWORKS, NETWORK_DEFAULT } from '../../schemas/settings.js';
+import { writeLastView } from './lastViewMemory.js';
+import { t } from '../../i18n/index.js';
 
 export const ACTIVE_NETWORK_OPTIONS = /** @type {const} */ ([
     { value: 'mainnet', label: 'Mainnet' },
@@ -38,15 +40,36 @@ export function activeNetworkLabel(value) {
 }
 
 /**
- * Keep Regtest developer-only while always offering an exit from it.
+ * Keep non-Mainnet choices developer-only while preserving a recovery path
+ * for an older persisted Regtest selection.
  *
  * @param {{ developerMode?: boolean, current?: unknown }} opts
  */
 export function activeNetworkOptions({ developerMode = false, current } = {}) {
-    const showRegtest = developerMode || normalizeActiveNetwork(current) === 'regtest';
-    return showRegtest
-        ? ACTIVE_NETWORK_OPTIONS
-        : ACTIVE_NETWORK_OPTIONS.filter((option) => option.value !== 'regtest');
+    if (developerMode || normalizeActiveNetwork(current) === 'regtest') {
+        return ACTIVE_NETWORK_OPTIONS;
+    }
+    // Callers without a loaded network retain the loading-time list. Once
+    // settings resolve, Developer Mode controls every non-Mainnet choice.
+    if (current === undefined || !NETWORKS.includes(current)) {
+        return ACTIVE_NETWORK_OPTIONS.filter((option) => option.value !== 'regtest');
+    }
+    return ACTIVE_NETWORK_OPTIONS.filter((option) => option.value === 'mainnet');
+}
+
+/**
+ * Describe the reload, data boundary, and required unlock consistently.
+ *
+ * @param {unknown} current
+ * @param {unknown} next
+ */
+export function activeNetworkSwitchCopy(current, next) {
+    const from = activeNetworkLabel(current);
+    const to = activeNetworkLabel(next);
+    return {
+        title: t('settings.network.switchTitle', { network: to }),
+        message: t('settings.network.switchMessage', { nextNetwork: to, currentNetwork: from }),
+    };
 }
 
 /**
@@ -79,10 +102,23 @@ export function confirmActiveNetworkSwitch(current, next, confirm = globalThis.c
 export async function persistActiveNetwork({ messaging, update, walletId, network }) {
     if (!NETWORKS.includes(network)) throw new Error('A valid active network is required.');
     if (typeof messaging?.setActiveNetwork === 'function' && walletId) {
-        return messaging.setActiveNetwork({ walletId, network });
+        const result = await messaging.setActiveNetwork({ walletId, network });
+        // Start network reloads from Home instead of restoring a route whose
+        // content belongs to the network the user just left.
+        writeLastView(walletId, 'home');
+        if (result?.addresses?.skipped === 'no-signer') {
+            if (typeof messaging.lockWallet !== 'function') {
+                throw new Error('Unlock your wallet to finish switching networks.');
+            }
+            await messaging.lockWallet();
+            return { ...result, requiresUnlock: true };
+        }
+        return result;
     }
     if (typeof update === 'function') {
-        return { settings: await update({ activeNetwork: network }) };
+        const settings = await update({ activeNetwork: network });
+        if (walletId) writeLastView(walletId, 'home');
+        return { settings };
     }
     throw new Error('Active network switching is not available in this shell.');
 }

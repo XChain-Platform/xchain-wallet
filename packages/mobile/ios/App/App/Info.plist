@@ -59,6 +59,10 @@
 	<string>Allow XChain Wallet to use the camera to scan QR codes for addresses, payment requests, and transactions.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Allow XChain Wallet to use Face ID to unlock your wallet. Face ID does not approve transactions.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Allow XChain Wallet to connect to wallet nodes and services on your local network.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow XChain Wallet to choose images from your photo library for wallet attachments and imports.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -102,9 +106,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- The light launch fallback uses dark icons. SystemBars follows the live
+	     web theme after the bridge loads. -->
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>UIStatusBarStyle</key>
-	<string>UIStatusBarStyleDarkContent</string>
+	<string>UIStatusBarStyleDefault</string>
 </dict>
 </plist>

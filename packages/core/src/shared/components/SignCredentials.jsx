@@ -33,9 +33,11 @@
 //       getSignerStatus={messaging.getSignerStatus}
 //   />
 
+import { useCallback } from 'react';
 import { Input, StatusMessage } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -71,7 +73,12 @@ export function SignCredentials({
     onConfirmedChange,
 }) {
     const src = fromAddress?.source;
+    const signerId = fromAddress?.signerId;
     const isHw = src === 'trezor' || src === 'ledger';
+    const getHwStatus = useCallback((opts) => getSignerStatus?.({
+        signerId,
+        chainId: opts?.chainId ?? chainId,
+    }), [getSignerStatus, signerId, chainId]);
     if (isHw) {
         const signerKind = /** @type {'trezor'|'ledger'} */ (src);
         return (
@@ -81,11 +88,8 @@ export function SignCredentials({
                 path={fromAddress.derivationPath || ''}
                 address={fromAddress.address}
                 chainId={chainId}
-                getStatus={getSignerStatus && fromAddress.signerId
-                    ? (opts) => getSignerStatus({
-                        signerId: fromAddress.signerId,
-                        chainId: opts?.chainId ?? chainId,
-                    })
+                getStatus={getSignerStatus && signerId
+                    ? getHwStatus
                     : null}
                 onStatusChange={onStatusChange}
                 signerInfo={signerInfo}
@@ -126,7 +130,7 @@ export function SignCredentials({
                             color: 'var(--xc-text-muted)',
                         }}
                     >
-                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                        <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                     </p>
                 </SigningReadyNote>
                 {submitError ? (
@@ -139,8 +143,8 @@ export function SignCredentials({
         <Input
             ref={passwordRef}
             type="password"
-            label="Password"
-            hint="Required to sign."
+            label={t('common.password')}
+            hint={t('components.messageConfirmScreen.requiredToSign')}
             value={password || ''}
             onChange={(e) => onPasswordChange?.(e.target.value)}
             autoComplete="current-password"

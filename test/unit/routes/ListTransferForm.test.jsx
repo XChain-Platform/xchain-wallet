@@ -47,17 +47,20 @@ const COMPOSED = Object.freeze({
     version: 1,
 });
 
-function makeMessaging({ walletMode = 'full' } = {}) {
+function makeMessaging({ walletMode = 'full', listError = null } = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ACTIVE_RECORD, OWNER_RECORD] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ACTIVE_RECORD.id } }),
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        getListByActionIndex: vi.fn().mockResolvedValue({
-            action_index: 2700,
-            source: OWNER,
-            state: { owner: OWNER },
+        getListByActionIndex: vi.fn().mockImplementation(async () => {
+            if (listError) throw listError;
+            return {
+                action_index: 2700,
+                source: OWNER,
+                state: { owner: OWNER },
+            };
         }),
         getActionFormats: vi.fn().mockResolvedValue({
             0: 'VERSION|TYPE|MEMO|...ITEM',
@@ -77,14 +80,16 @@ function makeMessaging({ walletMode = 'full' } = {}) {
     });
 }
 
-function mount({ support = { share: true, transfer: true, union: true }, ...options } = {}) {
+function mount({
+    support = { share: true, transfer: true, union: true }, actionIndex = '2700', ...options
+} = {}) {
     listFormatSupport.mockResolvedValue(support);
     const messaging = makeMessaging(options);
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ListTransferForm
                 walletId="wallet-1"
-                listRef={{ chainId: CHAIN, actionIndex: '2700', source: OWNER }}
+                listRef={{ chainId: CHAIN, actionIndex, source: OWNER }}
                 onBack={() => {}}
                 onDone={() => {}}
             />
@@ -105,6 +110,27 @@ afterEach(() => {
 });
 
 describe('ListTransferForm', () => {
+    it('refuses a malformed list reference before review', async () => {
+        const messaging = mount({ actionIndex: 'not-an-index' });
+        await fillTransfer();
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows plain copy when the list indexer read fails', async () => {
+        mount({
+            listError: Object.assign(
+                new Error('Explorer returned HTTP 502 for /BTC/api/lists/2700'),
+                { name: 'SDKExplorerError' },
+            ),
+        });
+
+        expect(await screen.findByText(/service that reads the chain is temporarily unavailable/)).toBeTruthy();
+        expect(screen.queryByText(/\/BTC\/api\/lists/)).toBeNull();
+    });
+
     it('refuses malformed and current-owner destinations', async () => {
         const messaging = mount();
         await fillTransfer({ destination: 'not-an-address' });
@@ -128,6 +154,7 @@ describe('ListTransferForm', () => {
 
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), { target: { value: 'transfer' } });
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(false);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('composes format 3 from the current owner and submits it through createList', async () => {

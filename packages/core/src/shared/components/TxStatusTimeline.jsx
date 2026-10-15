@@ -8,9 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useState } from 'react';
 import styles from './TxStatusTimeline.module.css';
+import { t } from '../../i18n/index.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
+
+const TICK_MS = 30_000;
 
 // Copy for the mempool stage, one entry per state `pendingDisplayState` can
 // return. Written so each line is a claim the wallet can defend from what it
@@ -39,10 +43,10 @@ const MEMPOOL_STAGE_COPY = {
         sub: 'No node has reported holding this transaction. It may not have reached the network',
     },
     dropped: {
-        label: 'Dropped or replaced?',
+        label: 'Failed',
         done: false,
         warn: true,
-        sub: 'A node was holding this transaction and no longer is, and no block has included it',
+        sub: 'The network stopped reporting this transaction and it did not confirm',
     },
     replaced: {
         label: 'Replaced',
@@ -54,7 +58,7 @@ const MEMPOOL_STAGE_COPY = {
     failed: {
         label: 'Failed',
         done: false,
-        warn: true,
+        error: true,
         sub: "This send did not reach the network. Review the failure reason in this transaction's details, correct the problem, and try again",
     },
 };
@@ -111,6 +115,14 @@ const MEMPOOL_STAGE_COPY = {
 export function TxStatusTimeline({
     entry, chainTip, indexerWatermark, seenWindowMs, droppedGraceMs,
 }) {
+    const [, setTick] = useState(0);
+    const nowMs = Date.now();
+
+    useEffect(() => {
+        const id = setInterval(() => setTick((tick) => tick + 1), TICK_MS);
+        return () => clearInterval(id);
+    }, []);
+
     const txHash = typeof entry?.txHash === 'string' ? entry.txHash : '';
     // A record the wallet proved into a block itself stays blockless in
     // shape (so the pending detail branch renders it) and carries the proof
@@ -133,7 +145,7 @@ export function TxStatusTimeline({
     // `pendingDisplayState` would answer 'awaiting-network' for it, which is
     // true of nothing that is in a block.
     const pendingState = !confirmed && (txHash.length > 0 || failed)
-        ? pendingDisplayState(entry, Date.now(), { seenWindowMs, droppedGraceMs })
+        ? pendingDisplayState(entry, nowMs, { seenWindowMs, droppedGraceMs })
         : null;
     const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
     const watermark = Number.isFinite(Number(indexerWatermark)) ? Number(indexerWatermark) : 0;
@@ -145,7 +157,7 @@ export function TxStatusTimeline({
     // with no hash never got that far, and "waiting for you" would be a lie.
     const signed = signedAt > 0 || txHash.length > 0;
     const signedSub = signedAt > 0
-        ? (formatRelativeTime(signedAt) || 'Approved and signed')
+        ? (formatRelativeTime(signedAt, nowMs) || 'Approved and signed')
         : (signed
             ? 'Approved and signed'
             : (failed ? 'Not reached: the send failed first' : 'Waiting for you to approve and sign'));
@@ -164,18 +176,18 @@ export function TxStatusTimeline({
             : 'The service is still catching up to this block')
         : indexed
             ? (watermark > 0
-                ? `Fully processed · the service has reached block ${watermark.toLocaleString()}`
+                ? t('txTimeline.fullyProcessedAtBlock', { block: watermark })
                 : 'Fully processed and searchable')
             : (confirmed
                 ? 'The service is still catching up to this block'
                 : 'Waiting to confirm before it can be processed');
     const confirmedSubBase = confirmed && timestamp > 0
-        ? formatRelativeTime(timestamp)
+        ? formatRelativeTime(timestamp, nowMs)
         : '';
     const confirmedSub = confirmations > 0
         ? (confirmedSubBase === ''
-            ? `${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`
-            : `${confirmedSubBase} · ${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`)
+            ? t('transactionStatus.confirmations', { count: confirmations })
+            : `${confirmedSubBase} · ${t('transactionStatus.confirmations', { count: confirmations })}`)
         : confirmedSubBase;
 
     // The mempool stage in three situations: an in-flight transaction (the
@@ -205,7 +217,7 @@ export function TxStatusTimeline({
         },
         {
             key: 'confirmed',
-            label: confirmed && blockIndex > 0 ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
+            label: confirmed && blockIndex > 0 ? t('txTimeline.confirmedAtBlock', { block: blockIndex }) : 'Confirmed',
             done: confirmed,
             sub: confirmedSub,
         },
@@ -221,37 +233,43 @@ export function TxStatusTimeline({
         : stages.findIndex((stage) => !stage.done);
 
     return (
-        <ol className={styles.timeline} aria-label="Transaction status">
-            {stages.map((s, i) => {
-                const current = i === currentStageIndex;
-                const stateLabel = s.done
-                    ? 'Complete'
-                    : current
-                        ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
-                        : 'Not started';
-                return (
-                    <li
-                        key={s.key}
-                        className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
-                            + (s.warn ? ` ${styles.rowWarn}` : '')}
-                        aria-current={current ? 'step' : undefined}
-                    >
-                        <span className={styles.dot} aria-hidden="true">
-                            {s.warn ? '!' : (s.done ? '●' : '○')}
-                        </span>
-                        {i < stages.length - 1 ? (
-                            <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
-                        ) : null}
-                        <div className={styles.body}>
-                            <div className={styles.heading}>
-                                <div className={styles.label}>{s.label}</div>
-                                <span className={styles.state}>{stateLabel}</span>
+        <>
+            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {confirmed ? t('txTimeline.transactionConfirmed') : ''}
+            </span>
+            <ol className={styles.timeline} aria-label={t('txTimeline.transactionStatus')}>
+                {stages.map((s, i) => {
+                    const current = i === currentStageIndex;
+                    const stateLabel = s.done
+                        ? 'Complete'
+                        : current
+                            ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
+                            : 'Not started';
+                    return (
+                        <li
+                            key={s.key}
+                            className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
+                                + (s.warn ? ` ${styles.rowWarn}` : '')
+                                + (s.error ? ` ${styles.rowError}` : '')}
+                            aria-current={current ? 'step' : undefined}
+                        >
+                            <span className={styles.dot} aria-hidden="true">
+                                {s.error ? '✕' : (s.warn ? '!' : (s.done ? '●' : '○'))}
+                            </span>
+                            {i < stages.length - 1 ? (
+                                <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
+                            ) : null}
+                            <div className={styles.body}>
+                                <div className={styles.heading}>
+                                    <div className={styles.label}>{s.label}</div>
+                                    <span className={styles.state}>{stateLabel}</span>
+                                </div>
+                                <div className={styles.sub}>{s.sub}</div>
                             </div>
-                            <div className={styles.sub}>{s.sub}</div>
-                        </div>
-                    </li>
-                );
-            })}
-        </ol>
+                        </li>
+                    );
+                })}
+            </ol>
+        </>
     );
 }

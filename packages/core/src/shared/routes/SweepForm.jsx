@@ -9,12 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -65,10 +66,7 @@ function destinationAddressError(address, descriptor) {
     if (detected && detected !== descriptor.coin) {
         return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
     }
-    const where = descriptor.networkKind === 'mainnet'
-        ? chainName
-        : `${chainName} ${descriptor.networkKind}`;
-    return `This is not a valid ${where} address. Check it for typos.`;
+    return `This is not a valid ${chainName} address. Check it for typos.`;
 }
 
 const CATEGORY_META = [
@@ -112,6 +110,7 @@ export function SweepForm({
     walletId, onBack, initialChainId, initialFromAddress, initialDestination, migrateTo = null,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const migrateLane = !!migrateTo;
 
@@ -140,7 +139,7 @@ export function SweepForm({
         // Migrate lane arrives chain-locked (one sweep per chain row).
         lockedToken: migrateLane,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before sweeping.',
+            'No addresses on any network yet. Use Receive to generate one before sweeping.',
     });
 
     const [destination, setDestination] = useState(
@@ -207,22 +206,41 @@ export function SweepForm({
     const [preview, setPreview] = useState(/** @type {any | null} */ (null));
     const [previewError, setPreviewError] = useState(/** @type {string | null} */ (null));
     const [previewLoading, setPreviewLoading] = useState(false);
+    const previewRequestRef = useRef(0);
     useEffect(() => {
+        const requestId = ++previewRequestRef.current;
         setPreview(null);
         setPreviewError(null);
         const address = fromAddress?.address;
-        if (!chainId || !address) return undefined;
-        let cancelled = false;
+        if (!chainId || !address) {
+            setPreviewLoading(false);
+            return undefined;
+        }
         setPreviewLoading(true);
-        messaging.sweepPreview({ chainId, address })
-            .then((p) => { if (!cancelled) { setPreview(p); setPreviewError(null); } })
+        // The promise boundary handles transports that throw before returning
+        // a promise. The request id keeps an older address lookup from
+        // replacing the preview for a source selected while it is in flight.
+        Promise.resolve()
+            .then(() => messaging.sweepPreview({ chainId, address }))
+            .then((p) => {
+                if (previewRequestRef.current === requestId) {
+                    setPreview(p);
+                    setPreviewError(null);
+                }
+            })
             .catch(() => {
                 // Preview failure NEVER blocks the sweep; the typed
                 // confirm already covers unlisted holdings.
-                if (!cancelled) setPreviewError('Preview unavailable.');
+                if (previewRequestRef.current === requestId) {
+                    setPreviewError('Preview unavailable.');
+                }
             })
-            .finally(() => { if (!cancelled) setPreviewLoading(false); });
-        return () => { cancelled = true; };
+            .finally(() => {
+                if (previewRequestRef.current === requestId) setPreviewLoading(false);
+            });
+        return () => {
+            if (previewRequestRef.current === requestId) previewRequestRef.current += 1;
+        };
     }, [messaging, chainId, fromAddress?.address]);
 
     const gatedTicks = useMemo(() => (
@@ -575,8 +593,14 @@ export function SweepForm({
                 : (migrateLane ? 'Sweep to new wallet' : 'Sweep address')}
         />
     );
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children, footer = null) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
             {footer}
         </Screen>
@@ -650,23 +674,23 @@ export function SweepForm({
     const sweepWarnings = (
         <>
             {thirdPartyDestination ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>This destination is not one of this wallet's addresses.</strong>{' '}
                         Everything selected - balances, ownerships, and released
                         escrow - will belong to that address's owner. Triple-check
                         it before signing.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {!migrateLane && gatedTicks.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <StatusMessage variant="warning" role="alert">
                     {gatedTicks.map((tick) => (
-                        <p key={tick} className={styles.warning}>
+                        <p key={tick}>
                             {gatedTickWarningCopy(tick, 'sweep recipients')}
                         </p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
         </>
     );
@@ -674,6 +698,7 @@ export function SweepForm({
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review sweep"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -698,16 +723,18 @@ export function SweepForm({
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sweep on ${descriptor.displayName}` : 'Sweep')}
+                                : 'Sweep'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -731,11 +758,11 @@ export function SweepForm({
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {sweepWarnings}
                 {isWatcherMode ? (
@@ -849,6 +876,7 @@ export function SweepForm({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={migrateLane ? 'Sweep to new wallet' : 'Sweep address'}
             onSubmit={handleReview}
             sectioned
@@ -879,28 +907,32 @@ export function SweepForm({
                     recovery phrase until you have.
                 </p>
             ) : (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>Sweep moves everything selected at once.</strong>{' '}
                         The preview below is indicative; the chain settles whatever
                         the address holds when the sweep confirms.
                     </p>
-                </div>
+                </StatusMessage>
             )}
 
             {migrateLane ? (
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                 </dl>
             ) : (
-                <NetworkField
+                <ChainPicker
+                    label="Network"
                     value={chainId}
                     onChange={setChainId}
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
+                    hideNetworkKind
                 />
             )}
 
@@ -945,32 +977,28 @@ export function SweepForm({
                 />
             )}
             {thirdPartyDestination ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>Not your address.</strong> This wallet does not own
                         the destination; everything swept will belong to whoever
                         controls it.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             </FormSection>
 
             <FormSection title="What to sweep">
             {CATEGORY_META.map((c) => (
                 <div key={c.key}>
-                    <label className={styles.checkRow}>
-                        <input
-                            type="checkbox"
-                            checked={flags[c.key]}
-                            onChange={(e) => {
-                                setFlags((f) => ({ ...f, [c.key]: e.target.checked }));
-                                clearFormError();
-                            }}
-                        />
-                        {' '}{c.label}
-                        {preview ? ` (${categoryCount(preview, c.key)})` : ''}
-                    </label>
-                    <p className={styles.hint}>{c.hint}</p>
+                    <Checkbox
+                        label={`${c.label}${preview ? ` (${categoryCount(preview, c.key)})` : ''}`}
+                        description={c.hint}
+                        checked={flags[c.key]}
+                        onChange={(e) => {
+                            setFlags((f) => ({ ...f, [c.key]: e.target.checked }));
+                            clearFormError();
+                        }}
+                    />
                     {flags[c.key] ? <CategoryPreview preview={preview} categoryKey={c.key} /> : null}
                 </div>
             ))}
@@ -1001,11 +1029,17 @@ export function SweepForm({
                     {gateLoading ? <p className={styles.hint}>Checking vault keys…</p> : null}
                     {(gateRows || []).map((r) => (
                         <div key={r.tick}>
-                            <p className={r.missingCount > 0 ? styles.warning : styles.hint}>
-                                {r.tick}: {r.packCount - r.missingCount}/{r.packCount} unlock
-                                key{r.packCount === 1 ? '' : 's'} in the vault
-                                {r.missingCount > 0 ? ' - missing' : ''}
-                            </p>
+                            {r.missingCount > 0 ? (
+                                <StatusMessage variant="warning" role={null}>
+                                    {r.tick}: {r.packCount - r.missingCount}/{r.packCount} unlock
+                                    key{r.packCount === 1 ? '' : 's'} in the vault - missing
+                                </StatusMessage>
+                            ) : (
+                                <p className={styles.hint}>
+                                    {r.tick}: {r.packCount}/{r.packCount} unlock
+                                    key{r.packCount === 1 ? '' : 's'} in the vault
+                                </p>
+                            )}
                             {r.missingKeyHashes.length > 0 ? (
                                 <ul className={styles.detailsList}>
                                     {r.missingKeyHashes.map((hash) => (
@@ -1052,40 +1086,41 @@ export function SweepForm({
                         </>
                     ) : null}
                     {(isHwSource || isWatcherMode) && gateMissingTicks.length > 0 ? (
-                        <p className={styles.warning}>
+                        <StatusMessage variant="warning" role={null}>
                             This signer cannot run the key recovery scan
                             ({isWatcherMode ? 'watch-only' : 'hardware'} addresses
                             hold no exportable key). Unlock keys for{' '}
                             {gateMissingTicks.join(', ')} may be lost after migration.
-                        </p>
+                        </StatusMessage>
                     ) : null}
                     {gateMissingTicks.length > 0 ? (
-                        <label className={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={ackMissingKeys}
-                                onChange={(e) => {
-                                    setAckMissingKeys(e.target.checked);
-                                    clearFormError();
-                                }}
-                            />
-                            {' '}Sweep anyway - I understand gated content for{' '}
-                            {gateMissingTicks.join(', ')} may become permanently
-                            unopenable in the new wallet.
-                        </label>
+                        <Checkbox
+                            label={(
+                                <>
+                                    Sweep anyway - I understand gated content for{' '}
+                                    {gateMissingTicks.join(', ')} may become permanently
+                                    unopenable in the new wallet.
+                                </>
+                            )}
+                            checked={ackMissingKeys}
+                            onChange={(e) => {
+                                setAckMissingKeys(e.target.checked);
+                                clearFormError();
+                            }}
+                        />
                     ) : null}
                 </FormSection>
             ) : null}
 
             <FormSection title="Transaction details">
             {!migrateLane && gatedTicks.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <StatusMessage variant="warning" role="alert">
                     {gatedTicks.map((tick) => (
-                        <p key={tick} className={styles.warning}>
+                        <p key={tick}>
                             {gatedTickWarningCopy(tick, 'sweep recipients')}
                         </p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
 
             <Input

@@ -10,6 +10,7 @@
 
 import { AddressList } from '../routes/AddressList.jsx';
 import { coinFromChainId } from './BalanceList.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * Standard own-address selector: the full change-address screen
@@ -38,7 +39,7 @@ export function OwnAddressPickerScreen({
     walletId,
     accountId,
     chainId,
-    title = 'Choose address',
+    title = t('routes.addressList.chooseAddress'),
     onPick,
     onBack,
     pickerActions,

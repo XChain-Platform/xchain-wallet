@@ -19,9 +19,14 @@ import {
     useFiatRate,
     useNativeFiatRates,
     priceNativeRows,
+    priceTokenRows,
 } from '../../../packages/core/src/shared/hooks/useFiatRate.js';
 import {
     configureFiatRateSource,
+    getFiatRate,
+    getTokenFiatRate,
+    refreshFiatRates,
+    refreshTokenFiatRate,
     _resetPriceLookupForTests,
 } from '../../../packages/core/src/flows/priceLookup.js';
 
@@ -190,18 +195,28 @@ describe('priceNativeRows', () => {
     const rates = { bitcoin: { rate: 80000 }, litecoin: { rate: 90 } };
     const row = (over) => ({ kind: 'native', chainId: 'bitcoin-mainnet', tick: 'BTC', quantity: '0', divisibility: 8, fiatRate: null, ...over });
 
-    it('attaches the coin rate to a native row with none, zero balance included', () => {
+    it('attaches rates only to mainnet rows, with zero balances included', () => {
         const [btc, ltc] = priceNativeRows(
             [row(), row({ chainId: 'litecoin-testnet', tick: 'LTC' })],
             rates,
         );
         expect(btc.fiatRate).toBe(80000);
-        expect(ltc.fiatRate).toBe(90);
+        expect(ltc.fiatRate).toBeNull();
     });
 
     it('keeps a rate the row already has, which is how demo fixtures price themselves', () => {
-        const [btc] = priceNativeRows([row({ fiatRate: 95000 })], rates);
+        const [btc] = priceNativeRows([row({ chainId: 'bitcoin-regtest', fiatRate: 95000 })], rates);
         expect(btc.fiatRate).toBe(95000);
+    });
+
+    it('leaves real test-network tokens unpriced while preserving demo fixtures', () => {
+        const rateMap = { 'bitcoin|XCHAIN': { rate: 1.25, source: 'oracle' } };
+        const testnet = row({ kind: 'token', chainId: 'bitcoin-testnet', tick: 'XCHAIN' });
+        const demo = row({ kind: 'token', chainId: 'bitcoin-regtest', tick: 'XCHAIN', fiatRate: 1.25 });
+        const [unpriced, fixture] = priceTokenRows([testnet, demo], rateMap);
+
+        expect(unpriced.fiatRate).toBeNull();
+        expect(fixture.fiatRate).toBe(1.25);
     });
 
     it('never prices a token with its chain coin rate', () => {
@@ -219,5 +234,69 @@ describe('priceNativeRows', () => {
     it('leaves a coin with no known rate unpriced and returns the same array', () => {
         const rows = [row({ chainId: 'dogecoin-mainnet', tick: 'DOGE' })];
         expect(priceNativeRows(rows, rates)).toBe(rows);
+    });
+});
+
+describe('expired fiat cache entries', () => {
+    it('marks a good native rate stale instead of replacing it with zero', async () => {
+        let now = NOW;
+        let quoted = '50000';
+        configureFiatRateSource({
+            now: () => now,
+            explorerUrlByCoin: EXPLORER,
+            fetch: async () => ({
+                ok: true,
+                json: async () => ({ data: [{ coin_pair: 'BTC/USD', price: quoted, block_timestamp: Math.floor(now / 1000) }] }),
+            }),
+        });
+        await refreshFiatRates({ chainCoins: ['bitcoin'], allowCoingeckoFallback: false });
+        const fetchedAt = getFiatRate({ chainCoin: 'bitcoin' }).fetchedAt;
+
+        quoted = '0';
+        now += 10 * 60 * 1000;
+        await refreshFiatRates({ chainCoins: ['bitcoin'], allowCoingeckoFallback: false, force: true });
+
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toMatchObject({
+            rate: 50000,
+            fetchedAt,
+            stale: true,
+        });
+    });
+
+    it('keeps a token observation timestamp stale while throttling failed retries', async () => {
+        let now = NOW;
+        let available = true;
+        const fetchImpl = async () => ({
+            ok: true,
+            json: async () => ({
+                data: available
+                    ? [{ coin_pair: 'XCHAIN/USD', price: '0.42', block_timestamp: Math.floor(now / 1000) }]
+                    : [],
+            }),
+        });
+        let calls = 0;
+        configureFiatRateSource({
+            now: () => now,
+            explorerUrlByCoin: EXPLORER,
+            fetch: async (...args) => { calls += 1; return fetchImpl(...args); },
+        });
+        const request = {
+            chainCoin: 'bitcoin',
+            tick: 'XCHAIN',
+            nativeTicker: 'BTC',
+            allowCoingeckoFallback: false,
+        };
+        await refreshTokenFiatRate(request);
+        const fetchedAt = getTokenFiatRate(request).fetchedAt;
+
+        available = false;
+        now += 10 * 60 * 1000;
+        await refreshTokenFiatRate(request);
+        expect(getTokenFiatRate(request)).toMatchObject({ rate: 0.42, fetchedAt, stale: true });
+
+        const callsAfterMiss = calls;
+        now += 30 * 1000;
+        await refreshTokenFiatRate(request);
+        expect(calls).toBe(callsAfterMiss);
     });
 });

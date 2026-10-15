@@ -16,19 +16,23 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
-    NetworkField,
     Icon,
     StatusMessage,
     FeeSelector,
     AddressField,
     FormErrorSummary,
+    Select,
+    RadioGroup,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { t } from '../../i18n/index.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -44,6 +48,8 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
     formatWithThousands,
+    normalizeLocalizedDecimal,
+    tokenAmountPrecisionError,
 } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -64,6 +70,7 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import {
@@ -85,6 +92,7 @@ import {
     readDispenserAddressStanding,
 } from '../../flows/dispenserAddressStanding.js';
 import { listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
+import { exceedsBalance } from '../utils/dividendPerUnit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -139,13 +147,13 @@ function outsideAddressError(address, descriptor) {
     if (!address || !descriptor?.coin || !descriptor?.networkKind) return null;
     if (isValidAddressForChain(address, descriptor.coin, descriptor.networkKind)) return null;
     const chainName = COIN_NAME[descriptor.coin] || descriptor.coin;
-    // Name the coin it does look like, which beats a bare "invalid".
+    // Name the coin it does look like, which beats a bare "invalid". The
+    // network kind stays out of the copy; Settings owns that choice.
     const detected = detectAddressCoin(address);
     if (detected && detected !== descriptor.coin) {
         return `This looks like a ${COIN_NAME[detected] || detected} address, not a ${chainName} address.`;
     }
-    const where = descriptor.networkKind === 'mainnet' ? chainName : `${chainName} ${descriptor.networkKind}`;
-    return `This is not a valid ${where} address. Check it for typos.`;
+    return `This is not a valid ${chainName} address. Check it for typos.`;
 }
 
 /**
@@ -185,6 +193,7 @@ function outsideAddressError(address, descriptor) {
  */
 export function DispenserForm({ walletId, activeAccountId, onBack, initialChainId, initialTick, initialFromAddress, reopen }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
@@ -218,6 +227,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [derivingGetAddress, setDerivingGetAddress] = useState(false);
 
     const [ticker, setTicker] = useState((initialTick || reopen?.tick || '').toUpperCase());
+    const giveTokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     // PC-26: dispenses carry no gated-key handoff; warn when the
     // dispensed token has gated content.
     const gatedGiveNotice = useGatedTickNotice({ messaging, chainId, tick: ticker });
@@ -235,6 +245,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // lane; EXPIRATION + allow/block lists complete the field set.
     const [payWith, setPayWith] = useState(/** @type {'coin' | 'token'} */ (reopen?.payWith === 'token' ? 'token' : 'coin'));
     const [getTick, setGetTick] = useState(reopen?.getTick || '');
+    const paymentTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick,
+        skip: payWith !== 'token' || !getTick.trim(),
+    });
     const [getTokenAmount, setGetTokenAmount] = useState(reopen?.getTokenAmount || '');
     // Every form starts on the default window, a reopen included: the indexer fills a concrete
     // EXPIRATION into every dispenser, so a reopened one's expiration is usually the old default
@@ -314,6 +329,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reviewInFlightRef = useRef(false);
+    const submitInFlightRef = useRef(false);
+    const routeIdentityRef = useRef('');
+    routeIdentityRef.current = `${walletId}\u0000${activeAccountId || ''}\u0000${chainId || ''}`;
 
     useEffect(() => {
         setFormError(null);
@@ -334,20 +353,30 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         draft.save({
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,
-            showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
-            outsideAddress,
+            showAdvanced, payWith, getTick, getTokenAmount,
+            expMode, expInput, allowListIdx, blockListIdx,
+            feePick, payFeeInNativeCoin, addressMode, existingAddressId, outsideAddress,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, giveAmount, escrow,
         triggerPrice, oracleAddress, fiatCode, fiatAmount,
-        showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
-        outsideAddress,
+        showAdvanced, payWith, getTick, getTokenAmount,
+        expMode, expInput, allowListIdx, blockListIdx,
+        feePick, payFeeInNativeCoin, addressMode, existingAddressId, outsideAddress,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -362,6 +391,14 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.fiatCode === 'string') setFiatCode(v.fiatCode);
         if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
         if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
+        if (v.payWith === 'coin' || v.payWith === 'token') setPayWith(v.payWith);
+        if (typeof v.getTick === 'string') setGetTick(v.getTick);
+        if (typeof v.getTokenAmount === 'string') setGetTokenAmount(v.getTokenAmount);
+        if (v.expMode === 'default' || v.expMode === 'custom') setExpMode(v.expMode);
+        if (typeof v.expInput === 'string') setExpInput(v.expInput);
+        if (typeof v.allowListIdx === 'string') setAllowListIdx(v.allowListIdx);
+        if (typeof v.blockListIdx === 'string') setBlockListIdx(v.blockListIdx);
+        if (v.feePick && ['low', 'normal', 'fast', 'custom'].includes(v.feePick.mode)) setFeePick(v.feePick);
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
         if (v.addressMode === 'new' || v.addressMode === 'current' || v.addressMode === 'existing'
             || v.addressMode === 'other') {
@@ -394,6 +431,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The active map and the settings read are best-effort: a host without
@@ -417,7 +455,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before opening a dispenser.',
+                        'No addresses on any network yet. Use Receive to generate one before opening a dispenser.',
                     );
                     return;
                 }
@@ -514,6 +552,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
@@ -651,25 +690,25 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // Scope of the unused-address memory: one per wallet, account and chain.
     const dispenserAddressScope = { walletId, accountId: activeAccountId, chainId: chainId || '' };
     const allowListWarningNode = allowListSelfWarning ? (
-        <div role="alert" className={styles.warnings}>
-            <p className={styles.warning}>{allowListSelfWarning}</p>
-        </div>
+        <StatusMessage variant="warning" role="alert">
+            <p>{allowListSelfWarning}</p>
+        </StatusMessage>
     ) : null;
     // Confirm-time reminder for an outside dispenser address: buyers pay that
     // address, not SOURCE, and the escrow goes back to whichever of the two
     // closes the dispenser (dispenser.md Rules), which may not be this wallet.
     const outsideAddressNote = addressMode === 'other' && outsideTrimmed
         && outsideVerdict?.allowed && outsideVerdict.kind !== 'self' ? (
-            <div role="note" className={styles.warnings} data-testid="outside-address-note">
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="note" testId="outside-address-note">
+                <p>
                     Dispenser address: <AddressText address={outsideTrimmed} truncate={false} />
                 </p>
-                <p className={styles.warning}>
+                <p>
                     Buyers&apos; payments go to this address, not to your source. Either this
                     address or your source can close the dispenser, and the unsold escrow
                     returns to whichever one closes it.
                 </p>
-            </div>
+            </StatusMessage>
         ) : null;
 
     // Resolve the SOURCE address's balance of the entered ticker for the
@@ -808,7 +847,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     async function handleReview(event) {
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
-        if (derivingGetAddress || actionConfirm.composing) return;
+        if (reviewInFlightRef.current || derivingGetAddress || actionConfirm.composing) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -827,13 +866,38 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setFormError('Per-fill give amount must be a positive number.');
             return;
         }
+        const givePrecisionError = tokenAmountPrecisionError(ga, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Per-fill give amount',
+        });
+        if (givePrecisionError) {
+            setFormError(givePrecisionError);
+            return;
+        }
         const esc = escrow.trim();
         if (!isPositiveDecimal(esc)) {
             setFormError('Escrow amount must be a positive number.');
             return;
         }
+        const escrowPrecisionError = tokenAmountPrecisionError(esc, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Escrow amount',
+        });
+        if (escrowPrecisionError) {
+            setFormError(escrowPrecisionError);
+            return;
+        }
         if (compareDecimalStrings(esc, ga) === -1) {
             setFormError('Escrow is smaller than a single fill; the dispenser would never dispense.');
+            return;
+        }
+        if (exceedsBalance(esc, sourceTickBalance)) {
+            setFormError(
+                `This address holds only ${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()}. `
+                + 'Enter an escrow amount at or below that balance.',
+            );
             return;
         }
         const oracle = oracleAddress.trim();
@@ -846,6 +910,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!isPositiveDecimal(getTokenAmount)) {
                 setFormError('Enter a positive token amount buyers pay per fill.'); return;
             }
+            const paymentPrecisionError = tokenAmountPrecisionError(getTokenAmount, {
+                divisibility: paymentTokenInfo?.divisibility,
+                tick: getTick,
+                noun: 'Payment amount',
+            });
+            if (paymentPrecisionError) { setFormError(paymentPrecisionError); return; }
         } else {
             if (!oracle && !fa && !trig) {
                 setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
@@ -873,6 +943,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             }
             if (!oracle && trig && !isPositiveDecimal(trig)) {
                 setFormError('Trigger price must be a positive number.');
+                return;
+            }
+            const triggerPrecisionError = !oracle && trig
+                ? tokenAmountPrecisionError(trig, {
+                    divisibility: descriptor?.nativeDecimals ?? 8,
+                    tick: coinTicker,
+                    noun: 'Trigger price',
+                })
+                : null;
+            if (triggerPrecisionError) {
+                setFormError(triggerPrecisionError);
                 return;
             }
             if (priceNotes.block) {
@@ -908,6 +989,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!outsideVerdict.allowed) { setFormError(outsideVerdict.message); return; }
         }
         setFormError(null);
+        reviewInFlightRef.current = true;
+        const routeIdentity = routeIdentityRef.current;
         // §16: the dedicated dispenser sub-address (GET_ADDRESS) for mode
         // 'new': the one derived for an earlier unsigned preview while the
         // wallet still holds it, else a fresh derivation, after validation so
@@ -921,8 +1004,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // fold `dispenserGetAddress` in. Reading the memo here would submit
         // the dispenser self-open and orphan the address just derived.
         let params = actionParams;
-        if (addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress) {
-            try {
+        try {
+            if (addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress) {
                 setDerivingGetAddress(true);
                 const addr = recallUnusedDispenserAddress(dispenserAddressScope, addressesByChain?.[chainId])
                     || await messaging.generateDispenserAddress({
@@ -931,17 +1014,23 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         chainId,
                     });
                 rememberUnusedDispenserAddress(dispenserAddressScope, addr);
+                if (routeIdentity !== routeIdentityRef.current || actionParams !== actionParamsRef.current) return;
                 setDispenserGetAddress(addr);
                 if (addr?.address) params = { ...actionParams, GET_ADDRESS: addr.address };
-            } catch (err) {
-                setFormError(err?.message || 'Could not derive a dispenser address.');
-                return;
-            } finally {
                 setDerivingGetAddress(false);
             }
+            if (singleEncode) { await openConfirmScreen(params, routeIdentity); return; }
+            if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
+                setStage('review');
+            }
+        } catch (err) {
+            if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
+                setFormError(err?.message || 'Could not derive a dispenser address.');
+            }
+        } finally {
+            setDerivingGetAddress(false);
+            reviewInFlightRef.current = false;
         }
-        if (singleEncode) { openConfirmScreen(params); return; }
-        setStage('review');
     }
 
     const hw = isHwSource(sourceAddress);
@@ -975,7 +1064,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // `params` is the wire param set to compose AND to sign on Approve; the
     // caller passes it explicitly when it holds a GET_ADDRESS newer than the
     // memoized `actionParams` (see handleReview).
-    async function openConfirmScreen(params = actionParams) {
+    const actionParamsRef = useRef(actionParams);
+    actionParamsRef.current = actionParams;
+
+    async function openConfirmScreen(params = actionParams, routeIdentity = routeIdentityRef.current) {
         const from = {
             address: sourceAddress.address,
             publicKey: sourceAddress.publicKey,
@@ -1004,6 +1096,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     prebuiltPsbt,
                 }),
             });
+            if (routeIdentity !== routeIdentityRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
@@ -1011,6 +1104,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             draft.clear();
             setDraftPending(false);
         } catch (err) {
+            if (routeIdentity !== routeIdentityRef.current) return;
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
@@ -1025,9 +1119,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitInFlightRef.current || stage === 'submitting') return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
+        const routeIdentity = routeIdentityRef.current;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -1062,6 +1158,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             } else {
                 res = await messaging.dispenserAction({ ...base, password });
             }
+            if (routeIdentity !== routeIdentityRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
@@ -1069,6 +1166,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             draft.clear();
             setDraftPending(false);
         } catch (err) {
+            if (routeIdentity !== routeIdentityRef.current) return;
             const isBadPassword = err?.name === 'InvalidPasswordError';
             let submitMsg;
             if (isBadPassword) {
@@ -1087,6 +1185,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -1098,15 +1198,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
         const header = (
         <PageHeader
-            onBack={leaveGuard.guardedOnBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : leaveGuard.guardedOnBack}
             titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
-                    : 'Create Dispenser'}
+                    : 'Create dispenser'}
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
             {leaveGuard.confirmation}
         </Screen>
@@ -1153,17 +1255,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const reviewDisabledReason = stage === 'submitting'
-            ? 'Submitting the dispenser…'
-            : isWatcherMode
-                ? null
-                : hw
-                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
-                    : (!signerReady && password.length === 0) ? 'Enter your wallet password to create this dispenser.' : null;
         // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
         // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review dispenser"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -1175,33 +1271,34 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     </StatusMessage>
                 ) : null}
                 actions={(
-                    <>
-                    {reviewDisabledReason ? (
-                        <p id="dispenser-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
-                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={Boolean(reviewDisabledReason)}
-                        aria-describedby={reviewDisabledReason ? 'dispenser-review-disabled-reason' : undefined}
+                        disabled={
+                            stage === 'submitting'
+                            || (!isWatcherMode && (hw
+                                ? hwStatus !== 'available'
+                                : (!signerReady && password.length === 0)))
+                        }
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
                             : hw
                                 ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                : 'Sign'}
                     </Button>
-                    </>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <p className={styles.hint}>{summaryLine}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Source</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={sourceAddress.address} />
@@ -1226,20 +1323,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {outsideAddressNote}
                 {allowListWarningNode}
@@ -1313,7 +1410,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     // whether the chain will accept it before Create enables.
                     key: 'another-address',
                     label: 'Another address',
-                    sublabel: 'Enter any address on this chain',
+                    sublabel: 'Enter any address on this network',
                     onSelect: () => {
                         setAddressMode('other');
                         setExistingAddressId(null);
@@ -1360,7 +1457,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                         + (feeFiat ? ` (${feeFiat})` : '')
@@ -1453,44 +1550,30 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const dispenserErrors = formError
         ? [{ ...dispenserErrorTarget, message: formError }]
         : [];
-    const dispenserDisabledReason = derivingGetAddress || actionConfirm.composing
-        ? 'Preparing the dispenser for review…'
-        : outsideBlocked && outsideVerdictLoading
-            ? 'Checking whether the dispenser address can be used…'
-            : outsideBlocked && outsideVerdict?.allowed === false
-                ? outsideVerdict.message || 'Choose a dispenser address that this source can use.'
-                : null;
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create dispenser"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={<FormErrorSummary errors={dispenserErrors} focusKey={validationAttempt} />}
             actions={(
-                <>
-                {dispenserDisabledReason ? (
-                    <p id="dispenser-disabled-reason" role="status" className={styles.hint}>{dispenserDisabledReason}</p>
-                ) : null}
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={actionConfirm.composing}
-                    disabled={Boolean(dispenserDisabledReason)}
-                    aria-describedby={dispenserDisabledReason ? 'dispenser-disabled-reason' : undefined}
+                    loading={derivingGetAddress || actionConfirm.composing}
+                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
                 >
-                    {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
+                    Create
                 </Button>
-                </>
             )}
         >
             {draftBanner}
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
             )}
 
             {fromAddress ? (
@@ -1502,21 +1585,26 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             label="Dispenser address"
                             icon="addresses"
                             value={outsideAddress}
-                            placeholder={descriptor?.displayName ? `Any ${descriptor.displayName} address` : 'Any address on this chain'}
+                            placeholder="Any address on the active network"
                             onChange={(e) => setOutsideAddress(e.target.value)}
                             error={outsideFormatError || undefined}
                             onIconClick={() => setAddressPickerOpen(true)}
                             iconLabel="Change dispenser address"
                         />
                     ) : (
+                        // A new address does not exist until preview, so the
+                        // field says so as a placeholder; as a value the
+                        // sentence went through the address shortener and
+                        // read "New di…eview)".
                         <AddressField
                             label="Dispenser address"
                             icon="addresses"
                             value={addressMode === 'new'
-                                ? 'New dispenser address (generated at preview)'
+                                ? ''
                                 : (addressMode === 'existing' && existingAddress
                                     ? existingAddress.address
                                     : fromAddress.address)}
+                            placeholder={addressMode === 'new' ? 'New address, made at preview' : undefined}
                             readOnly
                             onChange={() => {}}
                             onIconClick={() => setAddressPickerOpen(true)}
@@ -1564,18 +1652,19 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             )}
             {gatedGiveNotice.gated ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {gatedTickWarningCopy(ticker, 'buyers dispensed this token')}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             <AmountField
                 id="dispenser-give"
-                label="Give amount (per fill)"
+                label={t('dispenserForm.giveAmountPerFill')}
                 hint="Tokens sent to the buyer every time the dispenser is triggered."
                 amount={giveAmount}
                 tick={ticker}
+                divisibility={giveTokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -1594,6 +1683,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 label="Escrow amount"
                 amount={escrow}
                 tick={ticker}
+                divisibility={giveTokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -1607,15 +1697,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
                     : null}
             />
-            <p className={styles.pickerLabel}>Buyers pay with</p>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-pay" checked={payWith === 'coin'} onChange={() => setPayWith('coin')} />
-                {' '}Native {coinTicker || 'coin'}
-            </label>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-pay" checked={payWith === 'token'} onChange={() => setPayWith('token')} />
-                {' '}A token
-            </label>
+            <RadioGroup
+                legend="Buyers pay with"
+                name="disp-pay"
+                value={payWith}
+                onChange={setPayWith}
+                options={[
+                    { value: 'coin', label: `Native ${coinTicker || 'coin'}` },
+                    { value: 'token', label: 'A token' },
+                ]}
+            />
             {payWith === 'token' ? (
                 <>
                     <Input
@@ -1631,11 +1722,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                     <Input
                         id="dispenser-payment-amount"
-                        label="Payment amount (per fill)"
+                        label={t('dispenserForm.paymentAmountPerFill')}
                         hint="Amount of the payment token buyers send per fill."
                         inputMode="decimal"
                         value={getTokenAmount}
-                        onChange={(e) => setGetTokenAmount(e.target.value)}
+                        onChange={(e) => setGetTokenAmount(
+                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                        )}
                         autoComplete="off"
                     />
                 </>
@@ -1650,7 +1743,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     hint={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
                     inputMode="decimal"
                     value={triggerPrice}
-                    onChange={(e) => setTriggerPrice(e.target.value)}
+                    onChange={(e) => setTriggerPrice(
+                        normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                    )}
                     autoComplete="off"
                 />
             )}
@@ -1668,43 +1763,49 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             </StatusMessage>
 
             {payWith === 'coin' ? (
-                <button
-                    type="button"
-                    className={styles.pickerLabel}
+                <Button
+                    variant="link"
+                    size="sm"
+                    icon={null}
+                    className={styles.advancedToggle}
+                    aria-expanded={showAdvanced}
                     onClick={() => setShowAdvanced((v) => !v)}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
                 >
-                    {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
-                </button>
+                    {showAdvanced ? 'Advanced options' : 'Advanced options (fiat pricing, oracle)'}
+                    <Icon.ChevronDownIcon
+                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                    />
+                </Button>
             ) : null}
 
             {showAdvanced && payWith === 'coin' ? (
                 <>
-                    <label className={styles.pickerLabel}>
-                        Priced in fiat (optional)
-                        <select
-                            id="dispenser-fiat-code"
-                            className={styles.picker}
-                            value={fiatCode}
-                            onChange={(e) => setFiatCode(e.target.value)}
-                        >
-                            <option value="">(none, coin-paid)</option>
-                            {FIAT_CODES.map((c) => (
-                                <option key={c} value={c}>{c}</option>
-                            ))}
-                        </select>
-                    </label>
+                    <Select
+                        id="dispenser-fiat-code"
+                        label="Priced in fiat (optional)"
+                        value={fiatCode}
+                        onChange={(e) => setFiatCode(e.target.value)}
+                    >
+                        {/* Native options supply Select choices because the kit has no option primitive. */}
+                        <option value="">(none, coin-paid)</option>
+                        {FIAT_CODES.map((c) => (
+                            /* Native options supply Select choices because the kit has no option primitive. */
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </Select>
                     <Input
                         id="dispenser-fiat-amount"
                         label="Fiat amount (e.g. 12.34)"
                         hint="Validator-priced fiat dispenser. Leave blank if using a user oracle."
                         inputMode="decimal"
                         value={fiatAmount}
-                        onChange={(e) => setFiatAmount(e.target.value)}
+                        onChange={(e) => setFiatAmount(
+                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                        )}
                         autoComplete="off"
                     />
                     <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
-                    <Input
+                    <AddressField
                         id="dispenser-oracle"
                         label="Oracle address (optional)"
                         hint="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
@@ -1718,15 +1819,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </>
             ) : null}
 
-            <p className={styles.pickerLabel}>Expiration</p>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                {' '}Default window
-            </label>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                {' '}Expire at a specific time
-            </label>
+            <RadioGroup
+                legend="Expiration"
+                name="disp-exp"
+                value={expMode}
+                onChange={setExpMode}
+                options={[
+                    { value: 'default', label: 'Default window' },
+                    { value: 'custom', label: 'Expire at a specific time' },
+                ]}
+            />
             {expMode === 'custom' ? (
                 <Input
                     id="dispenser-expiration"
@@ -1738,16 +1840,18 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             ) : null}
 
-            <p className={styles.pickerLabel}>Restrict who can buy (optional)</p>
-            <div className={styles.actions}>
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                    {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                </Button>
-                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                    {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                </Button>
-                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+            <div className={styles.choiceGroup}>
+                <p className={styles.choiceGroupLabel}>Restrict who can buy (optional)</p>
+                <div className={styles.choiceButtons}>
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                        {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                    </Button>
+                    {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                        {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                    </Button>
+                    {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                </div>
             </div>
 
             {/* D-161: "Restrict who can buy" is the reading that causes the
@@ -1767,14 +1871,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
             />
 
-            <div className={styles.feeToggleGap}>
-                <NativeFeeToggle
-                    checked={payFeeInNativeCoin}
-                    onChange={setPayFeeInNativeCoin}
-                    coinTicker={coinTicker}
-                    mandatory={nativeFeeMandatory}
-                />
-            </div>
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+                mandatory={nativeFeeMandatory}
+            />
 
         </FormPage>,
     );

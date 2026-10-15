@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
 let messaging;
 
@@ -68,15 +68,66 @@ describe('badge presentation', () => {
         expect(label.style.textOverflow).toBe('ellipsis');
         expect(label.style.whiteSpace).toBe('nowrap');
     });
+
+    it('does not apply an in-flight result from a replaced messaging transport', async () => {
+        let resolveFirst;
+        const firstRequest = new Promise((resolve) => { resolveFirst = resolve; });
+        const firstMessaging = {
+            getDispensersForToken: vi.fn().mockReturnValue(firstRequest),
+        };
+        const secondMessaging = {
+            getDispensersForToken: vi.fn().mockResolvedValue([
+                { status: 'valid' },
+                { status: 'valid' },
+            ]),
+        };
+        messaging = firstMessaging;
+        const { rerender } = render(<DispenserBadge chainId="bitcoin-mainnet" tick="XCHAIN" />);
+        await waitFor(() => expect(firstMessaging.getDispensersForToken).toHaveBeenCalledOnce());
+
+        messaging = secondMessaging;
+        rerender(<DispenserBadge chainId="bitcoin-mainnet" tick="XCHAIN" />);
+
+        expect(await screen.findByRole('status', {
+            name: '2 open dispensers for XCHAIN on bitcoin-mainnet',
+        })).toBeInTheDocument();
+        expect(secondMessaging.getDispensersForToken).toHaveBeenCalledOnce();
+
+        await act(async () => {
+            resolveFirst([{ status: 'valid' }]);
+            await firstRequest;
+        });
+        expect(screen.getByRole('status')).toHaveAccessibleName(
+            '2 open dispensers for XCHAIN on bitcoin-mainnet',
+        );
+    });
+
+    it('contains synchronous messaging failures and caches the empty result', async () => {
+        messaging = {
+            getDispensersForToken: vi.fn(() => {
+                throw new Error('transport unavailable');
+            }),
+        };
+        const { unmount } = render(<DispenserBadge chainId="bitcoin-mainnet" tick="XCHAIN" />);
+        await waitFor(() => expect(messaging.getDispensersForToken).toHaveBeenCalledOnce());
+        expect(screen.queryByRole('status')).toBeNull();
+
+        unmount();
+        render(<DispenserBadge chainId="bitcoin-mainnet" tick="XCHAIN" />);
+        await act(async () => {});
+
+        expect(messaging.getDispensersForToken).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('status')).toBeNull();
+    });
 });
 
 describe('TickerIcon', () => {
-    it('names a native asset and keeps its default size stable', () => {
+    it('names a native asset and uses the list-row avatar size by default', () => {
         render(<TickerIcon chainId="bitcoin-mainnet" tick="BTC" />);
 
         const icon = screen.getByRole('img', { name: /BTC on /i });
-        expect(icon.style.width).toBe('28px');
-        expect(icon.style.height).toBe('28px');
+        expect(icon.style.width).toBe('var(--xc-avatar-size-list)');
+        expect(icon.style.height).toBe('var(--xc-avatar-size-list)');
         expect(icon.querySelector('img')).toHaveAttribute('alt', '');
     });
 
@@ -87,8 +138,8 @@ describe('TickerIcon', () => {
         const fallback = icon.firstElementChild;
         const pip = icon.querySelector('img');
 
-        expect(icon.style.width).toBe('32px');
-        expect(fallback.style.color).toBe('var(--xc-text-inverted)');
+        expect(icon.style.width).toBe('var(--xc-avatar-size-list)');
+        expect(fallback.style.color).toBe('var(--xc-avatar-ink, var(--xc-on-accent))');
         expect(pip.style.background).toBe('var(--xc-surface-raised)');
     });
 });

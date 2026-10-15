@@ -14,7 +14,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '../../helpers/userEvent.js';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
-import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 
 let messaging = {};
 const alertsCss = readFileSync(
@@ -87,7 +86,7 @@ describe('AlertsRoute empty state', () => {
         mount(props);
 
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
-        expect(screen.getByText(en['alerts.empty.body'])).toBeTruthy();
+        expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
         expect(screen.queryByRole('list')).toBeNull();
     });
 
@@ -199,7 +198,9 @@ describe('AlertsRoute alert list', () => {
         expect(screen.getByRole('button', { name: 'Clear alerts' })).toHaveFocus();
         await user.keyboard('{Enter}');
 
-        const clearedState = screen.getByLabelText(en['alerts.empty']);
+        const clearedState = screen.getByLabelText(
+            'No alerts. Wallet activity, security, and price changes appear here.',
+        );
         await waitFor(() => expect(clearedState).toHaveFocus());
         expect(screen.queryByRole('list')).toBeNull();
     });
@@ -256,11 +257,23 @@ describe('AlertsRoute alert list', () => {
 
         expect(screen.queryByRole('list')).toBeNull();
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
-        expect(screen.getByText(en['alerts.empty.body'])).toBeTruthy();
+        expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
         expect(screen.queryByText(/unread$/)).toBeNull();
 
         first.unmount();
         mount({ walletId: 'wallet-1', alerts });
+        expect(screen.queryByRole('list')).toBeNull();
+        expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
+    });
+
+    it('keeps a dismissed alert hidden when its content changes', () => {
+        const alert = { id: 'one', severity: 'info', title: 'One', message: 'First' };
+        const first = mount({ walletId: 'wallet-1', alerts: [alert] });
+        fireEvent.click(screen.getByRole('button', { name: 'Clear alerts' }));
+        first.unmount();
+
+        mount({ walletId: 'wallet-1', alerts: [{ ...alert, message: 'Updated' }] });
+
         expect(screen.queryByRole('list')).toBeNull();
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
     });
@@ -279,6 +292,24 @@ describe('AlertsRoute alert list', () => {
 
         expect(onSelect).toHaveBeenCalledTimes(1);
         expect(screen.getByText('0 unread')).toBeTruthy();
+        expect(screen.getByText('Read')).toBeTruthy();
+    });
+
+    it('consumes rejected async alert actions', async () => {
+        const then = vi.fn((_resolve, reject) => reject(new Error('navigation failed')));
+        const onSelect = vi.fn(() => ({ then }));
+        mount({ alerts: [{
+            id: 'message',
+            severity: 'info',
+            title: 'Unread messages',
+            message: 'You have a message.',
+            action: { label: 'Open Messaging', onSelect },
+        }] });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Messaging' }));
+
+        await waitFor(() => expect(then).toHaveBeenCalledTimes(1));
+        expect(onSelect).toHaveBeenCalledTimes(1);
         expect(screen.getByText('Read')).toBeTruthy();
     });
 

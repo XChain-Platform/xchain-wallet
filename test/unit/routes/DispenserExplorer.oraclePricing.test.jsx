@@ -67,7 +67,7 @@ function renderExplorer(extra = {}) {
 }
 
 async function searchFor(token) {
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
     fireEvent.change(screen.getByRole('textbox'), { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 }
@@ -171,11 +171,23 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(ruleBody(listNarrow, '.row')).toMatch(/grid-template-columns:\s*40px minmax\(0, 1fr\)/);
         expect(ruleBody(listNarrow, '.status')).toMatch(/overflow-wrap:\s*anywhere/);
 
+        // The kit Button's label span is what lays out a result card, so the
+        // column rule reaches it; otherwise ticker, terms and number sit side by side.
+        const explorerCss = readCss('packages/core/src/shared/routes/DispenserExplorer.module.css');
+        expect(ruleBody(explorerCss, '.resultRow > span')).toMatch(/flex-direction:\s*column/);
+
         const detailNarrow = mediaBlock(readCss(
             'packages/core/src/shared/routes/DispenserDetail.module.css',
         ), 'not all and (min-width: 400px)');
-        expect(ruleBody(detailNarrow, '.buyFillsRow')).toMatch(/flex-direction:\s*column/);
-        expect(ruleBody(detailNarrow, '.dispenseRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+        // Dispense rows are ListRows: the amount wraps inside the shrinkable
+        // content column and the time column wraps on a phone instead of
+        // pushing the row wider than the screen.
+        const detail = readCss('packages/core/src/shared/routes/DispenserDetail.module.css');
+        expect(ruleBody(detail, '.dispenseAmount')).toMatch(/min-width:\s*0;[\s\S]*overflow-wrap:\s*anywhere/);
+        expect(ruleBody(detailNarrow, '.dispenseWhen')).toMatch(/white-space:\s*normal/);
+        const listRow = readCss('packages/core/src/ui/ListRow.module.css');
+        expect(ruleBody(listRow, '.content')).toMatch(/min-width:\s*0/);
+        expect(ruleBody(listRow, '.trailing')).toMatch(/min-width:\s*0;[\s\S]*max-width:\s*50%/);
 
         const explorer = readCss('packages/core/src/shared/routes/DispenserExplorer.module.css');
         expect(ruleBody(explorer, '.resultRow')).toMatch(/flex-direction:\s*column/);

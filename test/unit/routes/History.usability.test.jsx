@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { DetailCard, EntryRow } from '../../../packages/core/src/shared/routes/History.jsx';
@@ -79,6 +80,7 @@ describe('History usability', () => {
                     onClick={onClick}
                     peerCache={{}}
                     walletId="wallet-a"
+                    walletAddresses={new Set([ADDRESS.toLowerCase()])}
                 />
             </ul>,
         ));
@@ -133,7 +135,9 @@ describe('History usability', () => {
         expect(screen.getByLabelText('Received 3.5 BTC')).toHaveTextContent('+3.5 BTC');
     });
 
-    it('labels a history address row with its chain and non-mainnet kind', () => {
+    it('keeps a regtest row chip-free and single-line at 360px', () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         render(provider(
             {},
             <ul>
@@ -145,7 +149,9 @@ describe('History usability', () => {
                         blockIndex: 100,
                         chainId: 'litecoin-regtest',
                         source: 'rltc1qsource',
-                        raw: {},
+                        address: 'rltc1qwallet',
+                        timestamp: 1787880118,
+                        raw: { amount: '2', tick: 'LTC', source: 'rltc1qsource' },
                     }}
                     selected={false}
                     showConnector={false}
@@ -156,9 +162,20 @@ describe('History usability', () => {
             </ul>,
         ));
 
-        const row = screen.getByRole('button', { name: /Send.*Confirmed/i });
-        expect(row).toHaveTextContent(/Litecoin\s+regtest/i);
-        expect(row).toHaveTextContent('rltc1qsource');
+        const row = screen.getByRole('button', { name: /Receive.*Confirmed/i });
+        const rowCss = readFileSync(
+            'packages/core/src/shared/components/ActivityRow.module.css',
+            'utf8',
+        );
+        expect(row).toHaveTextContent('Receive');
+        expect(row).toHaveTextContent('+2 LTC');
+        expect(row).not.toHaveTextContent(/regtest/i);
+        expect(row.querySelector('[data-asset-mark]')).not.toBeNull();
+        expect(rowCss).toMatch(/\.row\s*\{[^}]*display:\s*grid;[^}]*white-space:\s*nowrap;/s);
+        expect(window.innerWidth).toBe(360);
+
+        if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        else Reflect.deleteProperty(window, 'innerWidth');
     });
 
     it('caps a large recipient preview without creating a nested scroll area', async () => {
@@ -231,14 +248,12 @@ describe('History usability', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
+        expect(await screen.findByText('Copy failed: the clipboard is unavailable.')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
         fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy receipt' }));
         expect(document.execCommand).toHaveBeenCalledTimes(2);
-        await waitFor(() => {
-            expect(screen.getAllByText('Copy failed: clipboard unavailable')).toHaveLength(2);
-        });
+        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
     });
 
     it('copies the full transaction hash and builds working explorer destinations', async () => {
@@ -347,6 +362,71 @@ describe('History usability', () => {
                 Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
             } else {
                 delete navigator.clipboard;
+            }
+        }
+    });
+
+    it('copies a receipt when sharing is missing and stays silent when sharing is cancelled', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        delete navigator.share;
+        const entry = {
+            action: 'SEND',
+            actionIndex: '12',
+            blockIndex: 100,
+            chainId: CHAIN,
+            timestamp: 1705350600,
+            txHash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0',
+            raw: { amount: '2', tick: 'BTC', fee: '0.0001' },
+        };
+        const detail = () => provider(
+            { listContacts: vi.fn().mockResolvedValue([]) },
+            <DetailCard
+                entry={entry}
+                peerCache={{}}
+                walletId="wallet-a"
+                showFiatInHistory={false}
+                fiatCurrency="USD"
+            />,
+        );
+
+        try {
+            render(detail());
+            fireEvent.click(screen.getByRole('button', { name: 'More' }));
+            fireEvent.click(await screen.findByRole('menuitem', { name: 'Share receipt' }));
+
+            await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+            expect(await screen.findByText('Transaction receipt copied.')).toBeInTheDocument();
+
+            cleanup();
+            writeText.mockClear();
+            const share = vi.fn().mockRejectedValue(
+                Object.assign(new Error('Share cancelled'), { name: 'AbortError' }),
+            );
+            Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+            render(detail());
+            fireEvent.click(screen.getByRole('button', { name: 'More' }));
+            fireEvent.click(await screen.findByRole('menuitem', { name: 'Share receipt' }));
+
+            await waitFor(() => expect(share).toHaveBeenCalledOnce());
+            expect(writeText).not.toHaveBeenCalled();
+            expect(screen.queryByText('Transaction receipt copied.')).toBeNull();
+            expect(screen.queryByText('Sharing is unavailable.')).toBeNull();
+        } finally {
+            if (clipboardDescriptor) {
+                Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+            } else {
+                delete navigator.clipboard;
+            }
+            if (shareDescriptor) {
+                Object.defineProperty(navigator, 'share', shareDescriptor);
+            } else {
+                delete navigator.share;
             }
         }
     });

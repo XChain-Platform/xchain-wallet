@@ -152,7 +152,7 @@ assert.ok(scriptSrc.includes('grep_args+=(-e "$marker")'),
 
 // --- 3. Script REFUSES a tree where it can scan nothing --------------
 //
-// This assertion used to read "exits 0 when no dist exists", and it was the
+// This assertion originally read "exits 0 when no dist exists", and it was the
 // reason the defect it enshrined survived (S33). A pristine clone
 // checked out at the tag is precisely a tree with no dist/, and it is the
 // only tree sign.sh will sign from, so the state this test blessed as

@@ -81,7 +81,12 @@ function recordingMessaging() {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
+        getWalletBalances: () => Promise.resolve({
+            [CHAIN]: [{
+                address: CREATOR.address,
+                balances: { tokens: [{ tick: 'ALM0NDJ0Y', quantity: '10000000000', divisibility: 8 }] },
+            }],
+        }),
         getListByActionIndex: () => Promise.resolve(null),
         generateDispenserAddress: (args) => {
             calls.push({ method: 'generateDispenserAddress', args });
@@ -133,7 +138,7 @@ async function createAsIs(utils, calls) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const approve = Array.from(utils.container.querySelectorAll('button'))
+        const approve = utils.getAllByRole('button')
             .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
         if (!approve) throw new Error(`no enabled Approve button; page reads: ${utils.container.textContent}`);
         fireEvent.click(approve);

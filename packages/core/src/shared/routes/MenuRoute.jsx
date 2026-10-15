@@ -71,7 +71,7 @@ export function MenuRoute({
 
     const primary = [
         { id: 'markets',          label: 'Decentralized exchange', Icon: Icon.MarketIcon,   handler: onMarkets },
-        { id: 'market-activity',  label: 'Marketplace', Icon: Icon.DollarIcon,   handler: onMarketActivity },
+        { id: 'market-activity',  label: 'Marketplace', Icon: Icon.LineChartIcon, handler: onMarketActivity },
         { id: 'dispensers',       label: 'Dispensers',  Icon: Icon.HandshakeIcon, handler: onDispensers },
         { id: 'tokens',           label: 'My tokens',   Icon: Icon.TokenIcon,    handler: onTokens },
         { id: 'alerts',           label: 'Alerts',      Icon: Icon.InfoIcon,     handler: onAlerts },
@@ -99,12 +99,14 @@ export function MenuRoute({
                 <div className={menuStyles.scroll}>
                     {primary.length > 0 || typeof onSettings === 'function' ? (
                         /* Safari needs an explicit list role because this class removes list styling. */
-                        <ul className={menuStyles.list} role="list">
+                        <ul className={menuStyles.list} role="list" data-xc-menu-list="rows">
+                            {/* Menu entries stay native buttons because each control is the complete clickable row. */}
                             {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
                                 <li key={id}>
                                     <button
                                         type="button"
                                         className={rowStyles.entry}
+                                        data-xc-menu-item
                                         onClick={handler}
                                     >
                                         <span className={menuStyles.rowIcon} aria-hidden="true">
@@ -122,6 +124,7 @@ export function MenuRoute({
                                     <button
                                         type="button"
                                         className={rowStyles.entry}
+                                        data-xc-menu-item
                                         onClick={onSwitchWallet}
                                     >
                                         <span className={menuStyles.rowIcon} aria-hidden="true">
@@ -139,6 +142,7 @@ export function MenuRoute({
                                     <button
                                         type="button"
                                         className={rowStyles.entry}
+                                        data-xc-menu-item
                                         onClick={onSettings}
                                     >
                                         <span className={menuStyles.rowIcon} aria-hidden="true">

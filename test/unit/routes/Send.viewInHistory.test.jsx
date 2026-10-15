@@ -119,7 +119,7 @@ async function driveToBroadcastDone(messaging) {
     fireEvent.click(approve);
 
     await waitFor(() => expect(messaging.sendToken).toHaveBeenCalled());
-    return screen.findByRole('heading', { name: /^Pending$/i });
+    return screen.findByRole('heading', { name: /Broadcast pending/i });
 }
 
 afterEach(() => cleanup());
@@ -129,7 +129,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const statusHarness = { phase: 'pending' };
         const { messaging } = mount({ statusHarness });
         await driveToBroadcastDone(messaging);
-        expect(screen.getByRole('heading', { name: 'Pending' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
 
         statusHarness.phase = 'failed';
         document.dispatchEvent(new Event('visibilitychange'));
@@ -138,7 +138,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         statusHarness.phase = 'confirmed';
         document.dispatchEvent(new Event('visibilitychange'));
         expect(await screen.findByRole('heading', { name: 'Confirmed' })).toBeInTheDocument();
-        expect(await screen.findByText('3 Confirmations')).toBeInTheDocument();
+        expect(await screen.findByText('3 confirmations')).toBeInTheDocument();
     });
 
     it('offers the action after broadcast and names the wait honestly', async () => {
@@ -180,7 +180,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         expect(screen.getByRole('button', { name: /^Done$/ })).toBeInTheDocument();
     });
 
-    it('reports clipboard failure instead of claiming the transaction ID was copied', async () => {
+    it('uses the shared copy control to report clipboard failure', async () => {
         Object.defineProperty(document, 'execCommand', {
             configurable: true,
             value: vi.fn(() => false),
@@ -188,8 +188,10 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount();
         await driveToBroadcastDone(messaging);
 
-        fireEvent.click(screen.getByRole('button', { name: /Copy transaction ID/i }));
+        const copyButton = screen.getByRole('button', { name: /Copy transaction ID/i });
+        fireEvent.click(copyButton);
 
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
+        await waitFor(() => expect(copyButton).toHaveAttribute('data-state', 'failed'));
+        expect(copyButton).toHaveTextContent('Copy failed: the clipboard is unavailable.');
     });
 });

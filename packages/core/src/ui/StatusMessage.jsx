@@ -9,14 +9,17 @@
 // contact legal@dankest.llc.
 
 import styles from './StatusMessage.module.css';
+import { t } from '../i18n/index.js';
 
 /**
- * §53.3 / G169: shared status / error / success row that every form can
+ * §53.3 / G169: shared info / warning / error / success row that every form can
  * use in place of an unannounced `<p>` or `<div>`. Picks the right
  * `role` + `aria-live` per variant so screen readers announce the
  * message exactly once when it appears.
  *
- *   variant="status"   role="status" aria-live="polite"  (neutral progress / informational copy)
+ *   variant="status"   role="status" aria-live="polite"  (alias for informational copy)
+ *   variant="info"     role="status" aria-live="polite"  (informational copy)
+ *   variant="warning"  role="status" aria-live="polite"  (caution / degraded state)
  *   variant="error"    role="alert"  aria-live="assertive" (validation failure / runtime error)
  *   variant="success"  role="status" aria-live="polite"  (confirmation copy after a successful action)
  *
@@ -31,30 +34,49 @@ import styles from './StatusMessage.module.css';
  * together with the diagnostic.
  *
  * @param {object} props
- * @param {'status' | 'error' | 'success'} [props.variant]   default 'status'
+ * @param {'status' | 'info' | 'warning' | 'error' | 'success'} [props.variant]   default 'status'
  * @param {string} [props.id]
  * @param {import('react').ReactNode} props.children
  * @param {string} [props.className]                          appended after the variant class so callers can space-suffix layout adjustments
  * @param {string} [props.details]                            technical text shown only in a collapsed disclosure
  * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string }} [props.recovery]   one-click fix shown inline with the message
+ * @param {'alert' | 'status' | 'note' | null} [props.role]   overrides the variant's role where the tone and the
+ *   announcement differ: a caution the user must hear at once (warning tone, alert role), or
+ *   a verification verdict that is a result rather than a failure (error tone, status role).
+ *   null drops the role for a message that is part of the page from the first paint, so it is
+ *   not a live region at all. The look always follows the variant, so one tone keeps one style.
+ * @param {string} [props.testId]                             data-testid for tests that find the message by hook
+ *
+ * Children may be several block elements (one `<p>` per line of a multi-line
+ * warning, or a `<ul>`): they stay one box and one announcement.
  */
-export function StatusMessage({ variant = 'status', id, children, className, details, recovery }) {
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId }) {
     if (children === null || children === undefined || children === '') return null;
-    const role = variant === 'error' ? 'alert' : 'status';
-    const live = variant === 'error' ? 'assertive' : 'polite';
-    const variantClass = variant === 'error'
-        ? styles.error
-        : variant === 'success'
-            ? styles.success
-            : styles.status;
+    const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
+    const role = roleOverride === null
+        ? undefined
+        : ROLE_LIVE[roleOverride] !== undefined
+            ? roleOverride
+            : (presentation.tone === 'error' ? 'alert' : 'status');
+    const live = role ? ROLE_LIVE[role] || undefined : undefined;
+    const variantClass = styles[presentation.tone];
     const classNames = [styles.row, variantClass, className].filter(Boolean).join(' ');
     return (
-        <div role={role} aria-live={live} aria-atomic="true" id={id} className={classNames}>
+        <div
+            role={role}
+            aria-live={live}
+            aria-atomic={live ? 'true' : undefined}
+            id={id}
+            className={classNames}
+            data-variant={presentation.tone}
+            data-testid={testId}
+        >
+            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <div className={styles.text}>
-                <span>{children}</span>
+                <div className={styles.body}>{children}</div>
                 {details ? (
                     <details className={styles.details}>
-                        <summary>Technical details</summary>
+                        <summary>{t('pending.detail.technicalDetails')}</summary>
                         <code>{details}</code>
                     </details>
                 ) : null}
@@ -76,3 +98,14 @@ export function StatusMessage({ variant = 'status', id, children, className, det
         </div>
     );
 }
+
+// A note is static context, so it is not a live region at all.
+const ROLE_LIVE = { alert: 'assertive', status: 'polite', note: null };
+
+const STATUS_PRESENTATION = {
+    status: { tone: 'info', icon: 'ℹ' },
+    info: { tone: 'info', icon: 'ℹ' },
+    warning: { tone: 'warning', icon: '⚠' },
+    error: { tone: 'error', icon: '✕' },
+    success: { tone: 'success', icon: '✓' },
+};

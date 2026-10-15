@@ -68,7 +68,9 @@ function mountMint({ maxSupply = '5000', totalSupply = '5000', mintMax = null, d
                 },
             }],
         }),
-        composeForConfirm: vi.fn(),
+        // These tests stop at the compose call, so compose stays pending
+        // rather than resolving to a value no host returns.
+        composeForConfirm: vi.fn(() => new Promise(() => {})),
         preflight: vi.fn(),
     };
     render(
@@ -102,6 +104,7 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         expect(await screen.findByText(/0 S18PROBE available to mint/)).toBeInTheDocument();
         // The old, wrong number must be nowhere on the screen.
         expect(screen.queryByText(/5,000 S18PROBE available/)).not.toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('offers no Max at the cap, so it cannot fill a rejectable amount', async () => {
@@ -166,6 +169,20 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         fireEvent.click(submitButton());
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Amount must be a whole number because S18PROBE is indivisible.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed optional destination before composing', async () => {
+        const messaging = mountMint({ totalSupply: '1200' });
+        await screen.findByText(/3,800 S18PROBE available to mint/);
+        fireEvent.change(await amountField(), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText('Destination (optional)'), {
+            target: { value: 'not-an-address' },
+        });
+        fireEvent.click(submitButton());
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Destination is not valid for Bitcoin.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 

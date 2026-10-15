@@ -17,13 +17,33 @@
 // Whether the vendored list still matches what xchain.io publishes is checked
 // separately, over the network: test/smoke/shells/platform-links-drift.smoke.js
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
 import LINKS from '../../../packages/core/src/shared/platform-links.json';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 
-afterEach(() => cleanup());
+let nativeBack;
+let capacitorApp;
+
+beforeEach(() => {
+    resetBackStackForTests();
+    capacitorApp = {
+        addListener: vi.fn((_event, listener) => {
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn(),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
+});
+
+afterEach(() => {
+    cleanup();
+    resetBackStackForTests();
+    delete globalThis.Capacitor;
+});
 
 const trigger = () => screen.queryByRole('button', { name: 'XChain platform sites' });
 
@@ -101,17 +121,32 @@ describe('PlatformSwitcher', () => {
         expect(screen.queryAllByRole('menuitem').length).toBe(0);
         expect(document.activeElement).toBe(trigger());
     });
+
+    it('closes on Android Back instead of minimizing the app', () => {
+        render(<PlatformSwitcher current="wallet" />);
+        fireEvent.click(trigger());
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(trigger()).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
 });
 
 describe('AppHeader integration', () => {
     it('shows no switcher unless the host passes platformCurrent', () => {
         render(<AppHeader onMenuOpen={() => {}} />);
-        expect(trigger()).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+        expect(screen.queryByRole('menuitem', { name: LINKS.links.find((site) => site.key === 'explorer').label })).toBeNull();
     });
 
-    it('shows the switcher for a shell that opts in', () => {
+    it('moves platform destinations into the menu for a shell that opts in', () => {
         render(<AppHeader onMenuOpen={() => {}} platformCurrent="wallet" />);
-        expect(trigger()).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+        const explorer = LINKS.links.find((site) => site.key === 'explorer');
+        expect(screen.getByRole('menuitem', { name: explorer.label })).toHaveAttribute('href', explorer.href);
     });
 });
 

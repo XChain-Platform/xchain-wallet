@@ -12,6 +12,7 @@ import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtu
 import {
     describeOffenders,
     documentOverflow,
+    LG_K51,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -65,16 +66,17 @@ async function expectReviewAndReject(page, expectedAmount, expectedFee, label) {
     await expect(page.getByText(CONTACT_NAME, { exact: true })).toBeVisible();
 }
 
+test.use(LG_K51);
+
 test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
-    test('a contact amount and Max remain usable through review without broadcasting', async ({ page }, testInfo) => {
+    test('a contact amount and Max remain usable through review without broadcasting', async ({ page }) => {
         const browserErrors = [];
         page.on('console', (message) => {
             if (message.type() === 'error') browserErrors.push(message.text());
         });
         page.on('pageerror', (error) => browserErrors.push(String(error)));
 
-        expect(testInfo.project.name).toBe('android-lg-k51');
-        expect(page.viewportSize()).toEqual({ width: 412, height: 869 });
+        expect(page.viewportSize()).toEqual(LG_K51.viewport);
         expect(await page.evaluate(() => navigator.userAgent)).toContain('Chrome/102.');
         expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
 

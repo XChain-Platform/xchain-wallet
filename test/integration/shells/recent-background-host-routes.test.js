@@ -14,7 +14,11 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
 }));
 
 import { encryptWalletSeed, decryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
-import { makeFreshKdfParams } from '../../../packages/core/src/crypto/kdf.js';
+import { makeFreshKdfParams, deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
+import { Vault } from '../../../packages/core/src/storage/Vault.js';
+import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
+import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
+import { createVaultKeyring } from '../../../packages/extension/src/background/vaultKeyring.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { startLabelSyncRestoreTask } from '../../../packages/extension/src/background/labelSyncRestoreTasks.js';
 import { createSendHold } from '../../../packages/extension/src/background/sendHold.js';
@@ -24,6 +28,8 @@ const SOURCE = 'bcrt1qsource';
 const DESTINATION = 'bcrt1qdestination';
 const ORIGINAL_TX = 'aa'.repeat(32);
 const INPUT_TX = '11'.repeat(32);
+const ALICE = `02${'aa'.repeat(32)}`;
+const BOB = `03${'bb'.repeat(32)}`;
 
 function collection(initial = []) {
     const rows = new Map(initial.map((row) => [row.id, structuredClone(row)]));
@@ -82,12 +88,145 @@ function makeHost(overrides = {}) {
 
 const call = (host, type, request) => host.handle({ type, request });
 
+function vaultLockedError() {
+    return Object.assign(new Error('wallet is locked'), { name: 'VaultLockedError' });
+}
+
 afterEach(() => {
     submittedActions.length = 0;
     vi.unstubAllGlobals();
 });
 
 describe('recent background host routes across extension, web, and desktop shells', () => {
+    it('addresses.newest returns the latest derivable address and rejects invalid or locked reads', async () => {
+        const newest = {
+            id: 'address-watch-8',
+            accountId: 'account-1',
+            chain: 'bitcoin',
+            network: 'regtest',
+            address: 'bcrt1qwatch8',
+            addressType: 'p2wpkh',
+            source: 'watch-only',
+            derivationPath: "m/84'/1'/0'/0/8",
+        };
+        const vault = makeVault({
+            accounts: collection([{ id: 'account-1', walletId: 'wallet-1' }]),
+            addresses: collection([
+                {
+                    ...newest,
+                    id: 'address-hd-7',
+                    address: 'bcrt1qhd7',
+                    source: 'hd',
+                    derivationPath: "m/84'/1'/0'/0/7",
+                },
+                newest,
+                {
+                    ...newest,
+                    id: 'address-imported-9',
+                    address: 'bcrt1qimported9',
+                    source: 'imported',
+                    derivationPath: "m/84'/1'/0'/0/9",
+                },
+            ]),
+        });
+        const descriptor = { id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' };
+        const registry = {
+            get: (id) => id === CHAIN ? descriptor : null,
+            list: () => [descriptor],
+            supportedChains: () => [descriptor],
+        };
+        const host = makeHost({ vault, chainRegistry: registry });
+
+        expect(await call(host, 'addresses.newest', {
+            walletId: 'wallet-1',
+            chainId: CHAIN,
+            addressType: 'p2wpkh',
+        })).toEqual({ ok: true, result: newest });
+        const invalid = await call(host, 'addresses.newest', { walletId: 'wallet-1' });
+        expect(invalid).toMatchObject({
+            ok: false,
+            error: { message: expect.stringContaining('chainId is required') },
+        });
+
+        const lockedHost = makeHost({
+            vault: makeVault({
+                accounts: { findBy: async () => { throw vaultLockedError(); } },
+            }),
+            chainRegistry: registry,
+        });
+        expect(await call(lockedHost, 'addresses.newest', {
+            walletId: 'wallet-1',
+            chainId: CHAIN,
+            addressType: 'p2wpkh',
+        })).toMatchObject({ ok: false, error: { name: 'VaultLockedError' } });
+    });
+
+    it('multisigSign.finalize returns the finalized session and rejects invalid or locked reads', async () => {
+        const createdAt = '2026-10-13T12:00:00.000Z';
+        const session = {
+            schemaVersion: 1,
+            id: 'session-1',
+            walletId: 'wallet-1',
+            chainId: CHAIN,
+            scheme: 'p2wsh-multisig',
+            threshold: 2,
+            cosignerPubkeys: [ALICE, BOB],
+            msgHash: 'ab'.repeat(32),
+            psbtHex: '70736274ff',
+            actionSummary: 'Send 0.01 BTC',
+            nonces: [],
+            aggNonce: null,
+            partialSigs: [],
+            aggregatedSchnorrSig: null,
+            signatures: [],
+            status: 'ready-to-finalize',
+            finalizedTxHex: null,
+            txid: null,
+            createdAt,
+            updatedAt: createdAt,
+        };
+        const sessions = collection([session]);
+        const finalizeMultisigPsbt = vi.fn(async () => ({
+            txHex: '02000000000100',
+            txid: 'finalized-txid',
+        }));
+        const sdk = { wallet: { finalizeMultisigPsbt } };
+        const host = makeHost({
+            vault: makeVault({ multisigSigningSessions: sessions }),
+            sdkRegistry: { get: () => sdk, for: () => sdk },
+        });
+
+        const accepted = await call(host, 'multisigSign.finalize', { sessionId: session.id });
+        expect(accepted).toEqual({
+            ok: true,
+            result: {
+                ...session,
+                finalizedTxHex: '02000000000100',
+                txid: 'finalized-txid',
+                status: 'finalized',
+                updatedAt: expect.any(String),
+            },
+        });
+        expect(finalizeMultisigPsbt).toHaveBeenCalledWith(session.psbtHex);
+
+        const invalid = await call(host, 'multisigSign.finalize', {});
+        expect(invalid).toMatchObject({
+            ok: false,
+            error: { message: expect.stringContaining('sessionId is required') },
+        });
+
+        const lockedHost = makeHost({
+            vault: makeVault({
+                multisigSigningSessions: {
+                    get: async () => { throw vaultLockedError(); },
+                },
+            }),
+        });
+        expect(await call(lockedHost, 'multisigSign.finalize', {
+            sessionId: session.id,
+        })).toMatchObject({ ok: false, error: { name: 'VaultLockedError' } });
+    });
+
     it('wallet.labelSyncRestoreResult returns a task result and refuses a missing token', async () => {
         const host = makeHost();
         const token = startLabelSyncRestoreTask({
@@ -119,36 +258,65 @@ describe('recent background host routes across extension, web, and desktop shell
         expect((await call(host, 'wallet.setActive', { walletId: 'missing' })).ok).toBe(false);
     });
 
-    it('wallet.changePassword rekeys a wallet and refuses the previous password afterward', async () => {
+    it('wallet.changePassword re-seals the vault and the wallet, and refuses the previous password afterward', async () => {
         const mnemonic = new TextEncoder().encode(
             'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         );
-        const sealed = await encryptWalletSeed({
-            password: 'old-password',
-            seed: mnemonic,
-            kdfParams: makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 }),
-        });
-        const wallets = collection([{
+        // The vault and its onboarding wallet share one set of params, as
+        // onboarding leaves them.
+        const kdfParams = makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 });
+        const sealed = await encryptWalletSeed({ password: 'old-password', seed: mnemonic, kdfParams });
+        const backend = new InMemoryBackend();
+        const oldKey = deriveMasterKey('old-password', kdfParams);
+        const vault = new Vault({ backend, masterKey: oldKey });
+        await vault.open();
+        await vault.wallets.put({
+            ...createWallet({
+                name: 'Main',
+                origin: 'created',
+                format: 'bip39',
+                passphraseEnabled: false,
+                encryptedSeed: sealed.encryptedSeed,
+                kdfParams: sealed.kdfParams,
+            }),
             id: 'wallet-1',
-            name: 'Main',
-            format: 'bip39',
-            passphraseEnabled: false,
-            importedKeys: [],
-            ...sealed,
-        }]);
-        const evict = vi.fn();
+        });
+        const sessionSaves = [];
+        // An unlocked session caches the old key; the keyring moves it only
+        // while the slot still holds that key.
+        let sessionSlot = new Uint8Array(oldKey);
+        const unlockOne = vi.fn(async () => {});
         const host = makeHost({
-            vault: makeVault({ wallets }),
-            signerPool: { get: () => null, has: () => false, evict },
+            vault,
+            signerPool: { get: () => null, has: () => false, evict: vi.fn(), unlockOne },
+            vaultKeyring: createVaultKeyring({
+                metaBackend: { load: async () => ({ kdfParams }) },
+                sessionBackend: {
+                    load: async () => sessionSlot,
+                    save: async (key) => {
+                        sessionSlot = new Uint8Array(key);
+                        sessionSaves.push(new Uint8Array(key));
+                    },
+                },
+            }),
         });
 
         expect(await call(host, 'wallet.changePassword', {
             walletId: 'wallet-1',
             currentPassword: 'old-password',
             newPassword: 'new-password',
-        })).toEqual({ ok: true, result: { changed: true } });
-        expect(evict).toHaveBeenCalledWith('wallet-1');
-        const changed = await wallets.get('wallet-1');
+        })).toEqual({ ok: true, result: { changed: true, vaultRekeyed: true, walletIds: ['wallet-1'] } });
+        expect(unlockOne).toHaveBeenCalledWith(expect.objectContaining({ password: 'new-password' }));
+
+        // The stored blob opens under the new password only, and the cached
+        // session key is the one that opens it.
+        const newKey = deriveMasterKey('new-password', kdfParams);
+        const reopened = new Vault({ backend, masterKey: newKey });
+        await reopened.open();
+        expect([...sessionSaves[0]]).toEqual([...newKey]);
+        await expect(new Vault({ backend, masterKey: oldKey }).open()).rejects.toMatchObject({ name: 'AeadAuthError' });
+        const changed = await reopened.wallets.get('wallet-1');
+        expect(changed.kdfParams).toEqual(kdfParams);
         const decrypted = await decryptWalletSeed({
             password: 'new-password',
             encryptedSeed: changed.encryptedSeed,

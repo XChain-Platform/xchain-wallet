@@ -155,7 +155,7 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const approve = Array.from(utils.container.querySelectorAll('button'))
+        const approve = utils.getAllByRole('button')
             .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
         if (!approve) throw new Error('no enabled Approve button on the confirm page');
         fireEvent.click(approve);

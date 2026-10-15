@@ -58,15 +58,15 @@ describe('A through M route render coverage', () => {
         expect(screen.getByText('Loading wallet…')).toBeTruthy();
 
         addresses.resolve({
-            'bitcoin-testnet': [{
+            'bitcoin-mainnet': [{
                 id: 'address-1',
-                address: 'tb1qexample',
+                address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
                 publicKey: `02${'1'.repeat(64)}`,
-                derivationPath: "m/84'/1'/0'/0/0",
+                derivationPath: "m/84'/0'/0'/0/0",
             }],
         });
 
-        expect(await screen.findByRole('button', { name: 'Create agent account' })).toBeDisabled();
+        expect(await screen.findByRole('button', { name: 'Review agent account' })).toBeDisabled();
     });
 
     it('renders the template heading, primary actions, and empty state', async () => {
@@ -81,6 +81,6 @@ describe('A through M route render coverage', () => {
 
         addresses.resolve({});
 
-        expect(await screen.findByText('Two chains required')).toBeTruthy();
+        expect(await screen.findByText('Two networks required')).toBeTruthy();
     });
 });

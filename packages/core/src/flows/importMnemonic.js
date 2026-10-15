@@ -25,6 +25,7 @@ import {
     isValidCounterwalletMnemonic,
     validateCounterwalletMnemonic,
 } from '../crypto/counterwallet.js';
+import { normalizeRecoveryPhrase } from '../crypto/recoveryPhrase.js';
 import { persistHdWallet } from './_persistHdWallet.js';
 
 export class InvalidMnemonicError extends Error {
@@ -60,14 +61,13 @@ const DEFAULT_ORIGIN_BY_FORMAT = {
 const ALLOWED_ORIGINS = new Set(['created', 'demo', 'imported-mnemonic', 'imported-freewallet', 'imported-xchain-backup']);
 
 /**
- * Trim, collapse internal whitespace, lowercase. Users paste from many
- * sources (PDFs, SMS, handwriting OCR); the canonical validators expect
- * lowercase single-space-separated words.
+ * Trim, collapse internal whitespace, lowercase, and remove complete
+ * sequential display numbering. Users paste from many sources (PDFs, SMS,
+ * handwriting OCR); the canonical validators expect plain lowercase words.
  * @param {string} s
  */
 export function normalizeMnemonic(s) {
-    if (typeof s !== 'string') return '';
-    return s.trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+    return normalizeRecoveryPhrase(s);
 }
 
 /**

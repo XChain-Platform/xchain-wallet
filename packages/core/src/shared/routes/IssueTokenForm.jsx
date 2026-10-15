@@ -16,13 +16,21 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
- NetworkField,  Icon, StatusMessage, FeeSelector, AddressField, FormErrorSummary,} from '@xchain-wallet/core/ui';
+    Icon,
+    StatusMessage,
+    FeeSelector,
+    AddressField,
+    FormErrorSummary,
+    Switch,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -45,6 +53,7 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
@@ -68,6 +77,11 @@ function isPositiveDecimal(value) {
 function isNonNegativeDecimal(value) {
     const text = String(value || '').trim();
     return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') !== -1;
+}
+
+function hasAmountPrecision(value, decimals) {
+    const [, fraction = ''] = String(value || '').trim().split('.');
+    return fraction.length <= decimals;
 }
 
 function isValidIssueAddress(value, descriptor) {
@@ -97,6 +111,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function IssueTokenForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
@@ -117,6 +132,10 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
 
     const [ticker, setTicker] = useState('');
+    const [tickerCheck, setTickerCheck] = useState(
+        /** @type {{ ticker: string, status: 'idle' | 'checking' | 'available' | 'taken' | 'unknown' }} */
+        ({ ticker: '', status: 'idle' }),
+    );
     const [supply, setSupply] = useState('');
     // Blank means "mint the whole supply now". Kept as its own
     // string so an explicit 0 stays distinguishable from an untouched field.
@@ -164,8 +183,16 @@ export function IssueTokenForm({ walletId, onBack }) {
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         draft.save({
             chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
             description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
@@ -207,6 +234,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The active map and the settings read are best-effort: a host without
@@ -230,7 +258,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before issuing a token.',
+                        'No addresses on any network yet. Use Receive to generate one before issuing a token.',
                     );
                     return;
                 }
@@ -272,6 +300,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
@@ -282,12 +311,54 @@ export function IssueTokenForm({ walletId, onBack }) {
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+    const tickerLookupSupported = Object.prototype.hasOwnProperty.call(messaging, 'getTokenInfo')
+        && typeof messaging.getTokenInfo === 'function';
+
+    // A late response for an earlier ticker must not mark the current name as
+    // taken. Cleanup ties each debounced lookup to the exact field value and
+    // network that started it, while lookup failures leave protocol validation
+    // to composition instead of trapping the form during an explorer outage.
+    useEffect(() => {
+        const checkedTicker = ticker.trim();
+        setTickerCheck({ ticker: checkedTicker, status: checkedTicker ? 'checking' : 'idle' });
+        if (!chainId || !checkedTicker || tickerGrammarError(checkedTicker)
+            || !tickerLookupSupported) {
+            setTickerCheck({ ticker: checkedTicker, status: 'idle' });
+            return undefined;
+        }
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            Promise.resolve()
+                .then(() => messaging.getTokenInfo({ chainId, tick: checkedTicker }))
+                .then((info) => {
+                    if (cancelled) return;
+                    // The host answers an unknown tick with an all-empty
+                    // record, not null, so only a found record marks it taken.
+                    const verdict = tickLookupVerdict(info);
+                    setTickerCheck({
+                        ticker: checkedTicker,
+                        status: verdict === 'found' ? 'taken'
+                            : verdict === 'missing' ? 'available' : 'unknown',
+                    });
+                })
+                .catch(() => {
+                    if (!cancelled) setTickerCheck({ ticker: checkedTicker, status: 'unknown' });
+                });
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [chainId, ticker, messaging, tickerLookupSupported]);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
+    // Custom rates use the selected chain's native unit. A network change
+    // returns to that network's normal tier instead of reinterpreting the old
+    // numeric rate under a different unit and showing it as a fresh preview.
+    useEffect(() => {
+        setFeePick({ mode: 'normal' });
+    }, [chainId]);
     const feeTiers = useMemo(
         () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
         [chainId],
@@ -392,8 +463,25 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(tickerError);
             return;
         }
+        const checkedTicker = ticker.trim();
+        if (tickerLookupSupported
+            && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
+            setFormError('Wait for the ticker availability check to finish.');
+            return;
+        }
+        if (tickerCheck.ticker === checkedTicker && tickerCheck.status === 'taken') {
+            setFormError(t('issue.tickerTaken', { ticker: checkedTicker }));
+            return;
+        }
         if (!isPositiveDecimal(supply)) {
             setFormError('Supply must be a positive number.');
+            return;
+        }
+        const amountDecimals = divisible ? 8 : 0;
+        if (!hasAmountPrecision(supply, amountDecimals)) {
+            setFormError(divisible
+                ? 'Supply can have at most 8 decimal places.'
+                : 'Supply must be a whole number for an indivisible token.');
             return;
         }
         // An initial mint above the cap is rejected outright by the
@@ -403,6 +491,12 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (mintText) {
             if (!isNonNegativeDecimal(mintText)) {
                 setFormError('Initial mint must be zero or a positive number.');
+                return;
+            }
+            if (!hasAmountPrecision(mintText, amountDecimals)) {
+                setFormError(divisible
+                    ? 'Initial mint can have at most 8 decimal places.'
+                    : 'Initial mint must be a whole number for an indivisible token.');
                 return;
             }
             if (compareDecimalStrings(mintText, supply.trim()) === 1) {
@@ -424,13 +518,19 @@ export function IssueTokenForm({ walletId, onBack }) {
                 setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
                 return;
             }
+            if (!hasAmountPrecision(maxMintText, amountDecimals)) {
+                setFormError(divisible
+                    ? 'Max mint per transaction can have at most 8 decimal places.'
+                    : 'Max mint per transaction must be a whole number for an indivisible token.');
+                return;
+            }
         }
         if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
-            setFormError(`Transfer ownership address is not valid for ${descriptor?.displayName || 'this chain'}.`);
+            setFormError('Transfer ownership address is not valid for the active network.');
             return;
         }
         if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
-            setFormError(`Initial mint destination is not valid for ${descriptor?.displayName || 'this chain'}.`);
+            setFormError('Initial mint destination is not valid for the active network.');
             return;
         }
         // A supply destination with no initial mint would be silently dropped
@@ -605,7 +705,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
             {leaveGuard.confirmation}
         </Screen>
@@ -654,17 +754,11 @@ export function IssueTokenForm({ walletId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const reviewDisabledReason = stage === 'submitting'
-            ? 'Submitting the token issue…'
-            : isWatcherMode
-                ? null
-                : isHwSource
-                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
-                    : (!signerReady && password.length === 0) ? t('send.passwordHint') : null;
         // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
         // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('issue.reviewTokenIssue')}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -676,34 +770,34 @@ export function IssueTokenForm({ walletId, onBack }) {
                     </StatusMessage>
                 ) : null}
                 actions={(
-                    <>
-                    {reviewDisabledReason ? (
-                        <p id="issue-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
-                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={Boolean(reviewDisabledReason)}
-                        aria-describedby={reviewDisabledReason ? 'issue-review-disabled-reason' : undefined}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
                     >
                         {isWatcherMode
                             ? t('send.review.createUnsigned')
                             : isHwSource
                                 ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                                : (descriptor
-                                    ? t('send.review.signOn', { device: descriptor.displayName })
-                                    : t('send.review.sign'))}
+                                : t('send.review.sign')}
                     </Button>
-                    </>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -716,20 +810,20 @@ export function IssueTokenForm({ walletId, onBack }) {
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -763,7 +857,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -846,41 +940,27 @@ export function IssueTokenForm({ walletId, onBack }) {
     const issueErrors = formError
         ? [{ ...issueErrorTarget, message: formError }]
         : [];
-    const issueDisabledReason = actionConfirm.composing
-        ? 'Preparing the token issue for review…'
-        : !fromAddress
-            ? 'Add or choose a source address to continue.'
-            : !ticker.trim()
-                ? 'Enter a token ticker to continue.'
-                : !supply.trim()
-                    ? 'Enter the token supply to continue.'
-                    : null;
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('issue.title')}
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={<FormErrorSummary errors={issueErrors} focusKey={validationAttempt} />}
             actions={(
-                <>
-                {issueDisabledReason ? (
-                    <p id="issue-disabled-reason" role="status" className={styles.hint}>{issueDisabledReason}</p>
-                ) : null}
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={Boolean(issueDisabledReason)}
-                    aria-describedby={issueDisabledReason ? 'issue-disabled-reason' : undefined}
+                    disabled={!fromAddress || !ticker || !supply || actionConfirm.composing}
                 >
                     {singleEncode ? t('issue.title') : t('common.preview')}
                 </Button>
-                </>
             )}
         >
             {draftBanner}
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker label={t('settings.network.label')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
@@ -908,6 +988,9 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
+                error={tickerCheck.ticker === ticker.trim() && tickerCheck.status === 'taken'
+                    ? t('issue.tickerTaken', { ticker: ticker.trim() })
+                    : undefined}
             />
             <Input
                 id="issue-supply"
@@ -938,14 +1021,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                 onChange={(e) => setMaxMint(e.target.value)}
                 autoComplete="off"
             />
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={divisible}
-                    onChange={(e) => setDivisible(e.target.checked)}
-                />
-                <span>{t('issue.divisible')}</span>
-            </label>
+            <Switch
+                label={t('issue.divisible')}
+                checked={divisible}
+                onChange={(e) => setDivisible(e.target.checked)}
+            />
             <Input
                 label={t('issue.descriptionOptional')}
                 hint={t('issue.descriptionHint')}
@@ -954,14 +1034,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
                 maxLength={250}
             />
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={lockSupply}
-                    onChange={(e) => setLockSupply(e.target.checked)}
-                />
-                <span>{t('issue.lockSupply')}</span>
-            </label>
+            <Switch
+                label={t('issue.lockSupply')}
+                checked={lockSupply}
+                onChange={(e) => setLockSupply(e.target.checked)}
+            />
             {lockSupply && mintHeadroom ? (
                 // Locking minting alongside a partial initial mint strands the
                 // remainder forever: the cap says one thing, the token can only
@@ -977,15 +1054,13 @@ export function IssueTokenForm({ walletId, onBack }) {
                 is a separate owner-only action on an existing row. What belongs
                 on THIS screen is the one decision that is irreversible from
                 here: binding an address list to the token shuts the bridge door
-                for good in milestone 1. */}
-            <div className={styles.warnings}>
-                <p className={styles.hint}>
-                    {t('issue.bridgingHint')}
-                </p>
-                <p className={styles.hint}>
-                    {t('issue.boundListHint')}
-                </p>
-            </div>
+                for good in milestone 1. It is the shared warning notice, not a
+                box of its own inside the form card. */}
+            <StatusMessage variant="warning" role={null}>
+                <span>{t('issue.bridgingHint')}</span>
+                {' '}
+                <span>{t('issue.boundListHint')}</span>
+            </StatusMessage>
             <AddressField
                 id="issue-transfer-owner"
                 label={t('issue.transferOwnershipOptional')}
@@ -1006,6 +1081,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
 
             <FeeSelector
+                key={chainId}
                 label={t('send.networkFee')}
                 coinTicker={coinTicker}
                 formatFiat={formatNativeFee}

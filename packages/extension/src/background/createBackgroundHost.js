@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
+import { crypto as coreCrypto, decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
@@ -40,6 +40,11 @@ import {
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
+import {
+    notifyAccountsChanged,
+    notifyDisconnectedSites,
+    notifyNetworkChanged,
+} from '../bridge/bridgeEvents.js';
 import { applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
@@ -259,6 +264,7 @@ const {
     verifyAddressBalance,
     verifyAddressAction,
     getActiveNetwork,
+    filterChainIdsByActiveNetwork,
     createPriceOracle,
     isFiatRateSourceUrl,
     getMarkets,
@@ -310,6 +316,7 @@ const {
     listBlockedOrigins,
     addBlockedOrigin,
     removeBlockedOrigin,
+    isOriginBlocked,
     listBlocklistAuditLog,
     clearBlocklistAuditLog,
     refreshChainRegistry,
@@ -763,6 +770,14 @@ function permanentReleasePatch(entry, failure) {
     };
 }
 
+const QUEUED_BROADCAST_RETRY_BASE_MS = 1_000;
+const QUEUED_BROADCAST_RETRY_MAX_MS = 60_000;
+
+function queuedBroadcastRetryDelay(attempt) {
+    const exponent = Math.max(0, Math.min(16, attempt - 1));
+    return Math.min(QUEUED_BROADCAST_RETRY_MAX_MS, QUEUED_BROADCAST_RETRY_BASE_MS * (2 ** exponent));
+}
+
 async function retainReplacementPlan(vault, result, fallbackPsbtHex, requestedRbf, descriptor) {
     // Record the RBF the encoder was allowed to signal, not the one the caller asked for.
     const rbf = capRbfToDescriptor(descriptor, { rbf: requestedRbf }).rbf;
@@ -859,6 +874,16 @@ function assertReplacementPsbt({ replacement, plan, actionString, decodeActionSt
     }
 }
 
+async function cancelMatchingApprovals(approvals, matches) {
+    if (typeof approvals?.cancelOriginsMatching !== 'function') return 0;
+    return approvals.cancelOriginsMatching(matches);
+}
+
+async function emitSiteDisconnect(bridgeEvents, origin, reason = 'user-requested') {
+    if (typeof bridgeEvents?.disconnect !== 'function') return;
+    await bridgeEvents.disconnect(origin, reason);
+}
+
 /**
  * Read the selected wallet's accounts and the connected sites straight from
  * the vault and hand both to the bridge broadcaster.
@@ -879,6 +904,32 @@ async function announceWalletSwitch(req, vault, bridgeEvents) {
     const sites = await vault.connectedSites.list();
     await bridgeEvents.walletSwitched(accounts, sites);
     return { ok: true };
+}
+
+async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents) {
+    if (getActiveNetwork(previous) === getActiveNetwork(next)) return;
+    if (typeof bridgeEvents?.chainChanged !== 'function') return;
+    const activeChainIds = filterChainIdsByActiveNetwork(
+        Object.keys(next?.fees ?? {}),
+        next,
+        chainRegistry,
+    );
+    const sites = await vault.connectedSites.list();
+    await notifyNetworkChanged({ events: bridgeEvents, sites, activeChainIds });
+}
+
+async function announceAccountChange(vault, bridgeEvents, changedAccountIds, sites) {
+    if (typeof bridgeEvents?.accountsChanged !== 'function') return;
+    const [accounts, connectedSites] = await Promise.all([
+        vault.accounts.list(),
+        sites ? Promise.resolve(sites) : vault.connectedSites.list(),
+    ]);
+    await notifyAccountsChanged({
+        events: bridgeEvents,
+        accounts,
+        sites: connectedSites,
+        changedAccountIds,
+    });
 }
 
 function toSafeWallet(w) {
@@ -989,6 +1040,9 @@ export function createBackgroundHost(deps) {
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
     const sendHold = injectedSendHold ?? createSendHoldRegistry();
+    // Popup and side panel share this host. Matching semantic sends stay
+    // exclusive through signing and broadcast while unrelated sends proceed.
+    const activeSendIntents = new Set();
 
     async function publishSurfaceState(kind, payload) {
         if (typeof surfaceStateEvents?.publish !== 'function') return;
@@ -1000,13 +1054,37 @@ export function createBackgroundHost(deps) {
     }
 
     async function sendWithHold(req, flowDeps) {
-        const opts = { ...req, ...flowDeps };
-        const beforeBroadcast = createHoldBeforeBroadcast({
-            sendHold,
-            holdId: opts.holdId,
-            undoSeconds: opts.undoSeconds,
-        });
-        return sendToken({ ...opts, beforeBroadcast });
+        const legs = Array.isArray(req?.legs) && req.legs.length > 0
+            ? req.legs
+            : [{ to: req?.to, tick: req?.tick, amount: req?.amount, memo: req?.memo }];
+        const intentKey = JSON.stringify([
+            req?.walletId ?? null,
+            req?.chainId ?? null,
+            req?.from?.address ?? null,
+            legs.map((leg) => [
+                leg?.to ?? null,
+                typeof leg?.tick === 'string' ? leg.tick.toUpperCase() : null,
+                leg?.amount == null ? null : String(leg.amount),
+                leg?.memo ?? null,
+            ]),
+        ]);
+        if (activeSendIntents.has(intentKey)) {
+            const err = new Error('A matching send is already in progress in another wallet window.');
+            err.name = 'SendAlreadyInProgressError';
+            throw err;
+        }
+        activeSendIntents.add(intentKey);
+        try {
+            const opts = { ...req, ...flowDeps };
+            const beforeBroadcast = createHoldBeforeBroadcast({
+                sendHold,
+                holdId: opts.holdId,
+                undoSeconds: opts.undoSeconds,
+            });
+            return await sendToken({ ...opts, beforeBroadcast });
+        } finally {
+            activeSendIntents.delete(intentKey);
+        }
     }
 
     // ONE reservation ledger per host, shared across every
@@ -1354,7 +1432,11 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('account.rename', async (req, { vault }) => {
+        const previous = await vault.accounts.get(req?.accountId);
         const updated = await renameAccount({ ...req, vault });
+        if (previous?.name !== updated.name) {
+            await announceAccountChange(vault, bridgeEvents, [updated.id]);
+        }
         return { account: updated };
     });
 
@@ -1399,6 +1481,7 @@ export function createBackgroundHost(deps) {
             chainRegistry,
             sdkRegistry,
         });
+        await announceAccountChange(vault, bridgeEvents, [r.account.id]);
         return { account: r.account, addresses: r.addresses };
     });
 
@@ -1501,6 +1584,7 @@ export function createBackgroundHost(deps) {
         if (typeof network !== 'string' || !network) {
             throw new Error('settings.setActiveNetwork: network is required');
         }
+        const previousSettings = await getSettings(vault);
         let settings = await updateSettings(vault, { activeNetwork: network });
 
         let addresses = { created: [], existing: [], failed: [], skipped: 'no-wallet' };
@@ -1528,14 +1612,25 @@ export function createBackgroundHost(deps) {
                 settings = await ensureSettings(vault, chainRegistry, networkChainIds);
             }
         }
+        await announceNetworkChange(
+            previousSettings,
+            settings,
+            vault,
+            chainRegistry,
+            bridgeEvents,
+        );
         await publishSurfaceState('network', { settings });
         return { settings, addresses };
     });
 
-    host.register('settings.update', async (req, { vault, sdkRegistry }) => {
+    host.register('settings.update', async (req, { vault, chainRegistry, sdkRegistry }) => {
         const patch = req && typeof req === 'object' && 'patch' in req
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
+        const previousSettings = patch
+            && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')
+            ? await getSettings(vault)
+            : null;
         const result = await updateSettings(vault, patch);
         // A saved endpoint takes effect on the next request, not
         // at the next wallet restart. Invalidates only the chains whose
@@ -1570,6 +1665,13 @@ export function createBackgroundHost(deps) {
             }
         }
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')) {
+            await announceNetworkChange(
+                previousSettings,
+                result,
+                vault,
+                chainRegistry,
+                bridgeEvents,
+            );
             await publishSurfaceState('network', { settings: result });
         }
         return result;
@@ -1708,9 +1810,11 @@ export function createBackgroundHost(deps) {
     // here so the service worker can lock the wallet after the popup closes,
     // when the foreground timer no longer runs. Sender-gated to the trusted
     // extension UI by the transport (not a `bridge.*` type).
+    // Forward the foreground `activity` flag: an activity report restarts the
+    // idle window and can never re-arm a disarmed record.
     host.register('session.autolock', async (req) => {
         await applyAutoLockSignal(
-            { armed: req?.armed === true, idleMs: req?.idleMs },
+            { armed: req?.armed === true, idleMs: req?.idleMs, activity: req?.activity === true },
             Date.now(),
         );
         return { ok: true };
@@ -2040,6 +2144,10 @@ export function createBackgroundHost(deps) {
         if (typeof walletId !== 'string' || !walletId) {
             throw new Error('wallet.remove: walletId is required');
         }
+        const [removedAccounts, sitesBefore] = await Promise.all([
+            vault.accounts.findBy('walletId', walletId),
+            vault.connectedSites.list(),
+        ]);
         const result = await removeWallet({ vault, walletId });
         if (signerPool && typeof signerPool.evict === 'function') {
             try { signerPool.evict(walletId); } catch { /* best-effort */ }
@@ -2050,11 +2158,36 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
+        const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
+        const affectedOrigins = new Set(sitesBefore
+            .filter((site) => {
+                if (removedAccountIds.size === 0) return false;
+                const grants = Array.isArray(site?.permissions?.accounts)
+                    ? site.permissions.accounts
+                    : [];
+                return grants.length === 0 || grants.some((id) => removedAccountIds.has(id));
+            })
+            .map((site) => site.origin));
+        const sitesAfter = await vault.connectedSites.list();
+        const survivingOrigins = new Set(sitesAfter.map((site) => site.origin));
+        await notifyDisconnectedSites({
+            events: bridgeEvents,
+            sites: sitesBefore.filter((site) => (
+                affectedOrigins.has(site.origin) && !survivingOrigins.has(site.origin)
+            )),
+            reason: 'wallet-removed',
+        });
+        await announceAccountChange(
+            vault,
+            bridgeEvents,
+            [],
+            sitesAfter.filter((site) => affectedOrigins.has(site.origin)),
+        );
         return result;
     });
 
-    // §35.1 + §43 connected-sites maintenance. List/delete; the
-    // approval-flow record creation lives in bridge/handlers.js.
+    // §35.1 + §43 connected-sites maintenance. The approval-flow record
+    // creation lives in bridge/handlers.js.
     host.register('sites.list', async (_req, { vault }) => {
         const sites = await vault.connectedSites.list();
         return [...sites].sort((a, b) => (b.lastUsedAt || '').localeCompare(a.lastUsedAt || ''));
@@ -2064,7 +2197,22 @@ export function createBackgroundHost(deps) {
         if (typeof id !== 'string' || !id) {
             throw new Error('sites.delete: id is required');
         }
+        let site = null;
+        if (typeof vault.connectedSites.get === 'function') {
+            site = await vault.connectedSites.get(id);
+        } else if (typeof vault.connectedSites.list === 'function') {
+            site = (await vault.connectedSites.list()).find((candidate) => candidate.id === id);
+        }
+        const cancellation = site
+            ? cancelMatchingApprovals(approvals, (origin) => origin === site.origin)
+            : Promise.resolve(0);
         await vault.connectedSites.delete(id);
+        if (site) {
+            await Promise.all([
+                cancellation,
+                emitSiteDisconnect(bridgeEvents, site.origin, 'user-revoked'),
+            ]);
+        }
         return { ok: true };
     });
 
@@ -2086,6 +2234,10 @@ export function createBackgroundHost(deps) {
         if (typeof site.origin !== 'string' || !site.origin) {
             throw new Error('sites.restore: site.origin is required');
         }
+        const settings = await vault.settings.get().catch(() => null);
+        if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
+            throw new Error('sites.restore: origin is blocked');
+        }
         await vault.connectedSites.put(site);
         return { ok: true };
     });
@@ -2102,7 +2254,35 @@ export function createBackgroundHost(deps) {
         if (typeof origin !== 'string' || !origin) {
             throw new Error('sites.block: origin is required');
         }
-        return addBlockedOrigin({ vault, origin });
+        const cancelPending = () => cancelMatchingApprovals(
+            approvals,
+            (candidate) => typeof candidate === 'string'
+                && isOriginBlocked([origin], candidate),
+        );
+        const initialCancellation = cancelPending();
+        const sitesBeforeBlock = typeof vault.connectedSites.list === 'function'
+            ? await vault.connectedSites.list()
+            : [];
+        const result = await addBlockedOrigin({ vault, origin });
+        const evictedIds = new Set(result.evictedSiteIds);
+        let evictedOrigins = [...new Set(
+            sitesBeforeBlock
+                .filter((site) => evictedIds.has(site.id))
+                .map((site) => site.origin),
+        )];
+        if (evictedOrigins.length === 0
+            && evictedIds.size > 0
+            && !result.blocked.startsWith('*.')) {
+            evictedOrigins = [result.blocked];
+        }
+        await Promise.all([
+            initialCancellation,
+            cancelPending(),
+            ...evictedOrigins.map((evictedOrigin) => (
+                emitSiteDisconnect(bridgeEvents, evictedOrigin, 'blocked-by-user')
+            )),
+        ]);
+        return result;
     });
     host.register('sites.unblock', async (req, { vault }) => {
         const origin = req?.origin;
@@ -2328,16 +2508,17 @@ export function createBackgroundHost(deps) {
     host.register('addresses.setLabel', async (req, { vault }) => {
         const id = req?.id;
         if (!id) throw new Error('addresses.setLabel: id is required');
-        const label = typeof req?.label === 'string' ? req.label : '';
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
+        const requestedLabel = typeof req?.label === 'string' ? req.label.trim() : '';
+        const label = requestedLabel || schemas.address.defaultAddressLabel(rec);
         await vault.addresses.put({ ...rec, label });
         // §19.5.2 auto-sync: the label just changed on disk, so the
         // on-chain copy is stale. The scheduler batches this with every
         // other rename in the burst.
         const account = rec.accountId ? await vault.accounts.get(rec.accountId) : null;
         noteLabelChange({ vault }, account?.walletId ?? null);
-        return { ok: true };
+        return { ok: true, label };
     });
 
     // Keep hidden addresses in the vault and off the main list. The list's
@@ -2944,7 +3125,9 @@ export function createBackgroundHost(deps) {
         }
         let valid = false;
         try {
-            valid = Boolean(sdk.auth.verifyMessage(address, message, signature));
+            // Read the SDK's { valid, error } answer by its field; the demo stubs answer a bare boolean
+            const verdict = sdk.auth.verifyMessage(address, message, signature);
+            valid = typeof verdict === 'boolean' ? verdict : verdict?.valid === true;
         } catch (_err) {
             valid = false;
         }
@@ -3134,6 +3317,9 @@ export function createBackgroundHost(deps) {
         ));
         const conflictRecord = recordFor(originalTxHash);
         if (!conflictRecord) throw new Error('tx.replace: transaction is not a pending transaction in this wallet');
+        if (conflictRecord.chainConfirmed === true || conflictRecord.status === 'indexed') {
+            throw new Error('This transaction is already confirmed.');
+        }
         if (!['broadcast', 'broadcasting'].includes(conflictRecord.status)) {
             throw new Error('tx.replace: transaction is no longer replaceable');
         }
@@ -3266,12 +3452,17 @@ export function createBackgroundHost(deps) {
         try {
             broadcast = await sdk.encoder.broadcastTx(signed.txHex);
         } catch (err) {
-            await vault.pendingTxs.put({
-                ...pending,
-                status: 'failed',
-                error: err?.message ? String(err.message) : String(err),
-            });
-            throw err;
+            // An already-on-network answer means these exact bytes reached a node, so the
+            // replacement is live and the original evicted: settle it as delivered, as every broadcast lane does.
+            if (!flows.isAlreadyOnNetworkRejection(err)) {
+                await vault.pendingTxs.put({
+                    ...pending,
+                    status: 'failed',
+                    error: err?.message ? String(err.message) : String(err),
+                });
+                throw err;
+            }
+            broadcast = signed.txid;
         }
         const replacementTxHash = typeof broadcast === 'string'
             ? broadcast
@@ -3344,6 +3535,18 @@ export function createBackgroundHost(deps) {
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
             const entry = q[idx];
+            const retryAfterMs = Number.isFinite(entry.nextRetryAt)
+                ? Math.ceil(entry.nextRetryAt - Date.now())
+                : 0;
+            if (retryAfterMs > 0) {
+                const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
+                const retryError = new Error(
+                    `Sending is paused after a network failure. Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+                );
+                retryError.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
+                retryError.retryAfterMs = retryAfterMs;
+                throw retryError;
+            }
             const sdk = sdkRegistry.get(entry.chainId);
             // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
             // encoder as a second argument and refuses without it ("Encoder client
@@ -3457,6 +3660,23 @@ export function createBackgroundHost(deps) {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
+                } else {
+                    const retryAttempt = Number.isSafeInteger(entry.retryAttempt) && entry.retryAttempt > 0
+                        ? entry.retryAttempt + 1
+                        : 1;
+                    const retryDelayMs = queuedBroadcastRetryDelay(retryAttempt);
+                    const cur = q.findIndex((e) => e.id === id);
+                    if (cur >= 0) {
+                        q[cur] = {
+                            ...q[cur],
+                            retryAttempt,
+                            nextRetryAt: Date.now() + retryDelayMs,
+                        };
+                        await persistQueue();
+                    }
+                    if (err && typeof err === 'object') {
+                        try { err.retryAfterMs = retryDelayMs; } catch { /* a frozen error keeps no retry hint */ }
+                    }
                 }
                 // Carry the verdict this catch just ACTED on across the messaging
                 // boundary, which keeps only { name, message }. Without it the
@@ -5310,17 +5530,19 @@ export function createBackgroundHost(deps) {
                 return { ok: false, status: 0, error: 'price data disabled' };
             }
         }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         try {
             const resp = await globalThis.fetch(url, {
                 headers: { Accept: 'application/json' },
-                ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout
-                    ? { signal: AbortSignal.timeout(8000) }
-                    : {}),
+                signal: controller.signal,
             });
             if (!resp.ok) return { ok: false, status: resp.status };
             return { ok: true, status: resp.status, body: await resp.json() };
         } catch (err) {
             return { ok: false, status: 0, error: err?.message ? String(err.message) : String(err) };
+        } finally {
+            clearTimeout(timeoutId);
         }
     });
 
@@ -5391,9 +5613,50 @@ export function createBackgroundHost(deps) {
 }
 
 /**
- * Verify the current password before preparing a detached, re-encrypted wallet record.
- * Keeping the candidate detached means an authentication or encryption failure cannot
- * alter the live vault record.
+ * A host whose shell supplied no vault keyring cannot tell whether the vault
+ * itself is sealed under the password being changed, and changing only the
+ * wallet record in that case locks the person out of their own wallet.
+ */
+export class PasswordChangeUnavailableError extends Error {
+    constructor() {
+        super('This app cannot change the wallet password from here. Your password has not been changed.');
+        this.name = 'PasswordChangeUnavailableError';
+    }
+}
+
+/**
+ * A wallet record changed while a password change was being prepared (a
+ * rename, an imported key or a new wallet from another window, or a second
+ * change). Nothing was written; the person can simply try again.
+ */
+export class PasswordChangeConflictError extends Error {
+    constructor() {
+        super('Your wallets changed while the password was being changed. Your password has not been changed; try again.');
+        this.name = 'PasswordChangeConflictError';
+    }
+}
+
+/**
+ * Change the password every seal the current password made: the target
+ * wallet's, any other wallet sealed under the same password, and the vault
+ * document's own key when the current password is the unlock password.
+ *
+ * The vault document is sealed under a key derived from the unlock password
+ * and the meta slot's kdfParams, and each wallet record's seed under its own
+ * derivation. Re-sealing only the wallet record left the vault on the old
+ * password: the next unlock refused the new password, and the old one opened
+ * the vault with the changed wallet silently missing from the signer pool.
+ *
+ * Every replacement record is prepared on a detached copy and the whole set is
+ * written in ONE `vault.rekey` call together with the new document key, so an
+ * authentication, encryption or storage failure leaves the stored vault and
+ * the live session exactly as they were. KDF parameters, salt included, are
+ * kept on every seal: the meta slot keeps describing the vault, and the
+ * onboarding wallet keeps sharing its params with the vault key.
+ *
+ * @returns {Promise<{ changed: true, vaultRekeyed: boolean, walletIds: string[] }>}
+ *   `vaultRekeyed` says the unlock password itself changed, which is what a
+ *   biometric enrolment wraps.
  */
 export async function changeWalletPassword(req, deps, operations = {}) {
     const walletId = req?.walletId;
@@ -5417,6 +5680,7 @@ export async function changeWalletPassword(req, deps, operations = {}) {
 
     const unlock = operations.unlockWallet ?? unlockWallet;
     const rekey = operations.rekeyWalletRecord ?? rekeyWalletRecord;
+    const deriveKey = operations.deriveMasterKey ?? coreCrypto.deriveMasterKeyAsync;
     const wallet = await deps.vault.wallets.get(walletId);
     if (!wallet) throw new Error(`Wallet not found: ${walletId}`);
 
@@ -5433,22 +5697,117 @@ export async function changeWalletPassword(req, deps, operations = {}) {
         // Verification has completed; signer cleanup is best-effort.
     }
 
-    const candidate = {
+    const keyring = deps.vaultKeyring;
+    const vaultKdfParams = typeof keyring?.kdfParams === 'function' ? await keyring.kdfParams() : null;
+    if (!vaultKdfParams || typeof keyring.commit !== 'function') {
+        throw new PasswordChangeUnavailableError();
+    }
+
+    /** @type {Uint8Array | null} */
+    let oldVaultKey = null;
+    /** @type {Uint8Array | null} */
+    let newVaultKey = null;
+    try {
+        oldVaultKey = await deriveKey(currentPassword, vaultKdfParams);
+        const vaultRekeyed = deps.vault.keyMatches(oldVaultKey);
+
+        // Re-seal on detached copies; nothing below touches the live records.
+        // The target first, so its own failure is the one reported. Another
+        // wallet the old password does not open was sealed under a different
+        // password and keeps it.
+        // The records every replacement is prepared from. The vault write below
+        // refuses unless these are still the stored records, so a wallet write
+        // that lands during the derivations is never overwritten or left on
+        // the old password. The target was read before the verification
+        // unlock, so it must still be the stored one too.
+        const stored = await deps.vault.wallets.list();
+        if (!stored.includes(wallet)) throw new PasswordChangeConflictError();
+        const target = detachedWalletCopy(wallet);
+        const sealOpts = (candidate) => ({
+            walletPassword: currentPassword,
+            devicePassword: newPassword,
+            kdfParams: candidate.kdfParams,
+        });
+        if (!await rekey(target, sealOpts(target))) {
+            throw new Error('This wallet has no password-protected key material.');
+        }
+        const candidates = [target];
+        for (const other of stored) {
+            if (other.id === walletId) continue;
+            const candidate = detachedWalletCopy(other);
+            try {
+                if (await rekey(candidate, sealOpts(candidate))) candidates.push(candidate);
+            } catch (err) {
+                if (/** @type {any} */ (err)?.name !== 'BackupSeedPasswordError') throw err;
+            }
+        }
+
+        if (vaultRekeyed) newVaultKey = await deriveKey(newPassword, vaultKdfParams);
+        let applied;
+        try {
+            applied = await deps.vault.rekey({
+                ...(newVaultKey ? { masterKey: newVaultKey } : {}),
+                wallets: candidates,
+                readWallets: stored,
+            });
+        } catch (err) {
+            if (/** @type {any} */ (err)?.name === 'VaultConflictError') throw new PasswordChangeConflictError();
+            throw err;
+        }
+
+        const result = { changed: true, vaultRekeyed, walletIds: candidates.map((c) => c.id) };
+        // A lock that lands while the change runs closes this vault. The blob
+        // is written either way, so the change stands, but nothing below may
+        // run after a lock: a session key or signing password written now, or
+        // a signer pooled now, would leave the wallet usable behind the lock.
+        const stillOpen = () => deps.vault.isOpen !== false;
+        if (applied === false || !stillOpen()) return result;
+
+        // Committed. The shell's caches follow the vault key: a stale session
+        // key would reopen nothing after a worker restart or relaunch, and a
+        // stale signing password would refill the pool with nothing. A failure
+        // here does not undo the change; it costs one password unlock later.
+        // The keyring writes only while its slot still holds the old key,
+        // which a lock clears before it closes the vault.
+        if (newVaultKey) {
+            try {
+                await keyring.commit({ masterKey: newVaultKey, password: newPassword, previousKey: oldVaultKey });
+            } catch (err) {
+                console.error('[xchain] wallet.changePassword: session cache not updated:', err);
+            }
+        }
+
+        // The pooled signers hold the same seeds, but they were opened from
+        // the old seals; reopen them from the records as stored now.
+        const pool = deps.signerPool;
+        for (const candidate of candidates) {
+            if (!pool || !stillOpen()) break;
+            try {
+                await pool.unlockOne({
+                    wallet: candidate,
+                    password: newPassword,
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                });
+                // Each unlock is an Argon2id derivation; a lock can land inside it.
+                if (!stillOpen()) pool.evict?.(candidate.id);
+            } catch {
+                pool.evict?.(candidate.id);
+            }
+        }
+        return result;
+    } finally {
+        if (oldVaultKey) oldVaultKey.fill(0);
+        if (newVaultKey) newVaultKey.fill(0);
+    }
+}
+
+function detachedWalletCopy(wallet) {
+    return {
         ...wallet,
-        kdfParams: { ...wallet.kdfParams },
+        kdfParams: wallet.kdfParams ? { ...wallet.kdfParams } : wallet.kdfParams,
         importedKeys: Array.isArray(wallet.importedKeys)
             ? wallet.importedKeys.map((key) => ({ ...key }))
             : wallet.importedKeys,
     };
-    const rekeyed = await rekey(candidate, {
-        walletPassword: currentPassword,
-        devicePassword: newPassword,
-        kdfParams: candidate.kdfParams,
-    });
-    if (!rekeyed) {
-        throw new Error('This wallet has no password-protected key material.');
-    }
-    await deps.vault.wallets.put(candidate);
-    deps.signerPool?.evict?.(walletId);
-    return { changed: true };
 }

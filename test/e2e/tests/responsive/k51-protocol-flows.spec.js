@@ -14,10 +14,10 @@ import {
     describeOffenders,
     documentOverflow,
     enterDemoWallet,
+    LG_K51,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
-const EXPECTED_VIEWPORT = { width: 412, height: 869 };
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -86,6 +86,8 @@ async function discardReview(page) {
     await page.getByRole('button', { name: 'Discard and leave' }).click();
 }
 
+test.use(LG_K51);
+
 test.describe('LG K51 protocol authoring and markets', { tag: '@lg-k51' }, () => {
     test('review screens and a market pair fit the touch viewport', async ({ page }) => {
         test.slow();
@@ -96,13 +98,13 @@ test.describe('LG K51 protocol authoring and markets', { tag: '@lg-k51' }, () =>
         page.on('pageerror', (error) => consoleErrors.push(String(error)));
 
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-        expect(page.viewportSize()).toEqual(EXPECTED_VIEWPORT);
+        expect(page.viewportSize()).toEqual(LG_K51.viewport);
         const device = await page.evaluate(() => ({
             touchPoints: navigator.maxTouchPoints,
             userAgent: navigator.userAgent,
         }));
         expect(device.touchPoints).toBeGreaterThan(0);
-        expect(device.userAgent).toContain('Chrome/102.0.0.0');
+        expect(device.userAgent).toContain('Chrome/102.');
         await useWatcherMode(page);
 
         await test.step('Issue token reaches review with the entered values', async () => {

@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -32,14 +32,14 @@ const REQUEST = Object.freeze({
     timestamp: 1,
 });
 
-function messagingFor({ addresses = { [CHAIN]: [OWNER] }, messages = [], ready = true } = {}) {
+function messagingFor({ addresses = { [CHAIN]: [OWNER] }, messages = [], errors = [], ready = true } = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         listContacts: vi.fn().mockResolvedValue([]),
         signerReady: vi.fn().mockResolvedValue({ ready }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: ready ? 'unlocked' : 'locked' }),
-        getMessagingInboxSweep: vi.fn().mockResolvedValue({ messages, addresses: [], errors: [] }),
+        getMessagingInboxSweep: vi.fn().mockResolvedValue({ messages, addresses: [], errors }),
     };
     return new Proxy(target, {
         get(value, prop) {
@@ -49,7 +49,7 @@ function messagingFor({ addresses = { [CHAIN]: [OWNER] }, messages = [], ready =
     });
 }
 
-function mount(messaging) {
+function mount(messaging, props = {}) {
     return render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
@@ -58,17 +58,59 @@ function mount(messaging) {
             activeAccountId: 'account-1',
             onCompose() {},
             onBack() {},
+            ...props,
         }),
     ));
+}
+
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    return { promise, resolve, reject };
+}
+
+function inboxTree(messaging, activeAccountId) {
+    return React.createElement(
+        MessagingProvider,
+        { shell: 'web', messaging },
+        React.createElement(MessagingInbox, {
+            walletId: 'wallet-1',
+            activeAccountId,
+            onCompose() {},
+            onBack() {},
+        }),
+    );
+}
+
+function incoming({ from, to = OWNER.address, txid, text, timestamp }) {
+    return { format: 3, chainId: CHAIN, from, to, txid, text, timestamp };
 }
 
 afterEach(() => {
     cleanup();
     localStorage.clear();
     delete navigator.clipboard;
+    vi.restoreAllMocks();
 });
 
 describe('MessagingInbox audit states', () => {
+    it('uses the same shared size class for the search and network controls', async () => {
+        mount(messagingFor());
+
+        await screen.findByText('No messages yet');
+        const searchField = screen.getByRole('searchbox', { name: 'Search conversations' })
+            .parentElement.parentElement;
+        const networkFilter = screen.getByRole('button', { name: 'Filter by network' })
+            .parentElement;
+
+        expect(searchField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(networkFilter.className).toMatch(/(?:^|\s)_?md_/);
+    });
+
     it('renders the address empty state when the account has no messageable addresses', async () => {
         mount(messagingFor({ addresses: {} }));
 
@@ -82,6 +124,8 @@ describe('MessagingInbox audit states', () => {
 
         const password = await screen.findByLabelText('Password');
         const unlock = screen.getByRole('button', { name: 'Unlock inbox' });
+        expect(password).toHaveAccessibleDescription("Decrypts this account's messages.");
+        expect(screen.queryByText("Enter your wallet password to decrypt this account's messages.")).toBeNull();
         expect(unlock.disabled).toBe(true);
 
         fireEvent.change(password, { target: { value: 'secret' } });
@@ -127,6 +171,34 @@ describe('MessagingInbox audit states', () => {
         await screen.findByText('No messages yet');
         expect(screen.queryByRole('button', { name: 'Share my key' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull();
+    });
+
+    it('shows an inbox key-share encoder failure as plain copy', async () => {
+        const failure = new Error('no spendable UTXOs found for the funding address');
+        failure.name = 'SDKEncoderError';
+        failure.code = 'ENCODER_NETWORK';
+        const messaging = messagingFor({ messages: [REQUEST] });
+        messaging.composeForConfirm = vi.fn().mockRejectedValue(failure);
+        mount(messaging);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Share my key' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toMatch(/could not reach the transaction service/i);
+        expect(alert.textContent).not.toMatch(/no spendable UTXOs/i);
+    });
+
+    it('shows partial indexer failures as plain copy instead of an empty success', async () => {
+        mount(messagingFor({
+            errors: [{
+                addressId: OWNER.id,
+                error: 'Explorer returned HTTP 502 for /BTC/api/messages?address=secret',
+            }],
+        }));
+
+        const warning = await screen.findByText(/could not be loaded from 1 address/i);
+        expect(warning.textContent).toMatch(/network service did not answer/i);
+        expect(warning.textContent).not.toMatch(/\/api\/messages|secret|HTTP 502/i);
     });
 
     it('wraps long text, links only HTTP(S), opens links safely, and copies the message', async () => {
@@ -182,5 +254,119 @@ describe('MessagingInbox audit states', () => {
         expect(attachment).toHaveAttribute('download', 'notes.txt');
         expect(attachment.getAttribute('href')).toBe('data:text/plain;base64,aGVsbG8=');
         expect(document.body.textContent).not.toContain('xchain-attachment:v1');
+    });
+
+    it('uses the shared relative timestamp inside an opened message thread', async () => {
+        const now = new Date('2026-10-13T12:00:00Z').getTime();
+        const timestamp = Math.floor((now - 5 * 60_000) / 1000);
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+        mount(messagingFor({ messages: [incoming({
+            from: 'peer-time', txid: 'time-tx', text: 'timestamped message', timestamp,
+        })] }));
+
+        fireEvent.click(await screen.findByText('timestamped message'));
+
+        const time = await screen.findByText('5 minutes ago');
+        expect(time.tagName).toBe('TIME');
+        expect(time).toHaveAttribute('title');
+    });
+});
+
+describe('MessagingInbox scope and thread isolation', () => {
+    it('ignores an older account sweep after the next account finishes loading', async () => {
+        const sweeps = { 'owner-a': deferred(), 'owner-b': deferred() };
+        const messaging = messagingFor();
+        messaging.getAddressesByChain.mockImplementation((_walletId, accountId) => Promise.resolve({
+            [CHAIN]: [{ ...OWNER, id: `owner-${accountId}` }],
+        }));
+        messaging.getMessagingInboxSweep.mockImplementation(({ addressIds }) => (
+            sweeps[addressIds[0]].promise
+        ));
+
+        const utils = render(inboxTree(messaging, 'a'));
+        await waitFor(() => expect(messaging.getMessagingInboxSweep).toHaveBeenCalledWith(
+            expect.objectContaining({ addressIds: ['owner-a'] }),
+        ));
+
+        utils.rerender(inboxTree(messaging, 'b'));
+        await waitFor(() => expect(messaging.getMessagingInboxSweep).toHaveBeenCalledWith(
+            expect.objectContaining({ addressIds: ['owner-b'] }),
+        ));
+
+        await act(async () => {
+            sweeps['owner-b'].resolve({
+                messages: [incoming({ from: 'peer-b', txid: 'tx-b', text: 'account B', timestamp: 2 })],
+            });
+            await Promise.resolve();
+        });
+        expect(await screen.findByText('account B')).toBeTruthy();
+
+        await act(async () => {
+            sweeps['owner-a'].resolve({
+                messages: [incoming({ from: 'peer-a', txid: 'tx-a', text: 'account A', timestamp: 3 })],
+            });
+            await Promise.resolve();
+        });
+        expect(screen.getByText('account B')).toBeTruthy();
+        expect(screen.queryByText('account A')).toBeNull();
+    });
+
+    it('writes opened-thread read state only to the active account scope', async () => {
+        const messaging = messagingFor();
+        messaging.getAddressesByChain.mockImplementation((_walletId, accountId) => Promise.resolve({
+            [CHAIN]: [{ ...OWNER, id: `owner-${accountId}` }],
+        }));
+        messaging.getMessagingInboxSweep.mockImplementation(({ addressIds }) => {
+            const suffix = addressIds[0].slice(-1);
+            return Promise.resolve({
+                messages: [incoming({
+                    from: `peer-${suffix}`,
+                    txid: `tx-${suffix}`,
+                    text: `account ${suffix.toUpperCase()}`,
+                    timestamp: suffix === 'a' ? 1 : 2,
+                })],
+            });
+        });
+
+        const utils = render(inboxTree(messaging, 'a'));
+        expect(await screen.findByText('account A')).toBeTruthy();
+        utils.rerender(inboxTree(messaging, 'b'));
+        fireEvent.click(await screen.findByText('account B'));
+
+        const accountB = JSON.parse(localStorage.getItem('xc:msgRead:wallet-1:b'));
+        expect(accountB).toEqual({ 'peer-b': ['tx-b'] });
+        expect(localStorage.getItem('xc:msgRead:wallet-1:a')).toBeNull();
+    });
+
+    it('keeps a separate docked-composer draft for each conversation', async () => {
+        mount(messagingFor({ messages: [
+            incoming({ from: 'peer-a', txid: 'tx-a', text: 'message A', timestamp: 2 }),
+            incoming({ from: 'peer-b', txid: 'tx-b', text: 'message B', timestamp: 1 }),
+        ] }));
+
+        fireEvent.click(await screen.findByText('message A'));
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'draft for A' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        fireEvent.click(screen.getByText('message B'));
+        expect(screen.getByLabelText('Message').value).toBe('');
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'draft for B' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        fireEvent.click(screen.getByText('message A'));
+        expect(screen.getByLabelText('Message').value).toBe('draft for A');
+    });
+
+    it('shows a plain validation message for an empty quick reply', async () => {
+        const onCompose = vi.fn();
+        mount(messagingFor({ messages: [
+            incoming({ from: 'peer-a', txid: 'tx-a', text: 'message A', timestamp: 2 }),
+        ] }), { onCompose });
+
+        fireEvent.click(await screen.findByText('message A'));
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+        expect(screen.getByRole('alert').textContent).toBe('Write a message before continuing.');
+        expect(onCompose).not.toHaveBeenCalled();
     });
 });

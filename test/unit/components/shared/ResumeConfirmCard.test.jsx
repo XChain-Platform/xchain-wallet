@@ -128,4 +128,16 @@ describe('ResumeConfirmCard: several sessions', () => {
         expect(flows.describeResumeSession).toHaveBeenNthCalledWith(1, a);
         expect(flows.describeResumeSession).toHaveBeenNthCalledWith(2, b);
     });
+
+    it('renders only the newest occurrence of a duplicate session id', () => {
+        const newer = { id: 'same', label: 'Newer session' };
+        const older = { id: 'same', label: 'Older session' };
+        offer([newer, older]);
+        mount();
+
+        const cards = screen.getAllByTestId('resume-confirm-card');
+        expect(cards).toHaveLength(1);
+        expect(cards[0].textContent).toContain('Newer session');
+        expect(cards[0].textContent).not.toContain('Older session');
+    });
 });

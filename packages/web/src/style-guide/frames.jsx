@@ -75,9 +75,10 @@ function stopFocusScroll(win) {
  * @param {number} [props.minHeight]             floor for content that is all overlay (a dialog)
  * @param {boolean} [props.padded]               inset the content 12px, for examples that are not a whole Screen
  * @param {string} props.title                   accessible name of the frame
+ * @param {'light' | 'dark'} [props.theme]       fixed theme for side-by-side theme comparisons
  * @param {import('react').ReactNode} props.children
  */
-export function ViewportFrame({ width, minHeight = 0, padded = true, title, children }) {
+export function ViewportFrame({ width, minHeight = 0, padded = true, title, theme, children }) {
     const ref = useRef(/** @type {HTMLIFrameElement | null} */ (null));
     const [body, setBody] = useState(/** @type {HTMLElement | null} */ (null));
     const [height, setHeight] = useState(Math.max(minHeight, 120));
@@ -92,6 +93,7 @@ export function ViewportFrame({ width, minHeight = 0, padded = true, title, chil
             const doc = iframe.contentDocument;
             if (!doc || doc.URL !== 'about:srcdoc' || !doc.body || doc.body.dataset.sgReady) return;
             doc.body.dataset.sgReady = '1';
+            if (theme) doc.documentElement.dataset.xcTheme = theme;
             stopFocusScroll(iframe.contentWindow);
             syncStyles(doc);
             // A Screen sizes itself to the viewport; in a frame it sizes to
@@ -127,7 +129,7 @@ export function ViewportFrame({ width, minHeight = 0, padded = true, title, chil
             resize?.disconnect();
             cancelAnimationFrame(frameId);
         };
-    }, [minHeight, padded]);
+    }, [minHeight, padded, theme]);
 
     return (
         <>

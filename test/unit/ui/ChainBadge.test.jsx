@@ -16,18 +16,19 @@ import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 describe('<ChainBadge>', () => {
     const reg = defaultRegistry();
 
-    it('renders the descriptor display name for mainnet without network suffix', () => {
+    it('renders only an accessibly named icon by default', () => {
         const d = reg.get('bitcoin-mainnet');
-        render(<ChainBadge descriptor={d} />);
-        expect(screen.getByText('Bitcoin')).toBeInTheDocument();
-        // Mainnet kind intentionally elided.
-        expect(screen.queryByText(/mainnet/i)).toBeNull();
+        const { container } = render(<ChainBadge descriptor={d} />);
+        expect(screen.getByLabelText('Bitcoin')).toBe(container.firstChild);
+        expect(screen.getByRole('img', { name: 'Bitcoin' })).toBe(container.firstChild);
+        expect(screen.queryByText('Bitcoin')).toBeNull();
     });
 
-    it('surfaces the network kind on non-mainnet descriptors', () => {
+    it('shows the display name on request without network-kind text', () => {
         const d = reg.get('bitcoin-regtest');
-        render(<ChainBadge descriptor={d} />);
-        expect(screen.getByText(/regtest/i)).toBeInTheDocument();
+        render(<ChainBadge descriptor={d} showName />);
+        expect(screen.getByText('Bitcoin')).toBeInTheDocument();
+        expect(screen.queryByText(/regtest/i)).toBeNull();
     });
 
     it('renders the chain icon image with the tick URL from branding', () => {
@@ -45,7 +46,7 @@ describe('<ChainBadge>', () => {
         expect(root.getAttribute('style')).toContain('#F7931A');
     });
 
-    it('hides the name when showName={false}', () => {
+    it('keeps the icon-only rendering explicit with showName={false}', () => {
         const d = reg.get('litecoin-mainnet');
         render(<ChainBadge descriptor={d} showName={false} />);
         expect(screen.queryByText('Litecoin')).toBeNull();

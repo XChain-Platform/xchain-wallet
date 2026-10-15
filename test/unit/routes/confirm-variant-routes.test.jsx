@@ -172,17 +172,17 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         const { utils, calls } = await drive(parsed, { openConfirm: false });
 
         expect(utils.getAllByTestId('psbt-sign-input').map((row) => row.textContent)).toEqual([
-            `Input${OWN}150,000 sats`,
-            'Unknown input(unknown source script)50,000 sats',
+            `Input${OWN}0.0015 BTC`,
+            'Unknown input(unknown source script)0.0005 BTC',
         ]);
         expect(utils.getAllByTestId('psbt-sign-output').map((row) => row.textContent)).toEqual([
-            `Recipient${recipientA}120,000 sats`,
-            `Recipient${recipientB}20,000 sats`,
-            `Change (back to you)${OWN}55,000 sats`,
+            `Recipient${recipientA}0.0012 BTC`,
+            `Recipient${recipientB}0.0002 BTC`,
+            `Change (back to you)${OWN}0.00055 BTC`,
         ]);
-        expect(utils.container.textContent).toContain('Total in: 200,000 sats');
-        expect(utils.container.textContent).toContain('Total out: 195,000 sats');
-        expect(utils.container.textContent).toContain('Network fee: 5,000 sats');
+        expect(utils.container.textContent).toContain('Total in: 0.002 BTC');
+        expect(utils.container.textContent).toContain('Total out: 0.00195 BTC');
+        expect(utils.container.textContent).toContain('Network fee: 0.00005 BTC');
 
         await domAct(async () => {
             fireEvent.click(findButton(utils, /Sign transaction/i));
@@ -190,13 +190,13 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         });
 
         expect(utils.getAllByTestId('psbt-input').map((row) => row.textContent)).toEqual([
-            `Signs with your key${OWN}150,000 sats`,
-            'Unknown input(unknown source script)50,000 sats',
+            `Signs with your key${OWN}0.0015 BTC`,
+            'Unknown input(unknown source script)0.0005 BTC',
         ]);
         expect(utils.getAllByTestId('psbt-output').map((row) => row.textContent)).toEqual([
-            `Recipient${recipientA}120,000 sats`,
-            `Recipient${recipientB}20,000 sats`,
-            `Change (back to you)${OWN}55,000 sats`,
+            `Recipient${recipientA}0.0012 BTC`,
+            `Recipient${recipientB}0.0002 BTC`,
+            `Change (back to you)${OWN}0.00055 BTC`,
         ]);
         expect(calls.some((call) => call.method === 'signPsbtUserInitiated')).toBe(false);
     });
@@ -212,6 +212,24 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         expect(utils.getByTestId('psbt-intent-panel')).toBeTruthy();
         expect(utils.container.textContent).toContain('Signs with your key');
         // Nothing signed yet: opening the page is not authorizing.
+        expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
+    });
+
+    it('Reject returns to the form with the transaction and selections intact', async () => {
+        const { utils, calls } = await drive({
+            decomposed: DECOMPOSED,
+            action: null,
+            actionDecodeReason: 'NO_OP_RETURN',
+        });
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-reject'));
+            await drainMicrotasks();
+        });
+
+        expect(utils.queryByTestId('confirm-modal')).toBeNull();
+        expect(utils.getByLabelText(/Unsigned transaction/i).value).toBe(PSBT_HEX);
+        expect(utils.getByLabelText('Signing address').value).toBe(HD_ADDRESS.id);
         expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
     });
 
@@ -359,6 +377,88 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
             await drainMicrotasks();
         });
         expect(writeText).toHaveBeenCalledWith('sig-abc');
+    });
+
+    it('keeps the confirmed address, message, result, and copied signature in one submission', async () => {
+        const secondAddress = {
+            ...HD_ADDRESS,
+            id: 'addr-hd-1',
+            address: OTHER,
+            derivationPath: "m/84'/0'/0'/0/1",
+        };
+        const { messaging, calls } = recordingMessaging({
+            getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS, secondAddress] }),
+            signMessageRequest: (args) => {
+                calls.push({ method: 'signMessageRequest', args });
+                return Promise.resolve({ signature: 'signature-for-own' });
+            },
+        });
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(SignMessageForm, messaging);
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Address'), { target: { value: HD_ADDRESS.id } });
+            typeIn(utils, 'Message', 'approved message');
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(findButton(utils, /Sign message/i));
+            fireEvent.change(utils.getByLabelText('Address'), { target: { value: secondAddress.id } });
+            typeIn(utils, 'Message', 'later edit');
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByTestId('confirm-message-text').textContent).toBe('approved message');
+        expect(utils.container.textContent).toContain(OWN);
+        expect(utils.container.textContent).not.toContain(OTHER);
+        await domAct(async () => {
+            typeIn(utils, 'Password', 'hunter2');
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        const submit = calls.find((c) => c.method === 'signMessageRequest');
+        expect(submit.args).toMatchObject({
+            addressId: HD_ADDRESS.id,
+            message: 'approved message',
+        });
+        expect(utils.container.textContent).toContain('signature-for-own');
+        expect(utils.container.textContent).toContain('approved message');
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Copy signature' }));
+            await drainMicrotasks();
+        });
+        expect(writeText).toHaveBeenCalledWith('signature-for-own');
+    });
+
+    it('surfaces a rejected signing request without leaking its promise', async () => {
+        const { messaging } = recordingMessaging({
+            signMessageRequest: () => Promise.reject(new Error('signing backend unavailable')),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(SignMessageForm, messaging);
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            typeIn(utils, 'Message', 'proof of control');
+            fireEvent.click(findButton(utils, /Sign message/i));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            typeIn(utils, 'Password', 'hunter2');
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByRole('alert').textContent).toContain('signing backend unavailable');
     });
 
     it('Reject signs nothing and returns to the form with the draft intact', async () => {

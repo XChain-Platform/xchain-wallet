@@ -9,9 +9,56 @@
 // contact legal@dankest.llc.
 
 import { forwardRef, useEffect, useId, useState } from 'react';
+import { EyeIcon, EyeOffIcon } from './icons/index.jsx';
 import styles from './Input.module.css';
 import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
+import { t } from '../i18n/index.js';
+
+const PHONE_PLACEHOLDER_QUERY = '(max-width: 480px)';
+const LONG_PLACEHOLDER_LENGTH = 30;
+
+function phonePlaceholderMatches() {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.matchMedia === 'function') {
+        return window.matchMedia(PHONE_PLACEHOLDER_QUERY).matches;
+    }
+    return (window.innerWidth || document.documentElement?.clientWidth || 0) <= 480;
+}
+
+export function useResponsivePlaceholder(placeholder, compactPlaceholder) {
+    const [isPhoneWidth, setIsPhoneWidth] = useState(phonePlaceholderMatches);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const query = typeof window.matchMedia === 'function'
+            ? window.matchMedia(PHONE_PLACEHOLDER_QUERY)
+            : null;
+        const update = () => setIsPhoneWidth(phonePlaceholderMatches());
+        update();
+        if (query?.addEventListener) {
+            query.addEventListener('change', update);
+            return () => query.removeEventListener('change', update);
+        }
+        window.addEventListener('resize', update);
+        return () => window.removeEventListener('resize', update);
+    }, []);
+
+    return isPhoneWidth && compactPlaceholder ? compactPlaceholder : placeholder;
+}
+
+export const HIDDEN_PASTE_MESSAGE = 'Pasted text contains hidden characters. Check it and try again.';
+
+const FIELD_PASTE_EDGE = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
+const FIELD_PASTE_HIDDEN = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
+
+/** Strip paste artifacts at the edges and refuse hidden characters in the value. */
+export function inspectFieldPaste(value) {
+    const normalized = String(value ?? '').replace(FIELD_PASTE_EDGE, '');
+    return FIELD_PASTE_HIDDEN.test(normalized)
+        ? { ok: false, value: normalized, error: HIDDEN_PASTE_MESSAGE }
+        : { ok: true, value: normalized, error: null };
+}
 
 /**
  * Controlled text input with label, hint, and error slots. Pass-through
@@ -19,7 +66,9 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * `onChange`, `autoFocus`, `autoComplete`, etc. directly.
  *
  * Password fields render an inline Caps-Lock warning when the modifier
- * is on (§26 / G067). Detection runs only for `type="password"`; other
+ * is on (§26 / G067). A password field marked `revealable` also carries a
+ * show and hide button inside its border; the value is only ever held by the
+ * input itself, so revealing it writes nothing anywhere. Detection runs only for `type="password"`; other
  * inputs see no behavior change. Caller-provided `onKeyDown` / `onKeyUp`
  * / `onFocus` / `onBlur` handlers are chained, never replaced.
  *
@@ -36,8 +85,11 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {string} [error]
  * @property {string | number} [errorKey]
  * @property {string} [id]
+ * @property {string} [compactPlaceholder] concise phone-width placeholder; long placeholders default to the field's accessible name.
+ * @property {boolean} [pasteGuard] guards address-style text fields; decimal and number fields are guarded automatically.
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
- * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
+ * @property {'sm' | 'md' | 'lg'} [size] field size; defaults to 'md'.
+ * @property {boolean} [revealable] password fields only: a show and hide button sits inside the field.
  */
 export const Input = forwardRef(function Input(
     {
@@ -46,11 +98,14 @@ export const Input = forwardRef(function Input(
         error,
         errorKey,
         id,
+        compactPlaceholder,
         optional = false,
         size = 'md',
+        revealable = false,
         type = 'text',
         value,
         defaultValue,
+        placeholder,
         maxLength,
         className,
         onChange,
@@ -58,14 +113,18 @@ export const Input = forwardRef(function Input(
         autoCorrect = 'off',
         spellCheck = false,
         inputMode,
+        dir,
         enterKeyHint,
         onKeyDown,
         onKeyUp,
         onFocus,
         onBlur,
+        onPaste,
+        pasteGuard = false,
         required = false,
         onInvalid,
         'aria-invalid': externalInvalid,
+        'aria-label': externalLabel,
         'aria-describedby': externalDescribedBy,
         'aria-required': externalRequired,
         ...rest
@@ -85,14 +144,30 @@ export const Input = forwardRef(function Input(
         && Object.is(dismissedError.key, errorKey);
     const isDateOrTime = type === 'date' || type === 'datetime-local' || type === 'time';
     const [dateError, setDateError] = useState(null);
+    const [pasteError, setPasteError] = useState(null);
     const callerError = error && !errorIsDismissed ? error : null;
-    const visibleError = dateError || callerError;
+    const visibleError = pasteError || dateError || callerError;
     const hintId = hint && !visibleError ? `${inputId}-hint` : undefined;
     const errorId = visibleError ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
     const isDateTime = type === 'datetime-local';
     const zoneId = isDateTime ? `${inputId}-zone` : undefined;
     const counterId = maxLength != null ? `${inputId}-counter` : undefined;
+    const fullPlaceholder = typeof placeholder === 'string' ? placeholder : undefined;
+    const fieldName = typeof externalLabel === 'string'
+        ? externalLabel
+        : (typeof label === 'string' ? label : undefined);
+    const inferredCompactPlaceholder = fullPlaceholder?.length > LONG_PLACEHOLDER_LENGTH
+        && fieldName?.length < fullPlaceholder.length
+        ? fieldName
+        : undefined;
+    const visiblePlaceholder = useResponsivePlaceholder(
+        fullPlaceholder,
+        compactPlaceholder || inferredCompactPlaceholder,
+    );
+    const placeholderDescriptionId = visiblePlaceholder !== fullPlaceholder
+        ? `${inputId}-placeholder-description`
+        : undefined;
     const initialValue = value ?? defaultValue ?? '';
     const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
     const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
@@ -104,8 +179,26 @@ export const Input = forwardRef(function Input(
         url: 'url',
     }[type]);
     const resolvedEnterKeyHint = enterKeyHint || (type === 'search' ? 'search' : 'done');
+    const resolvedDir = dir || (resolvedInputMode === 'decimal' || resolvedInputMode === 'numeric'
+        ? 'ltr'
+        : undefined);
+    const shouldGuardPaste = pasteGuard
+        || resolvedInputMode === 'decimal'
+        || type === 'number'
+        || /address/i.test(typeof label === 'string' ? label : '')
+        || /address/i.test(String(externalLabel || ''));
 
     const isPassword = type === 'password';
+    const canReveal = isPassword && revealable;
+    const [revealed, setRevealed] = useState(false);
+    const renderedType = canReveal && revealed ? 'text' : type;
+    // The button is tied to its field by aria-controls, so its own name stays
+    // short: repeating the field label would make a lookup by that label find
+    // the button as well as the field.
+    const revealsPassphrase = /passphrase/i.test(fieldName || '');
+    const revealLabel = revealsPassphrase
+        ? (revealed ? t('common.hidePassphrase') : t('common.showPassphrase'))
+        : (revealed ? t('common.hidePassword') : t('common.showPassword'));
     const [capsLockOn, setCapsLockOn] = useState(false);
     const [focused, setFocused] = useState(false);
     const showCapsLock = isPassword && focused && capsLockOn;
@@ -117,8 +210,14 @@ export const Input = forwardRef(function Input(
         zoneId,
         counterId,
         showCapsLock ? capsLockId : undefined,
+        placeholderDescriptionId,
     ].filter(Boolean).join(' ') || undefined;
-    const inputClass = [styles.input, visibleError ? styles.invalid : '', className]
+    const inputClass = [
+        styles.input,
+        visibleError ? styles.invalid : '',
+        canReveal ? styles.revealableInput : '',
+        className,
+    ]
         .filter(Boolean).join(' ');
 
     useEffect(() => {
@@ -154,8 +253,51 @@ export const Input = forwardRef(function Input(
     const handleChange = (event) => {
         setUncontrolledLength(event.currentTarget.value.length);
         if (isDateOrTime) setDateError(null);
+        setPasteError(null);
         if (error) setDismissedError({ message: error, key: errorKey });
         onChange?.(event);
+    };
+    const handlePaste = (event) => {
+        if (!shouldGuardPaste) {
+            onPaste?.(event);
+            return;
+        }
+        const pasted = event.clipboardData?.getData?.('text');
+        if (typeof pasted !== 'string') {
+            onPaste?.(event);
+            return;
+        }
+        const inspected = inspectFieldPaste(pasted);
+        if (!inspected.ok) {
+            event.preventDefault();
+            setPasteError(inspected.error);
+            return;
+        }
+        setPasteError(null);
+        const normalizedEvent = pasted === inspected.value ? event : {
+            clipboardData: { getData: () => inspected.value },
+            currentTarget: event.currentTarget,
+            target: event.target,
+            defaultPrevented: false,
+            preventDefault() {
+                this.defaultPrevented = true;
+                event.preventDefault();
+            },
+        };
+        onPaste?.(normalizedEvent);
+        if (normalizedEvent.defaultPrevented || pasted === inspected.value) return;
+
+        const input = event.currentTarget;
+        const current = String(value ?? input.value ?? '');
+        const start = input.selectionStart ?? current.length;
+        const end = input.selectionEnd ?? start;
+        const nextValue = `${current.slice(0, start)}${inspected.value}${current.slice(end)}`;
+        const syntheticTarget = {
+            value: nextValue,
+            selectionStart: start + inspected.value.length,
+        };
+        event.preventDefault();
+        handleChange({ target: syntheticTarget, currentTarget: syntheticTarget });
     };
     const handleInvalid = (event) => {
         if (isDateOrTime) {
@@ -172,31 +314,53 @@ export const Input = forwardRef(function Input(
                     {requirement.label}
                 </label>
             ) : null}
-            <input
-                ref={ref}
-                id={inputId}
-                type={type}
-                autoCapitalize={autoCapitalize}
-                autoCorrect={autoCorrect}
-                spellCheck={spellCheck}
-                inputMode={resolvedInputMode}
-                enterKeyHint={resolvedEnterKeyHint}
-                className={inputClass}
-                aria-invalid={visibleError ? 'true' : externalInvalid}
-                aria-describedby={describedBy}
-                aria-required={requirement.ariaRequired}
-                required={required}
-                value={value}
-                defaultValue={defaultValue}
-                maxLength={maxLength}
-                onChange={handleChange}
-                onKeyDown={handleKeyDown}
-                onKeyUp={handleKeyUp}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-                onInvalid={handleInvalid}
-                {...rest}
-            />
+            <div className={styles.controlHitArea} onPointerDown={activateControlHitArea}>
+                <input
+                    ref={ref}
+                    id={inputId}
+                    type={renderedType}
+                    autoCapitalize={autoCapitalize}
+                    autoCorrect={autoCorrect}
+                    spellCheck={spellCheck}
+                    inputMode={resolvedInputMode}
+                    dir={resolvedDir}
+                    enterKeyHint={resolvedEnterKeyHint}
+                    className={inputClass}
+                    aria-invalid={visibleError ? 'true' : externalInvalid}
+                    aria-label={externalLabel}
+                    aria-describedby={describedBy}
+                    aria-required={requirement.ariaRequired}
+                    required={required}
+                    value={value}
+                    defaultValue={defaultValue}
+                    maxLength={maxLength}
+                    placeholder={visiblePlaceholder}
+                    onChange={handleChange}
+                    onKeyDown={handleKeyDown}
+                    onKeyUp={handleKeyUp}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    onPaste={handlePaste}
+                    onInvalid={handleInvalid}
+                    {...rest}
+                />
+                {canReveal ? (
+                    <button
+                        type="button"
+                        className={styles.revealToggle}
+                        onClick={() => setRevealed((shown) => !shown)}
+                        aria-label={revealLabel}
+                        aria-pressed={revealed}
+                        aria-controls={inputId}
+                        title={revealLabel}
+                    >
+                        {revealed ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                ) : null}
+            </div>
+            {placeholderDescriptionId ? (
+                <span id={placeholderDescriptionId} className="sr-only">{fullPlaceholder}</span>
+            ) : null}
             {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}
@@ -218,12 +382,20 @@ export const Input = forwardRef(function Input(
                     role="status"
                     aria-live="polite"
                 >
-                    Caps Lock is on
+                    {t('ui.input.capsLockIsOn')}
                 </div>
             ) : null}
         </div>
     );
 });
+
+function activateControlHitArea(event) {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    const control = event.currentTarget.firstElementChild;
+    control?.focus();
+    control?.click();
+}
 
 function dateValidationMessage(input) {
     const { validity, type } = input;

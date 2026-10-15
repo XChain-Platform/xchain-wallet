@@ -9,10 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -38,6 +39,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -84,6 +86,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -122,6 +125,14 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
+    const [reviewParams, setReviewParams] = useState(
+        /** @type {Record<string, string> | null} */ (null),
+    );
+
+    useEffect(() => {
+        setChainId(initialChainId);
+    }, [initialChainId]);
 
     // Declared before the effects below; the detection effect's dependency
     // array references fromAddress, which would hit the temporal dead zone
@@ -159,13 +170,13 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to stake from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your staking addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -268,27 +279,29 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
-    async function openConfirmScreen() {
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
-        setSubmitError(null);
+    async function openConfirmScreen(params) {
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
+            setSubmitError(null);
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: 'STAKE', params: actionParams },
+                actionData: { action: 'STAKE', params },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
-                    params: actionParams,
+                    params,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -301,6 +314,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || 'Stake failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -328,6 +343,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRateValid = feePick.mode !== 'custom'
+        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -377,8 +394,20 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             return;
         }
         const amt = amount.trim();
-        if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(amt) || Number(amt) <= 0) {
-            setFormError('Amount must be a positive number with up to 8 decimals.');
+        if (!amt) {
+            setFormError('Enter an amount to stake.');
+            return;
+        }
+        if (!/^[0-9]+(\.[0-9]+)?$/.test(amt)) {
+            setFormError('Amount must be a positive number.');
+            return;
+        }
+        if (Number(amt) <= 0) {
+            setFormError('Amount must be greater than zero.');
+            return;
+        }
+        if ((amt.split('.')[1] || '').length > 8) {
+            setFormError('Amount can have at most 8 decimal places.');
             return;
         }
         if (tickAmtBalance != null && compareDecimalStrings(amt, tickAmtBalance) === 1) {
@@ -386,20 +415,32 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             return;
         }
         const pk = signingPubkey.trim();
+        if (!pk) {
+            setFormError('Enter the signing public key.');
+            return;
+        }
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
             setFormError('Signing public key must be exactly 64 hexadecimal characters (Ed25519).');
             return;
         }
+        if (!customFeeRateValid) {
+            setFormError('Enter a custom network fee rate greater than zero.');
+            return;
+        }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        const params = { ...actionParams };
+        if (singleEncode) { void openConfirmScreen(params); return; }
+        setReviewParams(params);
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        const params = reviewParams || actionParams;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -414,7 +455,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
-                params: actionParams,
+                params,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -422,7 +463,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action: 'STAKE', params: actionParams },
+                    actionData: { action: 'STAKE', params },
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
@@ -447,23 +488,39 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
     function handleBuildAnother() {
         setResult(null);
         setSubmitError(null);
+        setReviewParams(null);
+        setStage('form');
+    }
+
+    function leaveReview() {
+        setReviewParams(null);
         setStage('form');
     }
 
     const header = (
         <PageHeader
-            onBack={stage === 'review' ? () => setStage('form') : onBack}
+            onBack={stage === 'review' ? leaveReview : onBack}
             backDisabled={stage === 'submitting' || actionConfirm.composing}
             title={stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake XCHAIN'}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
+    );
 
     if (loadError) {
         return wrap(
@@ -508,32 +565,26 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const verb = stakeMode === '2' ? 'Top up' : 'Stake';
-        const reviewDisabledReason = stage === 'submitting'
-            ? 'Submitting the stake…'
-            : isWatcherMode
-                ? null
-                : isHwSource
-                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
-                    : (!signerReady && password.length === 0) ? 'Enter your wallet password to sign this stake.' : null;
+        const reviewedParams = reviewParams || actionParams;
+        const verb = reviewedParams.VERSION === '2' ? 'Top up' : 'Stake';
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review stake"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
-                    <>
-                    {reviewDisabledReason ? (
-                        <p id="stake-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
-                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={Boolean(reviewDisabledReason)}
-                        aria-describedby={reviewDisabledReason ? 'stake-review-disabled-reason' : undefined}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
@@ -541,32 +592,35 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : 'Stake XCHAIN'}
                     </Button>
-                    </>
                 )}
             >
                 <p className={styles.summary}>
-                    {verb} {actionParams.AMOUNT} XCHAIN for signing public key{' '}
-                    {actionParams.SIGNING_PUBKEY.slice(0, 12)}….
+                    {verb} {reviewedParams.AMOUNT} XCHAIN for signing public key{' '}
+                    {reviewedParams.SIGNING_PUBKEY.slice(0, 12)}….
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
                     <dt className={styles.detailsLabel}>Mode</dt>
                     <dd className={styles.detailsValue}>
-                        {stakeMode === '2' ? 'Top up an existing stake' : 'New stake'}
+                        {reviewedParams.VERSION === '2' ? 'Top up an existing stake' : 'New stake'}
                     </dd>
                     <dt className={styles.detailsLabel}>Signing public key</dt>
                     <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                        {actionParams.SIGNING_PUBKEY}
+                        {reviewedParams.SIGNING_PUBKEY}
                     </dd>
                     <dt className={styles.detailsLabel}>Amount</dt>
-                    <dd className={styles.detailsValue}>{actionParams.AMOUNT} XCHAIN</dd>
+                    <dd className={styles.detailsValue}>{reviewedParams.AMOUNT} XCHAIN</dd>
+                    <dt className={styles.detailsLabel}>Activation</dt>
+                    <dd className={styles.detailsValue}>After 6 BTC blocks</dd>
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -643,18 +697,9 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         );
     }
 
-    const stakeDisabledReason = actionConfirm.composing
-        ? 'Preparing the stake for review…'
-        : !fromAddress
-            ? 'Add or choose a source address to continue.'
-            : !amount.trim()
-                ? 'Enter the amount you want to stake.'
-                : !signingPubkey.trim()
-                    ? 'Enter the signing public key to continue.'
-                    : null;
-
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Stake XCHAIN"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
@@ -662,23 +707,17 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             actions={(
-                <>
-                {stakeDisabledReason ? (
-                    <p id="stake-disabled-reason" role="status" className={styles.hint}>{stakeDisabledReason}</p>
-                ) : null}
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={Boolean(stakeDisabledReason)}
-                    aria-describedby={stakeDisabledReason ? 'stake-disabled-reason' : undefined}
+                    disabled={!fromAddress || actionConfirm.composing}
                 >
                     {singleEncode ? 'Stake' : 'Preview'}
                 </Button>
-                </>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} hideNetworkKind />
             {fromAddress ? (
                 <AddressField
                     label="From"
@@ -691,38 +730,25 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 />
             ) : null}
 
-            <fieldset style={{ border: '1px solid var(--xc-border)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
-                <legend style={{ padding: '0 0.25rem' }}>Mode</legend>
-                <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--xc-text-muted)' }}>
-                    Set automatically from the signing public key below. Change it only if you need to override the detected mode.
+            <RadioGroup
+                legend="Mode"
+                name="stakeMode"
+                value={stakeMode}
+                onChange={(value) => { setStakeMode(value); setFormError(null); }}
+                options={[
+                    { value: '1', label: 'New stake' },
+                    { value: '2', label: 'Top up an existing stake' },
+                ]}
+                hint="Set automatically from the signing public key below. Change it only if you need to override the detected mode."
+            />
+            {detectStatus !== 'idle' ? (
+                <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
+                    {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
+                    {detectStatus === 'new' && '✓ No existing stake for this public key. New stake is selected.'}
+                    {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
+                    {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
                 </p>
-                <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-                    <input
-                        type="radio"
-                        name="stakeMode"
-                        value="1"
-                        checked={stakeMode === '1'}
-                        onChange={() => { setStakeMode('1'); setFormError(null); }}
-                    /> New stake
-                </label>
-                <label style={{ display: 'block' }}>
-                    <input
-                        type="radio"
-                        name="stakeMode"
-                        value="2"
-                        checked={stakeMode === '2'}
-                        onChange={() => { setStakeMode('2'); setFormError(null); }}
-                    /> Top up an existing stake
-                </label>
-                {detectStatus !== 'idle' ? (
-                    <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
-                        {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
-                        {detectStatus === 'new' && '✓ No existing stake for this public key. New stake is selected.'}
-                        {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
-                        {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
-                    </p>
-                ) : null}
-            </fieldset>
+            ) : null}
 
             <AmountField
                 label="Amount"
@@ -746,11 +772,11 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             {qualifyReadout ? (
                 <div style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: '4px',
-                    padding: '0.5rem 0.75rem',
+                    border: 'var(--xc-card-border)',
+                    borderRadius: 'var(--xc-card-radius)',
+                    padding: 'var(--xc-card-pad)',
                     marginBottom: '0.75rem',
-                    background: 'var(--xc-bg-muted)',
+                    background: 'var(--xc-card-bg)',
                 }}>
                     <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
                         Capabilities this stake unlocks

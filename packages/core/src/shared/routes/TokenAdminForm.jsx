@@ -9,16 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -73,13 +74,9 @@ const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Doge
 // carries. Derived from the same map above so a new chain lands in both at once.
 const PROTOCOL_COIN_TICKERS = Object.values(PROTOCOL_COIN_TICKER);
 
-// "Bitcoin" on mainnet, "Bitcoin regtest" elsewhere. The registry's
-// displayName is the same string on every network, which is exactly the
-// distinction a wrong-network address needs spelled out.
 function chainLabelFor(descriptor) {
     if (!descriptor?.coin) return null;
-    const name = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
-    return descriptor.networkKind === 'mainnet' ? name : `${name} ${descriptor.networkKind}`;
+    return COIN_DISPLAY[descriptor.coin] || descriptor.coin;
 }
 
 // D-81: validate the TRANSFER destination against the chain the
@@ -161,6 +158,7 @@ function newOwnerAddressError(address, descriptor) {
  */
 export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick, initialFromAddress, initialPicker }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -241,6 +239,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitPendingRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -265,7 +264,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one first.',
+                        'No addresses on any network yet. Use Receive to generate one first.',
                     );
                     return;
                 }
@@ -337,22 +336,49 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // applyNativeFeePreflight.
     const nativeFee = useNativeFee(coinTicker);
 
-    // Current on-chain lock state, read via the same useTokenInfo hook
-    // ManageToken uses. Shared by `'mint-settings'` (PC-01, four of the
-    // seven flags gate its own fields) and `'lock'` (PC-02, all seven
-    // drive the lock matrix below). `'mint-settings'` is only ever
-    // launched from ManageToken with a concrete (chainId, tick) pair
-    // (lockedToken is always true for that mode), so `ticker` is stable
-    // for the life of the form; `'lock'` can also be reached from the
-    // free Actions menu, where `ticker` changes as the owner picks a
-    // token and this hook simply refetches.
-    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' && mode !== 'bridge-settings' });
+    // Every mode edits issuer-controlled token state, so each one reads the
+    // current owner before it can compose. The same record supplies lock state
+    // for the modes that need it. This keeps direct Actions-menu routes behind
+    // the same owner boundary as Manage Token instead of relying on a later
+    // protocol rejection that still spends the action fee.
+    const assetInfo = useTokenInfo({ chainId, tick: ticker });
+    const callbackTickKey = callbackTick.trim().toUpperCase();
     const callbackTokenInfo = useTokenInfo({
         chainId,
-        tick: callbackTick.trim().toUpperCase(),
-        skip: mode !== 'callback-settings' || !callbackTick.trim(),
+        tick: callbackTickKey,
+        skip: mode !== 'callback-settings' || !callbackTickKey,
     });
-    const tokenLocks = assetInfo?.locks || {};
+    // Accept decimal metadata only for the exact chain and ticker still in the field.
+    const callbackTokenDivisibility = callbackTokenInfo?.chainId === chainId
+        && callbackTokenInfo?.tick === callbackTickKey
+        && Number.isInteger(callbackTokenInfo?.divisibility)
+        ? callbackTokenInfo.divisibility
+        : null;
+    const assetInfoMatchesSelection = !assetInfo || (
+        (!assetInfo.chainId || assetInfo.chainId === chainId)
+        && (!assetInfo.tick || String(assetInfo.tick).toUpperCase() === ticker.trim().toUpperCase())
+    );
+    const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
+    const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
+    const tokenLocks = currentAssetInfo?.locks || {};
+    const tokenOwner = currentAssetInfo?.creator || null;
+    const walletOwnsToken = tokenOwner && addressesByChain && chainId
+        ? (addressesByChain[chainId] || []).some((address) => (
+            String(address?.address || '').toLowerCase() === String(tokenOwner).toLowerCase()
+        ))
+        : null;
+    const selectedSourceOwnsToken = !tokenOwner || !fromAddress
+        ? null
+        : String(fromAddress.address || '').toLowerCase() === String(tokenOwner).toLowerCase();
+    const ownershipError = walletOwnsToken === false
+        ? `This wallet does not own ${ticker}. Only the current owner can make this change.`
+        : selectedSourceOwnsToken === false
+            ? `The selected source address does not own ${ticker}. Choose the current owner address.`
+            : null;
+    const descriptionLocked = mode === 'description' && !!tokenLocks.description;
+    const eligibilityError = descriptionLocked
+        ? `The description for ${ticker} is permanently locked and cannot be updated.`
+        : ownershipError;
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
     // undistributed (issue.js). LOCK_CALLBACK reads straight off the lock
@@ -651,6 +677,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setFormError(tickerError);
             return;
         }
+        if (tokenInfoPending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            return;
+        }
+        if (eligibilityError) {
+            setFormError(eligibilityError);
+            return;
+        }
         if (mode === 'description' && !description.trim()) {
             setFormError('Description is required.');
             return;
@@ -755,13 +789,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError(callbackTickError);
                 return;
             }
-            if (callbackAmount && !(Number(callbackAmount) > 0)) {
+            if (callbackAmount && !isPositiveDecimal(callbackAmount)) {
                 setFormError('Callback amount must be a positive number.');
+                return;
+            }
+            // Hold fractional payouts until the newly typed token lookup resolves.
+            if (callbackAmount.includes('.') && callbackTokenDivisibility == null) {
+                setFormError(`Callback amount must be a whole number until the wallet confirms whether ${callbackTickKey || 'the callback token'} supports decimals.`);
                 return;
             }
             // Price callback payouts in the payout token's decimal scale.
             const callbackPrecisionError = tokenAmountPrecisionError(callbackAmount, {
-                divisibility: callbackTokenInfo?.divisibility,
+                divisibility: callbackTokenDivisibility,
                 tick: callbackTick,
                 noun: 'Callback amount',
             });
@@ -789,11 +828,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'bridge-settings') {
             if (bridgeFrozen) {
-                setFormError('Bridge settings are permanently frozen for this token. Neither the chain list nor the depth can change again.');
+                setFormError('Bridge settings are permanently frozen for this token. Neither the network list nor the depth can change again.');
                 return;
             }
             if (bridgePolicyBound && pickedBridgeChains.length > 0) {
-                setFormError('A token bound to an allow-list or block-list cannot be opened to the bridge: the copy on the other chain would carry none of that policy. Detach the policy list first.');
+                setFormError('A token bound to an allow-list or block-list cannot be opened to the bridge: the copy on the other network would carry none of that policy. Detach the policy list first.');
                 return;
             }
             const depth = String(bridgeMinDepth).trim();
@@ -802,7 +841,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
             if (!bridgeChanged) {
-                setFormError('Change a destination chain, the minimum confirmations, or the freeze before applying.');
+                setFormError('Change a destination network, the minimum confirmations, or the freeze before applying.');
                 return;
             }
         }
@@ -889,9 +928,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitPendingRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitPendingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -946,6 +986,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -957,7 +999,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         const header = (
         <PageHeader
             onBack={stage === 'review'
-                ? () => { setSubmitError(null); setStage('form'); }
+                ? () => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
@@ -966,7 +1008,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
         </Screen>
     );
@@ -1015,6 +1061,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${MODE_LABEL_LOWER[mode]}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -1039,16 +1086,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             ? `Create unsigned transaction: ${MODE_LABEL_LOWER[mode]}`
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${MODE_LABEL_LOWER[mode]}`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${MODE_LABEL_LOWER[mode]}`}
+                                : `Sign: ${MODE_LABEL_LOWER[mode]}`}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -1064,11 +1113,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
+                ) : null}
+                {mode === 'transfer' ? (
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
+                            Transferring ownership cannot be undone. After confirmation,
+                            only the new owner can administer this token.
+                        </p>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1124,6 +1181,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                extraCredentials={mode === 'transfer' ? (
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
+                            Transferring ownership cannot be undone. After confirmation,
+                            only the new owner can administer this token.
+                        </p>
+                    </StatusMessage>
+                ) : null}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
@@ -1238,10 +1303,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={MODE_LABEL[mode]}
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || eligibilityError ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    {formError || eligibilityError}
+                </StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1249,6 +1317,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     variant={mode === 'lock' ? 'danger' : 'primary'}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !ticker
+                        || tokenInfoPending
+                        || !!eligibilityError
                         || (mode === 'description' && !description)
                         || (mode === 'transfer' && !transferTo)
                         || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
@@ -1268,11 +1338,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             )}
         >
             {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
+                <TickerIcon chainId={chainId} tick={ticker} size={32} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
             )}
 
             {fromAddress ? (
@@ -1305,6 +1373,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     hint="Up to 250 characters. Stored on-chain and replaces the current one."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                    disabled={descriptionLocked}
                     autoComplete="off"
                     maxLength={250}
                 />
@@ -1329,13 +1398,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'lock' ? (
                 <>
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             <strong>Locking is permanent.</strong> Each flag below is a
                             one-way switch: once checked and submitted, it can never be
                             unlocked or reversed.
                         </p>
-                    </div>
+                    </StatusMessage>
                     {allLocksSet ? (
                         <p className={styles.hint}>
                             Every lock is already permanently set for {ticker}.
@@ -1347,19 +1416,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                                 const isLocked = !!tokenLocks[f.key];
                                 return (
                                     <div key={f.key} className={styles.lockFlagRow}>
-                                        <label className={styles.checkRow}>
-                                            <input
-                                                type="checkbox"
-                                                checked={isLocked || !!lockChecks[f.key]}
-                                                disabled={isLocked}
-                                                onChange={(e) => setLockChecks((prev) => ({
-                                                    ...prev,
-                                                    [f.key]: e.target.checked,
-                                                }))}
-                                            />
-                                            <span>{f.label}{isLocked ? ' (already locked)' : ''}</span>
-                                        </label>
-                                        <p className={styles.lockFlagHint}>{f.hint}</p>
+                                        <Checkbox
+                                            label={`${f.label}${isLocked ? ' (already locked)' : ''}`}
+                                            description={f.hint}
+                                            checked={isLocked || !!lockChecks[f.key]}
+                                            disabled={isLocked}
+                                            onChange={(e) => setLockChecks((prev) => ({
+                                                ...prev,
+                                                [f.key]: e.target.checked,
+                                            }))}
+                                        />
                                     </div>
                                 );
                             })}
@@ -1371,43 +1437,43 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             {mode === 'mint-settings' ? (
                 <>
                     {nothingMintEditable ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 Every mint setting for {ticker} is permanently locked.
                                 There is nothing left to edit here.
                             </p>
-                        </div>
+                        </StatusMessage>
                     ) : (
                         <>
                             {mintDeadLocked ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Minting is permanently locked for {ticker}.
                                         The mint window, max mint per transaction, and per-address
                                         cap below can no longer take effect.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : maxMintLocked ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Max mint per transaction is permanently locked for {ticker}.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : null}
                             {mintSupplyLocked ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Minting supply now is permanently locked for {ticker}.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : null}
                             {maxSupplyLockedInfo ? (
-                                <div role="alert" className={styles.warnings}>
-                                    <p className={styles.warning}>
+                                <StatusMessage variant="warning" role="alert">
+                                    <p>
                                         Max supply is also permanently locked for {ticker}.
                                         That is a separate token setting, not part of Mint settings.
                                     </p>
-                                </div>
+                                </StatusMessage>
                             ) : null}
                         </>
                     )}
@@ -1454,7 +1520,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                     {currentHeight != null ? (
                         <p className={styles.hint}>
-                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Current block: {currentHeight.toLocaleString('en-US')}.
                             Dates above are rough estimates; real block times vary.
                         </p>
                     ) : null}
@@ -1488,21 +1554,21 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         before any supply is distributed.
                     </p>
                     {callbackLocked ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 Callback settings are permanently locked for {ticker}.
                                 They can no longer be changed.
                             </p>
-                        </div>
+                        </StatusMessage>
                     ) : callbackDistributed ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {ticker} already has holders
                                 {distribution?.holderCount ? ` (${distribution.holderCount.toLocaleString('en-US')})` : ''},
                                 so its callback settings are frozen. They can only be set before any
                                 supply leaves your address.
                             </p>
-                        </div>
+                        </StatusMessage>
                     ) : null}
                     <Input
                         label="Callback token"
@@ -1534,7 +1600,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                     {currentHeight != null ? (
                         <p className={styles.hint}>
-                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Current block: {currentHeight.toLocaleString('en-US')}.
                             Date above is a rough estimate; real block times vary.
                         </p>
                     ) : null}
@@ -1617,7 +1683,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {bridgePolicyBound ? (
                         <StatusMessage variant="status">
                             {`${ticker || 'This token'} is bound to an address list, and a bridged copy `
-                                + 'would carry none of that policy on the other chain. It cannot be '
+                                + 'would carry none of that policy on the other network. It cannot be '
                                 + 'opened to the bridge. Detach the policy list first.'}
                         </StatusMessage>
                     ) : null}
@@ -1631,26 +1697,29 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {currentBridgeChains && reachableBridgeChains.length < currentBridgeChains.length ? (
                         <StatusMessage variant="status">
                             {`The current setting names ${currentBridgeChains.filter((c) => !isReachableBridgeChain(c)).map((c) => `"${c}"`).join(', ')}, `
-                                + 'a spelling the network does not accept, so it opens no chain. '
+                                + 'a spelling the network does not accept, so it opens no network. '
                                 + (bridgeFrozen
                                     ? 'The settings are frozen, so it cannot be corrected.'
-                                    : 'Check the chains you mean and apply to correct it.')}
+                                    : 'Check the networks you mean and apply to correct it.')}
                         </StatusMessage>
                     ) : null}
-                    <span className={styles.pickerLabel}>Destination chains</span>
-                    {bridgeDestinations.map((coin) => (
-                        <label key={coin} className={styles.checkRow}>
-                            <input
-                                type="checkbox"
+                    {/* One group, so the label sits a label gap above its chains
+                        instead of a form gap plus its own margin, and the
+                        chains read as one control rather than loose fields. */}
+                    <div className={styles.checkGroup} role="group" aria-labelledby="bridge-destination-chains">
+                        <span id="bridge-destination-chains" className={styles.pickerLabel}>Destination networks</span>
+                        {bridgeDestinations.map((coin) => (
+                            <Checkbox
+                                key={coin}
+                                label={bridgeCoinDisplay(coin)}
                                 checked={!!bridgeChainPicks[coin]}
                                 disabled={bridgeFrozen || bridgePolicyBound}
                                 onChange={(e) => setBridgeChainPicks(
                                     (prev) => ({ ...prev, [coin]: e.target.checked }),
                                 )}
                             />
-                            {` ${bridgeCoinDisplay(coin)}`}
-                        </label>
-                    ))}
+                        ))}
+                    </div>
                     <p className={styles.hint}>
                         Unchecking every chain closes the door to NEW transfers. It never
                         touches copies already out there, and holders can still bring those
@@ -1658,21 +1727,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     </p>
                     <Input
                         label="Minimum confirmations (optional)"
-                        hint="Blocks to wait before copying a locked transfer to the other chain. Longer waits are safer but slower. Values below the platform default have no effect."
+                        hint="Blocks to wait before copying a locked transfer to the other network. Longer waits are safer but slower. Values below the platform default have no effect."
                         value={bridgeMinDepth}
                         onChange={(e) => setBridgeMinDepth(e.target.value)}
                         disabled={bridgeFrozen}
                         inputMode="numeric"
                     />
                     {!bridgeFrozen ? (
-                        <label className={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={bridgeLock}
-                                onChange={(e) => setBridgeLock(e.target.checked)}
-                            />
-                            {' Freeze these settings permanently'}
-                        </label>
+                        <Checkbox
+                            label="Freeze these settings permanently"
+                            checked={bridgeLock}
+                            onChange={(e) => setBridgeLock(e.target.checked)}
+                        />
                     ) : null}
                     {bridgeLock ? (
                         <StatusMessage variant="status">

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -36,14 +36,21 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-function mount({ holders = { data: [] }, holdersError = null, settings = { walletMode: 'full' }, props = {} } = {}) {
+function mount({
+    holders = { data: [] },
+    holdersError = null,
+    holdersLookup = null,
+    tokenInfoLookup = null,
+    settings = { walletMode: 'full' },
+    props = {},
+} = {}) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue(settings),
-        getTokenInfo: vi.fn().mockResolvedValue({ creator: CREATOR }),
+        getTokenInfo: tokenInfoLookup || vi.fn().mockResolvedValue({ creator: CREATOR }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
-        getHoldersForToken: holdersError
+        getHoldersForToken: holdersLookup || (holdersError
             ? vi.fn().mockRejectedValue(holdersError)
-            : vi.fn().mockResolvedValue(holders),
+            : vi.fn().mockResolvedValue(holders)),
         listGatedContent: vi.fn().mockResolvedValue([]),
         getSupplyHistory: vi.fn().mockResolvedValue([]),
     };
@@ -70,9 +77,35 @@ describe('TokenDetail holders', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
 
-        expect(await screen.findByText('12,345.5')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Copy holder address 1' }));
+        const list = await screen.findByRole('list', { name: 'Holder balances' });
+        const row = within(list).getByRole('listitem');
+        expect(within(row).getByText('12,345.5')).toBeTruthy();
+        fireEvent.click(within(row).getByRole('button', { name: 'Copy holder address 1' }));
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(HOLDER));
+    });
+
+    it('uses the shared row primitive for actions, details, and holders', async () => {
+        const onViewActivity = vi.fn();
+        mount({
+            holders: { data: [{ address: HOLDER, amount: '7' }] },
+            props: { onViewActivity },
+        });
+
+        const activityRow = screen.getByRole('button', { name: 'History' });
+        fireEvent.click(activityRow);
+        expect(onViewActivity).toHaveBeenCalledOnce();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        const detailList = await screen.findByRole('list', { name: 'Token detail fields' });
+        const detailRow = within(detailList).getAllByRole('listitem')[0].firstElementChild;
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        const holderList = await screen.findByRole('list', { name: 'Holder balances' });
+        const holderRow = within(holderList).getByRole('listitem').firstElementChild;
+
+        const sharedRowClass = detailRow.classList[0];
+        expect(activityRow).toHaveClass(sharedRowClass);
+        expect(holderRow).toHaveClass(sharedRowClass);
     });
 
     it('distinguishes an empty list from a failed holder lookup', async () => {
@@ -97,8 +130,8 @@ describe('TokenDetail holders', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
 
         await screen.findByText('Holders (5000)');
-        const list = screen.getByRole('table', { name: 'Holder balances' });
-        expect(list.querySelectorAll('tbody tr')).toHaveLength(100);
+        const list = screen.getByRole('list', { name: 'Holder balances' });
+        expect(within(list).getAllByRole('listitem')).toHaveLength(100);
         expect(screen.getByRole('button', { name: 'Show more holders (100 of 5,000 shown)' })).toBeInTheDocument();
 
         const scroller = document.querySelector('main');
@@ -108,7 +141,7 @@ describe('TokenDetail holders', () => {
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
 
-        await waitFor(() => expect(list.querySelectorAll('tbody tr')).toHaveLength(200));
+        await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(200));
         expect(scroller.scrollTop).toBe(197);
     });
 
@@ -119,6 +152,118 @@ describe('TokenDetail holders', () => {
         const copy = await screen.findByRole('button', { name: 'Copy creator address' });
         fireEvent.click(copy);
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(CREATOR));
+    });
+
+    it('renders dashes for holder rows with missing or non-numeric data', async () => {
+        mount({
+            holders: {
+                data: [
+                    { address: null, amount: undefined },
+                    { address: 'undefined', quantity: 'NaN' },
+                ],
+            },
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        const table = await screen.findByRole('list', { name: 'Holder balances' });
+        expect(within(table).getAllByText('-', { exact: true })).toHaveLength(4);
+        expect(table.textContent).not.toMatch(/undefined|NaN/);
+    });
+
+    it('contains synchronous metadata and holder bridge failures', async () => {
+        const getTokenInfo = vi.fn(() => { throw new Error('metadata bridge unavailable'); });
+        const getHoldersForToken = vi.fn(() => { throw new Error('holders bridge unavailable'); });
+        mount({ tokenInfoLookup: getTokenInfo, holdersLookup: getHoldersForToken });
+
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        expect(await screen.findByText(/couldn't load the holders/i)).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Quick actions' })).toBeTruthy();
+    });
+
+    it('discards holder pagination and tab state when the token changes', async () => {
+        let resolveOldPage;
+        const oldPage = new Promise((resolve) => { resolveOldPage = resolve; });
+        const first = Array.from({ length: 25 }, (_, index) => ({
+            address: `${HOLDER}${index}`,
+            amount: String(index + 1),
+        }));
+        const freshHolder = 'bcrt1qfreshholderholderholderholder000';
+        const staleHolder = 'bcrt1qstaleholderholderholderholder000';
+        const getHoldersForToken = vi.fn(({ tick, opts }) => {
+            if (tick === 'OLD' && opts.page === 1) return Promise.resolve({ data: first, total: 50 });
+            if (tick === 'OLD') return oldPage;
+            return Promise.resolve({ data: [{ address: freshHolder, amount: '7' }], total: 1 });
+        });
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: CREATOR }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getHoldersForToken,
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: vi.fn().mockResolvedValue([]),
+        };
+        const tree = (tick) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail walletId="wallet" chainId={CHAIN} tick={tick} kind="token" quantity="1" onBack={() => {}} />
+            </MessagingProvider>
+        );
+        const view = render(tree('OLD'));
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        await screen.findByText('Holders (25 of 50)');
+        fireEvent.click(screen.getByRole('button', { name: 'Load more holders' }));
+
+        view.rerender(tree('NEW'));
+        expect(screen.getByRole('tab', { name: 'About' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.queryByRole('list', { name: 'Holder balances' })).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        expect(await screen.findByTitle(freshHolder)).toBeTruthy();
+
+        await act(async () => {
+            resolveOldPage({ data: [{ address: staleHolder, amount: '99' }], total: 50 });
+        });
+        expect(screen.getByTitle(freshHolder)).toBeTruthy();
+        expect(screen.queryByTitle(staleHolder)).toBeNull();
+    });
+
+    it('uses the current chain when an identically keyed gated file is opened', async () => {
+        const secondChain = 'litecoin-regtest';
+        const group = [{
+            keyHash: 'shared-key-hash',
+            files: [{ actionIndex: '42', name: 'secret.txt', type: 'text/plain' }],
+        }];
+        const unlockGatedContent = vi.fn().mockResolvedValue({
+            plaintextBase64: 'c2VjcmV0',
+            byteLength: 6,
+        });
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: CREATOR }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [], [secondChain]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue(group),
+            listGatedKeys: vi.fn().mockResolvedValue([{ keyHash: 'shared-key-hash' }]),
+            unlockGatedContent,
+            getSupplyHistory: vi.fn().mockResolvedValue([]),
+        };
+        const tree = (chainId, tick) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail walletId="wallet" chainId={chainId} tick={tick} kind="token" quantity="1" onBack={() => {}} />
+            </MessagingProvider>
+        );
+        const view = render(tree(CHAIN, 'OLD'));
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Unlock and open secret.txt' }));
+        await waitFor(() => expect(unlockGatedContent).toHaveBeenCalledWith(expect.objectContaining({ chainId: CHAIN, gateTicker: 'OLD' })));
+
+        view.rerender(tree(secondChain, 'NEW'));
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Unlock and open secret.txt' }));
+        await waitFor(() => expect(unlockGatedContent).toHaveBeenCalledTimes(2));
+        expect(unlockGatedContent).toHaveBeenLastCalledWith(expect.objectContaining({
+            chainId: secondChain,
+            gateTicker: 'NEW',
+        }));
     });
 });
 
@@ -162,7 +307,6 @@ describe('TokenDetail actions', () => {
 
         const send = await screen.findByRole('button', { name: 'Send' });
         expect(send.disabled).toBe(true);
-        expect(send.title).toBe('No balance to send.');
         expect(screen.getByText('No balance to send.')).toBeTruthy();
     });
 });

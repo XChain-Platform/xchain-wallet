@@ -21,12 +21,13 @@
 // detaches; leaving it attached for the rest of the session is
 // cheaper than re-arming on every Developer Mode visit.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { copyText } from '../clipboard.js';
 import { logConsole } from '../utils/logConsole.js';
 import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
 const MAX_VISIBLE_ENTRIES = 200;
@@ -49,10 +50,10 @@ const PANEL = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-2)',
-    background: 'var(--xc-bg)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
+    padding: 'var(--xc-card-pad)',
+    background: 'var(--xc-card-bg)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
     fontFamily: 'var(--xc-font-mono, monospace)',
     fontSize: 'var(--xc-text-xs)',
 };
@@ -60,10 +61,6 @@ const PANEL = {
 const LIST = {
     maxHeight: 240,
     overflowY: 'auto',
-    background: 'var(--xc-bg-muted)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1)',
 };
 
 const ROW = {
@@ -78,7 +75,7 @@ const LEVEL_COLORS = {
     log: 'var(--xc-text-muted)',
     info: 'var(--xc-text)',
     warn: 'var(--xc-warning, #C28A00)',
-    error: 'var(--xc-danger)',
+    error: 'var(--xc-danger-fg)',
 };
 
 const FILTER_CHIP = {
@@ -133,13 +130,12 @@ function formatTime(ms) {
 }
 
 export function LogConsole() {
-    const [allEntries, setAllEntries] = useState(() => {
-        if (!logConsole.isAttached()) logConsole.attach();
-        return logConsole.entries();
-    });
+    const [allEntries, setAllEntries] = useState(() => logConsole.entries());
     const [enabledLevels, setEnabledLevels] = useState(() => new Set(ALL_LEVELS));
     const [search, setSearch] = useState('');
     const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
+    const copyAttemptRef = useRef(0);
+    const copyResetTimerRef = useRef(null);
     const haptic = useHapticFeedback();
 
     useEffect(() => {
@@ -147,7 +143,15 @@ export function LogConsole() {
         const unsubscribe = logConsole.subscribe(() => {
             setAllEntries(logConsole.entries());
         });
-        return unsubscribe;
+        setAllEntries(logConsole.entries());
+        return () => {
+            unsubscribe();
+            copyAttemptRef.current += 1;
+            if (copyResetTimerRef.current !== null) {
+                clearTimeout(copyResetTimerRef.current);
+                copyResetTimerRef.current = null;
+            }
+        };
     }, []);
 
     const safeEntries = useMemo(() => allEntries.map(safeEntry), [allEntries]);
@@ -179,15 +183,33 @@ export function LogConsole() {
         setAllEntries([]);
     };
 
-    const onCopy = async () => {
+    const onCopy = () => {
+        const attempt = copyAttemptRef.current + 1;
+        copyAttemptRef.current = attempt;
+        if (copyResetTimerRef.current !== null) {
+            clearTimeout(copyResetTimerRef.current);
+            copyResetTimerRef.current = null;
+        }
         const text = safeEntries.map(
             (e) => `${formatTime(e.timestamp)} [${e.level}] ${e.source}: ${e.message}`,
         ).join('\n');
-        const { ok } = await copyText(text);
-        setCopyState(ok ? 'copied' : 'failed');
-        if (ok) haptic.tap();
-        else haptic.error();
-        setTimeout(() => setCopyState('idle'), 1500);
+        void (async () => {
+            let ok = false;
+            try {
+                const result = await copyText(text);
+                ok = Boolean(result?.ok);
+            } catch {
+                ok = false;
+            }
+            if (copyAttemptRef.current !== attempt) return;
+            setCopyState(ok ? 'copied' : 'failed');
+            if (ok) haptic.tap();
+            else haptic.error();
+            copyResetTimerRef.current = setTimeout(() => {
+                if (copyAttemptRef.current === attempt) setCopyState('idle');
+                copyResetTimerRef.current = null;
+            }, 1500);
+        })();
     };
 
     return (
@@ -215,8 +237,8 @@ export function LogConsole() {
                     spellCheck={false}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search messages…"
-                    aria-label="Search log messages"
+                    placeholder={t('components.logConsole.searchMessages')}
+                    aria-label={t('components.logConsole.searchLogMessages')}
                     style={{
                         flex: 1,
                         minWidth: 120,
@@ -233,28 +255,28 @@ export function LogConsole() {
                     type="button"
                     onClick={onCopy}
                     style={ACTION_BTN}
-                    aria-label="Copy all log entries"
-                    title="Copy filtered log entries plus entries hidden by the active filters"
+                    aria-label={t('components.logConsole.copyAllLogEntries')}
+                    title={t('components.logConsole.copyFilteredLogEntriesPlus')}
                 >
                     {copyState === 'copied'
-                        ? 'Copied'
+                        ? t('history.copy.copied')
                         : copyState === 'failed'
-                            ? 'Copy failed: clipboard unavailable'
-                            : 'Copy all'}
+                            ? t('components.logConsole.copyFailedClipboardUnavailable')
+                            : t('components.logConsole.copyAll')}
                 </button>
-                <button type="button" onClick={onClear} style={ACTION_BTN} aria-label="Clear log buffer">
-                    Clear
+                <button type="button" onClick={onClear} style={ACTION_BTN} aria-label={t('components.logConsole.clearLogBuffer')}>
+                    {t('common.clear')}
                 </button>
             </div>
-            <div style={LIST} role="log" aria-label="Recent console entries" aria-live="polite">
+            <div style={LIST} role="log" aria-label={t('components.logConsole.recentConsoleEntries')} aria-live="polite">
                 {copyState !== 'idle' ? (
                     <span style={SR_ONLY}>
-                        {copyState === 'copied' ? 'Copied' : 'Copy failed: clipboard unavailable'}
+                        {copyState === 'copied' ? t('history.copy.copied') : t('components.logConsole.copyFailedClipboardUnavailable')}
                     </span>
                 ) : null}
                 {filtered.length === 0 ? (
                     <div style={{ color: 'var(--xc-text-muted)', padding: 'var(--xc-space-2)' }}>
-                        No log entries yet. Trigger an action and recent console output will appear here.
+                        {t('components.logConsole.noLogEntriesYetTrigger')}
                     </div>
                 ) : (
                     visible.map((e) => (
@@ -272,8 +294,8 @@ export function LogConsole() {
                 )}
             </div>
             <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                Showing {formatDecimalAmount(visible.length)} of {formatDecimalAmount(filtered.length)} matching entries{' '}
-                ({formatDecimalAmount(allEntries.length)} total).
+                {t('components.logConsole.showing')} {formatDecimalAmount(visible.length)} {t('components.logConsole.of')} {formatDecimalAmount(filtered.length)} {t('components.logConsole.matchingEntries')}{' '}
+                ({formatDecimalAmount(allEntries.length)} {t('components.logConsole.total')}
             </div>
         </div>
     );

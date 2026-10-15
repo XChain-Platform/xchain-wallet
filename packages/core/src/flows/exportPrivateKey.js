@@ -66,6 +66,15 @@ export class ImportedKeyMissingError extends Error {
     }
 }
 
+export class AddressWalletMismatchError extends Error {
+    constructor(addressId, walletId) {
+        super(`exportPrivateKey: address "${addressId}" does not belong to wallet "${walletId}"`);
+        this.name = 'AddressWalletMismatchError';
+        this.addressId = addressId;
+        this.walletId = walletId;
+    }
+}
+
 export class WrongPasswordError extends Error {
     constructor() {
         super('exportPrivateKey: wrong password');
@@ -133,6 +142,14 @@ export async function exportPrivateKey({
 
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
+    let importedKeyEntry;
+    if (addressRecord.source === 'imported-wif') {
+        importedKeyEntry = wallet.importedKeys.find((entry) => entry.addressId === addressId);
+        if (!importedKeyEntry) throw new ImportedKeyMissingError(addressId);
+    }
+    if (!(await addressBelongsToWallet(vault, addressRecord, wallet))) {
+        throw new AddressWalletMismatchError(addressId, walletId);
+    }
 
     const chainId = chainRegistry.chainIdFor(
         addressRecord.chain,
@@ -146,10 +163,16 @@ export async function exportPrivateKey({
 
     // Callers that send a password always take the decrypt path so password
     // confirmation cannot be bypassed by an available session signer.
-    if (!hasPassword && providedSigner && typeof providedSigner.exportWifForPath === 'function') {
+    if (!hasPassword) {
+        if (providedSigner.id !== walletId) {
+            throw new Error('exportPrivateKey: signer does not belong to the requested wallet');
+        }
         if (addressRecord.source === 'imported-wif') {
+            if (typeof providedSigner.exportWifForAddressId !== 'function') {
+                throw new Error('exportPrivateKey: signer cannot export imported private keys');
+            }
             return {
-                wif: providedSigner.exportWifForAddressId(addressId),
+                wif: await providedSigner.exportWifForAddressId(addressId),
                 source: 'imported-wif',
                 derivationPath: null,
                 address: addressRecord.address,
@@ -161,8 +184,14 @@ export async function exportPrivateKey({
                 `exportPrivateKey: HD address "${addressId}" has no derivationPath`,
             );
         }
+        if (typeof providedSigner.exportWifForPath !== 'function') {
+            throw new Error('exportPrivateKey: signer cannot export derived private keys');
+        }
         return {
-            wif: providedSigner.exportWifForPath({ chainId, path: addressRecord.derivationPath }),
+            wif: await providedSigner.exportWifForPath({
+                chainId,
+                path: addressRecord.derivationPath,
+            }),
             source: 'hd',
             derivationPath: addressRecord.derivationPath,
             address: addressRecord.address,
@@ -171,9 +200,6 @@ export async function exportPrivateKey({
     }
 
     if (addressRecord.source === 'imported-wif') {
-        const entry = wallet.importedKeys.find((k) => k.addressId === addressId);
-        if (!entry) throw new ImportedKeyMissingError(addressId);
-
         const masterKey = await deriveMasterKeyAsync(password, wallet.kdfParams);
         try {
             // Password probe. For seed-backed wallets we decrypt the
@@ -187,20 +213,23 @@ export async function exportPrivateKey({
                 try {
                     wifBytes = await decrypt(
                         masterKey,
-                        base64ToBytes(entry.encryptedWif),
+                        base64ToBytes(importedKeyEntry.encryptedWif),
                     );
                 } catch {
                     throw new WrongPasswordError();
                 }
             } else {
+                let seedBytes;
                 try {
-                    await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
+                    seedBytes = await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
                 } catch {
                     throw new WrongPasswordError();
+                } finally {
+                    if (seedBytes) seedBytes.fill(0);
                 }
                 wifBytes = await decrypt(
                     masterKey,
-                    base64ToBytes(entry.encryptedWif),
+                    base64ToBytes(importedKeyEntry.encryptedWif),
                 );
             }
             try {
@@ -249,4 +278,14 @@ export async function exportPrivateKey({
     } finally {
         signer.lock();
     }
+}
+
+async function addressBelongsToWallet(vault, address, wallet) {
+    if (address.source === 'imported-wif') {
+        return wallet.importedKeys.some((entry) => entry.addressId === address.id)
+            && (address.signerId == null || address.signerId === wallet.id);
+    }
+    if (typeof address.accountId !== 'string' || address.accountId.length === 0) return false;
+    const account = await vault.accounts.get(address.accountId);
+    return account?.walletId === wallet.id;
 }

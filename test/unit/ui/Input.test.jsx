@@ -8,15 +8,101 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, createEvent } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { useRef, useEffect } from 'react';
 import { Input } from '../../../packages/core/src/ui/Input.jsx';
+import { IconSelect } from '../../../packages/core/src/ui/IconSelect.jsx';
 import { Select } from '../../../packages/core/src/ui/Select.jsx';
 import { Textarea } from '../../../packages/core/src/ui/Textarea.jsx';
 
+const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+
+afterEach(() => {
+    if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+});
+
 describe('<Input>', () => {
+    it('keeps a visible default border on shared fields and every select', () => {
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+
+        expect(inputCss).toMatch(
+            /\.input\s*\{[^}]*border:\s*1px solid var\(--xc-control-border\)/s,
+        );
+        expect(tokensCss).toMatch(
+            /:where\(select\)\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s,
+        );
+    });
+
+    it.each(['sm', 'md', 'lg'])('shares the %s height and radius tokens across text controls', (size) => {
+        render(
+            <>
+                <Input label="Name" size={size} />
+                <Select label="Network" size={size} defaultValue="mainnet">
+                    <option value="mainnet">Mainnet</option>
+                </Select>
+                <IconSelect
+                    label="Mode"
+                    size={size}
+                    value="private"
+                    options={[{ value: 'private', label: 'Private' }]}
+                    onChange={() => {}}
+                />
+            </>,
+        );
+
+        const input = screen.getByLabelText('Name');
+        const select = screen.getByLabelText('Network');
+        const iconSelect = screen.getByRole('button', { name: 'Mode: Private' });
+        expect(input.parentElement.parentElement.className).toContain(size);
+        expect(select.parentElement.parentElement.className).toContain(size);
+        expect(iconSelect.parentElement.className).toContain(size);
+
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const iconSelectCss = readFileSync('packages/core/src/ui/IconSelect.module.css', 'utf8');
+        const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+        const heightRule = new RegExp(
+            `\\.${size}\\s*\\{[^}]*--xc-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+            's',
+        );
+        const heights = { sm: '28px', md: '36px', lg: '44px' };
+        expect(inputCss).toMatch(heightRule);
+        expect(iconSelectCss).toMatch(heightRule);
+        expect(tokensCss).toMatch(new RegExp(`--xc-control-h-${size}:\\s*${heights[size]}`));
+        expect(tokensCss).toMatch(/--xc-control-radius:\s*8px/);
+        expect(inputCss).toMatch(/\.input\s*\{[^}]*border-radius:\s*var\(--xc-control-radius,\s*8px\)/s);
+        expect(iconSelectCss).toMatch(/\.trigger\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
+    });
+
+    it('defines the measured mouse and touch control scales', () => {
+        const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const mouseTokens = {
+            '--xc-control-font-sm': '13px',
+            '--xc-control-font-md': '14px',
+            '--xc-control-font-lg': '16px',
+            '--xc-control-pad-x-sm': '8px',
+            '--xc-control-pad-x-md': '12px',
+            '--xc-control-pad-x-lg': '16px',
+            '--xc-control-icon-sm': '16px',
+            '--xc-control-icon-md': '20px',
+            '--xc-control-icon-lg': '24px',
+            '--xc-control-line': '1.25',
+            '--xc-control-radius': '8px',
+            '--xc-control-hit-min': '24px',
+        };
+
+        for (const [token, value] of Object.entries(mouseTokens)) {
+            expect(tokensCss).toContain(`${token}: ${value};`);
+        }
+        expect(tokensCss).toMatch(/--xc-radius-control:\s*var\(--xc-control-radius\)/);
+        expect(tokensCss).toMatch(/@media \(pointer: coarse\), \(hover: none\)\s*\{\s*:root\s*\{[^}]*--xc-control-h-sm:\s*36px[^}]*--xc-control-h-md:\s*44px[^}]*--xc-control-h-lg:\s*48px[^}]*--xc-control-font-sm:\s*1rem[^}]*--xc-control-font-md:\s*1rem[^}]*--xc-control-font-lg:\s*1\.0625rem[^}]*--xc-control-hit-min:\s*44px/s);
+        expect(inputCss).toMatch(/\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height\)[^}]*padding-block:\s*0/s);
+        expect(inputCss).toMatch(/calendar-picker-indicator\s*\{[^}]*width:\s*var\(--xc-tap-min,\s*24px\)[^}]*background-size:\s*var\(--xc-control-icon-size,\s*20px\) var\(--xc-control-icon-size,\s*20px\)[^}]*padding:\s*0/s);
+    });
+
     it('associates label via htmlFor / id', () => {
         render(<Input label="Email" />);
         const input = screen.getByLabelText('Email');
@@ -61,6 +147,27 @@ describe('<Input>', () => {
         expect(describedBy).toBeTruthy();
         const hintId = describedBy.split(' ')[0];
         expect(document.getElementById(hintId)).toHaveTextContent('Min 8 chars');
+    });
+
+    it.each([360, 412])('uses a concise placeholder at %dpx and preserves the full hint as its description', (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+        render(<Input label="Receive at" placeholder="Automatically filled from your wallet on the get chain" />);
+
+        const input = screen.getByLabelText('Receive at');
+        expect(input).toHaveAttribute('placeholder', 'Receive at');
+        expect(input).toHaveAccessibleDescription('Automatically filled from your wallet on the get chain');
+    });
+
+    it('keeps the full placeholder at tablet and desktop widths', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 768 });
+        render(<Input label="Receive at" placeholder="Automatically filled from your wallet on the get chain" />);
+
+        const input = screen.getByLabelText('Receive at');
+        expect(input).toHaveAttribute(
+            'placeholder',
+            'Automatically filled from your wallet on the get chain',
+        );
+        expect(input).not.toHaveAttribute('aria-describedby');
     });
 
     it('renders error and sets aria-invalid, hiding the hint to avoid noise', () => {
@@ -272,6 +379,18 @@ describe('<Input>', () => {
         fireEvent.change(input, { target: { value: max } });
         expect(onChange).toHaveBeenCalledOnce();
         expect(onChange.mock.calls[0][0].target.value).toBe(max);
+    });
+
+    it('constrains native date and time controls to their container', () => {
+        const css = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const rule = /\.input:is\(\[type='date'\], \[type='datetime-local'\], \[type='time'\]\)\s*\{([^}]*)\}/s
+            .exec(css)?.[1];
+
+        expect(rule).toMatch(/-webkit-appearance:\s*none/);
+        expect(rule).toMatch(/appearance:\s*none/);
+        expect(rule).toMatch(/box-sizing:\s*border-box/);
+        expect(rule).toMatch(/width:\s*100%/);
+        expect(rule).toMatch(/min-width:\s*0/);
     });
 
     it('explains date range violations and clears the error after a valid entry', () => {

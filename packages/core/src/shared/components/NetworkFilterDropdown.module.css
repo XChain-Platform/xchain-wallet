@@ -8,11 +8,23 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
-/* Wrapper for the shared NetworkFilter. It shares the toolbar row with a
-   search box, and both controls may shrink at narrow widths. */
+/* Preserve enough width for the filter label so the shared toolbar wraps
+   the control below its neighboring search field on narrow screens. */
 .networkWrap {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 1 1 10rem;
+    min-width: min(10rem, 100%);
     position: relative;
     box-sizing: border-box;
+}
+
+.sm {
+    --network-filter-control-height: var(--xc-control-h-sm);
+}
+
+.md {
+    --network-filter-control-height: var(--xc-control-h-md);
+}
+
+.lg {
+    --network-filter-control-height: var(--xc-control-h-lg);
 }

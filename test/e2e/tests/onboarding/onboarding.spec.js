@@ -95,7 +95,7 @@ test.describe('onboarding', () => {
         await lockWallet(page);
         // Wrong password
 
-        await page.getByLabel('Password').fill('WRONG');
+        await page.getByLabel('Password', { exact: true }).fill('WRONG');
         await page.getByRole('button', { name: 'Unlock' }).click();
 
         await expect(page.getByRole('alert')).toHaveText(/incorrect password/i);
@@ -137,7 +137,7 @@ test.describe('onboarding', () => {
         await page.getByRole('button', { name: 'Import' }).click();
 
         await expect(page.getByRole('alert')).toContainText(
-            /expected 12, 15, 18, 21, 24 words/i,
+            'Expected 12, 15, 18, 21, or 24 words, got 13.',
         );
     });
 });

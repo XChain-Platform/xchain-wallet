@@ -24,19 +24,16 @@
 }
 .back:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 /* Lists and tables (inbox, signing session, settlement) fill the content
    area; only genuine forms keep the FormPage column. */
 .listCard {
+    composes: card from '../../ui/Card.module.css';
     width: 100%;
     min-width: 0;
     margin: var(--xc-space-6) 0 0;
-    padding: var(--xc-space-6);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
     box-shadow: var(--xc-shadow-md);
     box-sizing: border-box;
     overflow-wrap: anywhere;
@@ -50,6 +47,29 @@
     margin: 0;
 }
 
+/* A labelled row of list buttons (allow-list / block-list) among form
+   fields: the label reads like a field label, and the buttons start under it
+   instead of sitting right-aligned a whole action-row margin below. */
+.choiceGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-gap);
+    min-width: 0;
+}
+
+.choiceGroupLabel {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.choiceButtons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
 .pickerLabel {
     display: flex;
     flex-direction: column;
@@ -57,6 +77,19 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     margin-bottom: var(--xc-space-3);
+}
+
+/* A labelled set of checkboxes inside a form: the label keeps the label gap
+   to its options, and the options keep the label gap to each other. */
+.checkGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-gap);
+    min-width: 0;
+}
+
+.checkGroup > .pickerLabel {
+    margin-bottom: 0;
 }
 
 .picker {
@@ -73,6 +106,15 @@
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
     resize: vertical;
+}
+
+/* A dropdown picker keeps the shared dropdown height and text size from
+   tokens.css instead of the textarea padding above. */
+select.picker {
+    height: var(--xc-control-h-md);
+    padding-block: 0;
+    font-size: var(--xc-control-font-md);
+    border-radius: var(--xc-control-radius);
 }
 
 .tickItems {
@@ -92,7 +134,7 @@
 
 .tickItem:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
     border-radius: var(--xc-radius-sm);
 }
 
@@ -115,6 +157,7 @@
 
 .visuallyHidden {
     position: absolute;
+    /* Preserve the canonical one-pixel clipping box for assistive text. */
     width: 1px;
     height: 1px;
     padding: 0;
@@ -126,13 +169,10 @@
 }
 
 .fromLine {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     margin-bottom: var(--xc-space-3);
 }
 
@@ -163,16 +203,11 @@
     border-bottom: none;
 }
 
-.lockFlagHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: 0 0 0 calc(1rem + var(--xc-space-2));
-}
-
+/* Help text reads from the start edge, like every form's field hints. */
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-align: center;
+    text-align: start;
     margin: 0;
 }
 
@@ -194,6 +229,38 @@
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+/* Inside a form stack the form gap spaces the row; the margin above is for
+   result screens, where the row follows plain content. */
+:global([data-form-stack]) > .actions,
+.advancedOptions > .actions {
+    margin-top: 0;
+}
+
+.advancedToggle {
+    align-self: flex-start;
+}
+
+.advancedToggle > span {
+    white-space: nowrap;
+}
+
+.advancedToggle svg {
+    margin-inline-start: var(--xc-space-1);
+}
+
+.advancedOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+}
+
+/* The advanced column is spaced by its gap alone, like a form stack, so a
+   StatusMessage in it drops the row's own block margin. */
+.advancedOptions > [data-variant] {
+    margin: 0;
 }
 
 .betActions {
@@ -247,10 +314,6 @@
     min-width: 0;
 }
 
-.feeToggleGap {
-    margin-top: var(--xc-space-3);
-}
-
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
@@ -261,15 +324,12 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--xc-space-1) var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {
@@ -280,6 +340,7 @@
     letter-spacing: 0.04em;
     margin: 0;
     align-self: center;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .detailsValue {
@@ -288,6 +349,19 @@
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
+    border-top: var(--xc-table-row-divider);
+}
+
+/* Confirmation headers omit the redundant chain-name pill. */
+:global([data-testid='confirm-chain-badge']:empty) {
+    display: none;
 }
 
 @media not all and (min-width: 400px) {
@@ -318,8 +392,17 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .detailsLabel:not(:first-child) {
-        margin-top: var(--xc-space-2);
+    .detailsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .detailsLabel {
+        padding-bottom: 0;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: 0;
     }
 }
 
@@ -339,43 +422,6 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     margin-top: calc(var(--xc-space-1) / 2);
-}
-
-.warnings {
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
-    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
-}
-
-.warning {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-.warning + .warning {
-    margin-top: var(--xc-space-1);
-}
-
-.validationWarnings,
-.validationErrors {
-    margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3) var(--xc-space-2) calc(var(--xc-space-6) + var(--xc-space-1));
-    border-radius: var(--xc-radius-sm);
-    font-size: var(--xc-text-sm);
-}
-
-.validationWarnings {
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
-    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
-}
-
-.validationErrors {
-    border: 1px solid color-mix(in srgb, var(--xc-danger) 40%, transparent);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    color: var(--xc-danger-fg);
 }
 
 .validationItem + .validationItem {
@@ -400,25 +446,7 @@
 
 .validationLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.inlineAction {
-    /* A full tap target even though it reads as an inline link. */
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    text-align: start;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--xc-accent-primary);
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .splitValue {
@@ -426,9 +454,10 @@
     overflow-wrap: anywhere;
 }
 
-.inlineAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+.inlineDirectionalIcon {
+    --xc-icon-size: 1em;
+    display: inline-flex;
+    vertical-align: -0.125em;
 }
 
 .validationMessage,
@@ -460,6 +489,8 @@
 
 .txid {
     display: block;
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
     color: var(--xc-text);
@@ -468,39 +499,4 @@
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
-}
-
-/* One radio option: the control beside its text. `.pickerLabel` stacks its
-   children (it is built for a caption above a select), which left the
-   dispenser form's "Buyers pay with" and "Expiration" options rendering as a
-   centred radio with its label orphaned on the next line. */
-.radioOption {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-weight: normal;
-}
-
-.radioGroup {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2) var(--xc-space-4);
-    min-width: 0;
-    margin: 0 0 var(--xc-space-3);
-    padding: 0;
-    border: 0;
-}
-
-.radioGroup > legend {
-    width: 100%;
-    margin-bottom: var(--xc-space-1);
-}
-
-@media not all and (min-width: 400px) {
-    .radioGroup {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: var(--xc-space-2);
-    }
 }

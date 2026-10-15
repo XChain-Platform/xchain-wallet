@@ -29,7 +29,7 @@
 export function exactNetworkFeeSats(decomposed) {
     const inputs = Array.isArray(decomposed?.inputs) ? decomposed.inputs : null;
     const outputs = Array.isArray(decomposed?.outputs) ? decomposed.outputs : null;
-    if (!inputs || !outputs || inputs.length === 0) return null;
+    if (!inputs || !outputs || inputs.length === 0 || outputs.length === 0) return null;
     // Every input value must be known. A single missing one makes the
     // subtraction meaningless, so refuse rather than under-report.
     const inputValues = inputs.map((i) => exactSats(i?.value));
@@ -46,7 +46,11 @@ export function exactNetworkFeeSats(decomposed) {
 
 export function exactSats(value) {
     if (typeof value === 'bigint') return value >= 0n ? value : null;
-    const raw = String(value ?? '').trim();
+    if (typeof value === 'number') {
+        return Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : null;
+    }
+    if (typeof value !== 'string') return null;
+    const raw = value.trim();
     return /^\d+$/.test(raw) ? BigInt(raw) : null;
 }
 
@@ -55,6 +59,7 @@ export function renderSats(value) {
 }
 
 export function sumExactSats(values) {
+    if (!Array.isArray(values)) return null;
     const parsed = values.map((value) => exactSats(value));
     if (parsed.some((value) => value === null)) return null;
     return parsed.reduce((sum, value) => sum + value, 0n);
@@ -111,10 +116,18 @@ export function totalNetworkFeeSats(decomposed, {
     if (fundingFee === null) return null;
     // Single-transaction lanes (OP_RETURN, MULTISIGN) are unchanged: no
     // carriers, so the funding fee IS the whole fee.
-    const carrierCount = Array.isArray(carrierScripts) ? carrierScripts.length : 0;
+    if (!Array.isArray(carrierScripts)
+        || carrierScripts.some((script) => typeof script !== 'string' || !script)) return null;
+    const carrierCount = carrierScripts.length;
     if (carrierCount === 0) return fundingFee;
 
-    const own = new Set([...ownAddresses].filter(Boolean));
+    let own;
+    try {
+        if (typeof ownAddresses === 'string') return null;
+        own = new Set(Array.from(ownAddresses).filter(Boolean));
+    } catch {
+        return null;
+    }
     const carriers = (decomposed.outputs || []).filter((o) => (
         (o?.scriptType === 'p2sh' || o?.scriptType === 'p2wsh')
         && !(o?.address && own.has(o.address))

@@ -32,58 +32,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { Button, EmptyState, FormSection, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
-import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
-import { ConfirmModal } from '../ConfirmModal.jsx';
-import { INPUT, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import styles from './NetworkEndpointsSection.module.css';
+import { t } from '../../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-const CHAIN_BLOCK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-};
-const HEADER_ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 'var(--xc-space-2)',
-};
-const FIELD_LABEL = {
-    fontSize: 'var(--xc-text-xs)',
-    color: 'var(--xc-text-muted)',
-    marginBottom: 2,
-};
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-xs)',
-    cursor: 'pointer',
-};
-const ACTION_PRIMARY = {
-    ...ACTION_BTN,
-    background: 'var(--xc-accent-primary)',
-    borderColor: 'var(--xc-accent-primary)',
-    color: 'var(--xc-bg)',
-};
-
 export function NetworkEndpointsSection() {
     const { settings, loading, error, update } = useSettings();
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const descriptors = registryLib.filterChainsForUser(chainRegistry.supportedChains(), settings)
         .slice()
@@ -94,7 +57,7 @@ export function NetworkEndpointsSection() {
         });
 
     if (descriptors.length === 0) {
-        return <Status text="No chains registered." />;
+        return <EmptyState title={t('settings.endpoints.noChainsRegistered')} titleAs="p" body={t('settings.endpoints.registeredChainsAndTheirEndpoints')} />;
     }
 
     return (
@@ -124,72 +87,69 @@ function ChainRegistryRefreshRow() {
     const [status, setStatus] = useState(/** @type {any} */ (null));
     const [refreshing, setRefreshing] = useState(false);
     const [manualResult, setManualResult] = useState(false);
-    const manualRefreshRef = useRef(false);
+    const requestRef = useRef(0);
     useEffect(() => {
         if (!wired) return;
+        const request = ++requestRef.current;
+        setRefreshing(false);
+        setManualResult(false);
         messaging.getChainRegistryStatus()
-            .then((s) => { if (!manualRefreshRef.current) setStatus(s); })
-            .catch(() => { if (!manualRefreshRef.current) setStatus(null); });
+            .then((s) => { if (request === requestRef.current) setStatus(s); })
+            .catch(() => { if (request === requestRef.current) setStatus(null); });
+        return () => { requestRef.current += 1; };
     }, [wired, messaging]);
     if (!wired) return null;
 
     const onRefresh = async () => {
-        manualRefreshRef.current = true;
+        const request = ++requestRef.current;
         try {
             setRefreshing(true);
             const next = await messaging.refreshChainRegistry();
+            if (request !== requestRef.current) return;
             setStatus(next);
             setManualResult(true);
         } catch (err) {
+            if (request !== requestRef.current) return;
             setStatus({
                 ok: false,
-                error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
+                error: userFacingMessage(err, 'Could not refresh the network registry. Try again.'),
             });
             setManualResult(true);
         } finally {
-            setRefreshing(false);
+            if (request === requestRef.current) setRefreshing(false);
         }
     };
 
     return (
-        <div style={CHAIN_BLOCK}>
-            <div style={HEADER_ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                        Chain registry refresh
-                    </span>
-                    {/* "Descriptor" is the ChainDescriptor type name, and this
-                        panel is an ordinary Settings section, not a
-                        developer-gated one, so the count says "networks". It
-                        stays qualified as "in the registry" on purpose:
-                        descriptorCount is what the hub published registry-wide,
-                        while the chain list below is filtered through
-                        filterChainsForUser (regtest hidden unless developer
-                        mode), so a bare count would name a bigger number than
-                        the list under it. */}
-                    <span style={ROW_HINT}>
-                        {registryStatusText(status, manualResult)}
-                    </span>
-                </div>
-                <button
+        <FormSection
+            headingLevel="h3"
+            title={t('settings.endpoints.chainRegistryRefresh')}
+            description={registryStatusText(status, manualResult)}
+            className={styles.endpointCard}
+        >
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
                     type="button"
                     onClick={onRefresh}
                     disabled={refreshing}
-                    style={ACTION_BTN}
+                    size="sm"
+                    variant="secondary"
                 >
-                    {refreshing ? 'Refreshing…' : 'Refresh now'}
-                </button>
+                    {refreshing ? t('settings.endpoints.refreshing') : t('settings.endpoints.refreshNow')}
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
 function registryStatusText(status, manualResult) {
     if (status?.ok) {
-        const networks = `${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'}`;
         return manualResult
-            ? `Refresh complete: ${networks} available from the registry.`
-            : `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${networks} in the registry`;
+            ? t('settings.endpoints.refreshComplete', { count: status.descriptorCount })
+            : t('settings.endpoints.lastRefreshed', {
+                when: formatRelative(status.lastRefreshedAt),
+                count: status.descriptorCount,
+            });
     }
     if (!status?.error) {
         return 'No refresh yet; the networks bundled with this wallet are active.';
@@ -253,7 +213,6 @@ function canonicalEndpoint(value) {
 }
 
 function ChainEndpointBlock({ descriptor, override, onSave }) {
-    const confirmDialog = useConfirmModal();
     const defaults = {
         explorerUrl: sdkLib.joinEndpoint(descriptor.explorer),
         encoderUrl: sdkLib.joinEndpoint(descriptor.encoder),
@@ -284,7 +243,14 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         setEditing(false);
         setSaveError(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [override?.explorerUrl, override?.encoderUrl, override?.hubUrl]);
+    }, [
+        override?.explorerUrl,
+        override?.encoderUrl,
+        override?.hubUrl,
+        defaults.explorerUrl,
+        defaults.encoderUrl,
+        defaults.hubUrl,
+    ]);
 
     const isCustom = Boolean(override?.custom);
     const networkSuffix = descriptor.networkKind !== 'mainnet'
@@ -340,12 +306,6 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         }
     };
     const onReset = async () => {
-        const confirmed = await confirmDialog.confirm({
-            title: 'Reset network endpoints?',
-            message: `Restore ${descriptor.displayName}${networkSuffix} explorer, encoder, and hub URLs to their defaults?`,
-            confirmLabel: 'Reset endpoints',
-        });
-        if (!confirmed) return;
         setDraft(defaults);
         setSaveError(null);
         setSaving(true);
@@ -367,87 +327,74 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
     };
 
     return (
-        <div style={CHAIN_BLOCK}>
-            <div style={HEADER_ROW}>
-                <span style={{ fontWeight: 600, color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                    {descriptor.displayName}{networkSuffix}
-                </span>
-                <span style={ROW_HINT}>
-                    {isCustom ? 'Custom' : 'Default'}
-                </span>
-            </div>
+        <FormSection
+            headingLevel="h3"
+            title={`${descriptor.displayName}${networkSuffix}`}
+            description={isCustom ? t('ui.feeSelector.custom') : t('settings.endpoints.default')}
+            className={styles.endpointCard}
+        >
             <UrlField
-                label="Explorer URL"
+                label={t('settings.endpoints.explorerUrl')}
                 value={draft.explorerUrl}
                 placeholder={defaults.explorerUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, explorerUrl: v })); setEditing(true); }}
             />
             <UrlField
-                label="Encoder URL"
+                label={t('settings.endpoints.encoderUrl')}
                 value={draft.encoderUrl}
                 placeholder={defaults.encoderUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, encoderUrl: v })); setEditing(true); }}
             />
             <UrlField
-                label="Hub URL"
+                label={t('settings.endpoints.hubUrl')}
                 value={draft.hubUrl}
                 placeholder={defaults.hubUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
-            {saveError ? (
-                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg, #c33)' }}>
-                    {saveError}
-                </div>
-            ) : null}
+            {saveError ? <Status text={saveError} tone="error" /> : null}
             {dirty ? (
                 <div style={ROW_HINT}>
-                    Saving points this chain&apos;s balances, history and broadcasts at these
-                    addresses right away.
+                    {t('settings.endpoints.savingPointsThisChainS')}
                 </div>
             ) : null}
             {isCustom || dirty ? (
                 <div style={ROW_HINT}>
-                    URL format is checked here, but the host is not contacted until the wallet uses it.
-                    If it is unreachable, this chain&apos;s balances, history and transactions may be unavailable.
+                    {t('settings.endpoints.urlFormatIsCheckedHere')}
                 </div>
             ) : null}
-            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                {isCustom || dirty ? (
-                    <button type="button" onClick={onReset} style={ACTION_BTN} disabled={saving}>Reset to default</button>
-                ) : null}
-                {dirty || editing ? (
-                    <button type="button" onClick={onCommit} style={ACTION_PRIMARY} disabled={!dirty || saving}>
-                        {saving ? 'Saving…' : 'Save'}
-                    </button>
-                ) : null}
-            </div>
-            {confirmDialog.request ? (
-                <ConfirmModal
-                    {...confirmDialog.request}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
+            {/* The action row renders only with an action in it, so an untouched
+                default card keeps even padding instead of a blank gap at its foot. */}
+            {isCustom || dirty || editing ? (
+                <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                    {isCustom || dirty ? (
+                        <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
+                            {t('settings.endpoints.resetToDefault')}
+                        </Button>
+                    ) : null}
+                    {dirty || editing ? (
+                        <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
+                            {saving ? t('send.saveRecipient.saving') : t('history.contact.save')}
+                        </Button>
+                    ) : null}
+                </div>
             ) : null}
-        </div>
+        </FormSection>
     );
 }
 
 function UrlField({ label, value, placeholder, onChange }) {
     return (
-        <div>
-            <div style={FIELD_LABEL}>{label}</div>
-            <input
-                type="url"
-                enterKeyHint="done"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                value={value}
-                placeholder={placeholder}
-                onChange={(e) => onChange(e.target.value)}
-                aria-label={label}
-                style={{ ...INPUT, width: '100%' }}
-            />
-        </div>
+        <Input
+            type="url"
+            label={label}
+            enterKeyHint="done"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={label}
+        />
     );
 }

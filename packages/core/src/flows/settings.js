@@ -86,7 +86,8 @@ function isPlainObject(v) {
 function deepMerge(base, patch, path = '') {
     if (!isPlainObject(patch)) return patch;
     if (!isPlainObject(base)) return { ...patch };
-    if (Object.keys(patch).length === 0 || path === 'keyboard.bindings') return { ...patch };
+    // Only a nested map is replaced; an empty top-level patch changes nothing.
+    if (path && (Object.keys(patch).length === 0 || path === 'keyboard.bindings')) return { ...patch };
     const out = { ...base };
     for (const [k, v] of Object.entries(patch)) {
         if (v === undefined) continue;

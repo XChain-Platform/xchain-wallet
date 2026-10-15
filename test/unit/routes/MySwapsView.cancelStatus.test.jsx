@@ -11,7 +11,7 @@
 // a cancel row with no status (older reader) is read as valid.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, act as domAct, within } from '@testing-library/react';
+import { render, cleanup, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MySwapsView, collectCancelledKeys } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
@@ -92,6 +92,7 @@ describe('MySwapsView: cancel row status', () => {
         const row = within(list).getByText('#700', { exact: false }).closest('li');
         expect(within(row).getByText('Open')).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+        expect(row).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('a valid cancel row files the swap under Closed as Cancelled', async () => {
@@ -113,5 +114,16 @@ describe('MySwapsView: cancel row status', () => {
             ],
         }];
         expect([...collectCancelledKeys(results)].sort()).toEqual([`${CHAIN}:2`, `${CHAIN}:3`]);
+    });
+
+    it('shows plain copy and blocks a non-canonical swap action ID before compose', async () => {
+        const utils = await open([swapRow('007')], []);
+        const row = within(utils.getByRole('list', { name: 'Open swaps' }))
+            .getByText('#007', { exact: false }).closest('li');
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+
+        expect(utils.getByText('This swap has an invalid action ID and cannot be changed.')).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Cancel swap' }).disabled).toBe(true);
     });
 });

@@ -9,10 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -32,6 +33,7 @@ import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { latestEffectiveStakingRow } from '../../flows/stakingDashboard.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -70,6 +72,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isDelegate = mode === 'delegate';
@@ -89,6 +92,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [prefillError, setPrefillError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -108,13 +112,13 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your staking addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -128,6 +132,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         const addr = (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId);
         if (!addr) return;
         let cancelled = false;
+        setPrefillError(null);
         Promise.all([
             messaging.getDelegationsForAddress({ chainId, address: addr.address }),
             typeof messaging.getIndexerWatermark === 'function'
@@ -137,13 +142,28 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             .then(([resp, watermark]) => {
                 if (cancelled) return;
                 const rows = extractRows(resp);
-                const latest = latestEffectiveStakingRow(rows, watermark?.watermark);
+                const height = watermark?.watermark;
+                const needsHeight = rows.some((row) => (
+                    row?.activation_block != null
+                    || row?.ACTIVATION_BLOCK != null
+                    || row?.deactivation_block != null
+                    || row?.DEACTIVATION_BLOCK != null
+                ));
+                if (needsHeight && (height == null || !Number.isFinite(Number(height)) || Number(height) < 0)) {
+                    setPrefillError('Could not verify which delegation is currently active. Enter the signing public key manually.');
+                    return;
+                }
+                const latest = latestEffectiveStakingRow(rows, height);
                 const pk = latest?.signing_pubkey || latest?.SIGNING_PUBKEY;
                 if (pk && typeof pk === 'string' && /^[0-9a-fA-F]{64}$/.test(pk)) {
-                    setPubkey(pk.toLowerCase());
+                    setPubkey((current) => current.trim() ? current : pk.toLowerCase());
                 }
             })
-            .catch(() => { /* user will paste manually */ });
+            .catch((err) => {
+                if (!cancelled) setPrefillError(
+                    `${readFailureMessage(err, 'load the current delegation')} Enter the signing public key manually.`,
+                );
+            });
         return () => { cancelled = true; };
     }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging]);
 
@@ -248,6 +268,16 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRate = Number(feePick.customRate);
+    const customFeeRateError = feePick.mode !== 'custom'
+        ? null
+        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
+            ? 'Enter a custom network fee rate greater than zero.'
+            : Number.isFinite(feeTiers?.maximumRate) && customFeeRate > feeTiers.maximumRate
+                ? 'Custom network fee rate is above this network\'s supported maximum.'
+                : !feeCustomEstimate
+                    ? 'Custom network fee rate can have at most 8 decimal places.'
+                    : null;
 
     const actionParams = useMemo(() => {
         const pk = pubkey.trim().toLowerCase();
@@ -271,8 +301,18 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             return;
         }
         const pk = pubkey.trim();
+        if (!pk) {
+            setFormError(isDelegate
+                ? 'Enter the new signing public key.'
+                : 'Enter the signing public key to revoke.');
+            return;
+        }
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
             setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
+            return;
+        }
+        if (customFeeRateError) {
+            setFormError(customFeeRateError);
             return;
         }
         setFormError(null);
@@ -362,7 +402,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             <ListPage>{children}</ListPage>
         </Screen>
     );
-    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
+    const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{form}</Screen>;
 
     if (loadError) {
         return wrap(
@@ -410,6 +450,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         const shownPubkey = actionParams.NEW_SIGNING_PUBKEY || actionParams.SIGNING_PUBKEY;
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -440,10 +481,12 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                         : `Revoke the delegated signing key ${shownPubkey.slice(0, 12)}…`}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -495,7 +538,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -529,37 +572,33 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label={verb}
             onSubmit={handleReview}
-            intro={(
-                <>
-                    {isDelegate
-                        ? 'Delegating lets the selected Ed25519 key sign hub actions for this address without moving its stake.'
-                        : 'Revoking stops the selected Ed25519 key from signing hub actions for this address.'}
-                    {isDelegate
-                        ? ' Use Revoke delegation from the staking details to remove the key later.'
-                        : ''}
-                    {' '}You will review the source address, signing key, and fee before signing.
-                    {isWatcherMode
-                        ? ' Watch-only mode creates an unsigned transaction here and cannot sign it.'
-                        : ''}
-                </>
-            )}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || prefillError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError || prefillError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !pubkey.trim() || actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing}
                 >
                     {singleEncode ? verb : 'Preview'}
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
+            <details>
+                <summary>How signing-key delegation works</summary>
+                <p className={styles.hint}>
+                    {isDelegate
+                        ? 'The selected Ed25519 key can sign hub actions for this address without moving its stake. Revoke it later from staking details.'
+                        : 'Revoking stops the selected Ed25519 key from signing hub actions for this address.'}
+                    {isWatcherMode ? ' Watch-only mode creates an unsigned transaction and cannot sign it.' : ''}
+                </p>
+            </details>
+            <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"
@@ -578,7 +617,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     ? '64-character hex-encoded Ed25519 public key. Replaces any currently-active delegation for this address.'
                     : '64-character hex-encoded Ed25519 public key. Pre-filled with your most recent active delegation; change it to revoke a specific older key.'}
                 value={pubkey}
-                onChange={(e) => setPubkey(e.target.value)}
+                onChange={(e) => {
+                    setPubkey(e.target.value);
+                    setFormError(null);
+                    setPrefillError(null);
+                }}
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"

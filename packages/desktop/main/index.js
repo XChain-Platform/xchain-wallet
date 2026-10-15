@@ -40,12 +40,17 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
+// First import on purpose: the test network guard must be in place before
+// any other module evaluates (see networkGuardBoot.js). Off unless a test
+// harness sets XCHAIN_TEST_NETWORK_GUARD or --xchain-test-network-guard.
+import { networkGuard, runNetworkGuardProbeAndExit } from './networkGuardBoot.js';
 import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification, Tray } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
 
 import { IPC_CHANNEL } from './messageHost.js';
@@ -58,7 +63,7 @@ import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import {
     attachRendererCspHeaders,
-    isHttpUrl,
+    allowlistedExternalUrl,
     hasNoIpcArguments,
     isValidDesktopIpcMessage,
     normalizeOpenWindowArgs,
@@ -76,6 +81,12 @@ import {
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { attachUpdater } from './updater.js';
 import { applyTorRouting } from './torRouting.js';
+import {
+    installProcessErrorHandlers,
+    reportMainFailure,
+    runMainCallback,
+    runMainTask,
+} from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
 import {
     FileWindowBoundsStore,
@@ -103,13 +114,22 @@ import {
     wipeRuntimeStores,
 } from './runtime.js';
 
+logConsole.attach();
+
 const here = dirname(fileURLToPath(import.meta.url));
+installProcessErrorHandlers();
 
 // §9.3.2: the packaged renderer directory, and the whole definition of
 // "our own app" for the trust predicates below. Must stay the base of the
 // `win.loadFile(...)` target in createWindow: they are the same directory
 // said twice, and a drift between them locks the app out of its own IPC.
 const APP_ROOT = join(here, '..', 'renderer', 'dist');
+// Pinch zoom may magnify but never shrink below 1: a lower floor lets
+// Chromium show the page at that scale, which widens the layout viewport past
+// the window so the fixed-height shell fills only part of it and the whole
+// document scrolls.
+const MIN_VISUAL_ZOOM_LEVEL = 1;
+const MAX_VISUAL_ZOOM_LEVEL = 3;
 
 /**
  * Sender-trust gate for the privileged IPC channels, bound to this app's
@@ -140,6 +160,10 @@ let tray = /** @type {Tray | null} */ (null);
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
+// A warm deep link belongs to the primary window selected when it arrives.
+// Pinning the webContents keeps another primary or a detached window from
+// consuming the process-wide one-shot slot first.
+let deepLinkRecipient = null;
 // Windows opened on a pinned view (open-window), which never take a deep link.
 const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
@@ -174,11 +198,16 @@ function kickChainRegistrySync() {
         chainRegistrySync = registryLib
             .syncChainRegistryFromHub({ registry: registryLib.defaultRegistry() })
             .then((r) => {
-                if (!r.ok) console.info('[xchain] desktop: chain-registry sync skipped:', r.reason);
+                if (!r.ok) console.info('[xchain] desktop: chain-registry sync skipped');
                 return r;
             })
-            .catch((err) => ({ ok: false, reason: String(err?.message ?? err) }));
-    } catch { /* soft enhancement; bundled descriptors keep serving */ }
+            .catch((err) => {
+                reportMainFailure('chain-registry sync', err);
+                return { ok: false, reason: 'registry sync failed' };
+            });
+    } catch (err) {
+        reportMainFailure('chain-registry sync start', err);
+    }
 }
 
 // §9.3.2 navigation lockdown. Every BrowserWindow loads the local
@@ -264,18 +293,18 @@ function hardenWebContents(contents) {
         }
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
-        if (isHttpUrl(url)) {
-            shell.openExternal(url).catch((err) => {
-                console.error('[xchain] shell.openExternal failed:', err);
-            });
+        const externalUrl = allowlistedExternalUrl(url);
+        if (externalUrl) {
+            void runMainTask(() => shell.openExternal(externalUrl), 'external link open');
         }
         return { action: 'deny' };
     });
     contents.on('will-navigate', (event, url) => {
         if (shouldBlockNavigation(url, APP_ROOT)) {
             event.preventDefault();
-            if (isHttpUrl(url)) {
-                shell.openExternal(url).catch(() => { /* best-effort */ });
+            const externalUrl = allowlistedExternalUrl(url);
+            if (externalUrl) {
+                void runMainTask(() => shell.openExternal(externalUrl), 'external navigation open');
             }
         }
     });
@@ -355,7 +384,19 @@ export function applyWindowCloseConvention(win, event, options = {}) {
 function broadcastToWindows(channel, payload, excludedContents = null) {
     for (const w of liveWindows()) {
         if (w.webContents === excludedContents) continue;
-        w.webContents.send(channel, payload);
+        sendToWindow(w, channel, payload);
+    }
+}
+
+function sendToWindow(win, channel, payload) {
+    if (!win || win.isDestroyed() || win.webContents?.isDestroyed?.()) return false;
+    try {
+        win.webContents.send(channel, payload);
+        return true;
+    } catch {
+        // A window can close after liveWindows() snapshots it. Notification
+        // delivery must not turn a completed wallet operation into an error.
+        return false;
     }
 }
 
@@ -364,17 +405,20 @@ function forwardDeepLink(event) {
     // that does not exist yet, or has not mounted its listener, claims it on
     // mount through 'xchain:deep-link-take', so a cold-start link is not lost.
     deepLinkSlot.offer(event);
+    deepLinkRecipient = null;
     const live = liveWindows();
     if (live.length === 0) return;
     const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
     // Only detached windows are open: a fresh window claims the link on mount
     if (!target) {
         if (canCreateWindows) {
+            // A dock or tray restore already in flight owns the next window;
+            // hand the link to it instead of racing a second window open.
             const pendingRestore = reopenInFlight;
             if (!pendingRestore) {
-                void openWindowAfterIdleCheck();
+                void runMainTask(openWindowAfterIdleCheck, 'deep-link window open');
             } else {
-                void pendingRestore.then(() => {
+                void runMainTask(() => pendingRestore.then(() => {
                     const current = pickDeepLinkTarget(
                         liveWindows(),
                         BrowserWindow.getFocusedWindow(),
@@ -383,18 +427,21 @@ function forwardDeepLink(event) {
                     if (!current) return openWindowAfterIdleCheck();
                     current.webContents.send('xchain:uri', event);
                     revealWindow(current);
-                });
+                    return undefined;
+                }), 'deep-link window open');
             }
         }
         return;
     }
+    deepLinkRecipient = target.webContents;
     if (!target.isVisible()) {
-        void restoreWindowAfterIdleCheck().then(() => {
-            if (!target.isDestroyed()) target.webContents.send('xchain:uri', event);
-        });
+        void runMainTask(async () => {
+            await restoreWindowAfterIdleCheck();
+            sendToWindow(target, 'xchain:uri', event);
+        }, 'deep-link window restore');
         return;
     }
-    target.webContents.send('xchain:uri', event);
+    sendToWindow(target, 'xchain:uri', event);
     revealWindow(target);
 }
 
@@ -469,7 +516,7 @@ function buildRuntime() {
                     new Notification({ title, body }).show();
                 }
             } catch (err) {
-                console.error('[xchain] desktop notification failed:', err);
+                reportMainFailure('desktop notification', err);
             }
         },
         // §50 / Cluster L FOLLOWUP 4: desktop diagnostic env + build.
@@ -519,12 +566,16 @@ export function createWindow(opts = {}) {
         ...initialBounds,
         minWidth: MIN_WINDOW_BOUNDS.width,
         minHeight: MIN_WINDOW_BOUNDS.height,
+        // Linux and Windows hide the File/Edit/View/Window/Help bar until
+        // Alt is pressed; macOS uses the global menu bar and ignores this.
+        autoHideMenuBar: process.platform !== 'darwin',
         webPreferences: {
             preload: join(here, '..', 'preload.cjs'),
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
+            zoomFactor: 1,
             // A console in the shipped wallet invites "paste this to fix
             // your wallet" scams against a page that holds unlocked keys;
             // the mobile shells ship with WebView debugging off for the
@@ -533,26 +584,39 @@ export function createWindow(opts = {}) {
         },
         show: false,
     });
+    void runMainTask(
+        () => win.webContents.setVisualZoomLevelLimits(
+            MIN_VISUAL_ZOOM_LEVEL,
+            MAX_VISUAL_ZOOM_LEVEL,
+        ),
+        'window zoom limits',
+    );
 
     // Renderer is built into packages/desktop/renderer/dist by Step 19's
     // packaging pipeline (vite build). In packaged mode that's what
     // `loadFile` points at; in dev the same path works because
     // `pnpm run start` runs vite first.
     const loadOpts = buildLoadOptions(opts);
-    win.loadFile(join(APP_ROOT, 'index.html'), loadOpts);
+    void runMainTask(
+        () => win.loadFile(join(APP_ROOT, 'index.html'), loadOpts),
+        'renderer load',
+        { recover: () => { if (!win.isDestroyed()) win.show(); } },
+    );
     win.once('ready-to-show', () => {
-        if (!win.isDestroyed()) win.show();
+        runMainCallback(() => { if (!win.isDestroyed()) win.show(); }, 'renderer reveal');
     });
-    win.on('move', () => { rememberWindowBounds(win); });
-    win.on('resize', () => { rememberWindowBounds(win); });
+    win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
+    win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
     win.on('close', (event) => {
-        rememberWindowBounds(win);
-        // Synchronous: on quit the process can exit before an async write
-        // lands, which left window-bounds.json holding stale values.
-        flushWindowBoundsSync();
-        if (applyWindowCloseConvention(win, event) && !hasVisibleWindow()) {
-            startWindowlessIdleLock();
-        }
+        runMainCallback(() => {
+            rememberWindowBounds(win);
+            // Synchronous: on quit the process can exit before an async write
+            // lands, which left window-bounds.json holding stale values.
+            flushWindowBoundsSync();
+            if (applyWindowCloseConvention(win, event) && !hasVisibleWindow()) {
+                startWindowlessIdleLock();
+            }
+        }, 'window close');
     });
     win.on('closed', () => { windows.delete(win); });
 
@@ -567,7 +631,9 @@ function rememberWindowBounds(win) {
     if (!bounds) return;
     rememberedWindowBounds = bounds;
     if (windowBoundsSaveTimer) clearTimeout(windowBoundsSaveTimer);
-    windowBoundsSaveTimer = setTimeout(() => { void flushWindowBounds(); }, 250);
+    windowBoundsSaveTimer = setTimeout(() => {
+        void runMainTask(flushWindowBounds, 'window bounds save');
+    }, 250);
     windowBoundsSaveTimer.unref?.();
 }
 
@@ -578,7 +644,7 @@ async function flushWindowBounds() {
     try {
         await windowBoundsStore.save(rememberedWindowBounds);
     } catch (err) {
-        console.error('[xchain] could not save desktop window bounds:', err);
+        reportMainFailure('desktop window bounds save', err);
     }
 }
 
@@ -591,7 +657,7 @@ function flushWindowBoundsSync() {
     try {
         windowBoundsStore.saveSync(rememberedWindowBounds);
     } catch (err) {
-        console.error('[xchain] could not save desktop window bounds:', err);
+        reportMainFailure('desktop window bounds save', err);
     }
 }
 
@@ -652,9 +718,10 @@ function startWindowlessIdleLock() {
     if (windowlessIdleTimer) return;
     windowlessIdleTimer = setInterval(() => {
         if (!runtime || hasVisibleWindow()) return;
-        void enforceIdleAutoLock(runtime).then((res) => {
+        void runMainTask(async () => {
+            const res = await enforceIdleAutoLock(runtime);
             if (res.locked) console.info(`[xchain] auto-lock: windowless session locked (${res.reason})`);
-        });
+        }, 'windowless auto-lock check');
     }, WINDOWLESS_IDLE_CHECK_MS);
     windowlessIdleTimer.unref?.();
 }
@@ -676,13 +743,13 @@ function runWindowlessIdleGate(action, logAction) {
             }
         } catch (err) {
             // Cannot decide, so it costs a password prompt rather than an unlock.
-            console.error(`[xchain] auto-lock check before ${logAction} failed:`, err);
+            reportMainFailure(`auto-lock check before ${logAction}`, err);
             if (runtime) {
                 tearDownHost(runtime);
                 try { await runtime.sessionBackend.clear(); } catch { /* logged by the check */ }
             }
         }
-        action();
+        runMainCallback(() => { action(); }, `${logAction} window`);
     })().finally(() => { reopenInFlight = null; });
     return reopenInFlight;
 }
@@ -706,13 +773,15 @@ function runSystemAutoLock(eventName) {
  * @returns {Promise<void>}
  */
 function openWindowAfterIdleCheck() {
-    if (hasVisibleWindow()) {
-        createWindow();
-        return Promise.resolve();
-    }
-    return runWindowlessIdleGate(() => {
-        if (!hasVisibleWindow()) createWindow();
-    }, 'reopening');
+    return runMainTask(() => {
+        if (hasVisibleWindow()) {
+            createWindow();
+            return undefined;
+        }
+        return runWindowlessIdleGate(() => {
+            if (!hasVisibleWindow()) createWindow();
+        }, 'reopening');
+    }, 'window open');
 }
 
 /**
@@ -758,6 +827,23 @@ export function installTray({ platform = process.platform } = {}) {
 }
 
 /**
+ * Reload only the focused renderer so the main-process vault, signer pool, and
+ * cached session keep the same unlocked state across Cmd/Ctrl+R.
+ *
+ * @param {BrowserWindow | undefined} menuWindow
+ * @param {boolean} [ignoreCache]
+ * @returns {boolean}
+ */
+export function reloadRendererWindow(menuWindow, ignoreCache = false) {
+    const target = menuWindow ?? BrowserWindow.getFocusedWindow();
+    const contents = target?.webContents;
+    if (!contents || contents.isDestroyed?.()) return false;
+    if (ignoreCache) contents.reloadIgnoringCache();
+    else contents.reload();
+    return true;
+}
+
+/**
  * Wire the application menu. File > New Window runs the idle-lock gate;
  * direct-download builds also expose a visible update check, and every
  * platform can open the version-pinned native About panel.
@@ -770,7 +856,9 @@ export function installApplicationMenu({
     isMac = process.platform === 'darwin',
 } = {}) {
     const updateItem = runUpdaterCheck
-        ? createUpdateCheckMenuItem(() => { void requestUpdateCheck({ visible: true }); })
+        ? createUpdateCheckMenuItem(() => {
+            void runMainTask(() => requestUpdateCheck({ visible: true }), 'menu update check');
+        })
         : null;
     /** @type {Electron.MenuItemConstructorOptions[]} */
     const template = [
@@ -794,7 +882,7 @@ export function installApplicationMenu({
             submenu: [
                 {
                     label: 'New Window',
-                    accelerator: 'CmdOrCtrl+N',
+                    accelerator: 'CmdOrCtrl+Shift+N',
                     click: () => { void openWindowAfterIdleCheck(); },
                 },
                 { type: 'separator' },
@@ -816,8 +904,16 @@ export function installApplicationMenu({
         {
             label: '&View',
             submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
+                    click: (_item, win) => { reloadRendererWindow(win); },
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    click: (_item, win) => { reloadRendererWindow(win, true); },
+                },
                 ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
                 { type: 'separator' },
                 { role: 'resetZoom' },
@@ -831,8 +927,8 @@ export function installApplicationMenu({
             label: '&Window',
             submenu: [
                 { role: 'minimize' },
-                { role: 'zoom' },
                 ...(isMac ? [
+                    { role: 'zoom' },
                     { type: 'separator' },
                     { role: 'front' },
                 ] : [
@@ -868,14 +964,17 @@ function buildApplicationMenu() {
 // remote content. Registered before whenReady so the very first window is
 // covered.
 app.on('web-contents-created', (_event, contents) => {
-    hardenWebContents(contents);
+    runMainCallback(() => hardenWebContents(contents), 'web contents hardening');
 });
 
 const deepLinkCtx = attachDeepLinkHandlers(app, {
     onDeepLink: forwardDeepLink,
     onSecondInstance: () => {
-        if (canCreateWindows) void restoreWindowAfterIdleCheck();
+        if (canCreateWindows) {
+            void runMainTask(restoreWindowAfterIdleCheck, 'second-instance window restore');
+        }
     },
+    onError: (error) => reportMainFailure('deep-link handling', error),
 });
 if (!deepLinkCtx.gotLock) {
     // Another instance is already running. Quit cleanly; the running
@@ -883,8 +982,24 @@ if (!deepLinkCtx.gotLock) {
     app.quit();
 }
 
-app.whenReady().then(async () => {
+// Every renderer window, the startup-failure recovery window included, gets
+// the CSP response headers, attached once per process.
+let rendererCspAttached = false;
+function ensureRendererCspHeaders() {
+    if (rendererCspAttached) return;
     attachRendererCspHeaders(session.defaultSession.webRequest, APP_ROOT);
+    rendererCspAttached = true;
+}
+
+void runMainTask(async () => {
+    await app.whenReady();
+    // Before anything in main can fetch or open a window.
+    networkGuard.attachSession(session.defaultSession, 'default session');
+    if (networkGuard.probe) {
+        await runNetworkGuardProbeAndExit();
+        return;
+    }
+    ensureRendererCspHeaders();
 
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
     rememberedWindowBounds = await windowBoundsStore.load();
@@ -913,16 +1028,16 @@ app.whenReady().then(async () => {
         bootMayUnlock = gate.locked === false;
         if (gate.locked) console.info(`[xchain] auto-lock: relaunch locked (${gate.reason})`);
     } catch (err) {
-        console.error('[xchain] desktop auto-lock gate failed:', err);
+        reportMainFailure('desktop auto-lock gate', err);
         try { await runtime.sessionBackend.clear(); } catch (clearErr) {
-            console.error('[xchain] auto-lock could not clear the cached session key:', clearErr);
+            reportMainFailure('cached session key clear', clearErr);
         }
     }
     if (bootMayUnlock) {
         try {
             await ensureHost(runtime);
         } catch (err) {
-            console.error('[xchain] desktop auto-unlock failed:', err);
+            reportMainFailure('desktop auto-unlock', err);
         }
     }
 
@@ -947,11 +1062,13 @@ app.whenReady().then(async () => {
     // so the latest event is retained for a renderer that subscribes later.
     // `getState` returns the broadcast shape and keeps one rendering path.
     let lastUpdaterEvent = null;
+    let downloadAndInstall = null;
+    let restartAndInstall = null;
     try {
         const {
             checkForUpdates,
-            downloadUpdate: downloadAndInstall,
-            restartAndInstall,
+            downloadUpdate,
+            restartAndInstall: restart,
             isActive,
         } = await attachUpdater({
             isPackaged: app.isPackaged,
@@ -963,58 +1080,59 @@ app.whenReady().then(async () => {
             },
             canRestart: () => activeWalletOperations === 0,
         });
+        downloadAndInstall = downloadUpdate;
+        restartAndInstall = restart;
         runUpdaterCheck = isActive ? checkForUpdates : null;
 
-        // Same trust boundary as the install handler: the updater state says
-        // whether a version is on offer, which is not sensitive, but a
-        // positively-remote frame has no business reading the app's state.
-        ipcMain.handle('xchain:updater-state', async (event, ...args) => {
-            if (!isTrustedSender(event)) return null;
-            if (!hasNoIpcArguments(args)) return null;
-            return lastUpdaterEvent;
-        });
+        // Kick a quiet check on launch. The menu path marks its events so
+        // the renderer can show progress and an explicit up-to-date result.
+        void runMainTask(requestUpdateCheck, 'launch update check');
+    } catch (err) {
+        reportMainFailure('updater wiring', err);
+    }
 
-        // THE INSTALL HANDLER IS THE HALF THAT WAS MISSING (row
-        // 142). The broadcast above has always fired, into a channel no
-        // renderer could subscribe to under contextIsolation, and nothing
-        // in the repo ever called `downloadAndInstall`. The app therefore
-        // checked for updates on launch and had no way to offer or apply
-        // one - while the feed, the pointers and the S5 manifest gate
-        // were all built and tested. Same sender check as the message
-        // channel below: an install is a quit-and-replace, so it must not
-        // be reachable from a frame that is positively remote.
-        ipcMain.handle('xchain:updater-install', async (event, ...args) => {
-            if (!isTrustedSender(event)) {
-                return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
-            }
-            // At most one argument, and it must be one of the known action
-            // names; anything else is rejected before it can steer main.
-            if (args.length > 1) {
-                return { ok: false, reason: 'desktop: update install takes at most one action' };
-            }
-            const action = args.length === 0 ? 'download' : args[0];
+    // Register these channels even when updater wiring fails. The renderer
+    // can treat null as no retained offer and an ok:false action as a visible
+    // failure instead of receiving Electron's raw no-handler rejection.
+    ipcMain.handle('xchain:updater-state', async (event, ...args) => {
+        if (!isTrustedSender(event)) return null;
+        if (!hasNoIpcArguments(args)) return null;
+        return lastUpdaterEvent;
+    });
+
+    ipcMain.handle('xchain:updater-install', async (event, ...args) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
+        }
+        if (args.length > 1) {
+            return { ok: false, reason: 'desktop: update install takes at most one action' };
+        }
+        const action = args.length === 0 ? 'download' : args[0];
+        if (action !== 'check' && action !== 'restart' && action !== 'download') {
+            return { ok: false, reason: 'desktop: unknown update action' };
+        }
+        if (!downloadAndInstall || !restartAndInstall) {
+            return { ok: false, reason: 'desktop: updater unavailable' };
+        }
+        try {
             if (action === 'check') {
                 await requestUpdateCheck({ visible: true });
                 return { ok: true };
             }
-            if (action === 'restart') return restartAndInstall();
-            if (action === 'download') {
-                activeUpdateDownloads += 1;
-                try {
-                    return await downloadAndInstall();
-                } finally {
-                    activeUpdateDownloads -= 1;
-                }
+            if (action === 'restart') return await restartAndInstall();
+            // Counted so a quit during the fetch or signature check waits
+            // for the verdict instead of cutting it off.
+            activeUpdateDownloads += 1;
+            try {
+                return await downloadAndInstall();
+            } finally {
+                activeUpdateDownloads -= 1;
             }
-            return { ok: false, reason: 'desktop: unknown update action' };
-        });
-
-        // Kick a quiet check on launch. The menu path marks its events so
-        // the renderer can show progress and an explicit up-to-date result.
-        void requestUpdateCheck();
-    } catch (err) {
-        console.error('[xchain] updater wiring failed:', err);
-    }
+        } catch (error) {
+            reportMainFailure('updater IPC action', error);
+            return { ok: false, reason: 'desktop: update action failed' };
+        }
+    });
 
     ipcMain.handle(IPC_CHANNEL, async (event, message, ...extraArgs) => {
         // Sender trust boundary behind the navigation lockdown: only an app
@@ -1043,6 +1161,12 @@ app.whenReady().then(async () => {
             const change = stateChangeForMessage(message, response);
             if (change) broadcastToWindows('xchain:state-changed', change, event.sender);
             return response;
+        } catch (error) {
+            reportMainFailure('wallet IPC message', error);
+            return {
+                ok: false,
+                error: { name: 'Error', message: 'desktop: message handling failed' },
+            };
         } finally {
             activeWalletOperations -= 1;
         }
@@ -1067,7 +1191,8 @@ app.whenReady().then(async () => {
             const win = createWindow({ initialView, initialContext });
             return { ok: true, windowId: win.id };
         } catch (err) {
-            return { ok: false, error: String(err?.message ?? err) };
+            reportMainFailure('open-window IPC action', err);
+            return { ok: false, error: 'open-window: operation failed' };
         }
     });
 
@@ -1100,7 +1225,8 @@ app.whenReady().then(async () => {
                 error: result.errors.map((e) => `${e.store}: ${e.message}`).join('; '),
             };
         } catch (err) {
-            return { ok: false, error: String(err?.message ?? err) };
+            reportMainFailure('wipe-storage IPC action', err);
+            return { ok: false, error: 'wipe-storage: operation failed' };
         }
     });
 
@@ -1118,18 +1244,35 @@ app.whenReady().then(async () => {
             return { ok: false, reason: 'chain-registry: takes no arguments' };
         }
         if (!chainRegistrySync) return { ok: false, reason: 'registry sync not started' };
-        const r = await chainRegistrySync;
-        return r.ok
-            ? { ok: true, descriptors: r.descriptors, generatedAt: r.generatedAt }
-            : { ok: false, reason: r.reason };
+        try {
+            const r = await chainRegistrySync;
+            return r.ok
+                ? { ok: true, descriptors: r.descriptors, generatedAt: r.generatedAt }
+                : { ok: false, reason: r.reason };
+        } catch (error) {
+            reportMainFailure('chain-registry IPC action', error);
+            return { ok: false, reason: 'registry sync failed' };
+        }
     });
 
-    // Hand the parked deep link to the renderer that asks, once. Same trust
-    // boundary as the other handlers: a remote frame gets nothing.
+    // Hand the parked deep link to its selected primary renderer once. Same
+    // trust boundary as the other handlers: a remote or detached frame gets
+    // nothing, and a sibling cannot consume a link nudged to another window.
     ipcMain.handle('xchain:deep-link-take', async (event, ...args) => {
         if (!isTrustedSender(event)) return null;
         if (!hasNoIpcArguments(args)) return null;
-        return deepLinkSlot.take();
+        try {
+            const senderWindow = BrowserWindow.fromWebContents(event.sender);
+            if (!senderWindow || !windows.has(senderWindow) || detachedWindows.has(senderWindow)) return null;
+            if (deepLinkRecipient?.isDestroyed?.()) deepLinkRecipient = null;
+            if (deepLinkRecipient && deepLinkRecipient !== event.sender) return null;
+            const pending = deepLinkSlot.take();
+            deepLinkRecipient = null;
+            return pending;
+        } catch (error) {
+            reportMainFailure('deep-link IPC action', error);
+            return null;
+        }
     });
 
     // Wire the signer-bridge ipc listener so renderer-hosted HW
@@ -1147,13 +1290,26 @@ app.whenReady().then(async () => {
     createWindow();
 
     app.on('activate', () => {
-        void restoreWindowAfterIdleCheck();
+        void runMainTask(() => restoreWindowAfterIdleCheck(), 'activation window restore');
     });
+}, 'desktop startup', {
+    recover: () => {
+        networkGuard.attachSession(session.defaultSession, 'default session');
+        if (networkGuard.probe) {
+            app.exit(1);
+            return;
+        }
+        ensureRendererCspHeaders();
+        canCreateWindows = true;
+        if (liveWindows().length === 0) createWindow();
+    },
 });
 
 app.on('window-all-closed', () => {
-    // Keep the vault alive for dock, tray, or second-instance reopening.
-    startWindowlessIdleLock();
+    runMainCallback(() => {
+        // Keep the vault alive for dock, tray, or second-instance reopening.
+        startWindowlessIdleLock();
+    }, 'all windows closed');
 });
 
 app.on('before-quit', (event) => {
@@ -1171,10 +1327,12 @@ app.on('before-quit', (event) => {
     // cases where a GC'd buffer might otherwise linger until
     // reallocation. The session-backend ciphertext stays on disk; the
     // next launch reuses it via the keychain.
-    isQuitting = true;
-    stopWindowlessIdleLock();
-    flushWindowBoundsSync();
-    tray?.destroy();
-    tray = null;
-    if (runtime) tearDownHost(runtime);
+    runMainCallback(() => {
+        isQuitting = true;
+        stopWindowlessIdleLock();
+        flushWindowBoundsSync();
+        tray?.destroy();
+        tray = null;
+        if (runtime) tearDownHost(runtime);
+    }, 'desktop shutdown');
 });

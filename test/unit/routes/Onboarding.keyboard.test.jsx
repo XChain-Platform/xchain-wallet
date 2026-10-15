@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import { CreateWallet } from '../../../packages/core/src/shared/routes/CreateWallet.jsx';
@@ -36,22 +36,34 @@ afterEach(() => {
     generateBip39Mnemonic.mockClear();
 });
 
-function renderCreate({ onBack = vi.fn(), importMnemonic = vi.fn().mockResolvedValue({}) } = {}) {
+function renderCreate({
+    onBack = vi.fn(),
+    onCreated = vi.fn(),
+    importMnemonic = vi.fn().mockResolvedValue({}),
+} = {}) {
     render(
         <MessagingProvider shell="web" messaging={{ importMnemonic }}>
-            <CreateWallet onBack={onBack} onCreated={() => {}} />
+            <CreateWallet onBack={onBack} onCreated={onCreated} />
         </MessagingProvider>,
     );
-    return { onBack, importMnemonic };
+    return { onBack, onCreated, importMnemonic };
 }
 
-function renderImport({ onBack = vi.fn(), importMnemonic = vi.fn().mockResolvedValue({}) } = {}) {
+function renderImport({
+    onBack = vi.fn(),
+    onImported = vi.fn(),
+    importMnemonic = vi.fn().mockResolvedValue({}),
+} = {}) {
     render(
         <MessagingProvider shell="web" messaging={{ importMnemonic }}>
-            <ImportWallet onBack={onBack} onImported={() => {}} />
+            <ImportWallet onBack={onBack} onImported={onImported} />
         </MessagingProvider>,
     );
-    return { onBack, importMnemonic };
+    return { onBack, onImported, importMnemonic };
+}
+
+function swipeBackFromIOS() {
+    act(() => window.dispatchEvent(new Event('xchain:native-edge-back')));
 }
 
 function tabStops() {
@@ -96,7 +108,7 @@ describe('create onboarding keyboard flow', () => {
         const expectedTabOrder = [
             screen.getByLabelText('Confirm password'),
             screen.getByRole('radio', { name: /^12 words/ }),
-            screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ }),
+            screen.getByRole('switch', { name: /Use a BIP39 passphrase/ }),
             screen.getByRole('button', { name: 'BIP39 passphrase help' }),
         ];
         for (const control of expectedTabOrder) {
@@ -160,7 +172,7 @@ describe('create onboarding keyboard flow', () => {
 
         fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Travel wallet' } });
         fireEvent.click(screen.getByRole('radio', { name: /^24 words/ }));
-        fireEvent.click(screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ }));
+        fireEvent.click(screen.getByRole('switch', { name: /Use a BIP39 passphrase/ }));
         fillCreatePasswords();
         fireEvent.change(screen.getByLabelText('BIP39 passphrase'), { target: { value: 'hidden phrase' } });
         fireEvent.change(screen.getByLabelText('Confirm passphrase'), { target: { value: 'hidden phrase' } });
@@ -180,7 +192,7 @@ describe('create onboarding keyboard flow', () => {
         await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Travel wallet');
         expect(screen.getByRole('radio', { name: /^24 words/ })).toBeChecked();
-        expect(screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ })).toBeChecked();
+        expect(screen.getByRole('switch', { name: /Use a BIP39 passphrase/ })).toBeChecked();
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
         expect(screen.getByLabelText('BIP39 passphrase')).toHaveValue('');
@@ -189,6 +201,42 @@ describe('create onboarding keyboard flow', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallet setup' }));
         expect(onBack).toHaveBeenCalledOnce();
+    });
+
+    it('keeps the keyboard dismissed when an iOS swipe returns from the phrase', async () => {
+        const { onBack } = renderCreate();
+        fillCreatePasswords();
+        pressEnter(screen.getByLabelText('Confirm password'));
+        await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+
+        swipeBackFromIOS();
+
+        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        expect(screen.getByLabelText('Password')).toHaveValue('');
+        expect(screen.getByLabelText('Confirm password')).toHaveValue('');
+        expect(screen.getByLabelText('Password')).not.toHaveFocus();
+        expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it('does not let an iOS swipe bypass the completion notice', async () => {
+        const { onBack, onCreated } = renderCreate();
+        fillCreatePasswords();
+        pressEnter(screen.getByLabelText('Confirm password'));
+        fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        for (const input of await screen.findAllByLabelText(/^Word \d+$/)) {
+            fireEvent.change(input, { target: { value: 'abandon' } });
+        }
+        pressEnter(screen.getAllByLabelText(/^Word \d+$/)[2]);
+        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(onBack).not.toHaveBeenCalled();
+        expect(onCreated).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(onCreated).toHaveBeenCalledOnce();
     });
 });
 
@@ -205,13 +253,14 @@ describe('import onboarding keyboard flow', () => {
             screen.getByRole('tab', { name: 'Recovery phrase' }),
             screen.getByRole('tab', { name: 'Private key' }),
             screen.getByRole('tab', { name: 'Encrypted backup' }),
+            // Paste and Scan QR sit inside the phrase box, so they follow it.
+            screen.getByLabelText('Recovery phrase'),
             screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }),
             screen.getByRole('button', { name: 'Scan QR' }),
-            screen.getByLabelText('Recovery phrase'),
             screen.getByLabelText('Wallet name'),
             screen.getByLabelText('Password'),
             screen.getByLabelText('Confirm password'),
-            screen.getByRole('checkbox', { name: /wallet uses a BIP39 passphrase/ }),
+            screen.getByRole('switch', { name: /wallet uses a BIP39 passphrase/ }),
             screen.getByRole('button', { name: 'BIP39 passphrase help' }),
         ];
         for (const control of expectedTabOrder) {
@@ -258,7 +307,7 @@ describe('import onboarding keyboard flow', () => {
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
-        fireEvent.click(screen.getByRole('checkbox', { name: /wallet uses a BIP39 passphrase/ }));
+        fireEvent.click(screen.getByRole('switch', { name: /wallet uses a BIP39 passphrase/ }));
         fireEvent.change(screen.getByLabelText('BIP39 passphrase'), { target: { value: 'hidden phrase' } });
 
         fireEvent.keyDown(window, { key: 'Escape' });
@@ -267,12 +316,52 @@ describe('import onboarding keyboard flow', () => {
         expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
-        expect(screen.getByLabelText('BIP39 passphrase')).toHaveValue('');
+        // Back clears the passphrase and collapses its field.
+        expect(screen.queryByLabelText('BIP39 passphrase')).toBeNull();
+        expect(screen.getByRole('switch', { name: /wallet uses a BIP39 passphrase/ })).not.toBeChecked();
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallet setup' }));
         expect(onBack).toHaveBeenCalledTimes(2);
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Recovered wallet');
         expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
+    });
+
+    it('closes an import scanner before leaving and clears focused secrets on the next swipe', async () => {
+        const { onBack } = renderImport();
+        const phrase = screen.getByLabelText('Recovery phrase');
+        fireEvent.change(phrase, { target: { value: 'abandon ability' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Scan QR' }));
+        expect(screen.getByRole('button', { name: 'Cancel scan' })).toBeInTheDocument();
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('button', { name: 'Scan QR' })).toBeInTheDocument();
+        expect(phrase).toHaveValue('abandon ability');
+        expect(onBack).not.toHaveBeenCalled();
+
+        phrase.focus();
+        swipeBackFromIOS();
+
+        expect(onBack).toHaveBeenCalledOnce();
+        expect(phrase).toHaveValue('');
+        expect(phrase).not.toHaveFocus();
+    });
+
+    it('does not let an iOS swipe bypass the import completion notice', async () => {
+        const { onBack, onImported } = renderImport();
+        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(onBack).not.toHaveBeenCalled();
+        expect(onImported).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(onImported).toHaveBeenCalledOnce();
     });
 });

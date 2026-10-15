@@ -18,7 +18,7 @@
 //      registers itself with the `windows` Set and unregisters on
 //      `closed`. Show on `ready-to-show`.
 //   3. `buildApplicationMenu()` wires `File → New Window` with
-//      CmdOrCtrl+N → `openWindowAfterIdleCheck()` so the user can open
+//      CmdOrCtrl+Shift+N → `openWindowAfterIdleCheck()` so the user can open
 //      additional windows without restarting the app.
 //   4. Deep-link forwarder targets the focused window (or last-created
 //      fallback) instead of a singleton; updater events broadcast to
@@ -72,8 +72,8 @@ assert.ok(/function buildApplicationMenu\(\)/.test(src),
     'buildApplicationMenu() exists');
 assert.ok(/Menu\.setApplicationMenu\(Menu\.buildFromTemplate\(template\)\)/.test(src),
     'application menu is installed from the template');
-assert.ok(/label:\s*'New Window',\s*accelerator:\s*'CmdOrCtrl\+N',\s*click:\s*\(\)\s*=>\s*\{\s*void openWindowAfterIdleCheck\(\);\s*\}/.test(src),
-    'File → New Window (Cmd/Ctrl+N) opens through the idle-check helper');
+assert.ok(/label:\s*'New Window',\s*accelerator:\s*'CmdOrCtrl\+Shift\+N',\s*click:\s*\(\)\s*=>\s*\{\s*void openWindowAfterIdleCheck\(\);\s*\}/.test(src),
+    'File → New Window (Cmd/Ctrl+Shift+N) opens through the idle-check helper');
 // macOS-aware app-name submenu shape.
 assert.ok(/process\.platform === 'darwin'/.test(src),
     'menu template branches on macOS for the app-name submenu');

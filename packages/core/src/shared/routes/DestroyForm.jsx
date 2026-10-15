@@ -9,12 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -76,6 +77,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function DestroyForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const lockedToken = !!(initialChainId && initialTick);
@@ -105,7 +107,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before destroying.',
+            'No addresses on any network yet. Use Receive to generate one before destroying.',
     });
 
 
@@ -401,7 +403,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -409,20 +411,21 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     if (loadError) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Destroy token"
                 status={<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>}
             />,
         );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<FormPage label="Destroy token"><p className={styles.hint}>Loading…</p></FormPage>);
+        return wrap(<FormPage demoGuard={demoGuard} label="Destroy token"><p className={styles.hint}>Loading…</p></FormPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <FormPage label="Unsigned destroy transaction">
+                <FormPage demoGuard={demoGuard} label="Unsigned destroy transaction">
                     <WatcherResultPanel
                         result={result}
                         onBuildAnother={handleBuildAnother}
@@ -434,13 +437,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         // Signed but not broadcast. Nothing has been destroyed yet.
         if (result?.queued) {
             return wrap(
-                <FormPage label="Queued destroy transaction">
+                <FormPage demoGuard={demoGuard} label="Queued destroy transaction">
                     <QueuedResultPanel onDone={onBack} what="destroy" unsaved={result.unsaved} />
                 </FormPage>,
             );
         }
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Destroy result"
                 actions={<Button variant="primary" onClick={onBack}>Done</Button>}
             >
@@ -460,6 +464,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review destroy"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -484,16 +489,18 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                             ? 'Create unsigned transaction: destroy'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: destroy`
-                                : (descriptor ? `Sign on ${descriptor.displayName}: destroy` : 'Destroy')}
+                                : 'Destroy'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -509,11 +516,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -561,7 +568,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -628,6 +635,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Destroy token"
             onSubmit={handleReview}
             status={formError ? (
@@ -644,18 +652,16 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 </Button>
             )}
         >
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="alert">
+                <p>
                     <strong>Destroy is irreversible.</strong> The burned amount cannot be recovered.
                 </p>
-            </div>
+            </StatusMessage>
 
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
             )}
 
             {fromAddress ? (

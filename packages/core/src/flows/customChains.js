@@ -58,7 +58,7 @@
 import { validateChainDescriptor } from '../registry/validate.js';
 
 async function readSettings(vault) {
-    try { return await vault.settings.get(); } catch { return null; }
+    return vault.settings.get();
 }
 
 async function writeSettings(vault, next) {
@@ -124,7 +124,7 @@ export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegi
         // `restored` that its paste was not what got installed.
         const stored = list.find((d) => d?.id === descriptor.id && validateChainDescriptor(d).ok);
         if (stored) {
-            try { chainRegistry?.addCustom?.(stored); } catch { /* idempotent */ }
+            chainRegistry.addCustom(stored);
             dropCachedSdk(sdkRegistry, descriptor.id);
             refreshEndpointOverrides(sdkRegistry, settings);
             return { descriptor: stored, restored: true };
@@ -232,11 +232,11 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
     const list = asList(settings);
     const next = list.filter((d) => d?.id !== chainId);
     const persistedRemoved = next.length !== list.length;
+    const live = chainRegistry?.get?.(chainId);
     let persisted = settings;
     if (persistedRemoved) {
         persisted = withoutEndpointOverride({ ...settings, customChains: next }, chainId);
         // Keep the fee entry of a bundled chain that shares this id: that chain stays.
-        const live = chainRegistry?.get?.(chainId);
         if (!live || live.isUserAdded) persisted = withoutFeeEntry(persisted, chainId);
         await writeSettings(vault, persisted);
     }
@@ -244,9 +244,14 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
     try {
         registryRemoved = Boolean(chainRegistry?.removeCustom?.(chainId));
     } catch (_err) {
+        if (persistedRemoved) {
+            // A failed live removal leaves the saved descriptor in place too,
+            // so the running registry and the next boot keep the same chain.
+            await writeSettings(vault, settings);
+        }
         // Bundled chains throw; surface a friendlier error if the
         // user tried to remove one. Otherwise rethrow.
-        if (chainRegistry?.has?.(chainId)) {
+        if (live && !live.isUserAdded) {
             throw new Error(
                 `removeCustomChain: "${chainId}" is a bundled chain and cannot be removed`,
             );

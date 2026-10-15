@@ -13,6 +13,14 @@
 // type it targets.
 
 import { sendMessage } from '../shared/chromeMessaging.js';
+import { interruptedApprovalMessage } from './interruptedMessage.js';
+
+function normalizeInterruptedApproval(err) {
+    if (err?.name !== 'ApprovalNotFoundError') throw err;
+    const interrupted = new Error(interruptedApprovalMessage());
+    interrupted.name = 'ApprovalInterruptedError';
+    throw interrupted;
+}
 
 /**
  * List persisted wallets (safe-projected). The approval popup needs
@@ -26,28 +34,34 @@ export function listWallets() {
 
 /**
  * Fetch the parked approval request by id. Thrown errors carry
- * `name: 'ApprovalNotFoundError'` when the broker has no entry for
- * the id (already resolved, or window opened with a bogus param).
+ * `name: 'ApprovalInterruptedError'` when the broker has no entry for
+ * the id because its owning background session ended.
  *
  * @param {string} id
  * @returns {Promise<{ id: string, kind: string, payload: unknown }>}
  */
 export function fetchApproval(id) {
-    return /** @type {any} */ (sendMessage('approval.fetch', { id }));
+    return /** @type {any} */ (sendMessage('approval.fetch', { id })
+        .catch(normalizeInterruptedApproval));
 }
 
 /**
  * Report the user's decision. `result` must match the shape the
  * relevant bridge handler expects (ConnectApprovalResult for connect,
- * SignApprovalResult for the signing kinds). Broker closes the window
- * on resolve; the promise is effectively fire-and-forget.
+ * SignApprovalResult for the signing kinds). The broker closes the window
+ * after a successful resolve; a stale or missing request rejects.
  *
  * @param {string} id
  * @param {object} result
  * @returns {Promise<{ resolved: boolean }>}
  */
 export function resolveApproval(id, result) {
-    return /** @type {any} */ (sendMessage('approval.resolve', { id, result }));
+    return sendMessage('approval.resolve', { id, result }).then((response) => {
+        if (/** @type {any} */ (response)?.resolved !== true) {
+            normalizeInterruptedApproval({ name: 'ApprovalNotFoundError' });
+        }
+        return /** @type {{ resolved: boolean }} */ (response);
+    }).catch(normalizeInterruptedApproval);
 }
 
 /**
@@ -85,7 +99,7 @@ export function getTokenInfo(req) {
  *
  * @param {string} walletId
  * @param {string} [accountId]   when supplied, restrict to a single BIP44 account
- * @returns {Promise<Record<string, Array<{ address: string }>>>}
+ * @returns {Promise<Record<string, Array<{ address: string, derivationPath?: string | null }>>>}
  */
 export function getAddressesByChain(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));

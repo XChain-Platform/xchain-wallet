@@ -124,8 +124,13 @@ describe('chaos/background/restart-mid-flow', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wallet password' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
 
-        expect(await screen.findByText(RESTART_MESSAGE)).toBeInTheDocument();
+        // The lock screen reports the failure in plain copy, never the raw
+        // runtime message about the closed port.
+        expect(await screen.findByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeInTheDocument();
+        expect(screen.queryByText(RESTART_MESSAGE)).toBeNull();
         expect(onUnlocked).not.toHaveBeenCalled();
+        // The failed attempt clears the typed password; retype it for a fresh unlock.
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wallet password' } });
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeEnabled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));

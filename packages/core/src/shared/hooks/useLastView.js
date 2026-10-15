@@ -36,6 +36,9 @@ import { setRouteHistoryManaged } from '../../ui/backStack.js';
 
 const PARAM_VIEWS = new Set(['token-detail', 'list-detail', 'dispenser-detail', 'market']);
 const RESUMABLE_SET = new Set(RESUMABLE_VIEWS);
+// These routes can render secret material, so they share the previous safe
+// snapshot instead of leaving a restorable entry in browser history.
+const SECRET_HISTORY_VIEWS = new Set(['view-private-key', 'migrate-bip39', 'add-wallet']);
 
 /**
  * @param {object} args
@@ -98,9 +101,9 @@ export function useLastView({
             lastPersistedFor.current = walletId;
             return;
         }
-        // An unsafe route resolves to Home instead of leaving an older safe
-        // route behind for the next unlock.
-        writeLastView(walletId, resumableView ? currentView : 'home', normalizedParams);
+        // Unsafe transaction routes leave a one-shot Home note while every
+        // other unsafe route simply clears the older resumable destination.
+        writeLastView(walletId, currentView, normalizedParams, { markInterrupted: true });
     }, [walletId, currentView, routeKey, sessionActive]);
 
     // Session history stores the same validated route payload as reload
@@ -112,7 +115,7 @@ export function useLastView({
         setRouteHistoryManaged(true);
         const onPop = (event) => {
             const snapshot = event.state?.xcRoute;
-            if (!snapshot || snapshot.walletId !== walletId || typeof snapshot.view !== 'string') return;
+            if (!snapshot || snapshot.walletId !== walletId || !RESUMABLE_SET.has(snapshot.view)) return;
             const params = normalizeRouteParams(snapshot.view, snapshot.params);
             if (PARAM_VIEWS.has(snapshot.view) && !params) return;
             const next = { view: snapshot.view, params };
@@ -133,6 +136,26 @@ export function useLastView({
             historyKey.current = null;
             pendingPopKey.current = null;
         }
+        if (SECRET_HISTORY_VIEWS.has(currentView)) {
+            const currentSnapshot = window.history.state?.xcRoute;
+            const currentParams = currentSnapshot
+                ? normalizeRouteParams(currentSnapshot.view, currentSnapshot.params)
+                : null;
+            const currentIsSafe = currentSnapshot?.walletId === walletId
+                && RESUMABLE_SET.has(currentSnapshot.view)
+                && (!PARAM_VIEWS.has(currentSnapshot.view) || currentParams !== null);
+            const safeRoute = currentIsSafe
+                ? { view: currentSnapshot.view, params: currentParams }
+                : { view: 'home', params: null };
+            const state = {
+                ...(window.history.state || {}),
+                xcRoute: { walletId, ...safeRoute },
+            };
+            window.history.replaceState(state, '');
+            historyKey.current = JSON.stringify(safeRoute);
+            pendingPopKey.current = null;
+            return;
+        }
         if (pendingPopKey.current === routeKey) {
             pendingPopKey.current = null;
             return;
@@ -142,7 +165,7 @@ export function useLastView({
         if (historyKey.current === null) window.history.replaceState(state, '');
         else window.history.pushState(state, '');
         historyKey.current = routeKey;
-    }, [walletId, routeKey, sessionActive]);
+    }, [walletId, currentView, routeKey, sessionActive]);
 
     // Resume on wallet activation / change. Skips re-running for the
     // same walletId so user navigation after the resume is not

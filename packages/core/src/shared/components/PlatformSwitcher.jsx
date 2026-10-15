@@ -24,11 +24,12 @@
 // shell does; the extension popup and desktop app do not, because a menu of
 // websites is not what a user opens their wallet extension to find.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../ui/index.js';
 import LINKS from '../platform-links.json';
 import styles from './PlatformSwitcher.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { t } from '../../i18n/index.js';
 
 function actionableMenuItems(menu) {
     return Array.from(
@@ -46,9 +47,6 @@ export function PlatformSwitcher({ current }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
-    // The system Back gesture and Escape close this before it leaves the
-    // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
     const menuRef = useRef(null);
     const initialFocusRef = useRef('first');
 
@@ -57,10 +55,13 @@ export function PlatformSwitcher({ current }) {
         setOpen(true);
     };
 
-    const closeMenu = (restoreFocus = false) => {
+    const closeMenu = useCallback((restoreFocus = false) => {
         setOpen(false);
         if (restoreFocus) triggerRef.current?.focus();
-    };
+    }, []);
+    // The system Back gesture and Escape close this before it leaves the
+    // screen; the shared stack consumes Escape, so focus goes back here.
+    useBackHandler(open ? () => closeMenu(true) : undefined);
 
     // Same dismissal contract as the header's other dropdowns: outside click
     // or Escape.
@@ -68,21 +69,11 @@ export function PlatformSwitcher({ current }) {
         if (!open) return undefined;
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
-            setOpen(false);
-            triggerRef.current?.focus();
+            closeMenu(true);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
+        return () => window.removeEventListener('mousedown', onClick);
+    }, [closeMenu, open]);
 
     useEffect(() => {
         if (!open) return;
@@ -113,8 +104,8 @@ export function PlatformSwitcher({ current }) {
                 }}
                 aria-haspopup="menu"
                 aria-expanded={open ? 'true' : 'false'}
-                aria-label="XChain platform sites"
-                title="XChain platform sites"
+                aria-label={t('components.platformSwitcher.xchainPlatformSites')}
+                title={t('components.platformSwitcher.xchainPlatformSites')}
             >
                 <Icon.ExternalLinkIcon />
             </button>
@@ -123,7 +114,7 @@ export function PlatformSwitcher({ current }) {
                     ref={menuRef}
                     className={styles.menu}
                     role="menu"
-                    aria-label="XChain platform sites"
+                    aria-label={t('components.platformSwitcher.xchainPlatformSites')}
                     onKeyDown={(e) => {
                         const items = actionableMenuItems(menuRef.current);
                         const index = items.indexOf(document.activeElement);
@@ -144,10 +135,10 @@ export function PlatformSwitcher({ current }) {
                             role="menuitem"
                             aria-current="page"
                             aria-disabled="true"
-                            aria-label={`${p.label}, current site`}
+                            aria-label={t('components.platformSwitcher.currentSite', { label: p.label })}
                         >
                             <span>{p.label}</span>
-                            <span className={styles.hereTag} aria-hidden="true">you are here</span>
+                            <span className={styles.hereTag} aria-hidden="true">{t('components.platformSwitcher.youAreHere')}</span>
                         </div>
                     ) : (
                         // Each entry leaves the wallet, so it opens in a new
@@ -161,7 +152,7 @@ export function PlatformSwitcher({ current }) {
                             target="_blank"
                             rel="noopener noreferrer"
                             tabIndex={-1}
-                            onClick={() => closeMenu()}
+                            onClick={() => closeMenu(true)}
                         >
                             <span>{p.label}</span>
                             <span className={styles.itemIcon} aria-hidden="true">

@@ -10,8 +10,11 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Chip, Icon } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '../../ui/backStack.js';
+import { ChevronIcon } from '../../ui/ChainPicker.icons.jsx';
 import styles from './NetworkFilter.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * Single-select network filter that scales to N chains. Replaces the
@@ -32,8 +35,16 @@ import styles from './NetworkFilter.module.css';
  * @param {string} props.value
  * @param {(coin: string) => void} props.onChange
  * @param {string} [props.ariaLabel]
+ * @param {'sm' | 'md' | 'lg'} [props.size]
  */
-export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ariaLabel }) {
+export function NetworkFilter({
+    chainRegistry,
+    coinFamilies,
+    value,
+    onChange,
+    ariaLabel,
+    size = 'md',
+}) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const listboxId = useId();
@@ -45,27 +56,19 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
     const closeFilter = useCallback((restoreFocus = false) => {
         setOpen(false);
         setQuery('');
-        if (restoreFocus) triggerRef.current?.focus();
+        if (restoreFocus) triggerRef.current?.querySelector('button')?.focus();
     }, []);
+    useBackHandler(open ? () => closeFilter(true) : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (triggerRef.current?.contains(e.target)) return;
             if (popoverRef.current?.contains(e.target)) return;
-            closeFilter();
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
             closeFilter(true);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
+        return () => window.removeEventListener('mousedown', onClick);
     }, [closeFilter, open]);
 
     const entries = useMemo(() => {
@@ -92,9 +95,11 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
     const triggerLabel = value === 'all'
         ? 'All networks'
         : (entries.find((e) => e.coin === value)?.label || value);
-    const triggerSub = value === 'all'
+    const triggerCount = value === 'all'
         ? `${entries.length} ${entries.length === 1 ? 'network' : 'networks'}`
         : null;
+    const triggerAriaLabel = ariaLabel
+        || [triggerLabel, triggerCount].filter(Boolean).join(', ');
     const triggerIconUrl = value === 'all'
         ? null
         : branding.chainIconSmallUrl(entries.find((e) => e.coin === value)?.chainId || '');
@@ -146,11 +151,10 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
     };
 
     return (
-        <div className={styles.wrap}>
-            <button
-                type="button"
-                ref={triggerRef}
-                className={styles.trigger}
+        <div ref={triggerRef} className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
+            <Chip
+                pressed={value !== 'all'}
+                className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
                 onClick={() => {
                     if (open) closeFilter();
                     else openFilter(entries.length > 6 ? 'search' : 'selected');
@@ -163,7 +167,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
                 aria-controls={open ? listboxId : undefined}
-                aria-label={ariaLabel}
+                aria-label={triggerAriaLabel}
                 title={triggerLabel}
             >
                 <span className={styles.triggerIcon} aria-hidden="true">
@@ -175,14 +179,11 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                 </span>
                 <span className={styles.triggerText}>
                     <span className={styles.triggerLabel}>{triggerLabel}</span>
-                    {triggerSub ? (
-                        <span className={styles.triggerSub}>{triggerSub}</span>
-                    ) : null}
                 </span>
                 <span className={styles.triggerCaret} aria-hidden="true">
-                    {open ? '▴' : '▾'}
+                    <ChevronIcon open={open} />
                 </span>
-            </button>
+            </Chip>
             {open ? (
                 <div
                     ref={popoverRef}
@@ -200,36 +201,36 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                                 autoCorrect="off"
                                 spellCheck={false}
                                 className={styles.search}
-                                placeholder="Search networks…"
-                                aria-label="Search networks"
+                                placeholder={t('components.networkFilter.searchNetworks')}
+                                aria-label={t('components.networkFilter.searchNetworks2')}
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                             />
                         </div>
                     ) : null}
-                    <ul id={listboxId} className={styles.list} role="listbox" aria-label="Networks">
+                    <ul id={listboxId} className={styles.list} role="listbox" aria-label={t('extension.connect.chains')}>
                         <li role="presentation">
                             <button
                                 type="button"
                                 role="option"
                                 tabIndex={-1}
-                                aria-label="All networks"
+                                aria-label={t('common.allNetworks')}
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
                                 onClick={() => { onChange('all'); closeFilter(true); }}
-                                title="All networks"
+                                title={t('common.allNetworks')}
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
                                     <Icon.FilterIcon />
                                 </span>
-                                <span className={styles.itemLabel}>All networks</span>
+                                <span className={styles.itemLabel}>{t('common.allNetworks')}</span>
                                 <span className={styles.itemTicker}>{entries.length}</span>
                             </button>
                         </li>
-                        {filtered.map((e) => {
+                        {filtered.map((e, index) => {
                             const iconUrl = branding.chainIconSmallUrl(e.chainId || '');
                             return (
-                                <li key={e.coin} role="presentation">
+                                <li key={`${e.coin}-${index}`} role="presentation">
                                     <button
                                         type="button"
                                         role="option"
@@ -255,7 +256,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                                 role="option"
                                 aria-disabled="true"
                             >
-                                No matching networks.
+                                {t('components.networkFilter.noMatchingNetworks')}
                             </li>
                         ) : null}
                     </ul>

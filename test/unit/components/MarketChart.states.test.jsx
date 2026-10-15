@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
-const reducedMotionHarness = vi.hoisted(() => ({ value: false }));
 const chartHarness = vi.hoisted(() => {
     const setData = vi.fn();
     const fitContent = vi.fn();
@@ -31,10 +30,6 @@ const chartHarness = vi.hoisted(() => {
     };
 });
 
-vi.mock('@xchain-wallet/core/ui', async (importOriginal) => ({
-    ...(await importOriginal()),
-    useReducedMotion: () => reducedMotionHarness.value,
-}));
 vi.mock('lightweight-charts', () => ({ createChart: chartHarness.createChart }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -42,7 +37,7 @@ import { MarketChart } from '../../../packages/core/src/shared/components/Market
 
 afterEach(() => {
     cleanup();
-    reducedMotionHarness.value = false;
+    vi.useRealTimers();
     document.documentElement.removeAttribute('data-xc-theme');
     vi.clearAllMocks();
 });
@@ -68,14 +63,14 @@ describe('MarketChart states and timeframes', () => {
         const request = deferred();
         renderChart(vi.fn(() => request.promise));
 
-        expect(screen.getByRole('status')).toHaveTextContent('Loading price chart…');
+        expect(screen.getByRole('status', { name: 'Loading price chart' })).toBeInTheDocument();
         expect(screen.queryByText('No trades yet in this market.')).toBeNull();
         expect(screen.getByRole('img').parentElement).toHaveAttribute('aria-busy', 'true');
 
         await act(async () => request.resolve([]));
 
         expect(await screen.findByText('No trades yet in this market.')).toBeInTheDocument();
-        expect(screen.queryByText('Loading price chart…')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading price chart' })).toBeNull();
     });
 
     it('offers every supported timeframe and rebuckets the loaded history', async () => {
@@ -136,8 +131,11 @@ describe('MarketChart states and timeframes', () => {
             rightPriceScale: { borderColor: '#222222' },
             timeScale: { borderColor: '#222222' },
         });
-        expect(chartHarness.addLineSeries.mock.calls.at(-1)[0].priceFormat.formatter(0.125))
-            .toBe('0.125 BTC');
+        const axisFormatter = chartHarness.addLineSeries.mock.calls.at(-1)[0].priceFormat.formatter;
+        expect(axisFormatter(0.125)).toBe('0.125');
+        // A sub-satoshi price keeps four significant digits on the axis.
+        expect(axisFormatter(0.00000062913043)).toBe('0.0000006291');
+        expect(axisFormatter(12345.678)).toBe('12,345.678');
 
         cleanup();
         renderChart(vi.fn().mockResolvedValue([
@@ -200,8 +198,7 @@ describe('MarketChart states and timeframes', () => {
         computedStyle.mockRestore();
     });
 
-    it('resizes the canvas with its container and disables momentum for reduced motion', async () => {
-        reducedMotionHarness.value = true;
+    it('resizes the canvas with its container without enabling momentum redraws', async () => {
         renderChart(vi.fn().mockResolvedValue([]));
         await waitFor(() => {
             expect(chartHarness.createChart.mock.calls.at(-1)[1].kineticScroll)
@@ -219,6 +216,35 @@ describe('MarketChart states and timeframes', () => {
 
         expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the price chart.");
         expect(screen.queryByText('No trades yet in this market.')).toBeNull();
-        expect(screen.queryByText('Loading price chart…')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading price chart' })).toBeNull();
+    });
+
+    it('times out a stalled history request and retries it', async () => {
+        vi.useFakeTimers();
+        const getMarketHistory = vi.fn()
+            .mockImplementationOnce(() => new Promise(() => {}))
+            .mockResolvedValueOnce([]);
+        renderChart(getMarketHistory);
+
+        expect(screen.getByRole('status', { name: 'Loading price chart' })).toBeInTheDocument();
+        await act(async () => vi.advanceTimersByTimeAsync(15_000));
+        expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the price chart.");
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByText('No trades yet in this market.')).toBeInTheDocument();
+        expect(getMarketHistory).toHaveBeenCalledTimes(2);
+    });
+
+    it('removes a partially initialized chart when series setup fails', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        chartHarness.addLineSeries.mockImplementationOnce(() => {
+            throw new Error('series setup failed');
+        });
+        renderChart(vi.fn().mockResolvedValue([]));
+
+        expect(await screen.findByText('The price chart is unavailable right now.')).toBeInTheDocument();
+        expect(chartHarness.remove).toHaveBeenCalledTimes(1);
+        consoleError.mockRestore();
     });
 });

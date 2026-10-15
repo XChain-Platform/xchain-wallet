@@ -4,16 +4,54 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
+import marketsStyles from '../../../packages/core/src/shared/routes/MarketsList.module.css';
+import { readFileSync } from 'node:fs';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
+}
 
 describe('MarketsList narrow layout', () => {
+    it('names the selected chain without its network kind', async () => {
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-regtest', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        await screen.findByText('No markets for BTC');
+        const selector = screen.getByRole('button', { name: /Change asset/ });
+        // The selector card names the chain (coordinator ruling) but never
+        // the network kind.
+        expect(selector).toHaveTextContent('Bitcoin');
+        expect(selector.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+    });
+
     it('reaches and activates market actions in their visual order', async () => {
         const user = userEvent.setup();
         const onBack = vi.fn();
@@ -40,6 +78,8 @@ describe('MarketsList narrow layout', () => {
         );
 
         await screen.findByRole('button', { name: 'Open Pepe market' });
+        const pair = screen.getByText('PEPE').closest(`.${chipStyles.chip}`);
+        expect(pair).toHaveTextContent('BTC / PEPE');
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         back.focus();
         await user.keyboard('{Enter}');
@@ -75,6 +115,33 @@ describe('MarketsList narrow layout', () => {
         expect(screen.getByRole('button', { name: 'Open Pepe market' })).toHaveFocus();
         await user.keyboard('{Enter}');
         expect(onOpenMarket).toHaveBeenCalledTimes(2);
+    });
+
+    it('shortens a long ticker inside the pair chip and keeps the full pair as its title', async () => {
+        const longTick = 'A'.repeat(120);
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([{ tick1: longTick, tick2: 'BTC', depth: 3 }]),
+                getDispensersForToken: vi.fn().mockResolvedValue([]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const pair = (await screen.findByText(longTick)).closest(`.${chipStyles.chip}`);
+        expect(pair).toHaveClass(marketsStyles.pairChip);
+        expect(pair).toHaveAttribute('title', `${longTick} / BTC`);
+        const css = readFileSync('packages/core/src/shared/routes/MarketsList.module.css', 'utf8');
+        expect(css).toMatch(/\.pairChip\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+        expect(css).toMatch(/\.pairTick\s*\{[^}]*text-overflow:\s*ellipsis/s);
+        // The depth pill stays on one line however long the pair name is.
+        expect(screen.getByText('depth 3')).toHaveStyle({ whiteSpace: 'nowrap' });
     });
 
     it('matches market-row height and marks the results region busy on first load', () => {
@@ -155,9 +222,9 @@ describe('MarketsList narrow layout', () => {
             </MessagingProvider>,
         );
 
-        const search = await screen.findByLabelText('Search markets');
-        expect(search.parentElement.style.flexWrap).toBe('wrap');
-        expect(search.style.flex).toBe('1 1 140px');
+        const search = await screen.findByRole('searchbox', { name: 'Search markets' });
+        expect(search.closest('[class*="searchField"]')).toBeInTheDocument();
+        expect(search.closest('[class*="searchField"]').parentElement.style.flexWrap).toBe('wrap');
     });
 
     it('shows a load error instead of presenting a failed request as an empty market', async () => {
@@ -178,6 +245,66 @@ describe('MarketsList narrow layout', () => {
 
         expect(await screen.findByText('Could not load markets. Try again.')).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('internal transport detail');
+    });
+
+    it('times out a stalled market request and retries it', async () => {
+        vi.useFakeTimers();
+        const getMarkets = vi.fn()
+            .mockImplementationOnce(() => new Promise(() => {}))
+            .mockResolvedValueOnce([{ tick1: 'BTC', tick2: 'PEPE', depth: 9 }]);
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets,
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByRole('status', { name: 'Loading markets' })).toBeInTheDocument();
+        await act(async () => vi.advanceTimersByTimeAsync(15_000));
+        expect(screen.getByText('Could not load markets. Try again.')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByText('PEPE')).toBeInTheDocument();
+        expect(getMarkets).toHaveBeenCalledTimes(2);
+    });
+
+    it('locks a watchlist button while its write is pending', async () => {
+        const save = deferred();
+        const saveWatchlistEntry = vi.fn(() => save.promise);
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([
+                    { tick1: 'BTC', tick2: 'PEPE', depth: 9 },
+                ]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+                saveWatchlistEntry,
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const star = await screen.findByRole('button', { name: 'Add to watchlist' });
+        fireEvent.click(star);
+        fireEvent.click(star);
+        expect(star).toBeDisabled();
+        expect(star).toHaveAttribute('aria-busy', 'true');
+        expect(saveWatchlistEntry).toHaveBeenCalledOnce();
+
+        save.resolve({});
+        await waitFor(() => expect(star).not.toBeDisabled());
     });
 
     it('the All tab lists every market while the default Popular tab lists the top five', async () => {
@@ -217,6 +344,32 @@ describe('MarketsList narrow layout', () => {
         expect(screen.getByRole('tabpanel', { name: 'All' })).toBe(panel);
         expect(panel).toHaveAttribute('aria-labelledby', all.id);
         expect(await screen.findByText('FFF')).toBeInTheDocument();
+    });
+
+    it('assigns unique keys when the explorer repeats a market pair', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const messaging = {
+            getMarkets: vi.fn().mockResolvedValue([
+                { tick1: 'BTC', tick2: 'PEPE', depth: 9 },
+                { tick1: 'BTC', tick2: 'PEPE', depth: 8 },
+            ]),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findAllByRole('button', { name: 'Open PEPE market' })).toHaveLength(2);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+        consoleError.mockRestore();
     });
 
     it('debounces case-insensitive ticker and name search, clears it, and opens the result from the keyboard', async () => {
@@ -343,18 +496,19 @@ describe('MarketsList narrow layout', () => {
         );
 
         fireEvent.click(await screen.findByRole('tab', { name: 'All' }));
-        const list = (await screen.findByText('TOKEN0000')).closest('ul');
-        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(25));
+        await screen.findByText('TOKEN0000');
+        const list = screen.getByRole('list', { name: 'Markets' });
+        await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(25));
         expect(screen.getByText('25 of 5,000 markets shown')).toBeInTheDocument();
 
-        const scroller = document.querySelector('main');
+        const scroller = screen.getByRole('main');
         scroller.scrollTop = 241;
         const showMore = screen.getByRole('button', { name: 'Load more markets' });
         showMore.focus();
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
 
-        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(50));
+        await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(50));
         expect(scroller.scrollTop).toBe(241);
     });
 });

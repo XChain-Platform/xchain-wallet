@@ -10,7 +10,9 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
+import { useBackHandler } from './backStack.js';
 import styles from './IconSelect.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * Single-select dropdown that can render an icon per option. A native
@@ -26,8 +28,17 @@ import styles from './IconSelect.module.css';
  * @param {Array<{ value: string, label: string, sub?: string, icon?: import('react').ReactNode }>} props.options
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
+ * @param {'sm' | 'md' | 'lg'} [props.size]
  */
-export function IconSelect({ label, value, onChange, options = [], placeholder = 'Select…', disabled }) {
+export function IconSelect({
+    label,
+    value,
+    onChange,
+    options = [],
+    placeholder = t('ui.iconSelect.select'),
+    disabled,
+    size = 'md',
+}) {
     const [open, setOpen] = useState(false);
     const listboxId = useId();
     const triggerRef = useRef(null);
@@ -38,25 +49,17 @@ export function IconSelect({ label, value, onChange, options = [], placeholder =
         setOpen(false);
         if (restoreFocus) triggerRef.current?.focus();
     }, []);
+    useBackHandler(open ? () => closeSelect(true) : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (triggerRef.current?.contains(e.target)) return;
             if (popoverRef.current?.contains(e.target)) return;
-            closeSelect();
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
             closeSelect(true);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
+        return () => window.removeEventListener('mousedown', onClick);
     }, [closeSelect, open]);
 
     const selected = options.find((o) => o.value === value) || null;
@@ -104,7 +107,7 @@ export function IconSelect({ label, value, onChange, options = [], placeholder =
         : undefined;
 
     return (
-        <div className={styles.wrap}>
+        <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             {label ? <span className={styles.label}>{label}</span> : null}
             <button
                 type="button"
@@ -147,7 +150,7 @@ export function IconSelect({ label, value, onChange, options = [], placeholder =
                     id={listboxId}
                     className={styles.popover}
                     role="listbox"
-                    aria-label={label || 'Options'}
+                    aria-label={label || t('ui.iconSelect.options')}
                     onKeyDown={onListboxKeyDown}
                 >
                     <ul className={styles.list}>

@@ -39,6 +39,26 @@ function publishSettingsChange(settings) {
 export const RUNTIME_MESSAGE_TIMEOUT_MS = 4_000;
 export const BACKGROUND_INTERRUPTED_MESSAGE =
     'The wallet background restarted before this request finished. Please review and try again.';
+export const RUNTIME_REQUEST_TIMEOUT_MS = 60_000;
+
+const TIMED_SHELL_REQUESTS = new Set([
+    'account.list',
+    'addresses.byChain',
+    'balances.wallet',
+    'broadcast.queue.list',
+    'contacts.list',
+    'reachability.check',
+    'session.autolock',
+    'settings.get',
+    'sites.list',
+    'wallet.list',
+    'wallet.lock',
+    'wallet.setActive',
+]);
+
+function defaultTimeoutMs(type) {
+    return TIMED_SHELL_REQUESTS.has(type) ? RUNTIME_REQUEST_TIMEOUT_MS : 0;
+}
 
 function runtimeTransportError(_message, code) {
     const error = new Error(BACKGROUND_INTERRUPTED_MESSAGE);
@@ -53,7 +73,7 @@ function runtimeTransportError(_message, code) {
  * @param {{ timeoutMs?: number }} [options]
  * @returns {Promise<unknown>}
  */
-export function sendMessage(type, request, { timeoutMs = 0 } = {}) {
+export function sendMessage(type, request, { timeoutMs = defaultTimeoutMs(type) } = {}) {
     return new Promise((resolve, reject) => {
         const runtime = globalThis.chrome?.runtime;
         if (!runtime?.sendMessage) {

@@ -10,6 +10,26 @@ import { ToastHost } from '../../../packages/core/src/shared/components/ToastHos
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
+const confirmFailure = vi.hoisted(() => ({ message: null }));
+vi.mock('../../../packages/core/src/shared/hooks/useConfirmModal.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        useConfirmModal() {
+            const modal = actual.useConfirmModal();
+            return {
+                ...modal,
+                confirm(options) {
+                    if (!confirmFailure.message) return modal.confirm(options);
+                    const message = confirmFailure.message;
+                    confirmFailure.message = null;
+                    return Promise.reject(new Error(message));
+                },
+            };
+        },
+    };
+});
+
 const BTC = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 const LTC = 'ltc1qg82rffhs37lynnvf3tfxcuvtlhm0fwwpv3l5z6';
 const AMBIGUOUS_TESTNET = base58check(sha256).encode(new Uint8Array([0x6f, ...new Uint8Array(20).fill(7)]));
@@ -60,12 +80,13 @@ function mount(messaging, walletId = 'w1') {
 
 function listedNames() {
     return within(screen.getByRole('list', { name: 'Contacts' }))
-        .getAllByRole('listitem')
-        .map((row) => (row.querySelector('[class*="rowName"]') ?? row).textContent.trim());
+        .getAllByRole('button')
+        .map((row) => row.getAttribute('aria-label'));
 }
 
 afterEach(() => {
     cleanup();
+    confirmFailure.message = null;
     globalThis.localStorage?.clear();
 });
 
@@ -77,7 +98,7 @@ describe('ContactsList audited behavior', () => {
         ]);
         mount(messaging);
 
-        const row = (await screen.findByText('Alice')).closest('button');
+        const row = await screen.findByRole('button', { name: 'Alice' });
         row.focus();
         await user.keyboard('{Enter}');
         const edit = screen.getByRole('button', { name: 'Edit' });
@@ -102,6 +123,8 @@ describe('ContactsList audited behavior', () => {
         await user.keyboard('{Enter}');
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledOnce());
         expect(messaging.saveContact.mock.calls[0][0].record.name).toBe('Alice Keys');
+        expect(messaging.saveContact.mock.calls[0][0].expectedUpdatedAt)
+            .toBe('2026-01-01T00:00:00.000Z');
     });
 
     it('leaves an empty contact form directly but confirms before discarding real input', async () => {
@@ -148,12 +171,15 @@ describe('ContactsList audited behavior', () => {
         ]);
         mount(messaging);
 
-        fireEvent.click((await screen.findByText('Bob')).closest('button'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Bob' }));
         fireEvent.click(screen.getByRole('button', { name: 'Add address' }));
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-        expect(await screen.findByText('This address is already saved for Alice.')).toBeTruthy();
+        const error = await screen.findByText('This address is already saved for Alice.');
+        const address = screen.getByLabelText('Address');
+        expect(address).toHaveAttribute('aria-invalid', 'true');
+        expect(address.getAttribute('aria-describedby').split(' ')).toContain(error.id);
         expect(messaging.saveContact).not.toHaveBeenCalled();
     });
 
@@ -240,12 +266,54 @@ describe('ContactsList audited behavior', () => {
         });
     });
 
+    it('keeps the form usable and hides storage internals when a save is refused', async () => {
+        const messaging = makeMessaging([]);
+        messaging.saveContact.mockRejectedValue(
+            new DOMException('Private storage payload detail', 'QuotaExceededError'),
+        );
+        mount(messaging);
+        await screen.findByText('No contacts yet');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not save this contact. Try again.',
+        );
+        expect(screen.queryByText(/Private storage payload detail|QuotaExceededError/)).toBeNull();
+        expect(screen.getByLabelText('Name')).toHaveValue('Alice');
+        expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+    });
+
+    it('keeps a contact visible and hides storage internals when deletion is refused', async () => {
+        const alice = contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z');
+        const messaging = makeMessaging([alice]);
+        messaging.deleteContact.mockRejectedValue(
+            new DOMException('Private storage payload detail', 'QuotaExceededError'),
+        );
+        mount(messaging);
+
+        fireEvent.click((await screen.findByText('Alice')).closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not delete this contact. Try again.',
+        );
+        expect(screen.queryByText(/Private storage payload detail|QuotaExceededError/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByText('Alice')).toBeTruthy();
+    });
+
     it('restores a deleted contact from the Undo toast', async () => {
         const alice = contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z');
         const messaging = makeMessaging([alice]);
         mount(messaging);
 
-        fireEvent.click((await screen.findByText('Alice')).closest('button'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
         fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
         const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
         expect(within(dialog).getByText('Alice and all saved addresses will be removed. You can restore the contact with Undo.')).toBeTruthy();
@@ -253,7 +321,102 @@ describe('ContactsList audited behavior', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
 
         await waitFor(() => expect(messaging.store.get('alice')).toEqual(alice));
-        expect(messaging.deleteContact).toHaveBeenCalledWith({ id: 'alice' });
-        expect(messaging.saveContact).toHaveBeenCalledWith({ record: alice });
+        expect(messaging.deleteContact).toHaveBeenCalledWith({
+            id: 'alice',
+            expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
+        });
+        expect(messaging.saveContact).toHaveBeenCalledWith({ record: alice, expectedUpdatedAt: null });
+    });
+
+    it('surfaces a rejected confirmation without leaking the event-handler promise', async () => {
+        const messaging = makeMessaging([
+            contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z'),
+        ]);
+        mount(messaging);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+        confirmFailure.message = 'Confirmation failed.';
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Confirmation failed.');
+        expect(messaging.deleteContact).not.toHaveBeenCalled();
+    });
+
+    it('shares only a contact name and its labelled addresses', async () => {
+        const share = vi.fn().mockResolvedValue(undefined);
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+        const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        const alice = contact('private-id', 'Alice', BTC, '2026-01-01T00:00:00.000Z', {
+            notes: 'private note',
+            entries: [
+                { chain: 'bitcoin', address: BTC, label: 'Savings' },
+                { chain: 'litecoin', address: LTC, label: '' },
+            ],
+        });
+
+        try {
+            mount(makeMessaging([alice]));
+            fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+            await waitFor(() => expect(share).toHaveBeenCalledWith({
+                title: 'Alice contact',
+                text: `Alice\nBitcoin (Savings): ${BTC}\nLitecoin: ${LTC}`,
+            }));
+            expect(share.mock.calls[0][0].text).not.toMatch(/private/i);
+            expect(writeText).not.toHaveBeenCalled();
+            expect(screen.queryByText('Contact copied.')).toBeNull();
+            expect(screen.queryByText('Sharing is unavailable.')).toBeNull();
+        } finally {
+            if (shareDescriptor) {
+                Object.defineProperty(navigator, 'share', shareDescriptor);
+            } else {
+                delete navigator.share;
+            }
+            if (clipboardDescriptor) {
+                Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+            } else {
+                delete navigator.clipboard;
+            }
+        }
+    });
+
+    it('copies a contact with a confirmation when the share API is missing', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
+        const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        delete navigator.share;
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+
+        try {
+            mount(makeMessaging([
+                contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z'),
+            ]));
+            fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+            await waitFor(() => expect(writeText).toHaveBeenCalledWith(`Alice\nBitcoin: ${BTC}`));
+            expect(await screen.findByText('Contact copied.')).toBeInTheDocument();
+        } finally {
+            if (shareDescriptor) {
+                Object.defineProperty(navigator, 'share', shareDescriptor);
+            } else {
+                delete navigator.share;
+            }
+            if (clipboardDescriptor) {
+                Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+            } else {
+                delete navigator.clipboard;
+            }
+        }
     });
 });

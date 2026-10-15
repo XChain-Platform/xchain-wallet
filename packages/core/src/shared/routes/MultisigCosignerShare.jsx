@@ -9,7 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { CopyButton, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    CopyButton,
+    FormPage,
+    FormSection,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { KeyQR } from '../components/KeyQR.jsx';
 import { useMessaging } from '../useMessaging.js';
@@ -55,6 +60,11 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
         setInfo(null);
         setError(null);
         if (!addressId) return undefined;
+        const requestedAddress = addresses.find((address) => address.id === addressId);
+        if (!requestedAddress) {
+            setError('Select an address from this wallet.');
+            return undefined;
+        }
         // A shell without the route keeps the manual path rather than crashing.
         if (typeof messaging.getMultisigCosignerInfo !== 'function') {
             setError('Sharing cosigner keys is not available in this shell.');
@@ -63,17 +73,25 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
         let cancelled = false;
         messaging.getMultisigCosignerInfo({ walletId, addressId })
             .then((r) => {
-                if (!cancelled) setInfo({ walletId, addressId, value: r });
+                if (cancelled) return;
+                if ((r?.addressId && r.addressId !== addressId)
+                    || (r?.address && r.address !== requestedAddress.address)) {
+                    setError('The wallet returned cosigner keys for a different address. Select the address again.');
+                    return;
+                }
+                setInfo({ walletId, addressId, value: r });
             })
             .catch((err) => {
                 if (!cancelled) setError(userFacingMessage(err, 'Could not read this wallet\'s cosigner keys.'));
             });
         return () => { cancelled = true; };
-    }, [walletId, addressId, messaging]);
+    }, [walletId, addressId, addresses, messaging]);
 
     return (
-        <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('multisig.share.title')}</summary>
+        <FormPage as="div" sectioned label={t('multisig.share.title')}>
+            <FormSection title={t('multisig.share.title')}>
+                <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('multisig.share.title')}</summary>
             <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
                 {t('multisig.share.instructions')}
             </p>
@@ -105,15 +123,8 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
                         </p>
                         <KeyQR
                             value={sharePayload}
-                            size={200}
+                            size={256}
                             alt={t('multisig.share.qrAlt')}
-                        />
-                        <textarea
-                            readOnly
-                            aria-label={t('multisig.share.payloadAriaLabel')}
-                            value={sharePayload}
-                            rows={8}
-                            style={payloadTextStyle}
                         />
                         <CopyButton
                             value={sharePayload}
@@ -131,7 +142,9 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
                     </p>
                 </>
             ) : null}
-        </details>
+                </details>
+            </FormSection>
+        </FormPage>
     );
 }
 
@@ -140,7 +153,7 @@ function buildSharePayload({ info, address, networkKind }) {
         type: 'xchain-multisig-cosigner',
         version: 1,
         network: networkKind || null,
-        address: info.address || address?.address || null,
+        address: address?.address || null,
         xpub: xpubForNetwork(info.xpub, networkKind) || null,
         pubkey: info.pubkey || null,
         fingerprint: info.fingerprint || null,
@@ -191,13 +204,4 @@ const payloadStyle = {
     alignItems: 'flex-start',
     gap: 'var(--xc-space-2)',
     margin: 'var(--xc-space-3) 0',
-};
-
-const payloadTextStyle = {
-    boxSizing: 'border-box',
-    width: '100%',
-    resize: 'vertical',
-    fontFamily: 'var(--xc-font-mono)',
-    fontSize: 'var(--xc-text-xs)',
-    overflowWrap: 'anywhere',
 };

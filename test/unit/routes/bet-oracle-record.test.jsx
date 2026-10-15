@@ -213,7 +213,7 @@ describe('OracleRecord (P8)', () => {
             betOracle: () => Promise.reject(new Error('explorer down')),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(utils.container.querySelector('[role="alert"]').textContent).toMatch(/explorer down/);
+        expect(utils.getByRole('alert').textContent).toMatch(/explorer down/);
     });
 
     it('opens one of the oracle\'s markets on the chain the record was read from', async () => {
@@ -222,8 +222,7 @@ describe('OracleRecord (P8)', () => {
         const utils = await mount(OracleRecord, messaging, {
             chainId: CHAIN, address: ORACLE, onOpenMarket: (c, i) => opened.push([c, i]),
         });
-        const row = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /Who wins the final\?/.test(b.textContent || ''));
+        const row = utils.getByRole('button', { name: /Who wins the final\?/ });
         await domAct(async () => { fireEvent.click(row); await drain(); });
         expect(opened).toEqual([[CHAIN, '2308']]);
     });
@@ -249,7 +248,7 @@ describe('BetFeedDetail reaches the oracle record (the prop that had no caller)'
             walletId: 'w', chainId: CHAIN, feedIndex: '2308',
         });
         expect(text(utils)).toMatch(new RegExp(ORACLE));
-        expect(utils.container.querySelector(`a[href="#"]`)).toBeNull();
+        expect(utils.queryByRole('link', { name: ORACLE })).toBeNull();
         expect(utils.queryByRole('button', { name: ORACLE })).toBeNull();
     });
 });

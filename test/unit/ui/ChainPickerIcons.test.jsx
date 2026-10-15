@@ -17,7 +17,7 @@ describe('<ChevronIcon>', () => {
         expect(icon).toHaveAttribute('focusable', 'false');
         expect(icon).toHaveAttribute('data-xc-icon');
         expect(icon).toHaveStyle({ transform: 'none' });
-        expect(icon.style.getPropertyValue('--xc-icon-size')).toBe('var(--xc-icon-xs)');
+        expect(icon.style.getPropertyValue('--xc-icon-size')).toBe('');
     });
 
     it('rotates the same icon for the open state', () => {

@@ -24,9 +24,9 @@ import { resolveFieldRequirement } from './fieldRequirement.js';
  * @property {string} [error]
  * @property {string} [id]
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
- * @property {'md' | 'lg'} [size]   field size, matching Input.
+ * @property {'sm' | 'md' | 'lg'} [size] field size, matching Input.
  */
-export const Select = forwardRef(function Select(
+export const Select = /* @__PURE__ */ forwardRef(function Select(
     {
         label,
         hint,
@@ -78,19 +78,21 @@ export const Select = forwardRef(function Select(
                     {requirement.label}
                 </label>
             ) : null}
-            <select
-                ref={ref}
-                id={selectId}
-                className={selectClass}
-                aria-invalid={visibleError ? 'true' : externalInvalid}
-                aria-describedby={describedBy}
-                aria-required={requirement.ariaRequired}
-                required={required}
-                onChange={handleChange}
-                {...rest}
-            >
-                {children}
-            </select>
+            <div className={styles.controlHitArea} onPointerDown={activateControlHitArea}>
+                <select
+                    ref={ref}
+                    id={selectId}
+                    className={selectClass}
+                    aria-invalid={visibleError ? 'true' : externalInvalid}
+                    aria-describedby={describedBy}
+                    aria-required={requirement.ariaRequired}
+                    required={required}
+                    onChange={handleChange}
+                    {...rest}
+                >
+                    {children}
+                </select>
+            </div>
             {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}
@@ -100,3 +102,11 @@ export const Select = forwardRef(function Select(
         </div>
     );
 });
+
+function activateControlHitArea(event) {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    const control = event.currentTarget.firstElementChild;
+    control?.focus();
+    control?.click();
+}

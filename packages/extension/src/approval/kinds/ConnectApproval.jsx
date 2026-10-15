@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
+import { Screen, ListPage, Button, ChainBadge, ChoiceControl } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
@@ -22,6 +22,28 @@ import styles from './ConnectApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const { t } = i18n;
+const INVALID_REQUEST_MESSAGE = 'This connection request is missing or invalid.';
+const EXPIRED_REQUEST_MESSAGE = 'This connection request has expired.';
+
+function isValidConnectPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    if (typeof payload.origin !== 'string' || !payload.origin) return false;
+    try {
+        if (new URL(payload.origin).origin === 'null') return false;
+    } catch {
+        return false;
+    }
+    if (payload.requestedChains !== undefined
+        && (!Array.isArray(payload.requestedChains)
+            || payload.requestedChains.some((chainId) => typeof chainId !== 'string' || !chainId))) {
+        return false;
+    }
+    return payload.accountOptions === undefined
+        || (Array.isArray(payload.accountOptions)
+            && payload.accountOptions.every(
+                (account) => account && typeof account.id === 'string' && account.id,
+            ));
+}
 
 /**
  * Connect approval (§43.3 / §43.4): grants a dApp the right to call
@@ -43,6 +65,7 @@ const { t } = i18n;
  * @param {() => void} props.onReject
  */
 export function ConnectApproval({ id, payload, onReject }) {
+    const payloadValid = isValidConnectPayload(payload);
     const appName = neutralizeControlText(payload?.appName || '', { maxLength: 80 });
     const hasRequestedChains = Array.isArray(payload?.requestedChains);
     const requestedChains = useMemo(
@@ -109,6 +132,7 @@ export function ConnectApproval({ id, payload, onReject }) {
     );
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [requestExpired, setRequestExpired] = useState(false);
     useBackHandler(onReject, busy);
 
     function toggleChain(chainId) {
@@ -130,9 +154,12 @@ export function ConnectApproval({ id, payload, onReject }) {
     // With options on screen the user must share at least one account; with
     // none (the account read failed) the background grants the primary one.
     const accountsMissing = accountOptions.length > 0 && approvedAccounts.length === 0;
+    const requestError = !payloadValid
+        ? INVALID_REQUEST_MESSAGE
+        : (requestExpired ? EXPIRED_REQUEST_MESSAGE : null);
 
     async function handleApprove() {
-        if (busy || approvedChains.length === 0 || accountsMissing) return;
+        if (busy || requestError || approvedChains.length === 0 || accountsMissing) return;
         setBusy(true);
         setError(null);
         try {
@@ -147,7 +174,11 @@ export function ConnectApproval({ id, payload, onReject }) {
             // belt-and-braces in case the browser doesn't honour remove().
             window.close();
         } catch (err) {
-            setError(err?.message || 'Could not connect this site.');
+            if (err?.name === 'ApprovalNotFoundError') {
+                setRequestExpired(true);
+            } else {
+                setError(err?.message || 'Could not connect this site.');
+            }
             setBusy(false);
         }
     }
@@ -170,98 +201,107 @@ export function ConnectApproval({ id, payload, onReject }) {
                         block
                         onClick={handleApprove}
                         loading={busy}
-                        disabled={approvedChains.length === 0 || accountsMissing}
+                        disabled={!!requestError || approvedChains.length === 0 || accountsMissing}
                     >
                         {t('extension.connect.approve')}
                     </Button>
                 </div>
             }
         >
-            <OriginIdentity origin={payload?.origin || ''} label={t('extension.approval.requestingSite')}>
-                {appName ? (
-                    <>
-                        <p className={styles.declaredNameLabel}>{t('extension.connect.declaredName')}</p>
-                        <p className={styles.declaredName}>{appName}</p>
-                    </>
-                ) : null}
-            </OriginIdentity>
-            <p className={styles.lede}>
-                {CONNECT_SITE_WARNING}
-            </p>
-
-            <section className={styles.permissions} aria-label={t('extension.connect.permissions')}>
-                <p className={styles.permissionsTitle}>{t('extension.connect.permissions')}</p>
-                <ul className={styles.permissionsList}>
-                    <li>{t('extension.connect.permission.accounts')}</li>
-                    <li>{t('extension.connect.permission.chains')}</li>
-                    <li>{t('extension.connect.permission.signing')}</li>
-                </ul>
-            </section>
-
-            <fieldset className={styles.fieldset}>
-                <legend className={styles.legend}>{t('extension.connect.chains')}</legend>
-                <p className={styles.hint}>
-                    {hasRequestedChains
-                        ? t('extension.connect.chains.requestedHint')
-                        : t('extension.connect.chains.hint')}
+            <ListPage>
+                <div className={styles.identity}>
+                    <OriginIdentity
+                        origin={payload?.origin || ''}
+                        label={t('extension.approval.requestingSite')}
+                        embedded
+                    >
+                        {appName ? (
+                            <>
+                                <p className={styles.declaredNameLabel}>{t('extension.connect.declaredName')}</p>
+                                <p className={styles.declaredName}>{appName}</p>
+                            </>
+                        ) : null}
+                    </OriginIdentity>
+                </div>
+                <p className={styles.lede}>
+                    {CONNECT_SITE_WARNING}
                 </p>
-                <ul className={styles.chainList}>
-                    {offeredChains.map((d) => {
-                        const checked = approvedChains.includes(d.id);
-                        return (
-                            <li key={d.id} className={styles.chainRow}>
-                                <label className={styles.chainLabel}>
-                                    <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={() => toggleChain(d.id)}
-                                        aria-label={t('extension.connect.chains.allow', {
-                                            chain: d.displayName,
-                                            network: d.networkKind,
-                                        })}
-                                    />
-                                    <ChainBadge descriptor={d} size="sm" />
-                                </label>
-                            </li>
-                        );
-                    })}
-                </ul>
-            </fieldset>
 
-            <fieldset className={styles.fieldset}>
-                <legend className={styles.legend}>{t('accountPicker.title')}</legend>
-                {accountOptions.length > 0 ? (
-                    <>
-                        <p className={styles.hint}>
-                            {t('extension.connect.accounts.hint')}
-                        </p>
-                        <ul className={styles.chainList}>
-                            {accountOptions.map((a) => {
-                                const name = neutralizeControlText(a.name || a.id, { maxLength: 80 });
-                                return (
-                                    <li key={a.id} className={styles.chainRow}>
-                                        <label className={styles.chainLabel}>
-                                            <input
-                                                type="checkbox"
+                <section className={styles.permissions} aria-label={t('extension.connect.permissions')}>
+                    <p className={styles.permissionsTitle}>{t('extension.connect.permissions')}</p>
+                    <ul className={styles.permissionsList}>
+                        <li>{t('extension.connect.permission.accounts')}</li>
+                        <li>{t('extension.connect.permission.chains')}</li>
+                        <li>{t('extension.connect.permission.signing')}</li>
+                    </ul>
+                </section>
+
+                <fieldset className={styles.fieldset}>
+                    <legend className={styles.legend}>{t('extension.connect.chains')}</legend>
+                    <p className={styles.hint}>
+                        {hasRequestedChains
+                            ? t('extension.connect.chains.requestedHint')
+                            : t('extension.connect.chains.hint')}
+                    </p>
+                    <ul className={styles.chainList}>
+                        {offeredChains.map((d) => {
+                            const checked = approvedChains.includes(d.id);
+                            return (
+                                <li key={d.id} className={styles.chainRow}>
+                                    <ChoiceControl
+                                            className={styles.chainLabel}
+                                            checked={checked}
+                                            onChange={() => toggleChain(d.id)}
+                                            aria-label={t('extension.connect.chains.allow', {
+                                                chain: d.displayName,
+                                                network: d.networkKind,
+                                            })}
+                                    >
+                                        <ChainBadge descriptor={d} size="sm" showName />
+                                    </ChoiceControl>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </fieldset>
+
+                <fieldset className={styles.fieldset}>
+                    <legend className={styles.legend}>{t('accountPicker.title')}</legend>
+                    {accountOptions.length > 0 ? (
+                        <>
+                            <p className={styles.hint}>
+                                {t('extension.connect.accounts.hint')}
+                            </p>
+                            <ul className={styles.chainList}>
+                                {accountOptions.map((a) => {
+                                    const name = neutralizeControlText(a.name || a.id, { maxLength: 80 });
+                                    return (
+                                        <li key={a.id} className={styles.chainRow}>
+                                            <ChoiceControl
+                                                className={styles.chainLabel}
                                                 checked={approvedAccounts.includes(a.id)}
                                                 onChange={() => toggleAccount(a.id)}
                                                 aria-label={t('extension.connect.accounts.share', { name })}
-                                            />
-                                            <span>{name}</span>
-                                        </label>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </>
-                ) : (
-                    <p className={styles.hint}>
-                        {t('extension.connect.accounts.primary')}
-                    </p>
-                )}
-            </fieldset>
+                                            >
+                                                <span>{name}</span>
+                                            </ChoiceControl>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </>
+                    ) : (
+                        <p className={styles.hint}>
+                            {t('extension.connect.accounts.primary')}
+                        </p>
+                    )}
+                </fieldset>
 
-            {error ? <div className={shared.error} role="alert">{error}</div> : null}
+                {requestError ? (
+                    <div className={shared.error} role="alert">{requestError}</div>
+                ) : null}
+                {error ? <div className={shared.error} role="alert">{error}</div> : null}
+            </ListPage>
         </Screen>
     );
 }

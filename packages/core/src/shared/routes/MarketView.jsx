@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -77,7 +77,6 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
-    const [summaryRetryKey, setSummaryRetryKey] = useState(0);
     const [marketMissing, setMarketMissing] = useState(false);
     const [prefillPrice, setPrefillPrice] = useState(/** @type {string | null} */ (null));
     const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
@@ -89,9 +88,6 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         setMarketMissing(false);
         messaging.getMarket({ chainId, tick1, tick2 })
             .then((summary) => {
-                if (summary !== null && (typeof summary !== 'object' || Array.isArray(summary))) {
-                    throw new Error('getMarket: malformed response');
-                }
                 if (!cancelled) {
                     setSummaryLoading(false);
                     setMarketMissing(summary == null);
@@ -104,7 +100,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 }
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2, summaryRetryKey]);
+    }, [messaging, chainId, tick1, tick2]);
 
     useEffect(() => {
         setPrefillPrice(null);
@@ -118,10 +114,8 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const [historyError, setHistoryError] = useState(/** @type {string | null} */ (null));
     const [historyRetryKey, setHistoryRetryKey] = useState(0);
     useEffect(() => {
-        setHistoryRows([]);
-    }, [chainId, tick1, tick2, demo]);
-    useEffect(() => {
         let cancelled = false;
+        setHistoryRows([]);
         setHistoryError(null);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
             .then((resp) => {
@@ -131,11 +125,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             })
             .catch((err) => {
                 if (!cancelled) {
-                    if (demo) {
-                        setHistoryRows((current) => current.length > 0
-                            ? current
-                            : sampleMatchesFor(tick1, tick2));
-                    }
+                    setHistoryRows(demo ? sampleMatchesFor(tick1, tick2) : []);
                     setHistoryError(readFailureMessage(err, 'refresh market prices'));
                 }
             });
@@ -149,7 +139,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const changeDisplay = percentChangeDisplay(changePct);
     const changeColor = changeDisplay?.direction === 'positive'
         ? 'var(--xc-success)'
-        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
     const marketKey = `${chainId}:${tick1}:${tick2}`;
 
     const header = (
@@ -166,11 +156,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     const headerCard = (
         <div style={{
-            background: 'var(--xc-bg-muted)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-3)',
-            marginBottom: 'var(--xc-space-3)',
+            background: 'var(--xc-card-bg)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
+            padding: 'var(--xc-card-pad)',
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--xc-space-2)',
@@ -184,7 +173,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     {tick1} <span style={{ color: 'var(--xc-text-muted)', fontWeight: 500 }}>/</span> {tick2}
                 </span>
                 {typeof onSwap === 'function' ? (
-                    <button
+                    <Button
                         type="button"
                         onClick={() => {
                             setPrefillPrice(null);
@@ -197,8 +186,13 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             background: 'var(--xc-surface-raised)',
                             border: '1px solid var(--xc-border)',
                             borderRadius: '50%',
-                            width: 32,
-                            height: 32,
+                            // The button's own inline padding left no room
+                            // for the icon inside 32px, so it drew an empty
+                            // circle; square and unpadded, the icon shows.
+                            width: 36,
+                            minWidth: 36,
+                            height: 36,
+                            padding: 0,
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -208,7 +202,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         }}
                     >
                         <Icon.SwapIcon />
-                    </button>
+                    </Button>
                 ) : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
@@ -252,7 +246,15 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     return wrap(
         <>
-            <div role="region" aria-label={t('market.summary')} aria-busy={summaryLoading || undefined}>
+            {/* The page's own gap spaces the summary, chart, panel tabs and
+                panel; a stale or failed-price notice under the summary card
+                takes the same gap inside this region. */}
+            <div
+                role="region"
+                aria-label={t('market.summary')}
+                aria-busy={summaryLoading || undefined}
+                style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' }}
+            >
                 {summaryLoading ? (
                     <div role="status" aria-label={t('market.loading')}>
                         <Skeleton height={159} />
@@ -260,16 +262,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 ) : (
                     <>
                         {summaryError ? (
-                            <StatusMessage
-                                variant="error"
-                                className={styles.error}
-                                recovery={{
-                                    label: t('common.tryAgain'),
-                                    onAction: () => setSummaryRetryKey((key) => key + 1),
-                                }}
-                            >
-                                {summaryError}
-                            </StatusMessage>
+                            <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
                         ) : null}
                         <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:ticker`}>
                             {headerCard}
@@ -299,7 +292,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 )}
             </div>
 
-            <div style={{ marginTop: 'var(--xc-space-3)' }}>
+            <div>
                 <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:chart`}>
                     <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
                 </RouteErrorBoundary>
@@ -309,7 +302,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 className={receivePickerStyles.kindSegments}
                 role="tablist"
                 aria-label={t('market.panels')}
-                style={{ width: '100%', marginTop: 'var(--xc-space-3)', marginBottom: 'var(--xc-space-3)', flexShrink: 1 }}
+                style={{ width: '100%', flexShrink: 1 }}
             >
                 {[
                     { id: 'book',    label: 'Book' },
@@ -320,7 +313,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 ].map((opt) => {
                     const active = tab === opt.id;
                     return (
-                        <button
+                        <Button
                             key={opt.id}
                             id={`${tabsId}-tab-${opt.id}`}
                             type="button"
@@ -331,9 +324,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
                             style={{ flex: 1 }}
                             onClick={() => setTab(opt.id)}
+                            icon={null}
                         >
                             {opt.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>
@@ -393,11 +387,12 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
 /** Normalize the explorer's getMarketHistory response into a row array. */
 function extractHistoryRows(resp) {
+    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     if (Array.isArray(resp.history)) return resp.history;
-    throw new Error('getMarketHistory: malformed response');
+    return [];
 }
 
 /**

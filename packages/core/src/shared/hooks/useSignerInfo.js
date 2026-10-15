@@ -45,12 +45,14 @@ export function useSignerInfo({ walletId, signerId }) {
     ));
 
     useEffect(() => {
+        const unavailable = !walletId || typeof messaging?.listSigners !== 'function';
+        if (unavailable) setRows([]);
         if (!walletId || typeof messaging?.listSigners !== 'function') return undefined;
         let cancelled = false;
         // Serve from cache first to avoid the "loading flicker" when the
         // hook re-mounts (e.g. user navigates Send → Home → Send).
         const cached = cache.get(walletId);
-        if (cached) setRows(cached);
+        setRows(cached || []);
         messaging.listSigners(walletId)
             .then((next) => {
                 if (cancelled) return;

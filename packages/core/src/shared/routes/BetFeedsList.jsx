@@ -122,11 +122,13 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     useEffect(() => {
         if (!chainId) return undefined;
         let cancelled = false;
+        let latestRequestId = 0;
 
         // `clear` separates the FIRST read of a chain/filter from the refreshes
         // that follow it: blanking the rows is what shows "Loading markets…",
         // and doing that every 30 seconds would flash the whole list.
         const load = (clear) => {
+            const requestId = ++latestRequestId;
             if (clear) { setRows(null); setError(null); }
             // Filter on the stored feed status rather than fetching everything and
             // deciding client-side, so paging stays meaningful on a busy chain.
@@ -134,12 +136,17 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 ? { chainId, query: 'open', type: 'status', opts: { limit: 50 } }
                 : { chainId, opts: { limit: 50 } };
             return messaging.betFeeds(req)
-                .then((resp) => { if (!cancelled) { setRows(extractRows(resp)); setError(null); } })
+                .then((resp) => {
+                    if (!cancelled && requestId === latestRequestId) {
+                        setRows(extractRows(resp));
+                        setError(null);
+                    }
+                })
                 .catch((err) => {
                     // A failed REFRESH keeps the markets already on screen: they
                     // are still the best thing known about the chain, and
                     // replacing them with an error would punish a momentary blip.
-                    if (cancelled) return;
+                    if (cancelled || requestId !== latestRequestId) return;
                     if (clear) setError(userFacingMessage(err, 'Could not load betting markets. Try again.'));
                 });
         };
@@ -170,7 +177,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <EmptyState
                     title="No betting address"
-                    body="Betting requires an address on a supported chain."
+                    body="Betting requires an address on a supported network."
                 />
             </ListPage>,
         );
@@ -201,16 +208,24 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     return wrap(
         <ListPage
             toolbar={(
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                    <div className={styles.betActions}>
+                <div className={local.toolbarRow}>
+                    <div className={local.toolbarNetwork}>
+                        <NetworkField
+                            value={chainId}
+                            onChange={setChainId}
+                            chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])}
+                            chainRegistry={chainRegistry}
+                            size="md"
+                        />
+                    </div>
+                    <div className={`${styles.betActions} ${local.toolbarActions}`}>
                         {/* A two-way filter: the colour shows the active side, and
                             aria-pressed says the same to a screen reader. */}
-                        <Button variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                        <Button variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
-                        {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
+                        <Button size="md" variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button size="md" variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
+                        {onCreate ? <Button size="md" variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
                     </div>
-                </>
+                </div>
             )}
         >
             {/* This screen is the whole family's entry point (the GovernancePolls
@@ -218,8 +233,8 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 needing its own slot in the actions menu. */}
             {onMyBets || onMyMarkets ? (
                 <div className={styles.betActions}>
-                    {onMyBets ? <Button variant="ghost" onClick={onMyBets}>My bets</Button> : null}
-                    {onMyMarkets ? <Button variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
+                    {onMyBets ? <Button size="md" variant="ghost" onClick={onMyBets}>My bets</Button> : null}
+                    {onMyMarkets ? <Button size="md" variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
                 </div>
             ) : null}
 
@@ -240,7 +255,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             {rows && rows.length === 0 ? (
                 <EmptyState
                     title="No markets"
-                    body={openOnly ? 'No markets are taking bets on this chain right now.' : 'Markets created on this chain appear here.'}
+                    body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
                 />
             ) : null}
 

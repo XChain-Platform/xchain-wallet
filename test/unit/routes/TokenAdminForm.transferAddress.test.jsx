@@ -113,14 +113,16 @@ describe('Transfer ownership address validation (D-81)', () => {
         // The error is live: it lands on the field as the address is typed,
         // not two screens later on the dry-run.
         await waitFor(() => {
-            expect(q.alerts()).toMatch(/not a valid Bitcoin regtest address/i);
+            expect(q.alerts()).toMatch(/not a valid Bitcoin address/i);
+            expect(q.alerts()).not.toMatch(/regtest|testnet|Not mainnet/i);
         });
 
         // And the submit path refuses it rather than composing an action the
         // chain will throw away.
         fireEvent.click(q.submit());
         await waitFor(() => {
-            expect(q.alerts()).toMatch(/not a valid Bitcoin regtest address/i);
+            expect(q.alerts()).toMatch(/not a valid Bitcoin address/i);
+            expect(q.alerts()).not.toMatch(/regtest|testnet|Not mainnet/i);
         });
         // Still on the form: nothing was composed, nothing to sign.
         expect(q.newOwner()).toBeTruthy();

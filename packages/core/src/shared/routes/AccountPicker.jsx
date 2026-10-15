@@ -9,19 +9,24 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
+function runRouteAction(action, ...args) {
+    const result = action?.(...args);
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+}
+
 /**
  * AccountPicker: full-screen list of BIP44 accounts under the active
  * wallet, with thumb-reachable add and current-account management
- * actions. Reached from the gear popover's Account summary row. Picking
- * an account calls `onSwitch`
- * and returns to home.
+ * actions pinned in the footer, as on the Wallets screen. Reached from
+ * the gear popover's Account summary row. Picking an account calls
+ * `onSwitch` and returns to home.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -30,8 +35,9 @@ import pickerStyles from './WalletPicker.module.css';
  * @param {() => void} props.onAddAccount
  * @param {(account: any) => void} [props.onRenameAccount]
  * @param {() => void} props.onBack
+ * @param {string} [props.backLabel]
  */
-export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack }) {
+export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack, backLabel }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -61,17 +67,23 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         return () => { cancelled = true; };
     }, [walletId, messaging, reload]);
 
-    const header = <PageHeader onBack={onBack} title={t('accountPicker.title')} />;
+    const header = (
+        <PageHeader
+            onBack={() => runRouteAction(onBack)}
+            backLabel={backLabel}
+            title={t('accountPicker.title')}
+        />
+    );
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
     const footer = (
         <div className={pickerStyles.footerActions}>
-            <Button variant="primary" onClick={onAddAccount} icon={<Icon.PlusIcon />}>
+            <Button variant="primary" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
                 {t('accountPicker.add')}
             </Button>
             {onRenameAccount && activeAccount ? (
                 <Button
                     variant="ghost"
-                    onClick={() => onRenameAccount(activeAccount)}
+                    onClick={() => runRouteAction(onRenameAccount, activeAccount)}
                     icon={<Icon.PencilIcon />}
                 >
                     {t('accountPicker.manage')}
@@ -115,17 +127,15 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     const subtitle = customName && customName !== defaultName ? defaultName : null;
                     return (
                         <div key={a.id} className={pickerStyles.rowWrap}>
-                            <button
-                                type="button"
+                            <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => {
-                                    if (!active) onSwitch(a.id);
-                                    onBack();
+                                    if (!active) runRouteAction(onSwitch, a.id);
+                                    runRouteAction(onBack);
                                 }}
                                 aria-current={active ? 'true' : undefined}
-                            >
-                                <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
+                                title={(
                                     <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
                                         {active ? (
                                             <span className={pickerStyles.currentMark} aria-hidden="true">
@@ -134,24 +144,24 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                         ) : null}
                                         <span className={pickerStyles.rowName} title={label}>{label}</span>
                                     </span>
-                                    {subtitle ? (
-                                        <span className={styles.entryDescription}>{subtitle}</span>
-                                    ) : null}
-                                </span>
-                            </button>
+                                )}
+                                subtitle={subtitle ? (
+                                    <span className={styles.entryDescription}>{subtitle}</span>
+                                ) : null}
+                            />
                             {onRenameAccount ? (
-                                <button
+                                <Button
                                     type="button"
+                                    icon={<Icon.PencilIcon />}
+                                    variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('accountPicker.renameLabel', { label })}
                                     title={t('accountPicker.renameTitle')}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onRenameAccount(a);
+                                        runRouteAction(onRenameAccount, a);
                                     }}
-                                >
-                                    <Icon.PencilIcon />
-                                </button>
+                                />
                             ) : null}
                         </div>
                     );

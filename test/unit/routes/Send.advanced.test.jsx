@@ -87,8 +87,8 @@ describe('Send advanced choices', () => {
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.001' } });
         fireEvent.click(screen.getByText('Advanced'));
-        await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).not.toBeDisabled());
-        fireEvent.click(screen.getByLabelText('Coin control enabled'));
+        await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled());
+        fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
 
         expect(screen.getByText('Dust')).toHaveAttribute(
             'title',
@@ -135,9 +135,9 @@ describe('Send advanced choices', () => {
         const messaging = mount();
         await fillSend();
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'invoice 7' } });
-        await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).not.toBeDisabled());
-        fireEvent.click(screen.getByLabelText('Coin control enabled'));
-        fireEvent.click(screen.getByLabelText(/0\.001 BTC/));
+        await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled());
+        fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /0\.001 BTC/ }));
         fireEvent.change(screen.getByLabelText('Change address'), { target: { value: 'change' } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 

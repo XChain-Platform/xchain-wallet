@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -45,6 +45,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { useToast } from '../components/ToastHost.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -71,6 +72,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const [copied, setCopied] = useState('');
     const [copyError, setCopyError] = useState(/** @type {string | null} */(null));
     const startedRef = useRef(false);
+    const { announce } = useToast();
 
     const composed = session?.composed || {};
     const chainId = composed.chainId || session?.request?.chainId || null;
@@ -93,11 +95,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         }
         setCopyError(null);
         setCopied(label);
-    }, []);
+        const copiedLabel = label === 'from' ? 'From address copied.'
+            : label === 'to' ? 'To address copied.'
+            : 'Transaction ID copied.';
+        announce(copiedLabel);
+        setTimeout(() => setCopied((current) => current === label ? '' : current), 1500);
+    }, [announce]);
 
     const start = useCallback(async () => {
         try {
-            const { method, base } = flowsLib.resumeDispatch(session, { isHw: hw });
+            const { base } = flowsLib.resumeDispatch(session, { isHw: hw });
             const res = await confirmAction.confirm({
                 chainId,
                 source: base.from?.address || session?.request?.from?.address,
@@ -125,11 +132,12 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 // mid-resume deliberately leaves it stored - the user has not
                 // finished with it, and it is still resumable.
                 onApprove: (_creds, built) => {
+                    const approvedDispatch = flowsLib.resumeDispatch(session, { isHw: hw });
                     // The shared mapping, so a stored TAPROOT pair keeps its
                     // reveal and recovery record and is not refused unsigned.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(built);
-                    return messaging[method]({
-                        ...base,
+                    return messaging[approvedDispatch.method]({
+                        ...approvedDispatch.base,
                         prebuiltPsbt,
                         ...(hw
                             ? { signerId: fromAddress?.signerId }
@@ -188,22 +196,24 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                     />
                 )}
             >
-                {composed?.psbt ? (
-                    <WatcherResultPanel
-                        result={{
-                            psbtHex: String(composed.psbt),
-                            encoding: composed.encoding,
-                            chainId,
-                            fromAddress: fromAddress?.address,
-                        }}
-                        onDone={async () => {
-                            await messaging.clearConfirmSession({ id: session.id }).catch(() => {});
-                            onCancel?.();
-                        }}
-                    />
-                ) : (
-                    <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
-                )}
+                <FormPage label="Unsigned transaction">
+                    {composed?.psbt ? (
+                        <WatcherResultPanel
+                            result={{
+                                psbtHex: String(composed.psbt),
+                                encoding: composed.encoding,
+                                chainId,
+                                fromAddress: fromAddress?.address,
+                            }}
+                            onDone={async () => {
+                                await messaging.clearConfirmSession({ id: session.id }).catch(() => {});
+                                onCancel?.();
+                            }}
+                        />
+                    ) : (
+                        <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
+                    )}
+                </FormPage>
             </Screen>
         );
     }
@@ -259,7 +269,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 />
             )}
         >
-            <div className={styles.page}>
+            <FormPage label={title}>
                 {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                 {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
                 {result ? (
@@ -292,14 +302,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                     <dt>From</dt>
                                     <dd className={styles.copyableValue}>
                                         <code>{sourceAddress}</code>
-                                        <button
+                                        <Button
                                             type="button"
-                                            className={styles.copyButton}
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => copyValue('from', sourceAddress)}
                                             aria-label="Copy from address"
                                         >
-                                            {copied === 'from' ? 'Copied' : 'Copy'}
-                                        </button>
+                                            {copied === 'from' ? 'From address copied' : 'Copy'}
+                                        </Button>
                                     </dd>
                                 </div>
                             ) : null}
@@ -308,14 +320,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                     <dt>To</dt>
                                     <dd className={styles.copyableValue}>
                                         <code>{destinationAddress}</code>
-                                        <button
+                                        <Button
                                             type="button"
-                                            className={styles.copyButton}
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => copyValue('to', destinationAddress)}
                                             aria-label="Copy to address"
                                         >
-                                            {copied === 'to' ? 'Copied' : 'Copy'}
-                                        </button>
+                                            {copied === 'to' ? 'To address copied' : 'Copy'}
+                                        </Button>
                                     </dd>
                                 </div>
                             ) : null}
@@ -324,14 +338,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                     <dt>Transaction ID</dt>
                                     <dd className={styles.copyableValue}>
                                         <code>{txid}</code>
-                                        <button
+                                        <Button
                                             type="button"
-                                            className={styles.copyButton}
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => copyValue('txid', txid)}
                                             aria-label="Copy transaction ID"
                                         >
-                                            {copied === 'txid' ? 'Copied' : 'Copy'}
-                                        </button>
+                                            {copied === 'txid' ? 'Transaction ID copied' : 'Copy'}
+                                        </Button>
                                     </dd>
                                 </div>
                             ) : null}
@@ -343,7 +359,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                         ) : null}
                     </section>
                 ) : null}
-            </div>
+            </FormPage>
         </Screen>
     );
 }

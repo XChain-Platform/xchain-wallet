@@ -43,6 +43,7 @@ import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
 import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
 import { compiledPayloadByteLen, envelopeEncoderOpts } from '../flows/envelopeSelection.js';
 import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
+import { assertBuiltActionMatchesIntent } from '../flows/verifyBuiltAction.js';
 
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
 
@@ -248,6 +249,9 @@ export function assertCompleteEnvelope(built, action) {
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
  * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after every currently signable transaction is signed and before anything is broadcast
+ * @property {boolean} [verifyBuiltTx]   atomic path only: run the confirm pipeline's tamper checks on the
+ *                                       PSBT the encoder returns before the signer sees it (flows/verifyBuiltAction.js).
+ *                                       Set by callers whose approval came before the build, such as a dApp signAction.
  */
 
 /**
@@ -283,6 +287,7 @@ export async function submitWithSigner({
     waitOpts,
     onProgress = () => {},
     beforeBroadcast,
+    verifyBuiltTx = false,
 }) {
     if (!sdkRegistry) throw new Error('submitWithSigner: sdkRegistry is required');
     if (!actionData?.action) throw new Error('submitWithSigner: actionData.action is required');
@@ -400,6 +405,25 @@ export async function submitWithSigner({
             ? { ...encoderOpts, ...envelopeRequest }
             : encoderOpts;
 
+        // Step 1a: pay the recipient. Suppressing the SEND action string and
+        // adding the destination output are ONE decision, and this path made
+        // only the first half: it relied on every caller having put the payment
+        // in `customOutputs`. `sendToken` and `buildSendPsbt` do; the generic
+        // `advancedAction` route forwards pubkey/sourceAddress/change/fee opts
+        // and nothing else, so a native SEND through the parallel composer built
+        // a transaction with no OP_RETURN and no payment. Idempotent, so the
+        // callers that pre-supply it keep their bytes. Not gated on a bare
+        // payment, exactly like composeForConfirm: a native SEND carrying a
+        // MEMO keeps its action string and still pays the recipient. Folded
+        // before every fee and the donation, where composeForConfirm folds it,
+        // so both routes build one output order.
+        const paymentDescriptor = chainRegistry?.get(chainId);
+        const paidEncoderOpts = withNativePaymentOutput({
+            actionData,
+            descriptor: paymentDescriptor,
+            encoderOpts: requestedEncoderOpts,
+        });
+
         // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
         // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
         // a transaction that can't be safely priced. A failed native-fee action forfeits the fee.
@@ -407,7 +431,7 @@ export async function submitWithSigner({
         preflight = await applyNativeFeePreflight({
             sdk,
             actionData,
-            encoderOpts: requestedEncoderOpts,
+            encoderOpts: paidEncoderOpts,
             // Who is SPENDING, which the dry run behind this quote resolves the
             // holder and the balance from. `sourceAddress` is the address the SDK
             // funds from and is that spender on every flow that sets it; `change`
@@ -455,24 +479,8 @@ export async function submitWithSigner({
         // it left the reveal unable to balance.
         const feeOutput = nativeFeeOutputOf(preflight.quote);
 
-        // Step 1e: pay the recipient. Suppressing the SEND action string and
-        // adding the destination output are ONE decision, and this path made
-        // only the first half: it relied on every caller having put the payment
-        // in `customOutputs`. `sendToken` and `buildSendPsbt` do; the generic
-        // `advancedAction` route forwards pubkey/sourceAddress/change/fee opts
-        // and nothing else, so a native SEND through the parallel composer built
-        // a transaction with no OP_RETURN and no payment. Idempotent, so the
-        // callers that pre-supply it keep their bytes. Not gated on a bare
-        // payment, exactly like composeForConfirm: a native SEND carrying a
-        // MEMO keeps its action string and still pays the recipient.
-        const paymentDescriptor = chainRegistry?.get(chainId);
-        effectiveEncoderOpts = withNativePaymentOutput({
-            actionData,
-            descriptor: paymentDescriptor,
-            encoderOpts: effectiveEncoderOpts,
-        });
-        // Fail closed rather than sign a native send that pays nobody. The
-        // fold above makes this unreachable today; it is here so the next
+        // Step 1e: fail closed rather than sign a native send that pays nobody.
+        // The Step 1a fold makes this unreachable today; it is here so the next
         // route that skips it fails loudly instead of broadcasting.
         const paymentParams = actionData?.params || {};
         const owedPayment = nativePaymentOutput({
@@ -515,6 +523,23 @@ export async function submitWithSigner({
             deferredOutputs = Array.isArray(effectiveEncoderOpts.customOutputs)
                 ? effectiveEncoderOpts.customOutputs.slice()
                 : [];
+        }
+
+        // An approval given before this build (a dApp signAction) has not seen
+        // these bytes, so they are held to the confirm pipeline's checks before
+        // any signer is asked. Read after createTx: the ADS fold appends its
+        // donation to this same array on the way in. Throws, unsigned, on a
+        // mismatch; never changes the bytes of a build that passes.
+        if (verifyBuiltTx) {
+            assertBuiltActionMatchesIntent({
+                sdk,
+                encoded,
+                actionString: bareNativePayment ? null : createResult.actionString,
+                bareNativePayment,
+                customOutputs: effectiveEncoderOpts.customOutputs,
+                ownAddresses: [effectiveEncoderOpts.sourceAddress, effectiveEncoderOpts.change],
+                rawData: effectiveEncoderOpts.rawData,
+            });
         }
     }
 

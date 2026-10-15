@@ -81,8 +81,8 @@ export function useNativeAppLifecycle({
         let handle = null;
         if (plugin) {
             try {
-                // A full App plugin supplies state changes while the document
-                // events cover native shells that only bundle Capacitor core.
+                // A full App plugin exposes this event when available.
+                // Capacitor's document events cover narrower plugin builds.
                 handle = Promise.resolve(plugin.addListener('appStateChange', onStateChange))
                     .catch(() => null);
             } catch (_err) {

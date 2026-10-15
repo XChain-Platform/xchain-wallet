@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
@@ -20,6 +20,7 @@ const css = readFileSync(
 
 const VIEWPORTS = [
     { name: 'small phone portrait', width: 320, height: 568 },
+    { name: 'reported phone portrait', width: 360, height: 640 },
     { name: 'large phone portrait', width: 412, height: 732 },
     { name: 'phone landscape', width: 732, height: 412 },
 ];
@@ -29,6 +30,7 @@ afterEach(() => {
     clearDemoWalletId();
     clearLockoutState();
     document.documentElement.removeAttribute('data-xc-keyboard');
+    vi.restoreAllMocks();
 });
 
 function renderLocked({ width, height }) {
@@ -51,10 +53,13 @@ function renderLocked({ width, height }) {
 describe('Locked compact-height layout', () => {
     it('removes decorative height and tightens secondary content on landscape phones', () => {
         expect(css).toMatch(
-            /@media \(max-height: 480px\) \{[\s\S]*?@media not all and \(min-width: 600px\) \{[\s\S]*?\.hero\s*\{[\s\S]*?flex-direction: row;[\s\S]*?\.logo\s*\{[\s\S]*?width: 40px;[\s\S]*?\.lockoutBanner\s*\{[\s\S]*?padding: var\(--xc-space-2\);[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.hero\s*\{[\s\S]*?flex-direction: row;[\s\S]*?\.logo\s*\{[\s\S]*?width: 40px;[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
         );
         expect(css).not.toMatch(
-            /@media \(max-height: 480px\) \{[\s\S]*?@media not all and \(min-width: 600px\) \{[\s\S]*?\.unlockingNote\s*\{[\s\S]*?display: none;/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{\s*@media[^\{]*min-width: 600px/,
+        );
+        expect(css).not.toMatch(
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.unlockingNote\s*\{[\s\S]*?display: none;/,
         );
     });
 
@@ -68,9 +73,6 @@ describe('Locked compact-height layout', () => {
         expect(css).toMatch(
             /:global\(html\[data-xc-keyboard='open'\]\) \.forgotBlock,[\s\S]*?\.demoExitBlock\s*\{[\s\S]*?order: 3;/,
         );
-        expect(css).toMatch(
-            /:global\(html\[data-xc-keyboard='open'\]\) \.lockoutBanner\s*\{[\s\S]*padding: var\(--xc-space-2\);/,
-        );
         expect(css).not.toMatch(
             /:global\(html\[data-xc-keyboard='open'\]\)[^\{]*(?:\.hero|\.forgotBlock)[^\{]*\{\s*display: none;/,
         );
@@ -83,5 +85,34 @@ describe('Locked compact-height layout', () => {
         expect(screen.getByLabelText('Password')).toBeVisible();
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeVisible();
+    });
+
+    it('orders the primary action before recovery and toggles password visibility in memory', () => {
+        renderLocked({ width: 360, height: 640 });
+        const password = screen.getByLabelText('Password');
+        const unlock = screen.getByRole('button', { name: 'Unlock Wallet' });
+        const forgot = screen.getByRole('button', { name: 'Forgot password?' });
+        const storageWrite = vi.spyOn(Storage.prototype, 'setItem');
+        const consoleWrites = ['log', 'info', 'warn', 'error', 'debug']
+            .map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+
+        expect(password.compareDocumentPosition(unlock) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(unlock.compareDocumentPosition(forgot) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+
+        fireEvent.change(password, { target: { value: 'not-persisted' } });
+        const show = screen.getByRole('button', { name: 'Show password' });
+        expect(password).toHaveAttribute('type', 'password');
+        fireEvent.click(show);
+        expect(password).toHaveAttribute('type', 'text');
+        expect(password).toHaveValue('not-persisted');
+        expect(screen.getByRole('button', { name: 'Hide password' }))
+            .toHaveAttribute('aria-pressed', 'true');
+        expect(storageWrite).not.toHaveBeenCalled();
+        for (const write of consoleWrites) expect(write).not.toHaveBeenCalled();
+
+        const forgotRule = css.match(/\.forgotBlock\s*\{([^}]*)\}/);
+        expect(forgotRule?.[1]).not.toMatch(/border/);
     });
 });

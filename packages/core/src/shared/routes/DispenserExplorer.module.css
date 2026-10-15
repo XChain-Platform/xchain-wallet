@@ -5,18 +5,23 @@
 }
 
 .searchModes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-2);
 }
 
-.chainField {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
+.searchModes > div {
+    flex-flow: row wrap;
     align-items: center;
     gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
+    margin-bottom: 0;
+}
+
+/* Top-aligned: the search field carries its hint underneath, so bottom
+   alignment would push the Chain select down beside the hint. */
+.filterRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
 }
 
 .chainSelect {
@@ -26,10 +31,19 @@
     box-sizing: border-box;
 }
 
-.searchActions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
+.chainControl {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.queryControl {
+    flex: 2 1 18rem;
+    min-width: 0;
+}
+
+.chainControl > *,
+.queryControl > * {
+    margin-bottom: 0;
 }
 
 .resultGroup {
@@ -43,6 +57,20 @@
     flex-direction: column;
     align-items: stretch;
     gap: var(--xc-space-2);
+}
+
+/* The kit Button wraps its children in one inline-flex label span, so the
+   column layout has to reach that span too: without it the ticker, the
+   terms and the action number sat side by side and squeezed the terms into
+   a narrow middle column on a phone. */
+.resultRow > span {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    text-align: start;
 }
 
 .resultFacts {
@@ -76,13 +104,17 @@
     overflow-wrap: anywhere;
 }
 
+.numericValue {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .resultMeta {
     display: block;
     overflow-wrap: anywhere;
 }
 
 @media not all and (min-width: 400px) {
-    .chainField,
     .factRow {
         grid-template-columns: minmax(0, 1fr);
     }

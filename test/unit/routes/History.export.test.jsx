@@ -4,15 +4,49 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Blob as NodeBlob } from 'node:buffer';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import historyStyles from '../../../packages/core/src/shared/routes/History.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
+const historyCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/History.module.css'),
+    'utf8',
+).replace(/\/\*[\s\S]*?\*\//g, '');
+
+function ruleBody(text, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(text);
+    return match?.[2] || '';
+}
+
+function mediaBlock(text, query) {
+    const blocks = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+        const start = text.indexOf(`@media ${query}`, cursor);
+        if (start < 0) break;
+        const open = text.indexOf('{', start);
+        let depth = 0;
+        for (let index = open; index < text.length; index += 1) {
+            if (text[index] === '{') depth += 1;
+            if (text[index] === '}') depth -= 1;
+            if (depth !== 0) continue;
+            blocks.push(text.slice(open + 1, index));
+            cursor = index + 1;
+            break;
+        }
+    }
+    return blocks.join('\n');
+}
 
 function mountHistory(rows) {
     const messaging = {
@@ -67,7 +101,12 @@ describe('History export button', () => {
         await user.keyboard('{Enter}');
 
         const dialog = await screen.findByRole('dialog', { name: 'Export history' });
-        const controls = Array.from(dialog.querySelectorAll('input, button'));
+        const dialogQueries = within(dialog);
+        const controls = [
+            ...dialogQueries.getAllByRole('radio'),
+            ...dialogQueries.getAllByRole('checkbox'),
+            ...dialogQueries.getAllByRole('button'),
+        ];
         expect(controls).toHaveLength(17);
         await waitFor(() => expect(controls[0]).toHaveFocus());
         for (const control of controls.slice(1)) {
@@ -97,12 +136,55 @@ describe('History export button', () => {
         expect(button).toHaveAttribute('aria-describedby', 'history-export-disabled-reason');
     });
 
-    it('is disabled with an explanation when there is no history', async () => {
+    it('hides export controls when there is no history', async () => {
         mountHistory([]);
 
-        const button = await screen.findByRole('button', { name: 'Export…' });
-        expect(button).toBeDisabled();
-        expect(screen.getByText('There are no history rows to export.')).toBeInTheDocument();
+        await screen.findByText('No activity yet');
+        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
+        expect(screen.queryByText('There are no history rows to export.')).toBeNull();
+    });
+
+    it('keeps the kit controls together in a standard-height wrapping toolbar at 360px', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+
+        try {
+            mountHistory([historyRow()]);
+            const trigger = await screen.findByRole('button', { name: 'Export…' });
+            const additionalDetails = screen.getByRole('button', { name: 'Additional details' });
+            const showFiat = screen.getByRole('button', { name: 'Show fiat: Off' });
+            const grouping = screen.getByRole('radiogroup', { name: 'Grouping mode' });
+            const toolbar = additionalDetails.parentElement;
+            const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
+
+            expect(window.innerWidth).toBe(360);
+            expect(toolbar).not.toBeNull();
+            expect(additionalDetails.parentElement).toBe(toolbar);
+            expect(showFiat.parentElement).toBe(toolbar);
+            expect(grouping.parentElement).toBe(toolbar);
+            // Export sits in the always-visible top row, outside the foldable
+            // filter card, so it stays reachable while the filters are folded.
+            expect(trigger.parentElement).toHaveClass(historyStyles.toolbarTop);
+            expect(trigger.closest(`.${historyStyles.filterFooter}`)).toBeNull();
+            for (const control of [additionalDetails, showFiat, grouping, trigger]) {
+                expect(control).toHaveClass(historyStyles.toolbarControl);
+            }
+            expect(additionalDetails).toHaveAttribute('aria-pressed', 'false');
+            expect(showFiat).toHaveAttribute('aria-pressed', 'false');
+            expect(trigger).toHaveClass(buttonStyles.secondary);
+            expect(ruleBody(historyCss, '.filterFooter')).toMatch(
+                /display:\s*flex[\s\S]*flex-wrap:\s*wrap/,
+            );
+            expect(ruleBody(historyCss, '.toolbarControl')).toMatch(
+                /flex:\s*0 0 auto[\s\S]*height:\s*var\(--xc-control-h-md\)[\s\S]*min-height:\s*var\(--xc-control-h-md\)/,
+            );
+            expect(ruleBody(phone, '.body')).toMatch(
+                /padding-bottom:\s*calc\(3\.5rem \+ env\(safe-area-inset-bottom, 0px\)\)/,
+            );
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+            else Reflect.deleteProperty(window, 'innerWidth');
+        }
     });
 });
 
@@ -121,8 +203,8 @@ describe('History export shortcut (§34.2)', () => {
     it('leaves the export dialog closed on e when there is no history', async () => {
         mountHistory([]);
 
-        const button = await screen.findByRole('button', { name: 'Export…' });
-        expect(button).toBeDisabled();
+        await screen.findByText('No activity yet');
+        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
         fireEvent.keyDown(document.body, { key: 'e' });
 
         expect(screen.queryByRole('dialog', { name: 'Export history' })).toBeNull();
@@ -156,7 +238,7 @@ describe('large History export', () => {
         vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
         vi.stubGlobal('Blob', NodeBlob);
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        fireEvent.click(screen.getByLabelText(/^JSON/));
+        fireEvent.click(screen.getByRole('radio', { name: /^JSON/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Export' }));
         await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 

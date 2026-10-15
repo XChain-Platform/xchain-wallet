@@ -156,6 +156,26 @@ async function payToBuy() {
 }
 
 describe('fiat-priced dispenser, buyer view (D-144)', () => {
+    it('copies the unformatted decimal amount without the ticker', async () => {
+        const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        try {
+            mount({ ...COIN_DISPENSER, get_amount: '1234567.8900' });
+            fireEvent.click(await screen.findByRole('button', { name: 'Copy amount' }));
+
+            await waitFor(() => expect(writeText).toHaveBeenCalledWith('1234567.8900'));
+            expect(screen.getByRole('button', { name: 'Copied: amount' }))
+                .toHaveTextContent('Copied: amount');
+        } finally {
+            if (prior) Object.defineProperty(navigator, 'clipboard', prior);
+            else delete navigator.clipboard;
+        }
+    });
+
     it('shows the network fee in the selected currency', async () => {
         mount({ ...COIN_DISPENSER, source: BUYER, address: BUYER });
         fireEvent.click(await screen.findByTitle('Change expiration or allow/block lists'));

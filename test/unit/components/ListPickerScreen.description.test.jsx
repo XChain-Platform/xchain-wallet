@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ListPickerScreen } from '@xchain-wallet/core/shared/components/ListPickerScreen.jsx';
 
 function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }, overrides = {}) {
@@ -33,10 +33,9 @@ function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }, overrides 
 }
 
 async function detailText(idx) {
-    const title = await screen.findByText(new RegExp(`list #${idx}`));
-    const button = title.closest('button');
-    await waitFor(() => expect(button.lastChild.textContent).not.toMatch(/^counting…/));
-    return button.lastChild.textContent;
+    const row = await screen.findByRole('button', { name: new RegExp(`list #${idx}`, 'i') });
+    await waitFor(() => expect(row).not.toHaveTextContent('counting…'));
+    return within(row).getByText(/^(?:[\d,]+ members?|members unavailable)(?: · .*)?$/).textContent;
 }
 
 describe('ListPickerScreen description detail', () => {
@@ -44,7 +43,7 @@ describe('ListPickerScreen description detail', () => {
         renderPicker([]);
 
         const title = await screen.findByText('No address lists yet');
-        expect(screen.getByText('Address lists published from this chain appear here.')).toBeTruthy();
+        expect(screen.getByText('Address lists published from this network appear here.')).toBeTruthy();
         expect(title.tagName).toBe('P');
         expect(title.parentElement.className).toMatch(/wrap/);
         expect(title.parentElement.parentElement.className).toMatch(/page/);
@@ -69,6 +68,59 @@ describe('ListPickerScreen description detail', () => {
         expect(messaging.getListsForSource).toHaveBeenCalledTimes(2);
     });
 
+    it('shows the load failure when the source read throws synchronously', async () => {
+        const messaging = {
+            getListsForSource: vi.fn(() => { throw new Error('synchronous failure'); }),
+            getListByActionIndex: vi.fn(),
+        };
+        renderPicker([], undefined, { messaging });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Couldn’t load lists. Check your connection and try again.',
+        );
+    });
+
+    it('reloads detail for the same action index after the network changes', async () => {
+        const messaging = {
+            getListsForSource: vi.fn().mockResolvedValue([{ action_index: '10', type: '2' }]),
+            getListByActionIndex: vi.fn(async ({ chainId }) => (
+                chainId === 'first'
+                    ? { type: '2', list: ['a'] }
+                    : { type: '2', list: ['a', 'b'] }
+            )),
+        };
+        const props = {
+            variant: 'full',
+            messaging,
+            addresses: [{ address: 'addr1' }],
+            filterType: '2',
+            onSelect: vi.fn(),
+            onBack: vi.fn(),
+        };
+        const { rerender } = render(<ListPickerScreen {...props} chainId="first" />);
+        await waitFor(() => expect(screen.getByText('1 member')).toBeInTheDocument());
+
+        rerender(<ListPickerScreen {...props} chainId="second" />);
+
+        await waitFor(() => expect(screen.getByText('2 members')).toBeInTheDocument());
+        expect(messaging.getListByActionIndex).toHaveBeenCalledWith({
+            chainId: 'second',
+            actionIndex: '10',
+        });
+    });
+
+    it('omits rows without an action index', async () => {
+        renderPicker([
+            { tx_hash: 'first', type: '2' },
+            { tx_hash: 'second', type: '2' },
+            { action_index: '10', type: '2' },
+        ]);
+
+        expect(await screen.findByText(/list #10/)).toBeInTheDocument();
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.queryByText(/list #\?/)).toBeNull();
+    });
+
     it('omits rejected lists from access-filter choices', async () => {
         renderPicker([
             { action_index: '10', type: '2', status: 'valid' },
@@ -85,8 +137,8 @@ describe('ListPickerScreen description detail', () => {
             [{ action_index: '10', type: '2', description: 'Holders of the gold tier' }],
             detail.promise,
         );
-        const title = await screen.findByText(/list #10/);
-        expect(title.closest('button').lastChild.textContent).toBe('counting…');
+        const row = await screen.findByRole('button', { name: /list #10/i });
+        expect(row).toHaveTextContent('counting…');
         detail.resolve({ type: '2', list: ['a', 'b'] });
         expect(await detailText('10')).toBe('2 members · Holders of the gold tier');
     });
@@ -174,7 +226,7 @@ describe('ListPickerScreen description detail', () => {
         expect(onBack).toHaveBeenCalledOnce();
         expect(onSelect).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByText('Treasury (List #10)').closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: /Treasury \(List #10\)/ }));
         expect(onSelect).toHaveBeenCalledWith({
             actionIndex: '10',
             type: '2',

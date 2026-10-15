@@ -18,17 +18,25 @@
 import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import {
     registerLocale,
     setLocale,
 } from '../../../packages/core/src/i18n/index.js';
 
 const RATE = { rate: 67000, fiatCurrency: 'USD' };
+const amountFieldStyles = readFileSync(
+    'packages/core/src/shared/components/AmountField.module.css',
+    'utf8',
+);
 
 beforeAll(() => {
     registerLocale('de-DE', {});
     registerLocale('fr-FR', {});
+    registerLocale('hi-IN', {});
+    registerLocale('ar-EG', {});
 });
 
 afterEach(async () => {
@@ -51,6 +59,15 @@ describe('AmountField fiat gate', () => {
         const u = mount({ fiatRate: RATE });
         expect(u.getByRole('button', { name: /switch input to usd/i })).toBeTruthy();
         expect(u.container.textContent).toMatch(/≈\s*\$134,000\.00 USD/);
+    });
+
+    it('uses the shared small control size for the fiat toggle and Paste', () => {
+        const u = mount({ fiatRate: RATE });
+        const toggle = u.getByRole('button', { name: /switch input to usd/i });
+        const paste = u.getByRole('button', { name: 'Paste from clipboard' });
+
+        expect(toggle).toHaveClass(buttonStyles.btn, buttonStyles.sm);
+        expect(paste).toHaveClass(buttonStyles.btn, buttonStyles.sm);
     });
 
     it('formats the preview in the selected fiat currency', () => {
@@ -99,6 +116,36 @@ describe('AmountField fiat gate', () => {
 });
 
 describe('AmountField input contract', () => {
+    it.each([320, 360])('keeps Paste and Max on one line in a %ipx field', (width) => {
+        const u = render(
+            <div style={{ width }}>
+                <AmountField
+                    amount="1"
+                    tick="BTC"
+                    onAmountFieldChange={() => {}}
+                    onMax={() => {}}
+                />
+            </div>,
+        );
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+        const actions = [
+            u.getByRole('button', { name: 'Paste from clipboard' }),
+            u.getByRole('button', { name: 'Use max available amount' }),
+        ];
+
+        expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
+        expect(amountFieldStyles).toMatch(
+            /--amount-action-width:\s*calc\(var\(--amount-control-height\) \+ var\(--xc-space-8\)\)/,
+        );
+        expect(amountFieldStyles).toMatch(/\.amountFieldWrap input\s*\{[^}]*min-width:\s*0/s);
+        expect(amountFieldStyles).toMatch(
+            /\.pasteAction button > span,\s*\.maxAction > span\s*\{[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+        );
+        for (const action of actions) {
+            expect(action.textContent).not.toMatch(/\s/);
+        }
+    });
+
     it('switches display modes without replacing the canonical coin value', () => {
         const toggleAmountInputMode = vi.fn();
         const props = {
@@ -165,23 +212,28 @@ describe('AmountField input contract', () => {
     });
 
     it.each([
-        ['de-DE', '1,234.56', '1.234,56'],
-        ['fr-FR', '1,234.56', '1\u202f234,56'],
-    ])('uses %s separators for display while accepting either common paste style', async (
+        ['de-DE', '12,34,567.89', '1.234.567,89'],
+        ['fr-FR', '1.234.567,89', '1\u202f234\u202f567,89'],
+        ['hi-IN', '1\u202f234\u202f567,89', '12,34,567.89'],
+        ['ar-EG', '١٬٢٣٤٬٥٦٧٫٨٩ BTC', '١٬٢٣٤٬٥٦٧٫٨٩'],
+    ])('uses %s separators for display while accepting localized paste', async (
         locale,
         pasted,
         displayed,
     ) => {
         await setLocale(locale);
         const onAmountFieldChange = vi.fn();
-        const u = mount({ amount: '1234.56', onAmountFieldChange });
+        const u = mount({ amount: '1234567.89', onAmountFieldChange });
         const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
 
         expect(input).toHaveValue(displayed);
         fireEvent.change(input, {
             target: { value: pasted, selectionStart: pasted.length },
         });
-        expect(onAmountFieldChange).toHaveBeenCalledWith('1234.56', null);
+        expect(onAmountFieldChange).toHaveBeenCalledWith(
+            '1234567.89',
+            locale === 'hi-IN' ? '1234567.89'.length : null,
+        );
     });
 
     it('shows a plain error for malformed mixed separators', () => {

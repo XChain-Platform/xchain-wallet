@@ -74,16 +74,17 @@ describe('background settings save failures', () => {
         fireEvent.click(control);
 
         const alert = await screen.findByRole('alert');
-        expect(alert).toHaveTextContent('Could not save this privacy setting. Try again.');
-        expect(control.parentElement.nextElementSibling).toBe(alert);
+        expect(alert).toHaveTextContent('Couldn\'t save this privacy setting. Try again.');
+        // The kit Switch nests its input inside a label, so the row is the label's parent.
+        expect(control.closest('label').parentElement.nextElementSibling).toBe(alert);
         expect(control.checked).toBe(previous);
         expectNoSuccessToast();
     });
 
     it('shows an endpoint error in the edited chain and restores the persisted URL', async () => {
         renderSection(<NetworkEndpointsSection />);
-        const block = screen.getByText('Bitcoin').parentElement.parentElement;
-        const control = within(block).getByLabelText('Explorer URL');
+        const block = screen.getByRole('region', { name: 'Bitcoin' });
+        const control = within(block).getByRole('textbox', { name: 'Explorer URL' });
         const previous = control.value;
 
         fireEvent.change(control, { target: { value: 'https://private.example.com' } });
@@ -127,7 +128,8 @@ describe('background settings save failures', () => {
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('Could not update transaction confirmations. Try again.');
-        expect(control.parentElement.nextElementSibling).toBe(alert);
+        // The kit Switch nests its input inside a label, so the row is the label's parent.
+        expect(control.closest('label').parentElement.nextElementSibling).toBe(alert);
         expect(control.checked).toBe(previous);
         expectNoSuccessToast();
     });
@@ -141,7 +143,8 @@ describe('background settings save failures', () => {
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('Could not save this display preference. Try again.');
-        expect(control.parentElement.nextElementSibling).toBe(alert);
+        // The kit Switch nests its input inside a label, so the row is the label's parent.
+        expect(control.closest('label').parentElement.nextElementSibling).toBe(alert);
         await waitFor(() => expect(control.checked).toBe(previous));
         expectNoSuccessToast();
     });

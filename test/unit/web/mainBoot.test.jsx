@@ -15,6 +15,7 @@ const boot = vi.hoisted(() => ({
     floorFailureMessage: vi.fn(),
     floorStaleMessage: vi.fn(),
     nativeShellIsBroken: vi.fn(),
+    installNativeKdfProvider: vi.fn(),
     installKeyboardViewport: vi.fn(),
     installShellErrorCapture: vi.fn(),
     idleCallbacks: [],
@@ -36,6 +37,9 @@ vi.mock('../../../packages/web/src/platform/webviewFloor.js', () => ({
 vi.mock('../../../packages/web/src/storage/nativeVault.js', () => ({
     BROKEN_SHELL_MESSAGE: 'Native vault unavailable.',
     nativeShellIsBroken: boot.nativeShellIsBroken,
+}));
+vi.mock('../../../packages/web/src/storage/nativeKdfProvider.js', () => ({
+    installNativeKdfProvider: boot.installNativeKdfProvider,
 }));
 vi.mock('../../../packages/web/src/platform/keyboardViewport.js', () => ({
     installKeyboardViewport: boot.installKeyboardViewport,
@@ -81,6 +85,9 @@ describe('web application boot', () => {
         const container = document.getElementById('xchain-web-root');
 
         expect(boot.installShellErrorCapture).toHaveBeenCalledTimes(1);
+        expect(boot.installNativeKdfProvider).toHaveBeenCalledTimes(1);
+        expect(boot.installNativeKdfProvider.mock.invocationCallOrder[0])
+            .toBeLessThan(boot.render.mock.invocationCallOrder[0]);
         expect(boot.installKeyboardViewport).toHaveBeenCalledTimes(1);
         expect(navigator.registerProtocolHandler).toHaveBeenNthCalledWith(
             1,
@@ -102,6 +109,17 @@ describe('web application boot', () => {
         expect(boot.syncRegistry).toHaveBeenCalledWith({ registry: { kind: 'registry' } });
         const shell = boot.render.mock.calls[0][0];
         expect(shell.props.children[1].type.name).toBe('NativeShellReady');
+    });
+
+    it('mounts with the JS fallback when native KDF installation fails', async () => {
+        boot.installNativeKdfProvider.mockImplementationOnce(() => {
+            throw new Error('native bridge unavailable');
+        });
+
+        await runBoot();
+
+        expect(boot.installNativeKdfProvider).toHaveBeenCalledTimes(1);
+        expect(boot.render).toHaveBeenCalledTimes(1);
     });
 
     it('renders a plain blocking panel when required browser capabilities are missing', async () => {

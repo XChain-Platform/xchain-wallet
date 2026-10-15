@@ -35,10 +35,21 @@ import { defineConfig, devices } from '@playwright/test';
 
 import { describeBudget, timeoutBudget } from './timeout-budget.js';
 
+export function desktopUserAgentForHost(
+    platform = process.platform,
+    desktopUserAgent = devices['Desktop Chrome'].userAgent,
+) {
+    const platformToken = {
+        darwin: 'Macintosh; Intel Mac OS X 10_15_7',
+        linux: 'X11; Linux x86_64',
+        win32: 'Windows NT 10.0; Win64; x64',
+    }[platform];
+    return platformToken
+        ? desktopUserAgent.replace(/\([^)]*\)/, `(${platformToken})`)
+        : desktopUserAgent;
+}
+
 const budget = timeoutBudget();
-const LG_K51_TAG = /@lg-k51/;
-const LG_K51_CHROME_102_UA = 'Mozilla/5.0 (Linux; Android 12; LM-K500) '
-    + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.125 Mobile Safari/537.36';
 // Named in the run's own output, so a red run is self-describing: the
 // budget it had is the first thing you need to know when deciding whether
 // a timeout was pressure or a genuine hang.
@@ -56,6 +67,9 @@ export default defineConfig({
         '**/*.regtest.spec.js',
         '**/*.testnet.spec.js',
         '**/*.extension.spec.js',
+        // On demand through playwright.a11y-sweep.config.js: about a hundred
+        // screens per theme and size is too long for the default run.
+        '**/demo-axe-sweep.spec.js',
     ],
     outputDir: './test-results',
     fullyParallel: false,
@@ -66,7 +80,15 @@ export default defineConfig({
     // Vite transform on a loaded box costs several more. Both scale with
     // contention, so both budgets do too.
     timeout: budget.timeout,
-    expect: { timeout: budget.expectTimeout },
+    expect: {
+        timeout: budget.expectTimeout,
+        toHaveScreenshot: {
+            animations: 'disabled',
+            caret: 'hide',
+            maxDiffPixels: 100,
+            maxDiffPixelRatio: 0.001,
+        },
+    },
     globalSetup: './global-setup.ci.js',
     reporter: process.env.CI
         ? [['github'], ['html', { open: 'never' }]]
@@ -80,20 +102,11 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
-            grepInvert: /@lg-k51(?![-\w])/,
-            use: { ...devices['Desktop Chrome'] },
-        },
-        {
-            name: 'android-lg-k51-smoke',
-            grep: /@smoke|@lg-k51(?![-\w])/,
             use: {
-                browserName: 'chromium',
-                viewport: { width: 412, height: 869 },
-                deviceScaleFactor: 2,
-                userAgent: 'Mozilla/5.0 (Linux; Android 10; LM-K500) AppleWebKit/537.36 '
-                    + '(KHTML, like Gecko) Chrome/102.0.5005.125 Mobile Safari/537.36',
-                isMobile: true,
-                hasTouch: true,
+                ...devices['Desktop Chrome'],
+                // Playwright derives navigator.platform from this user agent,
+                // keeping ControlOrMeta aligned with the app's host shortcut gate.
+                userAgent: desktopUserAgentForHost(),
             },
         },
     ],

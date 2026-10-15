@@ -214,14 +214,22 @@ assert.ok(
 
 // --- 10. CSS ------------------------------------------------------------
 
+// Lock hints render as the kit Checkbox description, so no .lockFlagHint hook remains.
 for (const cls of [
-    'advanced', 'advancedBody', 'advancedHeading',
-    'lockFlagRow', 'lockFlagHint', 'listRow',
+    'advanced', 'advancedBody',
+    'lockFlagRow', 'listRow',
 ]) {
     assert.ok(
         new RegExp(`\\.${cls}[\\s,{:]`).test(css),
         `TokenWizard.module.css ships .${cls}`,
     );
 }
+assert.ok(
+    /<FormSection\s+title="Locks \(permanent\)"/.test(src)
+        && /<FormSection\s+title="Callback"/.test(src)
+        && /<FormSection\s+title="Access lists"/.test(src),
+    'advanced groups delegate their headings and layout to FormSection',
+);
+assert.ok(!/\.advancedHeading[\s,{:]/.test(css), 'advanced groups have no route-level heading style');
 
 console.log('OK: token wizard advanced smoke (PC-06: create-time lock matrix + callback trio + access lists folded into the Custom template; shared LOCK_FLAGS + ListPickerScreen; create-only future-block and divisibility rails)');

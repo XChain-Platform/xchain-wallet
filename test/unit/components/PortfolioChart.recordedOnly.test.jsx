@@ -14,7 +14,7 @@
 // keeps its synthesized chart and every range.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
     PortfolioChart,
@@ -119,6 +119,8 @@ describe('PortfolioChart on a real wallet', () => {
             /^Portfolio performance chart\. Range 7d\. Values range from .* USD\. Start .* USD\. End \$40,000\.00 USD\. Change \+/,
         ));
         expect(chart.querySelector('title')).toHaveTextContent('USD');
+        const change = screen.getByLabelText(/7d change\./);
+        expect(change).toHaveTextContent(/\(\+.*%\) · 7d/);
 
         const tablist = screen.getByRole('tablist', { name: 'Chart range' });
         const panel = screen.getByRole('tabpanel');
@@ -165,6 +167,15 @@ describe('PortfolioChart on a real wallet', () => {
         expect(screen.getByRole('img', { name: /^Portfolio performance chart\..*\(0\.00%\)/ })).toBeInTheDocument();
     });
 
+    it('labels the chart calculation with the selected period', async () => {
+        const sparkline = Array.from({ length: 168 }, (_, index) => 100 - index / 10);
+        mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline } } });
+
+        expect(await screen.findByLabelText(/7d change\. Decrease/)).toHaveTextContent('· 7d');
+        fireEvent.click(screen.getByRole('tab', { name: '24h' }));
+        expect(screen.getByLabelText(/24h change\. Decrease/)).toHaveTextContent('· 24h');
+    });
+
     it('requests and formats chart history in the selected fiat currency', async () => {
         const messaging = mount(
             'real-wallet-1',
@@ -195,5 +206,42 @@ describe('PortfolioChart on the demo wallet', () => {
         mount('demo-wallet-1', {});
         await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
         expect(rangeLabels()).toEqual(['24h', '7d', '30d', '90d', 'All']);
+    });
+
+    it('opens each wallet mode on its own default range when the active wallet changes', async () => {
+        const messaging = {
+            getSettings: vi.fn(async () => ({})),
+            getNativePricesRequest: vi.fn(async () => ({
+                prices: { 'bitcoin-mainnet': { sparkline: [70000, 71000] } },
+            })),
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PortfolioChart rows={ROWS} walletId="real-wallet-1" />
+            </MessagingProvider>,
+        );
+        const selectedRange = () => screen.getAllByRole('tab')
+            .find((tab) => tab.getAttribute('aria-selected') === 'true')?.textContent;
+
+        await screen.findByRole('img');
+        expect(selectedRange()).toBe('7d');
+
+        markDemoWallet('demo-wallet-1');
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PortfolioChart rows={ROWS} walletId="demo-wallet-1" />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(selectedRange()).toBe('30d'));
+
+        clearDemoWalletId();
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PortfolioChart rows={ROWS} walletId="real-wallet-2" />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(selectedRange()).toBe('7d'));
     });
 });

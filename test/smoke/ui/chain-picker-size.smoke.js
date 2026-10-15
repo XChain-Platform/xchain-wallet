@@ -39,7 +39,7 @@ assert.match(css, /\.lg \.trigger\s*\{[^}]*min-height:\s*48px/s, 'lg trigger is 
 // --- single-line trigger (the two-line stack is gone) -------------------
 
 assert.doesNotMatch(css, /\.triggerSub\b/, 'old two-line triggerSub removed');
-assert.match(cmp, /styles\.triggerKind/, 'network-kind rendered inline as a suffix');
+assert.doesNotMatch(cmp, /styles\.triggerKind/, 'network-kind suffix is not rendered');
 assert.doesNotMatch(cmp, /styles\.triggerSub/, 'no two-line sub in the trigger');
 
 console.log('chain-picker-size smoke OK');

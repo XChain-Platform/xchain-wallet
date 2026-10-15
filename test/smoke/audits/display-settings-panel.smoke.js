@@ -55,11 +55,11 @@ assert.ok(/writePinned\(next\)/.test(sectionSrc),
     'movePin writes the reordered array via writePinned');
 assert.ok(/update\(\{ pinnedTokens: next \}\)/.test(sectionSrc),
     'pinned writes go through update({ pinnedTokens })');
-assert.ok(/aria-label=\{`Move \$\{key\} up`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.moveUp', \{ key \}\)\}/.test(sectionSrc),
     'each ↑ row carries an aria-label naming the key it moves');
-assert.ok(/aria-label=\{`Move \$\{key\} down`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.moveDown', \{ key \}\)\}/.test(sectionSrc),
     'each ↓ row carries an aria-label naming the key it moves');
-assert.ok(/aria-label=\{`Unpin \$\{key\}`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.unpin', \{ key \}\)\}/.test(sectionSrc),
     'each unpin row carries an aria-label naming the key it removes');
 assert.ok(/disabled=\{idx === 0\}/.test(sectionSrc),
     '↑ button disables for the first row');
@@ -76,16 +76,16 @@ assert.ok(/const unhideAll = useCallback/.test(sectionSrc),
     'unhideAll handler exists');
 assert.ok(/writeHidden\(\[\]\)/.test(sectionSrc),
     'unhideAll writes the empty array');
-assert.ok(/aria-label=\{`Unhide \$\{key\}`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.unhide', \{ key \}\)\}/.test(sectionSrc),
     'each per-row unhide carries an aria-label naming the key');
 assert.ok(/Unhide all/.test(sectionSrc),
     'bulk Unhide-all action labelled in the UI');
 
 // --- 4. Empty-state hints ---------------------------------------------
 
-assert.ok(/No pinned tokens\./.test(sectionSrc),
+assert.ok(/title="No pinned tokens"[\s\S]*?body="Tap the star on a balance row to pin it\."/.test(sectionSrc),
     'empty pinned list shows the documented hint');
-assert.ok(/No hidden tokens\./.test(sectionSrc),
+assert.ok(/title="No hidden tokens"[\s\S]*?body="Tap the hide control on a balance row to hide it\."/.test(sectionSrc),
     'empty hidden list shows the documented hint');
 
 // --- 5. Settings.jsx mounts DisplaySection ----------------------------

@@ -8,7 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { ListPage } from '@xchain-wallet/core/ui';
 import { TokenPicker } from './TokenPicker.jsx';
+
+function ReceiveListPage(props) {
+    return <ListPage {...props} />;
+}
 
 /**
  * Receive picker: landing screen for the Receive quick-action. Thin
@@ -29,5 +34,5 @@ import { TokenPicker } from './TokenPicker.jsx';
 export function ReceivePicker(props) {
     // eslint-disable-next-line no-unused-vars -- drop legacy prop, forward rest
     const { hideOwnFilter, ...rest } = props;
-    return <TokenPicker {...rest} purpose="receive" />;
+    return <TokenPicker {...rest} purpose="receive" listPageComponent={ReceiveListPage} />;
 }

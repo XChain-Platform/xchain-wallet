@@ -6,9 +6,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
-vi.mock('@xchain-wallet/core/ui', async () => {
+vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     const React = await import('react');
+    const actual = await importOriginal();
     return {
+        StatusMessage: actual.StatusMessage,
         Button: ({ variant, onClick, children, disabled, loading }) =>
             React.createElement('button', {
                 'data-variant': variant,
@@ -24,6 +26,7 @@ import { ConfirmModal } from '../../../../packages/core/src/shared/components/Co
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
 });
 
@@ -130,6 +133,20 @@ describe('ConfirmModal', () => {
         fireEvent.click(screen.getByText('Confirm'));
         expect(onConfirm).toHaveBeenCalledTimes(1);
         expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('clears a pending confirmation release timer on unmount', () => {
+        vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+        const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+        const { unmount } = setup();
+        const timersBeforeConfirm = setTimeoutSpy.mock.calls.length;
+        fireEvent.click(screen.getByText('Confirm'));
+        expect(setTimeoutSpy).toHaveBeenCalledTimes(timersBeforeConfirm + 1);
+        const releaseTimer = setTimeoutSpy.mock.results.at(-1).value;
+
+        unmount();
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(releaseTimer);
     });
 
     it('cancel button calls onCancel only', () => {

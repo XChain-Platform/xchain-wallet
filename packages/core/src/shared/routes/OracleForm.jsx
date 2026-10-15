@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
@@ -36,7 +37,10 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { oraclePriceFeeError, oraclePriceValueError } from '../../flows/oraclePriceAction.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
@@ -114,6 +118,7 @@ function staleAgeText(seconds) {
  */
 export function OracleForm({ walletId, onBack, initialChainId, initialFromAddress, initialTick }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const {
@@ -139,7 +144,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         initialChainId,
         initialFromAddress,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one first.',
+            'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -306,19 +311,19 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     function guardBeforeSign() {
         if (!chainId || !fromAddress) { setFormError('Pick a publishing address first.'); return false; }
         if (!tick) { setFormError('Enter the token ticker this oracle prices.'); return false; }
+        const tickerError = tickerReferenceError(tick, { noun: 'Token ticker', allowRef: true });
+        if (tickerError) { setFormError(tickerError); return false; }
         if (!FIAT_CODES.includes(fiat)) { setFormError('Pick a supported currency.'); return false; }
         const v = value.trim();
-        if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(v) || Number(v) <= 0) {
-            setFormError('Enter a positive price with at most 8 decimal places.');
-            return false;
-        }
+        const valueError = oraclePriceValueError(v);
+        if (valueError) { setFormError(valueError); return false; }
         const f = fee.trim();
-        if (f.length > 0 && (!/^[0-9]+(\.[0-9]{1,18})?$/.test(f) || Number(f) > 1)) {
-            setFormError('The usage fee is a fraction between 0 and 1 (0.01 = 1%).');
-            return false;
-        }
+        const feeError = oraclePriceFeeError(f);
+        if (feeError) { setFormError(feeError); return false; }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
+        const memoError = memoLengthError(m);
+        if (memoError) { setFormError(memoError); return false; }
         return true;
     }
 
@@ -417,8 +422,16 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             title={stage === 'review' || stage === 'submitting' ? 'Review price publish' : 'My oracle'}
         />
     );
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
     );
 
     // The oracle-only facts that must sit in front of the signature on both
@@ -509,6 +522,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review price publish"
                 onSubmit={handleSubmit}
                 intro={decoded?.summary}
@@ -527,8 +541,12 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Publishing as</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     {/* The decoder's rows, so Memo and the fee as a percent show
@@ -543,9 +561,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 {publishNotes}
 
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => <p key={i} className={styles.warning}>{w}</p>)}
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        {decoded.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                    </StatusMessage>
                 ) : null}
 
                 <p className={styles.hint}>
@@ -579,17 +597,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Publish oracle price"
             onSubmit={handleReview}
             sectioned
-            intro={(
-                <>
-                An oracle publishes what one unit of a token is worth in a traditional currency.
-                Dispensers can then price in that currency, and a buyer pays in {priceCoin || 'the chain coin'} at
-                the going rate. Anyone can run one; whoever opens a dispenser against your oracle
-                pays you the usage fee you set below.
-                </>
-            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
@@ -605,6 +616,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             )}
         >
 
+            <InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />
+
             <FormSection title="My published prices">
             {/*
               * Pick the PUBLISHING chain: it decides which address signs, pays
@@ -612,11 +625,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
               * chain is the separate COIN field below, and dispensers on any
               * chain may read this oracle, so the two need not match.
               */}
-            <NetworkField
+            <ChainPicker
+                label="Network"
                 value={chainId}
                 onChange={setChainId}
                 chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
 
             {fromAddress ? (
@@ -630,7 +645,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     iconLabel="Choose publishing address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             {feeds == null ? (
@@ -651,9 +666,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                         const count = consumerCountFor(f);
                         return (
                             <li key={f.key} className={styles.hint}>
-                                <button type="button" onClick={() => prefillFromFeed(f)}>
+                                <Button variant="secondary" size="sm" onClick={() => prefillFromFeed(f)}>
                                     {f.coin && f.coin !== coinTicker ? `${f.coin}:` : ''}{f.tick} in {f.fiat}
-                                </button>
+                                </Button>
                                 {': '}
                                 {f.live
                                     ? `${f.live.value} ${f.fiat} live`
@@ -674,10 +689,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
             <FormSection title="Publish a price">
             <Select
-                label="Token's chain"
+                label="Token's network"
                 hint={crossChain
                     ? `Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`
-                    : 'The chain the priced token lives on. It can differ from the publishing chain.'}
+                    : 'The network the priced token lives on. It can differ from the publishing network.'}
                 value={priceCoin}
                 onChange={(e) => setCoinPick(e.target.value === coinTicker ? '' : e.target.value)}
             >
@@ -784,8 +799,8 @@ function OraclePublishNotes({
                 </dl>
             ) : null}
 
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="alert">
+                <p>
                     <strong>
                         {isFirstPublish
                             ? 'This is the first price for this pair, and it will not price anything for 24 hours.'
@@ -799,26 +814,26 @@ function OraclePublishNotes({
                                 ? 'The previous effective price is stale, so nothing sells on this pair until a pending price matures. The only way to correct a mistake is another publish, which also takes 24 hours.'
                             : 'Nothing sells on this pair yet: your earlier price is still pending and takes effect first, then this one replaces it. The only way to correct a mistake is another publish, which also takes 24 hours.'}
                 </p>
-            </div>
+            </StatusMessage>
 
             {needsTypedConfirm ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>That is a {fmtPct(deviationPct)} move</strong> from your last published
                         price of {priorQuote?.value} {fiat}. Check the decimal point before signing.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
 
             {consumers && !consumers.supported ? (
                 <p className={styles.hint}>
                     Could not check which dispensers use this oracle, so this list may be
                     incomplete. Treat the publish as if buyers are watching.
-                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this chain.` : ''}
+                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this network.` : ''}
                 </p>
             ) : pairConsumers.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {pairConsumers.length} open dispenser{pairConsumers.length === 1 ? '' : 's'} price
                         {pairConsumers.length === 1 ? 's' : ''} {tick} from this oracle and will sell at the
                         new price once it takes effect:
@@ -833,7 +848,7 @@ function OraclePublishNotes({
                             ))}
                         </ul>
                     </details>
-                </div>
+                </StatusMessage>
             ) : (
                 <p className={styles.hint}>No open dispensers price {tick} from this oracle right now.</p>
             )}

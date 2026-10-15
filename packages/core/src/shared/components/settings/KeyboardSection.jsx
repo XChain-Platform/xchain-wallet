@@ -24,8 +24,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
-import { useConfirmModal } from '../../hooks/useConfirmModal.js';
-import { ConfirmModal } from '../ConfirmModal.jsx';
 import {
     SHORTCUTS,
     SHORTCUT_GROUPS,
@@ -36,16 +34,28 @@ import {
     parseBinding,
     resolveBindings,
 } from '../../keyboard/shortcuts.js';
-import { ROW, ROW_LABEL, STACK, Status, settingsLoadErrorText } from './_settingsPrimitives.jsx';
+import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 const GROUP_HEADER = {
     fontSize: 'var(--xc-text-sm)',
     fontWeight: 600,
     color: 'var(--xc-text)',
     marginTop: 'var(--xc-space-3)',
-    marginBottom: 'var(--xc-space-1)',
+    marginBottom: 0,
+};
+const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
+const SHORTCUT_ROW = {
+    ...ROW,
+    boxSizing: 'border-box',
+    minHeight: 'var(--xc-control-h-lg)',
+    paddingBlock: 'var(--xc-space-1)',
 };
 const KBD = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '7rem',
     fontFamily: 'var(--xc-font-sans)',
     fontSize: 'var(--xc-text-xs)',
     color: 'var(--xc-text)',
@@ -62,7 +72,13 @@ const CAPTURING = {
     borderColor: 'var(--xc-accent)',
     color: 'var(--xc-accent)',
 };
-const ACTIONS = { display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexShrink: 0 };
+const ACTIONS = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    flexShrink: 0,
+};
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;
@@ -92,7 +108,6 @@ function bindingFromEvent(e, kind) {
 
 export function KeyboardSection() {
     const { settings, update, loading, error } = useSettings();
-    const confirmDialog = useConfirmModal();
     const overrides = settings?.keyboard?.bindings || {};
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
     const mac = isMac();
@@ -150,27 +165,14 @@ export function KeyboardSection() {
         return () => window.removeEventListener('keydown', onKey, true);
     }, [capturingId, leaderLead, overrides, shortcuts, update, mac]);
 
-    const resetOne = async (id) => {
-        const shortcut = shortcuts.find((candidate) => candidate.id === id);
-        const confirmed = await confirmDialog.confirm({
-            title: 'Reset shortcut?',
-            message: `Restore "${shortcut?.label || id}" to its built-in binding?`,
-            confirmLabel: 'Reset shortcut',
-        });
-        if (!confirmed) return;
+    const resetOne = (id) => {
         const next = { ...overrides };
         delete next[id];
         update({ keyboard: { bindings: next } })
             .then(() => setStatus({ kind: 'ok', text: 'Shortcut reset to its default.' }))
             .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset.' }));
     };
-    const resetAll = async () => {
-        const confirmed = await confirmDialog.confirm({
-            title: 'Reset all shortcuts?',
-            message: 'Every custom shortcut will return to its built-in binding.',
-            confirmLabel: 'Reset shortcuts',
-        });
-        if (!confirmed) return;
+    const resetAll = () => {
         setCapturingId(null);
         setLeaderLead(null);
         update({ keyboard: { bindings: {} } })
@@ -178,18 +180,17 @@ export function KeyboardSection() {
             .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset shortcuts.' }));
     };
 
-    if (loading) return <p style={ROW_LABEL}>Loading…</p>;
-    if (error) return <p role="alert" style={ROW_LABEL}>{settingsLoadErrorText(error)}</p>;
+    if (loading) return <p style={ROW_LABEL}>{t('common.loading')}</p>;
+    if (error) return <SettingsLoadError error={error} />;
 
     return (
         <div style={STACK}>
-            <p style={{ ...ROW_LABEL, color: 'var(--xc-text-muted)' }}>
-                Select Rebind, then press the new key combination. Screen-specific
-                shortcuts are fixed and only work on their screen.
+            <p style={INTRO}>
+                {t('settings.keyboard.selectRebindThenPressThe')}
             </p>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
             {SHORTCUT_GROUPS.map((group) => (
-                <section key={group}>
+                <section key={group} style={STACK}>
                     <h2 style={GROUP_HEADER}>{group}</h2>
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
@@ -199,15 +200,20 @@ export function KeyboardSection() {
                                 ? 'Requires “Show hide button on rows” in Display.'
                                 : null;
                         return (
-                            <div key={s.id} style={ROW}>
+                            <div key={s.id} style={SHORTCUT_ROW}>
                                 <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                                     <span style={ROW_LABEL}>{s.label}</span>
                                     {availability ? <span style={{ ...ROW_LABEL, fontSize: 'var(--xc-text-xs)' }}>{availability}</span> : null}
                                 </span>
                                 <span style={ACTIONS}>
+                                    {s.overridden ? (
+                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
+                                            {t('settings.keyboard.reset')}
+                                        </Button>
+                                    ) : null}
                                     <kbd style={capturing ? CAPTURING : KBD} aria-live={capturing ? 'polite' : undefined}>
                                         {capturing
-                                            ? (leaderLead ? `${leaderLead.toUpperCase()} then …` : 'Press keys…')
+                                            ? (leaderLead ? t('settings.keyboard.then', { value: leaderLead.toUpperCase() }) : t('settings.keyboard.pressKeys'))
                                             : [s.binding, s.altBinding]
                                                 .filter(Boolean)
                                                 .map((binding) => formatBinding(binding, mac))
@@ -224,13 +230,8 @@ export function KeyboardSection() {
                                                     setCapturingId(capturing ? null : s.id);
                                                 }}
                                             >
-                                                {capturing ? 'Cancel' : 'Rebind'}
+                                                {capturing ? t('common.cancel') : t('settings.keyboard.rebind')}
                                             </Button>
-                                            {s.overridden ? (
-                                                <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
-                                                    Reset
-                                                </Button>
-                                            ) : null}
                                         </>
                                     ) : null}
                                 </span>
@@ -239,27 +240,20 @@ export function KeyboardSection() {
                     })}
                 </section>
             ))}
-            <section>
-                <h3 style={GROUP_HEADER}>Defaults</h3>
+            <section style={STACK}>
+                <h3 style={GROUP_HEADER}>{t('settings.display.defaults')}</h3>
                 <div style={ROW}>
-                    <span style={ROW_LABEL}>Restore every custom shortcut to its built-in binding.</span>
+                    <span style={ROW_LABEL}>{t('settings.keyboard.restoreEveryCustomShortcutTo')}</span>
                     <Button
                         size="sm"
                         variant="secondary"
                         onClick={resetAll}
                         disabled={Object.keys(overrides).length === 0}
                     >
-                        Reset all shortcuts
+                        {t('settings.keyboard.resetAllShortcuts')}
                     </Button>
                 </div>
             </section>
-            {confirmDialog.request ? (
-                <ConfirmModal
-                    {...confirmDialog.request}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
-            ) : null}
         </div>
     );
 }

@@ -8,10 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// A native select cannot middle-truncate, and a full address ran under the
+// chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -19,6 +23,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -79,6 +84,7 @@ const newRowId = () => `row-${++nextRowId}`;
  */
 export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -91,6 +97,12 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     );
     const [actionsList, setActionsList] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [validationError, setValidationError] = useState(/** @type {string | null} */ (null));
+    const [validating, setValidating] = useState(false);
+    const validationRunRef = useRef(0);
+    // Rows the user has edited, or every row once Review was pressed. A row
+    // still missing its chain, address or action only says so after one of those.
+    const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
 
     const [rows, setRows] = useState(/** @type {Row[]} */ ([]));
     const [acknowledgedNoRollback, setAcknowledgedNoRollback] = useState(false);
@@ -127,7 +139,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before composing parallel actions.',
+                        'No addresses on any network yet. Use Receive to generate one before composing parallel actions.',
                     );
                     return;
                 }
@@ -150,7 +162,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, hasDexSurface]);
@@ -163,46 +175,102 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     }, [addressesByChain]);
 
     const updateRow = (index, patch) => {
+        const id = rows[index]?.id;
+        if (id) setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
+        validationRunRef.current += 1;
+        setValidating(false);
+        setValidationError(null);
         setRows((rs) => rs.map((r, i) => (i === index ? { ...r, ...patch } : r)));
     };
 
     const addRow = () => {
         if (chainsWithAddresses.length === 0) return;
+        validationRunRef.current += 1;
+        setValidating(false);
+        setValidationError(null);
         setRows((rs) => [...rs, blankRow(chainsWithAddresses[0], addressesByChain, activeByChain)]);
     };
 
     const removeRow = (index) => {
+        validationRunRef.current += 1;
+        setValidating(false);
+        setValidationError(null);
         setRows((rs) => rs.filter((_, i) => i !== index));
     };
 
-    const composeError = useMemo(() => {
-        if (rows.length === 0) return 'Add at least one action.';
-        for (let i = 0; i < rows.length; i += 1) {
-            const r = rows[i];
-            if (!r.chainId) return `Row ${i + 1}: pick a chain.`;
-            if (!r.fromAddressId) return `Row ${i + 1}: pick a from-address.`;
-            if (!r.action) return `Row ${i + 1}: pick an action.`;
-            if (!isActionOfferedOnChain(chainRegistry, r.chainId, r.action)) {
-                const chainName = chainRegistry.get(r.chainId)?.displayName || r.chainId;
-                return `Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available on ${chainName}.`;
-            }
-            // A prefilled row skips the picker, so the build check repeats here.
-            if (!isActionOfferedInBuild(r.action, { hasDexSurface })) {
-                return `Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available in this build.`;
-            }
-            const parseErr = parseParamsJson(r.paramsJson);
-            if (parseErr) return `Row ${i + 1}: ${parseErr}`;
-            // A BATCH row carries its legs in params, which no picker filtered.
-            if (!isActionDataOfferedInBuild({ action: r.action, params: JSON.parse(r.paramsJson) }, { hasDexSurface })) {
-                return `Row ${i + 1}: a BATCH step is not available in this build.`;
-            }
+    // One entry per row: null, or the row's first problem. `missing` marks a
+    // field not filled in yet, which waits until the row is touched.
+    const rowIssues = useMemo(() => rows.map((r, i) => {
+        const missing = (message) => ({ message, missing: true });
+        const problem = (message) => ({ message, missing: false });
+        if (!r.chainId) return missing(`Row ${i + 1}: pick a network.`);
+        if (!r.fromAddressId) return missing(`Row ${i + 1}: pick a from-address.`);
+        if (!(addressesByChain?.[r.chainId] || []).some((address) => address.id === r.fromAddressId)) {
+            return problem(`Row ${i + 1}: the from-address is no longer available. Pick another address.`);
+        }
+        if (!r.action) return missing(`Row ${i + 1}: pick an action.`);
+        if (!isActionOfferedOnChain(chainRegistry, r.chainId, r.action)) {
+            const chainName = chainRegistry.get(r.chainId)?.displayName || r.chainId;
+            return problem(`Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available on ${chainName}.`);
+        }
+        // A prefilled row skips the picker, so the build check repeats here.
+        if (!isActionOfferedInBuild(r.action, { hasDexSurface })) {
+            return problem(`Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available in this build.`);
+        }
+        const parseErr = parseParamsJson(r.paramsJson);
+        if (parseErr) return problem(`Row ${i + 1}: ${parseErr}`);
+        // A BATCH row carries its legs in params, which no picker filtered.
+        if (!isActionDataOfferedInBuild({ action: r.action, params: JSON.parse(r.paramsJson) }, { hasDexSurface })) {
+            return problem(`Row ${i + 1}: a BATCH step is not available in this build.`);
         }
         return null;
-    }, [rows, hasDexSurface]);
+    }), [rows, hasDexSurface, addressesByChain]);
 
-    const goReview = () => {
-        if (composeError) return;
-        setStage('review');
+    const composeError = rows.length === 0
+        ? 'Add at least one action.'
+        : (rowIssues.find(Boolean)?.message || null);
+    const shownComposeError = rows.length === 0
+        ? composeError
+        : (rowIssues.find((issue, i) => issue && (!issue.missing || touchedRows[rows[i].id]))?.message || null);
+
+    const goReview = async () => {
+        setTouchedRows(Object.fromEntries(rows.map((row) => [row.id, true])));
+        if (composeError || validating) return;
+        const runId = ++validationRunRef.current;
+        const draftRows = rows.map((row) => ({ ...row }));
+        setValidationError(null);
+        setValidating(true);
+        try {
+            const validations = await Promise.all(draftRows.map(async (row) => {
+                try {
+                    const result = await messaging.validateAction({
+                        chainId: row.chainId,
+                        action: row.action,
+                        params: JSON.parse(row.paramsJson),
+                    });
+                    return { result, error: null };
+                } catch (error) {
+                    return { result: null, error };
+                }
+            }));
+            if (validationRunRef.current !== runId) return;
+            for (let i = 0; i < validations.length; i += 1) {
+                const { result, error } = validations[i];
+                const message = error
+                    ? userFacingMessage(error, 'Validation could not be completed. Try again.')
+                    : actionValidationMessage(result);
+                if (!message) continue;
+                setValidationError(`Row ${i + 1}: ${message}`);
+                return;
+            }
+            setStage('review');
+        } catch (err) {
+            if (validationRunRef.current === runId) {
+                setValidationError(`Could not validate the actions. ${userFacingMessage(err, 'Try again.')}`);
+            }
+        } finally {
+            if (validationRunRef.current === runId) setValidating(false);
+        }
     };
 
     const startSigning = () => {
@@ -260,8 +328,28 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         if (activeLane.composing || activeRow.status === 'submitting') return;
 
         updateRow(activeRowIndex, { status: 'submitting', error: null });
+        const params = JSON.parse(activeRow.paramsJson || '{}');
         try {
-            const params = JSON.parse(activeRow.paramsJson || '{}');
+            const validation = await messaging.validateAction({
+                chainId: activeRow.chainId,
+                action: activeRow.action,
+                params,
+            });
+            const message = actionValidationMessage(validation);
+            if (message) {
+                updateRow(activeRowIndex, { status: 'failed', error: message });
+                setValidationError(`Row ${activeRowIndex + 1}: ${message}`);
+                setStage('compose');
+                return;
+            }
+        } catch (err) {
+            const message = userFacingMessage(err, 'Validation could not be refreshed. Try again.');
+            updateRow(activeRowIndex, { status: 'failed', error: message });
+            setValidationError(`Row ${activeRowIndex + 1}: ${message}`);
+            setStage('compose');
+            return;
+        }
+        try {
             const result = await activeLane.run({
                 actionData: { action: activeRow.action, params },
                 encoderOpts: feePerKb != null ? { feePerKb } : {},
@@ -297,7 +385,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 error: bad ? 'Incorrect password.' : submitFailureMessage(err, {
                     chainId: activeRow.chainId,
                     coinTicker: activeCoinTicker,
-                    fallback: err?.message || 'Sign failed.',
+                    fallback: 'Sign failed.',
                 }),
             });
         }
@@ -307,12 +395,12 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review' ? () => setStage('compose') : onBack}
             title="Parallel cross-chain actions"
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'review'}>
             {children}
         </Screen>
     );
@@ -337,6 +425,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         return (
             <ActionConfirmScreen
                 {...activeLane.confirmProps}
+                confirmAction={confirmActionWithPlainRefusal(activeLane.confirmProps.confirmAction)}
                 screenVariant={variant}
                 chainLabel={activeDescriptor?.displayName || activeChainId || ''}
                 feeText={feeEstimate?.coinAmount
@@ -399,6 +488,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         ].join(' ');
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Sign parallel actions"
                 status={activeRow.status === 'failed' && activeRow.error ? (
                     <StatusMessage variant="error" className={styles.error}>{activeRow.error}</StatusMessage>
@@ -462,13 +552,15 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     if (stage === 'review') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review parallel actions"
                 actions={(
                     <>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
                         <Button
                             type="button"
                             variant="ghost"
-                            onClick={() => setStage('compose')}
+                            onClick={(event) => { event.preventDefault(); setStage('compose'); }}
                         >
                             Back to composer
                         </Button>
@@ -487,24 +579,22 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     {rows.length} action{rows.length === 1 ? '' : 's'} across{' '}
                     {new Set(rows.map((r) => r.chainId)).size} chain{new Set(rows.map((r) => r.chainId)).size === 1 ? '' : 's'}
                 </p>
-                <SummaryList rows={rows} />
-                <div className={styles.warnings}>
-                    <p className={styles.warning} id="parallel-no-rollback-warning">
+                <SummaryList rows={rows} addressesByChain={addressesByChain} showDetails />
+                <StatusMessage variant="warning" role={null}>
+                    <p id="parallel-no-rollback-warning">
                         <strong>No rollback:</strong> each action signs and broadcasts independently.
                         If a later row fails, successful earlier rows remain broadcast.
                         Actions on different chains are not settled as one unit;
                         only an individual swap completes together.
                     </p>
-                </div>
-                <label className={`${styles.checkRow} ${parallelStyles.acknowledgement}`}>
-                    <input
-                        type="checkbox"
-                        checked={acknowledgedNoRollback}
-                        onChange={(e) => setAcknowledgedNoRollback(e.target.checked)}
-                        aria-describedby="parallel-no-rollback-warning"
-                    />
-                    <span>I understand successful actions cannot be rolled back if a later action fails.</span>
-                </label>
+                </StatusMessage>
+                <Checkbox
+                    className={parallelStyles.acknowledgement}
+                    label="I understand successful actions cannot be rolled back if a later action fails."
+                    checked={acknowledgedNoRollback}
+                    onChange={(e) => setAcknowledgedNoRollback(e.target.checked)}
+                    aria-describedby="parallel-no-rollback-warning"
+                />
             </FormPage>,
         );
     }
@@ -512,15 +602,15 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Compose parallel actions"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
                 event.preventDefault();
-                goReview();
+                await goReview();
             }}
             sectioned
-            intro="Compose any number of independent actions on any combination of chains. Each row is submitted as its own independent action. Review the no-rollback warning before signing."
-            status={composeError ? (
-                <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
+            status={shownComposeError || validationError ? (
+                <StatusMessage variant="error" className={styles.error}>{shownComposeError || validationError}</StatusMessage>
             ) : null}
             actions={(
                 <>
@@ -530,7 +620,8 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     <Button
                         type="submit"
                         variant="primary"
-                        disabled={Boolean(composeError)}
+                        loading={validating}
+                        disabled={Boolean(shownComposeError) || validating}
                     >
                         Review
                     </Button>
@@ -556,7 +647,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 }
 
 function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, actionsList, onChange, onRemove, canRemove }) {
-    const descriptor = row.chainId ? chainRegistry.get(row.chainId) : null;
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
 
     return (
@@ -567,70 +657,58 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 <StatusPill status={row.status} labelPrefix={`Row ${index + 1} status`} />
             </div>
 
-            <label className={styles.pickerLabel}>
-                <span>Chain</span>
-                <select
-                    className={styles.picker}
-                    value={row.chainId || ''}
-                    onChange={(e) => {
-                        const cid = e.target.value;
-                        const newAddrs = (addressesByChain[cid] || []);
-                        onChange({
-                            chainId: cid,
-                            fromAddressId: pickDefaultAddressId(newAddrs, activeByChain?.[cid]),
-                        });
-                    }}
-                >
-                    {chainIds.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        return (
-                            <option key={cid} value={cid}>
-                                {d ? d.displayName : cid}
-                            </option>
-                        );
-                    })}
-                </select>
-            </label>
+            <Select
+                label="Network"
+                value={row.chainId || ''}
+                onChange={(e) => {
+                    const cid = e.target.value;
+                    const newAddrs = (addressesByChain[cid] || []);
+                    onChange({
+                        chainId: cid,
+                        fromAddressId: pickDefaultAddressId(newAddrs, activeByChain?.[cid]),
+                    });
+                }}
+            >
+                {chainIds.map((cid) => {
+                    const d = chainRegistry.get(cid);
+                    return (
+                        <option key={cid} value={cid}>
+                            {d ? d.displayName : cid}
+                        </option>
+                    );
+                })}
+            </Select>
 
-            <label className={styles.pickerLabel}>
-                <span>From address</span>
-                <select
-                    className={styles.picker}
-                    value={row.fromAddressId || ''}
-                    onChange={(e) => onChange({ fromAddressId: e.target.value })}
-                >
-                    {addrs.map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label="From address"
+                value={row.fromAddressId || ''}
+                onChange={(e) => onChange({ fromAddressId: e.target.value })}
+            >
+                {addrs.map((a) => (
+                    <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
+                ))}
+            </Select>
 
-            <label className={styles.pickerLabel}>
-                <span>Action</span>
-                <select
-                    className={styles.picker}
-                    value={row.action || ''}
-                    onChange={(e) => onChange({ action: e.target.value })}
-                >
-                    <option value="">Select action</option>
-                    {/* One SDK list serves every row; drop what this row's chain refuses at every version. */}
-                    {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)).map((a) => (
-                        <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label="Action"
+                value={row.action || ''}
+                onChange={(e) => onChange({ action: e.target.value })}
+            >
+                <option value="">Select action</option>
+                {/* One SDK list serves every row; drop what this row's chain refuses at every version. */}
+                {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)).map((a) => (
+                    <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
+                ))}
+            </Select>
 
-            <label className={styles.pickerLabel} style={{ alignItems: 'stretch' }}>
-                <span>Params (JSON object)</span>
-                <textarea
-                    className={styles.picker}
-                    rows={4}
-                    value={row.paramsJson}
-                    onChange={(e) => onChange({ paramsJson: e.target.value })}
-                    placeholder='{"VERSION":"0", ...}'
-                    spellCheck={false}
-                />
-            </label>
+            <Textarea
+                label="Params (JSON object)"
+                rows={4}
+                value={row.paramsJson}
+                onChange={(e) => onChange({ paramsJson: e.target.value })}
+                placeholder='{"VERSION":"0", ...}'
+                spellCheck={false}
+            />
 
             <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
                 <Button
@@ -643,11 +721,6 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 </Button>
             </div>
 
-            {descriptor ? (
-                <p className={styles.hint} style={{ textAlign: 'left', marginTop: 'var(--xc-space-2)' }}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </p>
-            ) : null}
         </FormSection>
     );
 }
@@ -657,16 +730,20 @@ function RowDetail({ row, addressesByChain }) {
     const fromAddress = (addressesByChain[row.chainId] || []).find((a) => a.id === row.fromAddressId);
     return (
         <dl className={styles.detailsList}>
-            <dt className={styles.detailsLabel}>Chain</dt>
-            <dd className={styles.detailsValue}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-            </dd>
+            {descriptor ? (
+                <>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                </>
+            ) : null}
             <dt className={styles.detailsLabel}>From</dt>
             <dd className={styles.detailsValue}>
                 {fromAddress ? <AddressText address={fromAddress.address} /> : 'unknown'}
             </dd>
             <dt className={styles.detailsLabel}>Action</dt>
-            <dd className={styles.detailsValue}>{row.action ? actionDisplayLabel(row.action) : 'none'}</dd>
+            <dd className={styles.detailsValue}>
+                {row.action ? `${actionDisplayLabel(row.action)} (${row.action})` : 'none'}
+            </dd>
             <dt className={styles.detailsLabel}>Status</dt>
             <dd className={styles.detailsValue}><StatusPill status={row.status} /></dd>
             <dt className={styles.detailsLabel}>Params</dt>
@@ -677,7 +754,7 @@ function RowDetail({ row, addressesByChain }) {
     );
 }
 
-function SummaryList({ rows }) {
+function SummaryList({ rows, addressesByChain = null, showDetails = false }) {
     return (
         <ol className={parallelStyles.summaryList}>
             {rows.map((r) => {
@@ -692,6 +769,9 @@ function SummaryList({ rows }) {
                             </span>
                             <StatusPill status={r.status} />
                         </div>
+                        {showDetails && addressesByChain ? (
+                            <RowDetail row={r} addressesByChain={addressesByChain} />
+                        ) : null}
                         {r.txid ? <code className={parallelStyles.summaryMeta}>{shortenTxid(r.txid)}</code> : null}
                         {r.error ? <span className={`${parallelStyles.summaryMeta} ${parallelStyles.summaryError}`}>{r.error}</span> : null}
                     </li>
@@ -771,8 +851,38 @@ function parseParamsJson(json) {
         }
         return null;
     } catch (err) {
-        return `params JSON parse error: ${err?.message || String(err)}`;
+        return userFacingMessage(
+            err,
+            'Params JSON is not valid. Check the syntax and try again.',
+        );
     }
+}
+
+function actionValidationMessage(result) {
+    if (result?.valid === true) return null;
+    const errors = Array.isArray(result?.errors) ? result.errors : [];
+    const messages = errors.map((error) => {
+        if (typeof error === 'string' && error.trim()) return error.trim();
+        if (error && typeof error === 'object') {
+            if (typeof error.message === 'string' && error.message.trim()) return error.message.trim();
+            if (typeof error.field === 'string' && error.field.trim()) {
+                return `${error.field.trim()}: enter a valid value.`;
+            }
+        }
+        return 'Enter a valid value.';
+    });
+    return [...new Set(messages)].join(' ') || 'The action parameters are invalid.';
+}
+
+function confirmActionWithPlainRefusal(confirmAction) {
+    const error = confirmAction?.error;
+    if (!error || !['INPUTS_SPENT', 'NATIVE_FEE_CHANGED'].includes(error.code)) return confirmAction;
+    return {
+        ...confirmAction,
+        error: typeof error.message === 'string' && error.message
+            ? error.message
+            : 'The transaction became stale. Nothing was signed or sent. Start the action again.',
+    };
 }
 
 function getAnyChainId() {

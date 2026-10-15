@@ -34,6 +34,17 @@ describe('QueuedResultPanel unsaved warning', () => {
         expect(alerts[0].textContent).toBe(SIGNED_NOT_BROADCAST_UNSAVED_WARNING);
     });
 
+    it('follows an explicit unsaved verdict when the input changes', () => {
+        const { rerender } = render(<QueuedResultPanel onDone={() => {}} unsaved={false} />);
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        rerender(<QueuedResultPanel onDone={() => {}} unsaved />);
+        expect(screen.getByRole('alert').textContent).toBe(SIGNED_NOT_BROADCAST_UNSAVED_WARNING);
+
+        rerender(<QueuedResultPanel onDone={() => {}} unsaved={false} />);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
     it('keeps the hint, status and single Done button beside the warning', () => {
         render(<QueuedResultPanel onDone={() => {}} unsaved />);
         expect(screen.getByText(/signed but couldn't reach the network/i)).toBeTruthy();

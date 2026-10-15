@@ -121,7 +121,7 @@ const WIPE_COPY = {
 /**
  * @param {object} props
  * @param {'corrupt' | 'locked' | 'unavailable' | 'evicted'} props.kind
- * @param {() => void} [props.onRetry] defaults to reloading the app
+ * @param {() => void | Promise<void>} [props.onRetry] defaults to reloading the app
  * @param {() => Promise<void>} [props.wipe] injectable for tests
  */
 export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
@@ -137,10 +137,18 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
     const [confirmText, setConfirmText] = useState('');
     const [busy, setBusy] = useState(false);
     const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
+    const [retryError, setRetryError] = useState(/** @type {string | null} */ (null));
 
-    function handleRetry() {
-        if (onRetry) { onRetry(); return; }
-        if (typeof window !== 'undefined') window.location.reload();
+    async function handleRetry() {
+        setRetryError(null);
+        try {
+            if (onRetry) await onRetry();
+            else if (typeof window !== 'undefined') window.location.reload();
+            return true;
+        } catch {
+            setRetryError('Could not try again. Check your connection, then retry.');
+            return false;
+        }
     }
 
     async function handleWipe() {
@@ -150,7 +158,8 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
         setWipeError(null);
         try {
             await wipe();
-            handleRetry();
+            const retried = await handleRetry();
+            if (!retried) setBusy(false);
         } catch {
             setWipeError(wipeCopy.failed);
             setBusy(false);
@@ -177,9 +186,12 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                         </p>
 
                         {offersRetry ? (
-                            <Button type="button" variant="primary" block onClick={handleRetry}>
+                            <Button type="button" variant="primary" block onClick={() => { void handleRetry(); }}>
                                 {t('common.tryAgain')}
                             </Button>
+                        ) : null}
+                        {retryError ? (
+                            <StatusMessage variant="error">{retryError}</StatusMessage>
                         ) : null}
 
                         {/* Offered for `corrupt` and `evicted` alone. On `locked` the
@@ -189,15 +201,18 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                             Erasing in either case would destroy a working wallet to
                             fix nothing. */}
                         {offersEscape && !wipeOpen ? (
-                            <button
+                            <Button
                                 type="button"
-                                className={styles.escapeLink}
+                                variant="secondary"
+                                size="sm"
+                                icon={null}
+                                style={{ alignSelf: 'center' }}
                                 onClick={() => setWipeOpen(true)}
                                 aria-expanded="false"
                                 aria-controls="vault-unavailable-wipe-panel"
                             >
                                 {t('vaultUnavailable.restore')}
-                            </button>
+                            </Button>
                         ) : null}
 
                         {offersEscape && wipeOpen ? (
@@ -207,11 +222,11 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 role="region"
                                 aria-label={wipeCopy.region}
                             >
-                                <p className={styles.wipeWarning}>
+                                <StatusMessage variant="warning" role={null} className={styles.wipeWarning}>
                                     <strong>
                                         {t('vaultUnavailable.wipeWarning')}
                                     </strong>
-                                </p>
+                                </StatusMessage>
                                 <p className={styles.wipeNote}>{wipeCopy.note}</p>
                                 <Input
                                     type="text"

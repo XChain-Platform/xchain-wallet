@@ -19,6 +19,7 @@ import {
     describeOffenders,
     documentOverflow,
     enterDemoWallet,
+    LG_K51,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -64,6 +65,8 @@ function detailRow(page, label) {
     });
 }
 
+test.use(LG_K51);
+
 test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
     test('reviews an amount request and its matching transaction detail', async ({ page }) => {
         const consoleErrors = [];
@@ -79,7 +82,7 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             userAgent: navigator.userAgent,
             touchPoints: navigator.maxTouchPoints,
         }));
-        expect(device).toMatchObject({ width: 412, height: 869 });
+        expect(device).toMatchObject(LG_K51.viewport);
         expect(device.userAgent).toContain('Chrome/102.0.5005.125');
         expect(device.touchPoints).toBeGreaterThan(0);
 

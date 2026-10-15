@@ -28,9 +28,17 @@ import { t } from '../../i18n/index.js';
  * @param {object} props
  * @param {string} props.walletId
  * @param {boolean} props.hasFunds
+ * @param {boolean} [props.isDemo]
+ * @param {string | null} [props.walletMode]
  * @param {() => void} [props.onAction]      "Back up now" CTA
  */
-export function BackupReminderCard({ walletId, hasFunds, onAction }) {
+export function BackupReminderCard({
+    walletId,
+    hasFunds,
+    isDemo = false,
+    walletMode = 'full',
+    onAction,
+}) {
     const [state, setState] = useState({ kind: 'hidden' });
 
     useEffect(() => {
@@ -40,21 +48,25 @@ export function BackupReminderCard({ walletId, hasFunds, onAction }) {
         }
         const refresh = (event) => {
             if (event?.type === 'storage' && event.key !== 'xc:backupVerifiedAt') return;
-            setState(flowsLib.computeBackupReminderState({ walletId, hasFunds }));
+            setState(flowsLib.computeBackupReminderState({
+                walletId, hasFunds, isDemo, walletMode,
+            }));
         };
         refresh();
         globalThis.addEventListener?.('storage', refresh);
         return () => globalThis.removeEventListener?.('storage', refresh);
-    }, [walletId, hasFunds]);
+    }, [walletId, hasFunds, isDemo, walletMode]);
 
     useEffect(() => {
         if (typeof state.recheckAt !== 'number') return undefined;
         const delay = Math.max(0, state.recheckAt - Date.now());
         const timer = setTimeout(() => {
-            setState(flowsLib.computeBackupReminderState({ walletId, hasFunds }));
+            setState(flowsLib.computeBackupReminderState({
+                walletId, hasFunds, isDemo, walletMode,
+            }));
         }, delay);
         return () => clearTimeout(timer);
-    }, [state.recheckAt, walletId, hasFunds]);
+    }, [state.recheckAt, walletId, hasFunds, isDemo, walletMode]);
 
     if (state.kind === 'hidden') return null;
 
@@ -77,16 +89,19 @@ export function BackupReminderCard({ walletId, hasFunds, onAction }) {
                     {t('backupReminder.backupNow')}
                 </Button>
                 {state.dismissable ? (
-                    <button
-                        type="button"
-                        className={styles.dismissBtn}
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={null}
                         onClick={() => {
                             flowsLib.dismissBackupReminder(walletId);
-                            setState(flowsLib.computeBackupReminderState({ walletId, hasFunds }));
+                            setState(flowsLib.computeBackupReminderState({
+                                walletId, hasFunds, isDemo, walletMode,
+                            }));
                         }}
                     >
                         {t('backupReminder.remindTomorrow')}
-                    </button>
+                    </Button>
                 ) : null}
             </div>
         </div>

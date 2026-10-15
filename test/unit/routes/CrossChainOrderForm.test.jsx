@@ -13,18 +13,20 @@
 // wallet's own address on the get chain, and the whole thing rides the
 // same single-encode confirm lane as CreateOrderForm.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, act as domAct, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const DOGE = 'dogecoin-mainnet';
 const BTC = 'bitcoin-mainnet';
 
 const DOGE_ADDRESS = Object.freeze({
     id: 'addr-doge-0',
-    address: 'DExampleDogeAddressxxxxxxxxxxxxxxxx',
+    address: 'Ddevmock02aabbcc',
     publicKey: '02aabbcc',
     derivationPath: "m/44'/3'/0'/0/0",
     source: 'hd',
@@ -32,7 +34,7 @@ const DOGE_ADDRESS = Object.freeze({
 });
 const BTC_ADDRESS = Object.freeze({
     id: 'addr-btc-0',
-    address: 'bc1qexampleexampleexampleexampleexampleex',
+    address: 'bc1qdevmock02ddeeff',
     publicKey: '02ddeeff',
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
@@ -44,6 +46,7 @@ const COMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    __clearTokenInfoCache();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -51,6 +54,12 @@ beforeEach(() => {
             'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
         ],
     });
+});
+
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
 });
 
 // Recording messaging mock: a wallet with one address on DOGE and one on
@@ -110,6 +119,27 @@ async function mount(props = {}, overrides = {}) {
     return { utils, calls };
 }
 
+async function mountCreate(props = {}, overrides = {}) {
+    const { messaging, calls } = recordingMessaging(overrides);
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(CreateOrderForm, {
+                    walletId: 'w',
+                    onBack() {},
+                    initialChainId: DOGE,
+                    ...props,
+                }),
+            ),
+        );
+        await drainMicrotasks();
+    });
+    return { utils, calls };
+}
+
 const setValue = (utils, label, value) => {
     fireEvent.change(utils.getByLabelText(label), { target: { value } });
 };
@@ -149,8 +179,8 @@ async function placeAndApprove(utils) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const approve = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
+        const approve = utils.getAllByRole('button', { name: /approve/i })
+            .find((button) => !button.disabled);
         if (!approve) throw new Error('no enabled Approve button on the confirm page');
         fireEvent.click(approve);
         await drainMicrotasks();
@@ -162,12 +192,13 @@ describe('CrossChainOrderForm', () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
         // The get chain defaulted to the other coin, and the receiver was
         // resolved on THAT chain, not on the chain being signed.
-        expect(pickerName(utils, 'Give chain')).toBe('Give chain: Dogecoin');
-        expect(pickerName(utils, 'Get chain')).toBe('Get chain: Bitcoin');
+        expect(pickerName(utils, 'Give network')).toBe('Give network: Dogecoin');
+        expect(pickerName(utils, 'Get network')).toBe('Get network: Bitcoin');
         expect(utils.getByLabelText('Receive at').value).toBe(BTC_ADDRESS.address);
         expect(calls.filter((c) => c.method === 'getNewestAddress').map((c) => c.args.chainId)).toEqual([BTC]);
-        // Matching is described in plain words, not by the mechanism.
-        expect(utils.container.textContent).toMatch(/order book and fills automatically/);
+        const disclosure = utils.getByText('How orders fill').closest('details');
+        expect(disclosure).toHaveProperty('open', false);
+        expect(disclosure).toHaveTextContent(/order book and fills automatically/);
         expect(utils.container.textContent).not.toMatch(/federation|price-time/i);
 
         await fillPair(utils);
@@ -196,11 +227,12 @@ describe('CrossChainOrderForm', () => {
         expect(submit.args.chainId).toBe(DOGE);
         expect(submit.args.from.address).toBe(DOGE_ADDRESS.address);
         expect(submit.args.params).toMatchObject({ GIVE_COIN: 'DOGE', GET_COIN: 'BTC', GET_ADDRESS: BTC_ADDRESS.address });
+        expect(submit.args.params).toEqual(compose.args.actionData.params);
         expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
         expect(calls.some((c) => c.method === 'swapAction')).toBe(false);
     });
 
-    it('re-resolves the receiver when the get chain changes, and keeps a typed one', async () => {
+    it('re-resolves the receiver when the get network changes, and keeps a typed one', async () => {
         const { utils } = await mount({ initialChainId: DOGE }, {
             getAddressesByChain: () => Promise.resolve({
                 [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
@@ -214,16 +246,101 @@ describe('CrossChainOrderForm', () => {
             await drainMicrotasks();
         });
         expect(utils.getByLabelText('Receive at').value).toBe('typed-by-user');
-        await pickChain(utils, 'Get chain', 'Litecoin');
-        expect(pickerName(utils, 'Get chain')).toBe('Get chain: Litecoin');
+        await pickChain(utils, 'Get network', 'Litecoin');
+        expect(pickerName(utils, 'Get network')).toBe('Get network: Litecoin');
         expect(utils.getByLabelText('Receive at').value).toBe('newest-on-litecoin-mainnet');
+    });
+
+    it('clears amounts when either token or network changes the represented asset', async () => {
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getAddressesByChain: () => Promise.resolve({
+                [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
+            }),
+            getNewestAddress: (walletId, chainId) => Promise.resolve({ address: `newest-on-${chainId}` }),
+        });
+        await fillPair(utils);
+
+        await domAct(async () => {
+            setValue(utils, 'Give token', 'OTHER');
+            setValue(utils, 'Get token', 'WANTED');
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('');
+
+        await fillPair(utils);
+        await pickChain(utils, 'Get network', 'Litecoin');
+        expect(utils.getByLabelText('Get token').value).toBe('');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('');
+        expect(utils.getByLabelText('Give token').value).toBe('JDOG');
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
+
+        await pickChain(utils, 'Give network', 'Bitcoin');
+        expect(utils.getByLabelText('Give token').value).toBe('');
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('');
+    });
+
+    it('dispatches only one watcher build when two submit events arrive in one render', async () => {
+        let builds = 0;
+        let finishBuild;
+        const pending = new Promise((resolve) => { finishBuild = resolve; });
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: () => {
+                builds += 1;
+                return pending;
+            },
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+
+        const form = utils.getByRole('button', { name: 'Create unsigned transaction' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(builds).toBe(1);
+        await domAct(async () => {
+            finishBuild({ psbtHex: 'unsigned-cross-chain' });
+            await drainMicrotasks();
+        });
+    });
+
+    it('ignores a duplicate full-wallet submit while compose is pending', async () => {
+        let composes = 0;
+        let rejectCompose;
+        const pending = new Promise((resolve, reject) => { rejectCompose = reject; });
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            composeForConfirm: () => {
+                composes += 1;
+                return pending;
+            },
+        });
+        await fillPair(utils);
+        const form = utils.getByRole('button', { name: 'Place order' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(composes).toBe(1);
+        expect(utils.container.textContent).not.toMatch(/confirmation is already in progress/i);
+
+        await domAct(async () => {
+            rejectCompose(Object.assign(new Error('cancelled'), { reason: 'user-rejected' }));
+            await drainMicrotasks();
+        });
     });
 
     it('refuses a same-coin pair and points at Create order', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
-        await pickChain(utils, 'Get chain', 'Dogecoin');
+        await pickChain(utils, 'Get network', 'Dogecoin');
         await fillPair(utils);
-        expect(utils.container.textContent).toMatch(/Give and get chains must differ/);
+        expect(utils.container.textContent).toMatch(/Give and get networks must differ/);
         expect(utils.getByRole('button', { name: 'Place order' }).disabled).toBe(true);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
@@ -240,7 +357,7 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('will not compose without a receive address on the get chain', async () => {
+    it('will not compose without a receive address on the get network', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE }, {
             getNewestAddress: () => Promise.resolve(null),
         });
@@ -254,11 +371,271 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('explains itself on a wallet with addresses on one chain only', async () => {
+    it('validates token precision and the exact give balance before compose', async () => {
+        const { utils, calls } = await mount({ initialChainId: DOGE }, {
+            getTokenInfo: ({ tick }) => Promise.resolve({ divisibility: tick === 'JDOG' ? 0 : 8 }),
+            getWalletBalances: () => Promise.resolve({
+                [DOGE]: [{
+                    address: DOGE_ADDRESS.address,
+                    balances: { tokens: [{ tick: 'JDOG', quantity: '5', divisibility: 0 }] },
+                }],
+            }),
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            vi.advanceTimersByTime(450);
+            await drainMicrotasks();
+        });
+
+        await domAct(async () => {
+            setValue(utils, /^Give amount/, '1.5');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('Give amount must be a whole number because JDOG is indivisible.');
+
+        await domAct(async () => {
+            setValue(utils, /^Give amount/, '6');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('Give amount is above your available JDOG balance.');
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('blocks malformed token IDs, recipients, and empty custom expiry before compose', async () => {
+        const { utils, calls } = await mount({ initialChainId: DOGE });
+        await fillPair(utils);
+
+        await domAct(async () => {
+            setValue(utils, 'Give token', '^0');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain("Give token can be a name, or ^ followed by the token's number (^123).");
+
+        await domAct(async () => {
+            setValue(utils, 'Give token', 'JDOG');
+            setValue(utils, /^Give amount/, '10');
+            setValue(utils, 'Receive at', 'not an address');
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('This address has a typo. Check it and try again.');
+
+        await domAct(async () => {
+            setValue(utils, 'Receive at', BTC_ADDRESS.address);
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+        expect(utils.container.textContent).toContain('Pick an expiration date and time, or switch to the default window.');
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('watcher review matches built normalized values and Back keeps the form values', async () => {
+        const onBack = vi.fn();
+        const { utils } = await mount({ initialChainId: DOGE, onBack }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            setValue(utils, 'Receive at', `  ${BTC_ADDRESS.address}  `);
+            setValue(utils, 'Memo (optional)', '  exact memo  ');
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('10 JDOG')).toBeTruthy();
+        expect(utils.getByText('20 XCHAIN')).toBeTruthy();
+        expect(utils.getByLabelText(BTC_ADDRESS.address)).toBeTruthy();
+        expect(utils.getByText('exact memo')).toBeTruthy();
+        expect(utils.getByText('Protocol fee')).toBeTruthy();
+        expect(utils.getByText(/paid in DOGE; the network fee is separate/i)).toBeTruthy();
+
+        fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
+        expect(onBack).not.toHaveBeenCalled();
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('20');
+        expect(utils.getByLabelText('Receive at').value).toBe(`  ${BTC_ADDRESS.address}  `);
+        expect(utils.getByLabelText('Memo (optional)').value).toBe('  exact memo  ');
+    });
+
+    it('refuses a custom expiration that passes while editing but expires on watcher review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest,
+        });
+        await fillPair(utils);
+        const start = Date.now();
+        const expiration = new Date(start + 60_000);
+        const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
+            .toISOString().slice(0, 16);
+        await domAct(async () => {
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            setValue(utils, 'Expires', localExpiration);
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+        expect(utils.getByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+
+        vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('Expiration must be a future date and time.')).toBeTruthy();
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses a custom expiration that expires on the full-wallet confirmation', async () => {
+        const start = Date.now();
+        const expiration = new Date(start + 60_000);
+        const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
+            .toISOString().slice(0, 16);
+        const { utils, calls } = await mount({ initialChainId: DOGE });
+        await fillPair(utils);
+        await domAct(async () => {
+            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
+            setValue(utils, 'Expires', localExpiration);
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+
+        vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByText('Expiration must be a future date and time.')).toBeTruthy();
+        expect(calls.some((call) => call.method === 'orderAction')).toBe(false);
+    });
+
+    it('shows encoder failures as plain copy on the form', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const encoderError = Object.assign(
+            new Error('no spendable UTXOs found for the funding address'),
+            { name: 'SDKEncoderError', code: 'NO_UTXOS' },
+        );
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            composeForConfirm: () => Promise.reject(encoderError),
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.container.textContent).toMatch(/needs DOGE for the protocol fee and the network fee/i);
+        expect(utils.container.textContent).not.toMatch(/UTXO/i);
+    });
+
+    it('explains itself on a wallet with addresses on one network only', async () => {
         const { utils } = await mount({}, {
             getAddressesByChain: () => Promise.resolve({ [DOGE]: [DOGE_ADDRESS] }),
         });
-        expect(utils.container.textContent).toMatch(/addresses on two different chains/);
+        expect(utils.container.textContent).toMatch(/addresses on two different networks/);
         expect(utils.queryByRole('button', { name: 'Place order' })).toBeNull();
+    });
+});
+
+describe('CreateOrderForm state safety', () => {
+    it('clears stale values when an order side changes asset kind', async () => {
+        const { utils } = await mountCreate();
+        const ticker = utils.getByLabelText('Ticker');
+        const tokenAmount = utils.getByLabelText('Amount');
+        await domAct(async () => {
+            fireEvent.change(ticker, { target: { value: 'JDOG' } });
+            fireEvent.change(tokenAmount, { target: { value: '12' } });
+            await drainMicrotasks();
+        });
+
+        const ownership = utils.getByLabelText('Trade ownership of this ticker (not a balance)');
+        await domAct(async () => {
+            fireEvent.click(ownership);
+            fireEvent.click(ownership);
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText('Amount').value).toBe('');
+
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '12' } });
+            fireEvent.click(utils.getAllByLabelText('Native DOGE')[0]);
+            await drainMicrotasks();
+        });
+        expect(utils.getAllByLabelText('Amount (DOGE)')[0].value).toBe('');
+
+        await domAct(async () => {
+            fireEvent.click(utils.getAllByLabelText('A token')[0]);
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText('Ticker').value).toBe('');
+        expect(utils.getByLabelText('Amount').value).toBe('');
+    });
+
+    it('dispatches only one watcher build when two submit events arrive in one render', async () => {
+        let builds = 0;
+        let finishBuild;
+        const pending = new Promise((resolve) => { finishBuild = resolve; });
+        const { utils } = await mountCreate({}, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: () => {
+                builds += 1;
+                return pending;
+            },
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Ticker'), { target: { value: 'JDOG' } });
+            fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '5' } });
+            fireEvent.change(utils.getByLabelText('Amount (DOGE)'), { target: { value: '10' } });
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+
+        const form = utils.getByRole('button', { name: 'Create unsigned transaction' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(builds).toBe(1);
+        await domAct(async () => {
+            finishBuild({ psbtHex: 'unsigned-same-chain' });
+            await drainMicrotasks();
+        });
+    });
+
+    it('ignores a duplicate full-wallet submit while compose is pending', async () => {
+        let composes = 0;
+        let rejectCompose;
+        const pending = new Promise((resolve, reject) => { rejectCompose = reject; });
+        const { utils } = await mountCreate({}, {
+            composeForConfirm: () => {
+                composes += 1;
+                return pending;
+            },
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Ticker'), { target: { value: 'JDOG' } });
+            fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '5' } });
+            fireEvent.change(utils.getByLabelText('Amount (DOGE)'), { target: { value: '10' } });
+            await drainMicrotasks();
+        });
+        const form = utils.getByRole('button', { name: 'Place order' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(composes).toBe(1);
+        expect(utils.container.textContent).not.toMatch(/confirmation is already in progress/i);
+
+        await domAct(async () => {
+            rejectCompose(Object.assign(new Error('cancelled'), { reason: 'user-rejected' }));
+            await drainMicrotasks();
+        });
     });
 });

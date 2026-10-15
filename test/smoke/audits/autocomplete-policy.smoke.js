@@ -57,12 +57,16 @@ assert.match(
     'unlock uses current-password',
 );
 
-const recoveryPhrase = importWallet.match(/<textarea[\s\S]{0,1200}?id="xc-mnemonic"[\s\S]{0,1200}?\/>/)?.[0] || '';
+// The field's own props end where its in-box actions (Paste, Scan QR) begin,
+// or at its closing tag when it has none.
+const recoveryPhrase = importWallet.match(/<Textarea[\s\S]{0,1200}?id="xc-mnemonic"[\s\S]{0,2400}?(?:actions=|\/>)/)?.[0] || '';
 assert.match(recoveryPhrase, /autoComplete="off"/, 'recovery phrase disables autocomplete');
 assert.match(recoveryPhrase, /spellCheck=\{false\}/, 'recovery phrase disables spellcheck');
+assert.match(recoveryPhrase, /autoCapitalize="off"/, 'recovery phrase disables autocapitalize');
+assert.match(recoveryPhrase, /autoCorrect="off"/, 'recovery phrase disables autocorrect');
 
 const backupPhrase = backupSection.match(
-    /<textarea[\s\S]{0,500}?placeholder="Recovery phrase, words separated by spaces"[\s\S]{0,500}?\/>/,
+    /<Textarea[\s\S]{0,500}?placeholder="Recovery phrase, words separated by spaces"[\s\S]{0,500}?\/>/,
 )?.[0] || '';
 assert.match(backupPhrase, /autoComplete="off"/, 'backup test phrase disables autocomplete');
 assert.match(backupPhrase, /spellCheck=\{false\}/, 'backup test phrase disables spellcheck');

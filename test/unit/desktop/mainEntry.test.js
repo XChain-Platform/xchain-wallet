@@ -23,28 +23,40 @@ const electron = vi.hoisted(() => {
         userDataDir: '/tmp/xchain-main-entry-test',
         displays: [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
         normalBounds: { x: 0, y: 0, width: 1024, height: 768 },
+        loadFileError: null,
     };
     const ownerWindow = {};
     const popup = vi.fn();
     const webRequest = { onHeadersReceived: vi.fn() };
     class BrowserWindow {
         static instances = [];
-        static fromWebContents = vi.fn(() => ownerWindow);
+        static fromWebContents = vi.fn((contents) => (
+            BrowserWindow.instances.find((win) => win.webContents === contents) ?? ownerWindow
+        ));
 
         constructor(options) {
             browserWindowOptions.push(options);
             this.options = options;
-            this.webContents = { send: vi.fn() };
-            this.loadFile = vi.fn();
+            this.webContents = {
+                send: vi.fn(),
+                setVisualZoomLevelLimits: vi.fn(async () => {}),
+                isDestroyed: vi.fn(() => false),
+                reload: vi.fn(),
+                reloadIgnoringCache: vi.fn(),
+            };
+            this.loadFile = vi.fn(() => state.loadFileError
+                ? Promise.reject(state.loadFileError)
+                : undefined);
             this.once = vi.fn();
             this.on = vi.fn();
             this.isDestroyed = vi.fn(() => false);
-            this.isVisible = vi.fn(() => true);
             this.isMinimized = vi.fn(() => false);
+            this.isVisible = vi.fn(() => true);
+            this.show = vi.fn();
             this.hide = vi.fn();
+            this.restore = vi.fn();
             this.show = vi.fn();
             this.focus = vi.fn();
-            this.restore = vi.fn();
             this.getNormalBounds = vi.fn(() => state.normalBounds);
             BrowserWindow.instances.push(this);
         }
@@ -141,8 +153,9 @@ const runtime = vi.hoisted(() => ({
 }));
 
 const updater = vi.hoisted(() => ({
+    attachUpdater: vi.fn(),
     checkForUpdates: vi.fn(),
-    downloadUpdate: vi.fn(),
+    downloadAndInstall: vi.fn(),
     restartAndInstall: vi.fn(),
 }));
 
@@ -197,10 +210,7 @@ vi.mock('../../../packages/desktop/main/signerBridgeListener.js', () => ({
     attachSignerBridgeListener: vi.fn(),
 }));
 vi.mock('../../../packages/desktop/main/updater.js', () => ({
-    attachUpdater: vi.fn(async () => ({
-        ...updater,
-        isActive: true,
-    })),
+    attachUpdater: updater.attachUpdater,
 }));
 vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn() }));
 vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
@@ -228,6 +238,7 @@ beforeEach(() => {
     electron.state.userDataDir = '/tmp/xchain-main-entry-test';
     electron.state.displays = [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }];
     electron.state.normalBounds = { x: 0, y: 0, width: 1024, height: 768 };
+    electron.state.loadFileError = null;
     fsControl.failSyncWrite = false;
     electron.BrowserWindow.instances.length = 0;
     electron.Tray.instances.length = 0;
@@ -238,6 +249,12 @@ beforeEach(() => {
     runtime.enforceLaunchAutoLock.mockResolvedValue({ locked: false });
     runtime.enforceIdleAutoLock.mockResolvedValue({ locked: false });
     runtime.enforceSystemAutoLock.mockResolvedValue({ locked: true, reason: 'system-event' });
+    updater.attachUpdater.mockResolvedValue({
+        checkForUpdates: updater.checkForUpdates,
+        downloadUpdate: updater.downloadAndInstall,
+        restartAndInstall: updater.restartAndInstall,
+        isActive: false,
+    });
     vi.resetModules();
 });
 
@@ -317,6 +334,20 @@ describe('desktop main entry point', () => {
         );
     });
 
+    it('contains startup rejection and opens a window for retry', async () => {
+        const secret = 'private startup path';
+        electron.app.whenReady.mockRejectedValueOnce(new Error(secret));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] desktop startup failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(secret);
+        expect(electron.webRequest.onHeadersReceived).toHaveBeenCalledOnce();
+        error.mockRestore();
+    });
+
     it('parks an Electron deep link until a renderer can claim it', async () => {
         await import('../../../packages/desktop/main/index.js');
         const event = {
@@ -328,6 +359,105 @@ describe('desktop main entry point', () => {
         protocol.attachDeepLinkHandlers.mock.calls[0][1].onDeepLink(event);
 
         expect(protocol.deepLinkSlot.offer).toHaveBeenCalledExactlyOnceWith(event);
+    });
+
+    it('lets only the selected primary window claim a parked deep link', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const main = await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const selected = electron.BrowserWindow.instances[0];
+        const sibling = main.createWindow();
+        const detached = main.createWindow({ initialView: 'history' });
+        const link = {
+            scheme: 'dogecoin',
+            raw: 'dogecoin:DRecipient?amount=3',
+            parsed: { address: 'DRecipient', amount: '3' },
+        };
+        protocol.pickDeepLinkTarget.mockReturnValue(selected);
+        protocol.deepLinkSlot.take.mockReturnValue(link);
+        protocol.attachDeepLinkHandlers.mock.calls[0][1].onDeepLink(link);
+        const takePending = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain:deep-link-take')[1];
+        const invokeFrom = (win) => takePending({
+            sender: win.webContents,
+            senderFrame: { url: appIndex },
+        });
+
+        await expect(invokeFrom(sibling)).resolves.toBeNull();
+        await expect(invokeFrom(detached)).resolves.toBeNull();
+        expect(protocol.deepLinkSlot.take).not.toHaveBeenCalled();
+        await expect(invokeFrom(selected)).resolves.toEqual(link);
+        expect(protocol.deepLinkSlot.take).toHaveBeenCalledOnce();
+    });
+
+    it('returns no pending deep link when claiming the slot throws', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const sender = electron.BrowserWindow.instances[0];
+        protocol.deepLinkSlot.take.mockImplementationOnce(() => {
+            throw new Error('private link payload');
+        });
+        const takePending = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain:deep-link-take')[1];
+
+        await expect(takePending({
+            sender: sender.webContents,
+            senderFrame: { url: appIndex },
+        })).resolves.toBeNull();
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] deep-link IPC action failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain('private link payload');
+        error.mockRestore();
+    });
+
+    it('registers plain updater fallbacks when updater wiring rejects', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        updater.attachUpdater.mockRejectedValueOnce(new Error('private updater path'));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const handlers = new Map(electron.ipcMain.handle.mock.calls);
+        const event = {
+            sender: electron.BrowserWindow.instances[0].webContents,
+            senderFrame: { url: appIndex },
+        };
+
+        await expect(handlers.get('xchain:updater-state')(event)).resolves.toBeNull();
+        await expect(handlers.get('xchain:updater-install')(event, 'check')).resolves.toEqual({
+            ok: false,
+            reason: 'desktop: updater unavailable',
+        });
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] updater wiring failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain('private updater path');
+        error.mockRestore();
+    });
+
+    it('returns a committed message result when a sibling closes during notification', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const main = await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const sender = electron.BrowserWindow.instances[0];
+        const closingSibling = main.createWindow();
+        closingSibling.webContents.send.mockImplementation(() => {
+            throw new Error('Object has been destroyed');
+        });
+        const response = { ok: true, result: { walletId: 'wallet-2' } };
+        runtime.handleIpcMessage.mockResolvedValue(response);
+        const handleMessage = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain-wallet:message')[1];
+
+        await expect(handleMessage({
+            sender: sender.webContents,
+            senderFrame: { url: appIndex },
+        }, {
+            type: 'wallet.setActive',
+            request: { walletId: 'wallet-2' },
+        })).resolves.toEqual(response);
+        expect(closingSibling.webContents.send).toHaveBeenCalledWith(
+            'xchain:state-changed',
+            { kind: 'active-wallet', walletId: 'wallet-2' },
+        );
     });
 
     it('restores, shows, and focuses the Electron window receiving a link', async () => {
@@ -374,7 +504,7 @@ describe('desktop main entry point', () => {
 
         expect(electron.browserWindowOptions[0]).toMatchObject({
             ...expected,
-            minWidth: 640,
+            minWidth: 360,
             minHeight: 600,
         });
     });
@@ -391,6 +521,32 @@ describe('desktop main entry point', () => {
         await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
 
         expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
+    });
+
+    it.each([
+        {
+            label: 'off every connected display',
+            savedBounds: { x: 4000, y: 3000, width: 900, height: 700 },
+            expected: { width: 900, height: 700 },
+        },
+        {
+            label: 'too small to be usable',
+            savedBounds: { x: 80, y: 60, width: 100, height: 100 },
+            expected: { width: 1024, height: 768 },
+        },
+    ])('drops an unusable saved position when it is $label', async ({ savedBounds, expected }) => {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
+        tempDirs.push(userDataDir);
+        writeFileSync(join(userDataDir, 'window-bounds.json'), JSON.stringify(savedBounds));
+        electron.state.userDataDir = userDataDir;
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
+
+        expect(electron.browserWindowOptions[0]).toMatchObject(expected);
+        expect(electron.browserWindowOptions[0]).not.toHaveProperty('x');
+        expect(electron.browserWindowOptions[0]).not.toHaveProperty('y');
     });
 
     it('restores the saved position on one ultrawide display', async () => {
@@ -411,7 +567,7 @@ describe('desktop main entry point', () => {
         expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
     });
 
-    it('keeps an origin inside either display instead of clamping to the larger overlap', async () => {
+    it('clamps saved bounds inside the display containing their origin', async () => {
         const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
         tempDirs.push(userDataDir);
         const savedBounds = { x: 1800, y: 200, width: 900, height: 700 };
@@ -426,7 +582,10 @@ describe('desktop main entry point', () => {
         await import('../../../packages/desktop/main/index.js');
         await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
 
-        expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
+        expect(electron.browserWindowOptions[0]).toMatchObject({
+            ...savedBounds,
+            x: 1020,
+        });
     });
 
     it.each(['darwin', 'win32', 'linux'])('hides on %s close, permits an explicit quit, and reveals hidden windows', async (platform) => {
@@ -536,7 +695,7 @@ describe('desktop main entry point', () => {
 
     it('defers quit during an update download and restores a usable window', async () => {
         let finishDownload;
-        updater.downloadUpdate.mockImplementationOnce(() => new Promise((resolve) => {
+        updater.downloadAndInstall.mockImplementationOnce(() => new Promise((resolve) => {
             finishDownload = resolve;
         }));
         electron.app.whenReady.mockResolvedValueOnce();
@@ -599,8 +758,20 @@ describe('desktop main entry point', () => {
 
         expect(contents.setWindowOpenHandler).toHaveBeenCalledOnce();
         expect(permissions.observeHidFrames).toHaveBeenCalledWith(contents);
-        expect(openHandler({ url: 'https://example.com', frameName: '' })).toEqual({ action: 'deny' });
-        expect(electron.shell.openExternal).toHaveBeenCalledWith('https://example.com');
+        expect(openHandler({
+            url: 'HTTPS://Example.COM/docs?q=one two',
+            frameName: '',
+        })).toEqual({ action: 'deny' });
+        expect(electron.shell.openExternal)
+            .toHaveBeenCalledExactlyOnceWith('https://example.com/docs?q=one%20two');
+
+        expect(openHandler({
+            url: 'https://trusted.example@evil.example/',
+            frameName: '',
+        })).toEqual({ action: 'deny' });
+        expect(openHandler({ url: 'file:///tmp/untrusted.html', frameName: '' }))
+            .toEqual({ action: 'deny' });
+        expect(electron.shell.openExternal).toHaveBeenCalledTimes(1);
 
         const navigation = { preventDefault: vi.fn() };
         handlers.get('will-navigate')(navigation, 'file:///tmp/untrusted.html');
@@ -670,7 +841,46 @@ describe('desktop main entry point', () => {
             sandbox: true,
             nodeIntegration: false,
             webSecurity: true,
+            devTools: false,
         });
+    });
+
+    it('starts at 100 percent zoom and allows pinch zoom only above it', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+
+        const win = createWindow();
+
+        expect(win.options.webPreferences.zoomFactor).toBe(1);
+        // A floor below 1 shows the page zoomed out, so the fixed-height shell
+        // fills part of the window and the whole document scrolls.
+        expect(win.webContents.setVisualZoomLevelLimits).toHaveBeenCalledExactlyOnceWith(1, 3);
+    });
+
+    it('contains a renderer load rejection and reveals a recoverable window', async () => {
+        const secret = 'xchain:send?memo=private';
+        electron.state.loadFileError = new Error(secret);
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+
+        const win = createWindow();
+        await vi.waitFor(() => expect(win.show).toHaveBeenCalledOnce());
+
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] renderer load failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(secret);
+        error.mockRestore();
+    });
+
+    it('auto-hides the menu bar on the main window except on macOS', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+        const original = Object.getOwnPropertyDescriptor(process, 'platform');
+        try {
+            for (const [platform, expected] of [['linux', true], ['win32', true], ['darwin', false]]) {
+                Object.defineProperty(process, 'platform', { value: platform });
+                expect(createWindow().options.autoHideMenuBar).toBe(expected);
+            }
+        } finally {
+            Object.defineProperty(process, 'platform', original);
+        }
     });
 
     it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {
@@ -702,6 +912,30 @@ describe('desktop main entry point', () => {
         expect(electron.session.fromPartition).toHaveBeenCalledExactlyOnceWith('trezor-connect-isolated');
         expect(permissions.attachHidDenial).toHaveBeenCalledExactlyOnceWith(electron.isolatedSession);
     });
+
+    it('turns an IPC rejection into a logged generic response', async () => {
+        const secret = 'private wallet request';
+        electron.app.whenReady.mockResolvedValueOnce();
+        runtime.handleIpcMessage.mockRejectedValueOnce(new Error(secret));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcMain.handle).toHaveBeenCalled());
+        const handler = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain-wallet:message')[1];
+        const result = await handler({
+            senderFrame: { url: appIndex },
+            sender: { getURL: () => appIndex },
+        }, { type: 'wallet.test' });
+
+        expect(result).toEqual({
+            ok: false,
+            error: { name: 'Error', message: 'desktop: message handling failed' },
+        });
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] wallet IPC message failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(secret);
+        error.mockRestore();
+    });
 });
 
 describe('desktop window bounds on close and quit', () => {
@@ -724,9 +958,14 @@ describe('desktop window bounds on close and quit', () => {
         return { win, handler, onDisk };
     }
 
-    it('writes the latest bounds before the close handler returns', async () => {
-        const { handler, onDisk } = await bootWithSavedBounds();
+    it.each([
+        ['normal', null],
+        ['minimized', 'isMinimized'],
+        ['maximized', 'isMaximized'],
+    ])('writes normal bounds before a %s window close returns', async (_state, stateMethod) => {
+        const { win, handler, onDisk } = await bootWithSavedBounds();
         electron.state.normalBounds = MOVED;
+        if (stateMethod) win[stateMethod] = vi.fn(() => true);
 
         handler('close')({ preventDefault: vi.fn() });
 
@@ -770,10 +1009,8 @@ describe('desktop window bounds on close and quit', () => {
         expect(() => handler('close')({ preventDefault: vi.fn() })).not.toThrow();
         expect(() => electron.appListeners.get('before-quit')()).not.toThrow();
         expect(syncWrite).toHaveBeenCalled();
-        expect(error).toHaveBeenCalledWith(
-            '[xchain] could not save desktop window bounds:',
-            expect.objectContaining({ message: 'disk full' }),
-        );
+        expect(error).toHaveBeenCalledWith('[xchain] desktop window bounds save failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain('disk full');
         error.mockRestore();
     });
 });
@@ -800,8 +1037,60 @@ describe('desktop application menu', () => {
         const file = submenu(template, fileLabel);
 
         expect(file.at(-1)).toEqual({ role: finalRole });
-        expect(submenu(template, '&View').map((item) => item.role).filter(Boolean)).toContain('reload');
+        expect(submenu(template, '&View').find((item) => item.label === 'Reload')).toMatchObject({
+            accelerator: 'CmdOrCtrl+R',
+            click: expect.any(Function),
+        });
         expect(actionableLeaves(template).every((item) => item.role || item.click)).toBe(true);
+    });
+
+    it('provides native editing commands and only platform-valid window commands', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        installApplicationMenu({ isMac: false });
+        let template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(submenu(template, '&Edit').map((item) => item.role).filter(Boolean)).toEqual([
+            'undo',
+            'redo',
+            'cut',
+            'copy',
+            'paste',
+            'selectAll',
+        ]);
+        expect(submenu(template, '&Window').map((item) => item.role).filter(Boolean)).toEqual([
+            'minimize',
+            'close',
+        ]);
+
+        installApplicationMenu({ isMac: true });
+        template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(submenu(template, '&Window').map((item) => item.role).filter(Boolean)).toEqual([
+            'minimize',
+            'zoom',
+            'front',
+        ]);
+    });
+
+    it('reloads renderer contents without clearing the unlocked main-process session', async () => {
+        const { createWindow, installApplicationMenu } = await import(
+            '../../../packages/desktop/main/index.js'
+        );
+        const win = createWindow();
+        installApplicationMenu({ isMac: false });
+        const template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        const view = submenu(template, '&View');
+        const reload = view.find((item) => item.label === 'Reload');
+        const forceReload = view.find((item) => item.label === 'Force Reload');
+
+        reload.click({}, win);
+        forceReload.click({}, win);
+
+        expect(reload.accelerator).toBe('CmdOrCtrl+R');
+        expect(forceReload.accelerator).toBe('CmdOrCtrl+Shift+R');
+        expect(win.webContents.reload).toHaveBeenCalledOnce();
+        expect(win.webContents.reloadIgnoringCache).toHaveBeenCalledOnce();
+        expect(runtime.tearDownHost).not.toHaveBeenCalled();
+        expect(runtime.instance.sessionBackend.clear).not.toHaveBeenCalled();
     });
 
     it('places About in the native macOS app menu and invokes it from Help elsewhere', async () => {
@@ -839,6 +1128,124 @@ describe('desktop application menu', () => {
             .filter(Boolean)
             .map((accelerator) => accelerator.toLowerCase());
         expect(new Set(accelerators).size).toBe(accelerators.length);
-        expect(accelerators).toEqual(['cmdorctrl+n']);
+        expect(accelerators).toEqual([
+            'cmdorctrl+shift+n',
+            'cmdorctrl+r',
+            'cmdorctrl+shift+r',
+        ]);
+    });
+
+    it('provides native zoom shortcuts including reset to 100 percent', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        installApplicationMenu({ isMac: false });
+        const template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+
+        // Reload and Force Reload are labelled commands, not roles.
+        expect(submenu(template, '&View').map((item) => item.role).filter(Boolean)).toEqual([
+            'resetZoom',
+            'zoomIn',
+            'zoomOut',
+            'togglefullscreen',
+        ]);
+    });
+});
+
+describe('desktop main-process failure boundaries', () => {
+    it('logs one context-only record for a repeated error and resolves the task', async () => {
+        const {
+            reportMainFailure,
+            runMainCallback,
+            runMainTask,
+        } = await import('../../../packages/desktop/main/errorBoundary.js');
+        const secret = 'bitcoin:bc1qsecret?amount=4';
+        const failure = new Error(secret);
+        const log = vi.fn();
+
+        expect(runMainCallback(() => { throw failure; }, 'protocol callback', log)).toBeUndefined();
+        await expect(runMainTask(() => Promise.reject(failure), 'protocol callback', { log }))
+            .resolves.toBeUndefined();
+        expect(reportMainFailure('protocol callback', failure, log)).toBe(false);
+
+        expect(log).toHaveBeenCalledExactlyOnceWith('[xchain] protocol callback failed');
+        expect(log.mock.calls.flat().join(' ')).not.toContain(secret);
+    });
+
+    it('installs idempotent process-level rejection and exception handlers', async () => {
+        const { installProcessErrorHandlers } = await import(
+            '../../../packages/desktop/main/errorBoundary.js'
+        );
+        const listeners = new Map();
+        const proc = {
+            on: vi.fn((name, handler) => { listeners.set(name, handler); }),
+            off: vi.fn((name) => { listeners.delete(name); }),
+        };
+        const log = vi.fn();
+
+        const dispose = installProcessErrorHandlers(proc, log);
+        expect(installProcessErrorHandlers(proc, log)).toBe(dispose);
+        listeners.get('unhandledRejection')(new Error('private rejection text'));
+        listeners.get('uncaughtException')(new Error('private exception text'));
+
+        expect(log.mock.calls).toEqual([
+            ['[xchain] unhandled main-process rejection failed'],
+            ['[xchain] uncaught main-process exception failed'],
+        ]);
+        expect(proc.on).toHaveBeenCalledTimes(2);
+        dispose();
+        expect(proc.off).toHaveBeenCalledTimes(2);
+    });
+
+    it('contains deep-link callback exceptions and reports them once', async () => {
+        const { attachDeepLinkHandlers } = await vi.importActual(
+            '../../../packages/desktop/main/protocol.js',
+        );
+        const app = (() => {
+            const listeners = new Map();
+            return {
+                listeners,
+                requestSingleInstanceLock: () => true,
+                on: (name, handler) => { listeners.set(name, handler); },
+            };
+        })();
+        const failure = new Error('xchain:private?memo=secret');
+        const onError = vi.fn();
+        attachDeepLinkHandlers(app, {
+            onDeepLink: () => { throw failure; },
+            onError,
+        });
+
+        expect(() => app.listeners.get('open-url')(
+            { preventDefault: vi.fn() },
+            'xchain:BTC/send?to=address',
+        )).not.toThrow();
+        expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+    });
+
+    it('contains updater event consumer exceptions without disabling updater events', async () => {
+        const { attachUpdater } = await vi.importActual(
+            '../../../packages/desktop/main/updater.js',
+        );
+        const listeners = new Map();
+        const autoUpdater = {
+            isUpdaterActive: () => true,
+            on: (name, handler) => { listeners.set(name, handler); },
+            checkForUpdates: vi.fn(async () => {}),
+            downloadUpdate: vi.fn(async () => []),
+            quitAndInstall: vi.fn(),
+        };
+        const failure = new Error('private updater listener text');
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await attachUpdater({
+            loader: async () => ({ autoUpdater }),
+            onEvent: () => { throw failure; },
+            feedBaseUrl: 'https://feed.invalid/wallet/',
+        });
+
+        expect(() => listeners.get('checking-for-update')()).not.toThrow();
+        expect(() => listeners.get('update-available')({ version: '2.0.0' })).not.toThrow();
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] updater event delivery failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(failure.message);
+        error.mockRestore();
     });
 });

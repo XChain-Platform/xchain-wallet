@@ -136,7 +136,7 @@ async function fill({ feed, body, value, fee, timestamp }) {
         fireEvent.change(screen.getByLabelText(/^Feed fee/), { target: { value: fee } });
     }
     if (timestamp) {
-        fireEvent.click(screen.getByLabelText(/Prepend UTC timestamp/));
+        fireEvent.click(screen.getByRole('switch', { name: 'Prepend UTC timestamp to memo' }));
     }
 }
 
@@ -264,8 +264,7 @@ describe('BroadcastForm success screen', () => {
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeTruthy();
         expect(screen.getByText('deadbeef')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
-        expect(screen.getByText('Litecoin')).toBeTruthy();
-        expect(screen.getByText('regtest')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/Litecoin|regtest|testnet|not mainnet/i);
         expect(screen.getByRole('link', { name: 'View on explorer' })).toHaveAttribute(
             'href',
             'http://localhost:18080/RLTC/tx/deadbeef',
@@ -302,7 +301,7 @@ describe('BroadcastForm validates decimal fields before compose', () => {
 
 describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
     async function openRawTransaction(raw) {
-        fireEvent.click(await screen.findByLabelText('Signed transaction'));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Signed transaction' }));
         fireEvent.change(screen.getByLabelText('Signed transaction hex'), { target: { value: raw } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
     }
@@ -354,7 +353,8 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         mountForm(LTC_CHAIN, LTC_ADDRESSES);
         await openRawTransaction(SEGWIT_TX);
 
-        expect(await screen.findByText(/Taproot output, which Litecoin does not support/)).toBeTruthy();
+        expect(await screen.findByText(/Taproot output that the active network does not support/)).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
         expect(screen.getByRole('button', { name: 'Broadcast transaction' })).toBeDisabled();
         expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
     });

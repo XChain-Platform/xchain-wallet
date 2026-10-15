@@ -9,6 +9,7 @@ import {
     entriesToCsv,
     entriesToJson,
 } from '../../../packages/core/src/flows/historyExport.js';
+import { parseCsvRecords } from '../../../packages/core/src/shared/utils/csv.js';
 
 describe('History export serialization', () => {
     it('documents headers, preserves exact amounts, and labels fiat with its currency', () => {
@@ -57,5 +58,41 @@ describe('History export serialization', () => {
             memo: 'recorded memo',
             fiatCurrency: 'GBP',
         });
+    });
+
+    it('escapes text fields and neutralizes spreadsheet formulas', () => {
+        const csv = entriesToCsv([{
+            chainId: '=CHAIN(), "primary"\nlabel',
+            address: '+address',
+            action: '-action',
+            timestamp: 1_714_000_000,
+            source: '@source',
+            raw: {
+                amount: -1234.5,
+                memo: '=HYPERLINK("https://example.invalid", "memo")\nnext line',
+            },
+        }], {
+            columns: ['chainId', 'address', 'action', 'source', 'amount', 'memo', 'iso'],
+        });
+
+        const records = parseCsvRecords(csv, { strict: true });
+        expect(records).toHaveLength(2);
+        expect(records[1].cells).toEqual([
+            '\'=CHAIN(), "primary"\nlabel',
+            "'+address",
+            "'-action",
+            "'@source",
+            "'-1234.5",
+            '\'=HYPERLINK("https://example.invalid", "memo")\nnext line',
+            '2024-04-24T23:06:40.000Z',
+        ]);
+        expect(csv).toContain('"\'=CHAIN(), ""primary""\nlabel"');
+        expect(csv).toContain('"\'=HYPERLINK(""https://example.invalid"", ""memo"")\nnext line"');
+    });
+
+    it('serializes numeric amounts with a locale-independent decimal point', () => {
+        const csv = entriesToCsv([{ raw: { amount: 1234.5 } }], { columns: ['amount'] });
+
+        expect(csv).toBe('Amount\n1234.5\n');
     });
 });

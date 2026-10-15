@@ -15,10 +15,20 @@ afterEach(() => vi.restoreAllMocks());
 describe('shared date and time formatting', () => {
     it('uses one compact vocabulary for relative times', () => {
         expect(formatElapsedTime(4_000)).toBe('just now');
-        expect(formatElapsedTime(42_000)).toBe('42 sec ago');
-        expect(formatElapsedTime(5 * 60_000)).toBe('5 min ago');
-        expect(formatElapsedTime(3 * 60 * 60_000)).toBe('3 hr ago');
-        expect(formatRelativeTime(1_700_000_000, 1_700_000_300_000)).toBe('5 min ago');
+        expect(formatElapsedTime(42_000)).toBe('42 seconds ago');
+        expect(formatElapsedTime(5 * 60_000)).toBe('5 minutes ago');
+        expect(formatElapsedTime(3 * 60 * 60_000)).toBe('3 hours ago');
+        expect(formatRelativeTime(1_700_000_000, 1_700_000_300_000)).toBe('5 minutes ago');
+    });
+
+    it.each([
+        ['en-US', '3 minutes ago', 'just now'],
+        ['de-DE', 'vor 3 Minuten', 'jetzt'],
+        ['fr-FR', 'il y a 3 minutes', 'maintenant'],
+        ['ar-EG', 'قبل ٣ دقائق', 'الآن'],
+    ])('uses %s wording and digits', (locale, elapsed, current) => {
+        expect(formatElapsedTime(3 * 60_000, locale)).toBe(elapsed);
+        expect(formatElapsedTime(4_000, locale)).toBe(current);
     });
 
     it('formats absolute times through the viewer local zone and never as ISO', () => {

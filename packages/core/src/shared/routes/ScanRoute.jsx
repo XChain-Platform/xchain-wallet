@@ -23,7 +23,16 @@
 // drive the four supported routes.
 
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
-import { Button, FormPage, Icon, PageHeader, QrScanner, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    FormPage,
+    Icon,
+    PageHeader,
+    QrScanner,
+    Screen,
+    StatusMessage,
+    Textarea,
+} from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -69,26 +78,6 @@ function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
     };
 }
 
-const PASTE_LABEL = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
-    fontSize: 'var(--xc-text-sm)',
-    color: 'var(--xc-text-muted)',
-};
-const PASTE_BOX = {
-    width: '100%',
-    minHeight: '5rem',
-    fontFamily: 'var(--xc-font-mono, monospace)',
-    fontSize: 'var(--xc-text-xs)',
-    padding: 'var(--xc-space-2)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    background: 'var(--xc-surface-raised)',
-    color: 'var(--xc-text)',
-    resize: 'vertical',
-};
-
 /**
  * @typedef {(
  *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }
@@ -103,9 +92,11 @@ const PASTE_BOX = {
  * @param {() => void} [props.onBack]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
  * @param {boolean} [props.embedded]
+ * @param {boolean} [props.nested] the scanner opens inside another screen (a
+ *   contact form), so its Back stays even under a nav-linked route
  * @param {string} [props.titleId]
  */
-export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, titleId }) {
+export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, nested = false, titleId }) {
     const generatedHeadingId = useId();
     const headingId = titleId || generatedHeadingId;
     const [paste, setPaste] = useState('');
@@ -293,13 +284,14 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
 
     const header = useMemo(() => (
         <PageHeader
+            nested={nested || embedded}
             onBack={onBack}
             backLabel={t('common.back')}
             title={t('scan.title')}
             titleId={headingId}
             titleIcon={<Icon.CameraIcon />}
         />
-    ), [headingId, onBack]);
+    ), [headingId, onBack, nested, embedded]);
 
     return (
         <Screen
@@ -318,7 +310,6 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 actions={(
                     <Button
                         type="submit"
-                        size="sm"
                         variant="secondary"
                         disabled={!paste.trim() || stopped}
                     >
@@ -334,18 +325,16 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 {status ? (
                     <StatusMessage variant="error">{status}</StatusMessage>
                 ) : null}
-                <label style={PASTE_LABEL}>
-                    {t('scan.pasteLabel')}
-                    <textarea
-                        value={paste}
-                        onChange={(e) => setPaste(e.target.value)}
-                        placeholder={t('scan.pastePlaceholder')}
-                        style={PASTE_BOX}
-                        spellCheck={false}
-                        autoComplete="off"
-                        autoCorrect="off"
-                    />
-                </label>
+                <Textarea
+                    label={t('scan.pasteLabel')}
+                    value={paste}
+                    onChange={(e) => setPaste(e.target.value)}
+                    placeholder={t('scan.pastePlaceholder')}
+                    rows={4}
+                    spellCheck={false}
+                    autoComplete="off"
+                    autoCorrect="off"
+                />
             </FormPage>
         </Screen>
     );

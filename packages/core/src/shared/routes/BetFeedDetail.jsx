@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -32,6 +33,7 @@ import {
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
 import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -123,10 +125,7 @@ function betAmountError(value, minimum) {
 }
 
 function fmtTime(unix) {
-    if (unix === null || unix === undefined) return 'n/a';
-    const n = Number(unix);
-    if (!Number.isFinite(n)) return 'n/a';
-    return new Date(n * 1000).toLocaleString();
+    return formatLocalDateTime(unix) || 'n/a';
 }
 
 // Why not err.message on the two market loads below: betFeed forwards the SDK
@@ -156,6 +155,7 @@ const loadFailed = (err) => humanizeError(err, 'load this market').message;
  */
 export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSettleMarket, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
@@ -171,6 +171,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     const [projected, setProjected] = useState(/** @type {any} */ (null));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
+    const [submitting, setSubmitting] = useState(false);
+    const submitLockRef = useRef(false);
     const [settledSplit, setSettledSplit] = useState(/** @type {any[] | null} */ (null));
     const [settledPartial, setSettledPartial] = useState(false);
 
@@ -323,10 +325,13 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     // stakes are literal: a place-bet and a resolve differ on the wire only by
     // AMOUNT (that rule, sharper here).
     async function placeBet() {
-        if (!fromAddress) { setFormError('No address on this chain to bet from.'); return; }
+        if (!fromAddress) { setFormError('No address on this network to bet from.'); return; }
         if (outcome === null) { setFormError('Choose an outcome.'); return; }
         const amountProblem = betAmountError(amount, feed?.min_amount);
         if (amountProblem) { setFormError(amountProblem); return; }
+        if (submitLockRef.current) return;
+        submitLockRef.current = true;
+        setSubmitting(true);
         setFormError(null);
         const from = sourceDescriptor();
         try {
@@ -376,6 +381,9 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                 // rejection reason is worth showing verbatim when nothing recognises it.
                 fallback: err?.message || 'Bet failed.',
             }));
+        } finally {
+            submitLockRef.current = false;
+            setSubmitting(false);
         }
     }
 
@@ -476,13 +484,15 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                         <strong>Run by</strong>:{' '}
                         {onOpenOracle
                             ? (
-                                <button
+                                <Button
                                     type="button"
-                                    className={styles.inlineAction}
+                                    variant="link"
+                                    size="sm"
+                                    icon={null}
                                     onClick={() => onOpenOracle(chainId, feed.source)}
                                 >
                                     {feed.source}
-                                </button>
+                                </Button>
                             )
                             : feed.source}
                     </div>
@@ -501,7 +511,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     <p className={styles.hint}>
                         {resolveWindowOpen
                             ? 'The market oracle must publish the winning outcome before the refund window ends. Payouts settle automatically when the result is recorded; bettors do not submit a claim.'
-                            : 'The resolution window has ended. The protocol refunds every bet automatically when the chain records the expiry; bettors do not submit a claim.'}
+                            : 'The resolution window has ended. The protocol refunds every bet automatically when the network records the expiry; bettors do not submit a claim.'}
                     </p>
                     {resolveWindowOpen && ownsMarket && onSettleMarket ? (
                         <Button variant="primary" onClick={onSettleMarket}>Settle this market</Button>
@@ -616,13 +626,14 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     <>
                         <SectionHeader as="h3" title="Place a bet" />
                         <FormPage
+                            demoGuard={demoGuard}
                             label="Place a bet"
                             onSubmit={(event) => event.preventDefault()}
                             actions={(
                                 <Button
                                     variant="primary"
-                                    loading={actionConfirm.composing}
-                                    disabled={actionConfirm.composing}
+                                    loading={submitting || actionConfirm.composing}
+                                    disabled={demoGuard.blocked || submitting || actionConfirm.composing}
                                     onClick={placeBet}
                                 >
                                     {actionConfirm.composing

@@ -32,6 +32,34 @@ export function publishFileType(file) {
 }
 
 /**
+ * Return plain validation copy for the custom network fee used by publish
+ * forms. An invalid custom value must not silently fall back to the encoder's
+ * default fee after the user selected Custom.
+ *
+ * @param {{ mode?: string, customRate?: number } | null | undefined} feePick
+ * @param {object | null | undefined} estimate
+ * @returns {string | null}
+ */
+export function publishFeeValidationError(feePick, estimate) {
+    if (feePick?.mode !== 'custom') return null;
+    const rate = Number(feePick.customRate);
+    if (!Number.isFinite(rate) || rate <= 0) {
+        return 'Custom fee rate must be greater than zero.';
+    }
+    const text = String(feePick.customRate).toLowerCase();
+    const [mantissa, exponentText] = text.split('e');
+    const decimals = Math.max(
+        0,
+        (mantissa.split('.')[1]?.length || 0) - Number(exponentText || 0),
+    );
+    if (decimals > 8) {
+        return 'Custom fee rate can have at most 8 decimal places.';
+    }
+    if (!estimate) return 'Custom fee rate is outside the supported range.';
+    return null;
+}
+
+/**
  * Build a script-inert image preview from sniffed bytes. The declared MIME
  * type is not trusted because local files can carry incorrect metadata.
  *

@@ -52,6 +52,8 @@ import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
 
+import { networkGuardRefusal } from './networkGuard.js';
+
 /** Tor's default SOCKS port on localhost. */
 export const DEFAULT_SOCKS = Object.freeze({ host: '127.0.0.1', port: 9050 });
 
@@ -120,63 +122,83 @@ export function parseSocksAddress(value) {
 export function socksConnect({
     proxyHost, proxyPort, host, port, timeoutMs = HANDSHAKE_TIMEOUT_MS,
 }) {
+    // The proxy is on loopback, so the socket guard would let the tunnel
+    // through; a test run under the network guard checks the destination.
+    const refusal = networkGuardRefusal(host, port);
+    if (refusal) return Promise.reject(refusal);
     return new Promise((resolve, reject) => {
         let settled = false;
         const socket = net.connect(proxyPort, proxyHost);
 
+        const cleanup = () => {
+            socket.setTimeout(0);
+            socket.removeListener('timeout', onTimeout);
+            socket.removeListener('error', onError);
+            socket.removeListener('end', onDisconnect);
+            socket.removeListener('close', onDisconnect);
+            socket.removeListener('connect', onConnect);
+            socket.removeListener('data', onGreeting);
+            socket.removeListener('data', onReply);
+        };
         const fail = (err) => {
             if (settled) return;
             settled = true;
+            cleanup();
             socket.destroy();
             reject(err instanceof Error ? err : new SocksError(String(err)));
         };
         const done = () => {
             if (settled) return;
             settled = true;
-            socket.setTimeout(0);
-            socket.removeListener('error', fail);
+            cleanup();
             resolve(socket);
         };
+        const onTimeout = () => fail(new SocksError(
+            `SOCKS proxy at ${proxyHost}:${proxyPort} did not answer in ${timeoutMs}ms`));
+        const onError = (err) => fail(new SocksError(
+            `cannot reach the SOCKS proxy at ${proxyHost}:${proxyPort}: ${err.message}`));
+        const onDisconnect = () => fail(new SocksError('SOCKS proxy closed during handshake'));
+        const onReply = (reply) => {
+            if (reply[0] !== SOCKS5) return fail(new SocksError('malformed SOCKS5 reply'));
+            if (reply[1] !== 0x00) {
+                const why = REPLY[reply[1]] ?? `unknown error 0x${reply[1].toString(16)}`;
+                return fail(new SocksError(`SOCKS proxy refused ${host}:${port}: ${why}`));
+            }
+            done();
+        };
+        const onGreeting = (greeting) => {
+            if (greeting[0] !== SOCKS5) {
+                return fail(new SocksError('not a SOCKS5 proxy'));
+            }
+            if (greeting[1] !== NO_AUTH) {
+                // Tor's default needs no auth. A proxy demanding it is
+                // not the one the user thinks they are pointed at, and
+                // guessing credentials is not a thing to do quietly.
+                return fail(new SocksError(
+                    'the SOCKS proxy requires authentication, which is not configured'));
+            }
 
-        socket.setTimeout(timeoutMs, () => fail(new SocksError(
-            `SOCKS proxy at ${proxyHost}:${proxyPort} did not answer in ${timeoutMs}ms`)));
-        socket.once('error', (err) => fail(new SocksError(
-            `cannot reach the SOCKS proxy at ${proxyHost}:${proxyPort}: ${err.message}`)));
+            const name = Buffer.from(host, 'utf8');
+            if (name.length > 255) return fail(new SocksError('hostname too long for SOCKS5'));
+            socket.write(Buffer.concat([
+                Buffer.from([SOCKS5, CMD_CONNECT, 0x00, ATYP_DOMAIN, name.length]),
+                name,
+                Buffer.from([(port >> 8) & 0xff, port & 0xff]),
+            ]));
 
-        socket.once('connect', () => {
+            socket.once('data', onReply);
+        };
+        const onConnect = () => {
             // Greeting: version, one method, "no authentication".
             socket.write(Buffer.from([SOCKS5, 0x01, NO_AUTH]));
+            socket.once('data', onGreeting);
+        };
 
-            socket.once('data', (greeting) => {
-                if (greeting[0] !== SOCKS5) {
-                    return fail(new SocksError('not a SOCKS5 proxy'));
-                }
-                if (greeting[1] !== NO_AUTH) {
-                    // Tor's default needs no auth. A proxy demanding it is
-                    // not the one the user thinks they are pointed at, and
-                    // guessing credentials is not a thing to do quietly.
-                    return fail(new SocksError(
-                        'the SOCKS proxy requires authentication, which is not configured'));
-                }
-
-                const name = Buffer.from(host, 'utf8');
-                if (name.length > 255) return fail(new SocksError('hostname too long for SOCKS5'));
-                socket.write(Buffer.concat([
-                    Buffer.from([SOCKS5, CMD_CONNECT, 0x00, ATYP_DOMAIN, name.length]),
-                    name,
-                    Buffer.from([(port >> 8) & 0xff, port & 0xff]),
-                ]));
-
-                socket.once('data', (reply) => {
-                    if (reply[0] !== SOCKS5) return fail(new SocksError('malformed SOCKS5 reply'));
-                    if (reply[1] !== 0x00) {
-                        const why = REPLY[reply[1]] ?? `unknown error 0x${reply[1].toString(16)}`;
-                        return fail(new SocksError(`SOCKS proxy refused ${host}:${port}: ${why}`));
-                    }
-                    done();
-                });
-            });
-        });
+        socket.setTimeout(timeoutMs, onTimeout);
+        socket.once('error', onError);
+        socket.once('end', onDisconnect);
+        socket.once('close', onDisconnect);
+        socket.once('connect', onConnect);
     });
 }
 

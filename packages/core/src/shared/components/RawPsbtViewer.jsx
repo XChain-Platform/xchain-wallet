@@ -8,11 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useToast } from './ToastHost.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * Developer-Mode-gated raw view (§21.3 / §48.4) for sign screens.
@@ -45,23 +46,63 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     }));
     const haptic = useHapticFeedback();
     const { announce } = useToast();
-
-    if (!developerMode) return null;
-
     const hasPsbt = typeof psbtHex === 'string' && psbtHex.length > 0;
     const hasFields = actionFields && typeof actionFields === 'object' && Object.keys(actionFields).length > 0;
+    const fieldsJson = hasFields ? safeJson(actionFields) : '';
+    const mountedRef = useRef(false);
+    const copyAttemptRef = useRef(0);
+    const resetTimerRef = useRef(null);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        copyAttemptRef.current += 1;
+        if (resetTimerRef.current !== null) {
+            clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = null;
+        }
+        setCopyState((current) => current.status === 'idle'
+            ? current
+            : { target: null, status: 'idle' });
+
+        return () => {
+            mountedRef.current = false;
+            copyAttemptRef.current += 1;
+            if (resetTimerRef.current !== null) {
+                clearTimeout(resetTimerRef.current);
+                resetTimerRef.current = null;
+            }
+        };
+    }, [developerMode, fieldsJson, psbtHex]);
+
+    if (!developerMode) return null;
     if (!hasPsbt && !hasFields) return null;
 
-    const fieldsJson = hasFields ? safeJson(actionFields) : '';
     async function handleCopy(target, value) {
-        const { ok } = await copyText(value);
+        const attempt = ++copyAttemptRef.current;
+        if (resetTimerRef.current !== null) {
+            clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = null;
+        }
+        let ok = false;
+        try {
+            ({ ok } = await copyText(value));
+        } catch {
+            // Clipboard adapters are expected to return failures, but a rejected
+            // platform promise still produces the same safe, visible result.
+        }
+        if (!mountedRef.current || copyAttemptRef.current !== attempt) return;
+
         setCopyState({ target, status: ok ? 'copied' : 'failed' });
         announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
         if (ok) haptic.tap();
         else haptic.error();
-        setTimeout(() => setCopyState((current) => current.target === target
-            ? { target: null, status: 'idle' }
-            : current), 1500);
+        resetTimerRef.current = setTimeout(() => {
+            resetTimerRef.current = null;
+            if (!mountedRef.current || copyAttemptRef.current !== attempt) return;
+            setCopyState((current) => current.target === target
+                ? { target: null, status: 'idle' }
+                : current);
+        }, 1500);
     }
 
     function copyLabel(target, label) {
@@ -72,20 +113,20 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     return (
         <details className={styles.root}>
             <summary className={styles.toggle}>
-                Developer · raw view
+                {t('components.rawPsbtViewer.developerRawView')}
             </summary>
 
             <div className={styles.body}>
                 {hasPsbt ? (
-                    <section className={styles.section} aria-label="Unsigned transaction hex">
-                        <p className={styles.label}>Unsigned transaction hex</p>
+                    <section className={styles.section} aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}>
+                        <p className={styles.label}>{t('components.watcherResultPanel.unsignedTransactionHex2')}</p>
                         <textarea
                             className={styles.hex}
                             readOnly
                             value={psbtHex}
                             rows={4}
                             spellCheck={false}
-                            aria-label="Unsigned transaction hex"
+                            aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}
                         />
                         <button
                             type="button"
@@ -99,8 +140,8 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                 ) : null}
 
                 {hasFields ? (
-                    <section className={styles.section} aria-label="Action fields">
-                        <p className={styles.label}>Action fields</p>
+                    <section className={styles.section} aria-label={t('components.rawPsbtViewer.actionFields')}>
+                        <p className={styles.label}>{t('components.rawPsbtViewer.actionFields')}</p>
                         <pre className={styles.json}>{fieldsJson}</pre>
                         <button
                             type="button"
@@ -113,10 +154,10 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     </section>
                 ) : null}
 
-                <section className={styles.section} aria-label="Parsed inputs / outputs">
-                    <p className={styles.label}>Parsed inputs / outputs</p>
+                <section className={styles.section} aria-label={t('components.rawPsbtViewer.parsedInputsOutputs')}>
+                    <p className={styles.label}>{t('components.rawPsbtViewer.parsedInputsOutputs')}</p>
                     <p className={styles.placeholder}>
-                        (parser not wired yet; see PSBT hex above for the raw bytes)
+                        {t('components.rawPsbtViewer.parserNotWiredYetSee')}
                     </p>
                 </section>
 

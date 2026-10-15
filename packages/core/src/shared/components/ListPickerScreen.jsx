@@ -24,13 +24,13 @@
 // read fails or that has no members is left out.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
-import { TruncatedText } from '../../ui/PageHeader.jsx';
+import { t } from '../../i18n/index.js';
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -75,7 +75,7 @@ function extractListRows(resp) {
  * @param {() => void} props.onBack
  */
 export function ListPickerScreen({
-    variant, messaging, chainId, addresses, filterType, includeUnions = false, title = 'Choose a list', onSelect, onBack,
+    variant, messaging, chainId, addresses, filterType, includeUnions = false, title = t('components.listPickerScreen.chooseAList'), onSelect, onBack,
 }) {
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -88,16 +88,20 @@ export function ListPickerScreen({
         let cancelled = false;
         setRows(null);
         setLoadError(null);
+        setCounts({});
+        setDescriptions({});
         const addrList = (addresses || []).map((a) => a.address).filter(Boolean);
         if (addrList.length === 0) { setRows([]); return undefined; }
-        Promise.all(addrList.map((addr) => messaging.getListsForSource({ chainId, address: addr })
+        Promise.all(addrList.map((addr) => Promise.resolve()
+            .then(() => messaging.getListsForSource({ chainId, address: addr }))
             .then((resp) => extractListRows(resp))))
             .then(async (results) => {
                 if (cancelled) return;
                 const merged = results.flat();
                 const seen = new Set();
                 let uniq = merged.filter((row) => {
-                    const key = String(row.action_index ?? row.tx_hash ?? JSON.stringify(row));
+                    if (row?.action_index == null || row.action_index === '') return false;
+                    const key = String(row.action_index);
                     if (seen.has(key)) return false;
                     seen.add(key);
                     return true;
@@ -120,41 +124,29 @@ export function ListPickerScreen({
                 }
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
                 setRows(uniq);
+                if (typeof messaging.getListByActionIndex !== 'function') return;
+                for (const row of uniq) {
+                    const idx = String(row.action_index);
+                    try {
+                        const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
+                        if (cancelled) return;
+                        setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
+                        setDescriptions((prev) => ({
+                            ...prev,
+                            [idx]: typeof detail?.description === 'string' && detail.description.length > 0
+                                ? detail.description
+                                : null,
+                        }));
+                    } catch {
+                        if (cancelled) return;
+                        setCounts((prev) => ({ ...prev, [idx]: null }));
+                        setDescriptions((prev) => ({ ...prev, [idx]: null }));
+                    }
+                }
             })
             .catch(() => { if (!cancelled) setLoadError('Couldn’t load lists. Check your connection and try again.'); });
         return () => { cancelled = true; };
     }, [chainId, addresses, messaging, filterType, includeUnions, loadAttempt]);
-
-    // Best-effort member counts for the shown lists (one detail read each).
-    useEffect(() => {
-        if (!rows || rows.length === 0) return undefined;
-        if (typeof messaging.getListByActionIndex !== 'function') return undefined;
-        let cancelled = false;
-        (async () => {
-            for (const row of rows) {
-                const idx = String(row.action_index ?? '');
-                if (!idx || counts[idx] !== undefined) continue;
-                try {
-                    const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
-                    if (cancelled) return;
-                    // Count the newest valid edit's members: what a gate bound to this index checks
-                    setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
-                    setDescriptions((prev) => ({
-                        ...prev,
-                        [idx]: typeof detail?.description === 'string' && detail.description.length > 0
-                            ? detail.description
-                            : null,
-                    }));
-                } catch {
-                    if (cancelled) return;
-                    setCounts((prev) => ({ ...prev, [idx]: null }));
-                    setDescriptions((prev) => ({ ...prev, [idx]: null }));
-                }
-            }
-        })();
-        return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [rows, chainId, messaging]);
 
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -175,7 +167,7 @@ export function ListPickerScreen({
         });
     }, [rows, query, descriptions]);
 
-    const header = <PageHeader onBack={onBack} title={title} />;
+    const header = <PageHeader nested onBack={onBack} title={title} />;
 
     if (loadError) {
         return (
@@ -183,14 +175,14 @@ export function ListPickerScreen({
                 <ListPage>
                     <StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage>
                     <Button variant="secondary" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
-                        Retry
+                        {t('home.retryBalances')}
                     </Button>
                 </ListPage>
             </Screen>
         );
     }
     if (!rows) {
-        return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>Loading lists…</div></ListPage></Screen>;
+        return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>{t('components.listPickerScreen.loadingLists')}</div></ListPage></Screen>;
     }
     if (rows.length === 0) {
         return (
@@ -198,11 +190,11 @@ export function ListPickerScreen({
                 <ListPage>
                     <EmptyState
                         title={filterType === '2'
-                            ? 'No address lists yet'
-                            : 'No published lists yet'}
+                            ? t('components.listPickerScreen.noAddressListsYet')
+                            : t('components.listPickerScreen.noPublishedListsYet')}
                         body={filterType === '2'
-                            ? 'Address lists published from this chain appear here.'
-                            : 'Lists published from this chain appear here.'}
+                            ? t('components.listPickerScreen.addressListsPublishedFromThis')
+                            : t('components.listPickerScreen.listsPublishedFromThisChain')}
                         titleAs="p"
                         role={null}
                     />
@@ -220,19 +212,19 @@ export function ListPickerScreen({
                     autoCapitalize="off"
                     role="textbox"
                     className={styles.abSearch}
-                    placeholder="Search"
+                    placeholder={t('routes.addressList.search')}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    aria-label="Search lists"
+                    aria-label={t('components.listPickerScreen.searchLists')}
                 />
             )}>
                 {visibleRows.length === 0 ? (
                     <EmptyState
-                        title="No matching lists"
-                        body="Try a different search."
+                        title={t('components.listPickerScreen.noMatchingLists')}
+                        body={t('components.listPickerScreen.tryADifferentSearch')}
                         titleAs="p"
                         role={null}
                     />
@@ -259,8 +251,7 @@ export function ListPickerScreen({
                                     : `${formatDecimalAmount(count)} member${count === 1 ? '' : 's'}`;
                             return (
                                 <li key={idx}>
-                                    <button
-                                        type="button"
+                                    <ListRow
                                         className={styles.abRow}
                                         onClick={() => onSelect({
                                             actionIndex: idx,
@@ -270,17 +261,20 @@ export function ListPickerScreen({
                                                 ? { name: row.name }
                                                 : {}),
                                         })}
-                                    >
-                                        <TruncatedText className={styles.abName} title={titleLabel}>
-                                            {titleLabel}
-                                            {status && status !== 'valid' ? ` (${status})` : ''}
-                                        </TruncatedText>
-                                        <span className={styles.abAddr}>
-                                            {description && count !== undefined
-                                                ? `${countText} · ${description}`
-                                                : countText}
-                                        </span>
-                                    </button>
+                                        title={(
+                                            <span className={styles.abName}>
+                                                {titleLabel}
+                                                {status && status !== 'valid' ? ` (${status})` : ''}
+                                            </span>
+                                        )}
+                                        subtitle={(
+                                            <span className={styles.abAddr}>
+                                                {description && count !== undefined
+                                                    ? `${countText} · ${description}`
+                                                    : countText}
+                                            </span>
+                                        )}
+                                    />
                                 </li>
                             );
                         })}

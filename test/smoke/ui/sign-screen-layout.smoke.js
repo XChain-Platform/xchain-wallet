@@ -185,19 +185,18 @@ for (const cls of ['source', 'sourceLabel', 'sourceOrigin', 'sourceApp', 'detail
 
 // --- 5. Send.jsx polish -------------------------------------------------
 
-// Submit-button label uses chain-suffixed "Sign on <chain>" for
-// software signing (HW path keeps its existing Sign on Trezor / Ledger
-// affordance).
+// Software signing stays generic so the review does not repeat the chain name.
+// The hardware path keeps its Sign on Trezor / Ledger affordance.
 assert.match(
     sendSrc,
-    /descriptor\?\.displayName\s*\?\s*t\('send\.review\.signOn', \{ device: descriptor\.displayName \}\)\s*:\s*t\('send\.review\.sign'\)/,
-    'Send.jsx review/sign button reads "Sign on <chain>" (software path)',
+    /const softwareSignLabel = t\('send\.review\.sign'\)/,
+    'Send.jsx review/sign button uses generic software-signing copy',
 );
 // Send is a deliberate two-stage flow: the compose-stage submit button
 // reads "Send" (it advances to Review via handleReview), and only the
-// review-stage button commits with "Sign on <chain>" (asserted above).
+// review-stage button commits with "Sign" (asserted above).
 // A blanket "no Send button anywhere" check is therefore over-broad and
-// was retired; the "Sign on <chain>" assertion already pins the intent.
+// was retired; the generic Sign assertion already pins the intent.
 
 // Details collapsed.
 assert.match(

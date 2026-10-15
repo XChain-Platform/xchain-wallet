@@ -53,7 +53,7 @@ describe('header popover focus return', () => {
 
     it('returns network-status focus after an outside press', () => {
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
-        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        const trigger = screen.getByRole('button', { name: /Network connected/ });
         const wrap = trigger.closest('[data-open]');
         fireEvent.click(trigger);
         screen.getByRole('button', { name: 'Network settings' }).focus();
@@ -67,7 +67,7 @@ describe('header popover focus return', () => {
     it('returns network-status focus after its action closes the popover', () => {
         const onOpenNetworkSettings = vi.fn();
         render(<NetworkStatusIndicator onOpenNetworkSettings={onOpenNetworkSettings} />);
-        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        const trigger = screen.getByRole('button', { name: /Network connected/ });
         fireEvent.click(trigger);
 
         fireEvent.click(screen.getByRole('button', { name: 'Network settings' }));

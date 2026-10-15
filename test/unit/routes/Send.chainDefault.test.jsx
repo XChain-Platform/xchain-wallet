@@ -25,6 +25,7 @@ import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
 const LTC = 'litecoin-mainnet';
+const TESTNET = 'bitcoin-testnet';
 
 const BTC_FROM = 'bc1qsendersendersendersendersendersendersa';
 const DOGE_FROM = 'DHy1Qk7Zx8dCn4eW1sT9pVb2xKq3rLm5Ns';
@@ -47,7 +48,7 @@ const ACTIVE = {
 const NO_SAVED_FEE = Object.freeze({ strategy: null, customSatsPerKb: null, rbfByDefault: null });
 const NATIVE_TICK = { [BTC]: 'BTC', [DOGE]: 'DOGE', [LTC]: 'LTC' };
 
-function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}) {
+function mount({ settings, prefill, addresses = ADDRESSES, overrides = {}, onChangeAsset } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getActiveAddresses: vi.fn().mockResolvedValue(ACTIVE),
@@ -86,7 +87,9 @@ function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Send, { walletId: 'w', onBack() {}, prefill: prefill || null }),
+            React.createElement(Send, {
+                walletId: 'w', onBack() {}, prefill: prefill || null, onChangeAsset,
+            }),
         ),
     );
     return messaging;
@@ -102,12 +105,16 @@ describe('Send opens on the last-used chain', () => {
         await waitFor(() => expect(fromField().value).toBe(DOGE_FROM));
     });
 
-    it('a prefilled chain (a token context) wins over the last-used chain', async () => {
-        mount({ settings: { lastUsedChain: { mainnet: DOGE } }, prefill: { chainId: BTC } });
-        await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+    it('a token selected on another chain switches Send from the last-used chain', async () => {
+        mount({
+            settings: { lastUsedChain: { mainnet: DOGE } },
+            prefill: { chainId: LTC, tick: 'LTCASSET' },
+        });
+        await waitFor(() => expect(fromField().value).toBe(LTC_FROM));
+        expect(screen.getByLabelText('Token')).toHaveValue('LTCASSET');
         // And stays: the load must not re-point a prefilled form.
         await new Promise((r) => { setTimeout(r, 50); });
-        expect(fromField().value).toBe(BTC_FROM);
+        expect(fromField().value).toBe(LTC_FROM);
     });
 
     it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
@@ -119,6 +126,24 @@ describe('Send opens on the last-used chain', () => {
     it('a testnet slot never picks the chain on a mainnet wallet', async () => {
         mount({ settings: { lastUsedChain: { testnet: 'dogecoin-testnet' } } });
         await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+    });
+
+    it('shows a testnet asset only as its icon', async () => {
+        const testnetAddress = addr('addr-testnet', 'tb1qsendersendersendersendersendersenders', "m/84'/1'/0'/0/0");
+        mount({
+            settings: { activeNetwork: 'testnet' },
+            prefill: { chainId: TESTNET, tick: 'TBTC' },
+            addresses: { [TESTNET]: [testnetAddress] },
+            overrides: {
+                getActiveAddresses: vi.fn().mockResolvedValue({ [TESTNET]: testnetAddress }),
+            },
+            onChangeAsset: vi.fn(),
+        });
+
+        await waitFor(() => expect(fromField().value).toBe(testnetAddress.address));
+        expect(screen.getByRole('button', { name: /Change asset \(currently TBTC\)/ })).toBeTruthy();
+        expect(screen.queryByText('TBTC')).toBeNull();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('still opens, on the first chain, when the settings read fails', async () => {

@@ -21,6 +21,8 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { compareDecimalStrings } from '../shared/utils/amountFormat.js';
+import { tickerReferenceError } from '../shared/utils/tickerGrammar.js';
 
 /**
  * @typedef {Object} DividendActionOpts
@@ -52,14 +54,25 @@ export async function dividendAction(opts) {
     if (!opts.params || typeof opts.params !== 'object') {
         throw new Error('dividendAction: params is required');
     }
-    if (typeof opts.params.TICK !== 'string' || opts.params.TICK.length === 0) {
+    if (typeof opts.params.TICK !== 'string' || opts.params.TICK.trim().length === 0) {
         throw new Error('dividendAction: params.TICK is required');
     }
-    if (typeof opts.params.DIVIDEND_TICK !== 'string' || opts.params.DIVIDEND_TICK.length === 0) {
+    const tickError = tickerReferenceError(opts.params.TICK, { noun: 'Holder-of ticker', allowRef: true });
+    if (tickError) throw new Error(`dividendAction: ${tickError}`);
+    if (typeof opts.params.DIVIDEND_TICK !== 'string' || opts.params.DIVIDEND_TICK.trim().length === 0) {
         throw new Error('dividendAction: params.DIVIDEND_TICK is required');
     }
-    if (typeof opts.params.AMOUNT !== 'string' || opts.params.AMOUNT.length === 0) {
+    const dividendTickError = tickerReferenceError(opts.params.DIVIDEND_TICK, { noun: 'Dividend ticker', allowRef: true });
+    if (dividendTickError) throw new Error(`dividendAction: ${dividendTickError}`);
+    if (typeof opts.params.AMOUNT !== 'string' || opts.params.AMOUNT.trim().length === 0) {
         throw new Error('dividendAction: params.AMOUNT is required');
+    }
+    if (compareDecimalStrings(opts.params.AMOUNT, '0') !== 1) {
+        throw new Error('dividendAction: params.AMOUNT must be a positive decimal');
+    }
+    if (opts.params.MEMO !== undefined
+        && (typeof opts.params.MEMO !== 'string' || /[|;]/.test(opts.params.MEMO))) {
+        throw new Error('dividendAction: params.MEMO cannot contain | or ; characters');
     }
     const source = normalizeSource(opts.from, 'dividendAction');
 

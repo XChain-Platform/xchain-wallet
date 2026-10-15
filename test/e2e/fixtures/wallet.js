@@ -166,13 +166,53 @@ function navDestination(scope, name) {
     };
 }
 
+// A destination can sit in the DOM of a collapsed nav without being shown
+// (the phone bar keeps its More sheet rows mounted off screen); only one that
+// is visible inside the viewport is a click target, otherwise the caller
+// falls through to More.
+async function onScreen(locator) {
+    if (!(await locator.isVisible())) return false;
+    const box = await locator.boundingBox({ timeout: 2_000 }).catch(() => null);
+    if (!box) return false;
+    const viewport = locator.page().viewportSize();
+    if (!box || !viewport) return Boolean(box);
+    return box.x + box.width > 0 && box.y + box.height > 0
+        && box.x < viewport.width && box.y < viewport.height;
+}
+
+// The landscape icon rail and the open More sheet both scroll inside a short
+// viewport (or under enlarged text spacing), so a row can be scrolled out of
+// view; bring it back before the on-screen check. The closed phone bar's
+// off-screen sheet rows are neither, so they still fall through to More.
+// A resize can unmount the row between the count and these calls, so each
+// is bounded and a vanished row simply counts as not on screen.
+async function revealInScroller(locator) {
+    if (await locator.count() === 0) return;
+    try {
+        const scrolls = await locator.first().evaluate((el) => {
+            const navEl = el.closest('nav');
+            if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
+            const sheet = el.closest('[role="dialog"]');
+            return Boolean(sheet && sheet.getAttribute('aria-labelledby')
+                && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
+        }, undefined, { timeout: 2_000 });
+        if (scrolls && await locator.first().isVisible()) {
+            await locator.first().scrollIntoViewIfNeeded({ timeout: 2_000 });
+        }
+    } catch {
+        // Gone mid-resize: the caller's on-screen check decides.
+    }
+}
+
 async function clickDestination(scope, name) {
     const { exact, prefixed } = navDestination(scope, name);
-    if (await exact.count() > 0) {
+    await revealInScroller(exact);
+    await revealInScroller(prefixed);
+    if (await exact.count() > 0 && await onScreen(exact.first())) {
         await exact.first().click();
         return true;
     }
-    if (await prefixed.count() > 0) {
+    if (await prefixed.count() > 0 && await onScreen(prefixed.first())) {
         await prefixed.first().click();
         return true;
     }
@@ -189,12 +229,36 @@ async function clickDestination(scope, name) {
 export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
-        if (await clickDestination(bar, name)) return;
-
-        await bar.getByRole('button', { name: 'More', exact: true }).click();
-        const sheet = page.getByRole('dialog', { name: 'More', exact: true });
-        await sheet.waitFor({ state: 'visible', timeout: 15_000 });
-        if (await clickDestination(sheet, name)) return;
+        // Landscape phones can show the rail and the bottom bar together, so
+        // try every nav on screen before opening the More sheet. Right after
+        // a resize the shell can still be swapping the bottom bar for the
+        // rail, so a More button that vanishes means "look again", not
+        // "wait for it forever".
+        const navs = [
+            page.getByRole('navigation', { name: 'Primary navigation' }),
+            page.getByRole('navigation', { name: 'Bottom navigation' }),
+        ];
+        const more = page.getByRole('button', { name: 'More', exact: true });
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            for (const candidate of navs) {
+                if (await candidate.count() === 0) continue;
+                if (await clickDestination(candidate.first(), name)) return;
+            }
+            if (await more.count() === 0) {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            try {
+                await more.first().click({ timeout: 10_000 });
+            } catch {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
+            await sheet.waitFor({ state: 'visible', timeout: 15_000 });
+            if (await clickDestination(sheet, name)) return;
+            break;
+        }
         throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);
     }
 
@@ -212,9 +276,9 @@ export function mainButton(page, name) {
 }
 
 /**
- * The nav rail's "Lock" button. The header also carries a "Lock wallet"
- * button, so a substring match on "Lock" resolves to two elements and
- * trips strict mode. Anchor on the exact accessible name.
+ * The nav rail's "Lock" button. Only the phone layout's header carries a
+ * "Lock wallet" button (never beside the rail), but a substring match on
+ * "Lock" would still hit it, so anchor on the exact accessible name.
  */
 export function lockButton(page) {
     return page.getByRole('button', { name: 'Lock', exact: true });
@@ -462,7 +526,7 @@ export async function turnOffDonations(page) {
     await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
     await openSettings(page);
     await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Automatic Donation System', exact: true });
+    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
     await expect(toggle).toBeVisible();
     if (await toggle.isChecked()) {
         // Click, not check(): the input is controlled by PERSISTED settings,
@@ -489,7 +553,7 @@ export async function lockWallet(page) {
 
 /** Unlocks from the locked screen. */
 export async function unlockWallet(page, password = DEFAULT_PASSWORD) {
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Password', { exact: true }).fill(password);
     await unlockButton(page).click();
     // Argon2id again: unlocking derives the master key. Same budget.
     await expect(lockButton(page)).toBeVisible({ timeout: KDF_STEP_MS });

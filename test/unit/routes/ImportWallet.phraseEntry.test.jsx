@@ -12,6 +12,13 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
 
 const BIP39_PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const BIP39_PHRASES = [
+    BIP39_PHRASE,
+    `${Array(14).fill('abandon').join(' ')} address`,
+    `${Array(17).fill('abandon').join(' ')} agent`,
+    `${Array(20).fill('abandon').join(' ')} admit`,
+    `${Array(23).fill('abandon').join(' ')} art`,
+];
 const BIP39_24_WORD_PHRASE = `${Array(23).fill('abandon').join(' ')} art`;
 const COUNTERWALLET_PHRASE = 'explode gaze wolf admit nice charm except three any guitar into color';
 const PASSWORD = 'correct-horse-battery';
@@ -57,10 +64,22 @@ function submitPhrase(phrase, importMnemonic = vi.fn().mockResolvedValue({})) {
 }
 
 describe('ImportWallet recovery phrase entry', () => {
+    it('keeps the secret phrase field out of autofill, spellcheck, autocapitalize and autocorrect', () => {
+        renderImport();
+        const phrase = screen.getByLabelText('Recovery phrase');
+        expect(phrase.tagName).toBe('TEXTAREA');
+        expect(phrase).toHaveAttribute('autocomplete', 'off');
+        expect(phrase).toHaveAttribute('spellcheck', 'false');
+        expect(phrase).toHaveAttribute('autocapitalize', 'off');
+        expect(phrase).toHaveAttribute('autocorrect', 'off');
+    });
+
     it('names the next missing field beside the disabled import action', () => {
         renderImport();
         const action = screen.getByRole('button', { name: 'Import' });
+        const phrase = screen.getByLabelText('Recovery phrase');
 
+        expect(phrase).toHaveAccessibleDescription(/Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words/);
         expect(action).toBeDisabled();
         expect(action).toHaveAttribute('aria-describedby', 'import-wallet-disabled-reason');
         expect(screen.getByRole('status')).toHaveTextContent('Enter a recovery phrase to continue.');
@@ -76,6 +95,14 @@ describe('ImportWallet recovery phrase entry', () => {
         expect(action).not.toHaveAttribute('aria-describedby');
     });
 
+    it('names the accepted word counts once, in the hint and not again in the live count', () => {
+        renderImport();
+        const description = screen.getByLabelText('Recovery phrase').getAttribute('aria-describedby')
+            .split(' ').map((id) => document.getElementById(id)?.textContent || '').join(' ');
+        expect(description.match(/12, 15, 18, 21, or 24/g)).toHaveLength(1);
+        expect(screen.getByText('0 words entered')).toBeTruthy();
+    });
+
     it('normalizes spaces and newlines when a whole phrase is pasted', async () => {
         const importMnemonic = renderImport();
         const textarea = screen.getByLabelText('Recovery phrase');
@@ -86,7 +113,7 @@ describe('ImportWallet recovery phrase entry', () => {
         });
 
         expect(textarea).toHaveValue(BIP39_PHRASE);
-        expect(screen.getByText('12 words entered (use 12, 15, 18, 21, or 24)')).toBeTruthy();
+        expect(screen.getByText('12 words entered')).toBeTruthy();
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
 
         fillPasswords();
@@ -110,7 +137,46 @@ describe('ImportWallet recovery phrase entry', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }));
 
         await waitFor(() => expect(screen.getByLabelText('Recovery phrase')).toHaveValue(BIP39_PHRASE));
-        expect(screen.getByText('12 words entered (use 12, 15, 18, 21, or 24)')).toBeTruthy();
+        expect(screen.getByText('12 words entered')).toBeTruthy();
+    });
+
+    it('normalizes upper-case words before import', async () => {
+        const importMnemonic = submitPhrase(BIP39_PHRASE.toUpperCase());
+
+        await waitFor(() => expect(importMnemonic).toHaveBeenCalledWith(
+            expect.objectContaining({ mnemonic: BIP39_PHRASE }),
+        ));
+    });
+
+    it.each(BIP39_PHRASES.map((phrase) => [phrase.split(' ').length, phrase]))(
+        'imports a valid %i-word BIP39 phrase',
+        async (_wordCount, phrase) => {
+            const importMnemonic = submitPhrase(phrase);
+
+            await waitFor(() => expect(importMnemonic).toHaveBeenCalledWith(
+                expect.objectContaining({ mnemonic: phrase }),
+            ));
+        },
+    );
+
+    it('removes sequential numbering from a pasted recovery phrase', async () => {
+        const numbered = BIP39_PHRASE
+            .split(' ')
+            .map((word, index) => `${index + 1}. ${word}`)
+            .join('\n');
+        const importMnemonic = renderImport();
+        const textarea = screen.getByLabelText('Recovery phrase');
+
+        fireEvent.paste(textarea, {
+            clipboardData: { getData: () => numbered },
+        });
+
+        expect(textarea).toHaveValue(BIP39_PHRASE);
+        fillPasswords();
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+        await waitFor(() => expect(importMnemonic).toHaveBeenCalledWith(
+            expect.objectContaining({ mnemonic: BIP39_PHRASE }),
+        ));
     });
 
     it('offers BIP39 completions for the word at the caret', () => {
@@ -130,7 +196,7 @@ describe('ImportWallet recovery phrase entry', () => {
         const importMnemonic = submitPhrase(phrase);
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Unknown recovery phrase word "notaword". Check its spelling.',
+            'Word 12 ("notaword") is not in the recovery phrase word list. Check its spelling.',
         );
         expect(importMnemonic).not.toHaveBeenCalled();
     });
@@ -155,8 +221,51 @@ describe('ImportWallet recovery phrase entry', () => {
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
 
         fireEvent.change(textarea, { target: { value: BIP39_24_WORD_PHRASE } });
-        expect(screen.getByText('24 words entered (use 12, 15, 18, 21, or 24)')).toBeTruthy();
+        expect(screen.getByText('24 words entered')).toBeTruthy();
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
+    });
+
+    it.each([['import', renderImport], ['FreeWallet import', renderFreeWallet]])(
+        'puts Paste and Scan QR inside the %s phrase box, with the live count below the hint',
+        (_name, renderScreen) => {
+            renderScreen();
+            const textarea = screen.getByLabelText('Recovery phrase');
+            const box = textarea.parentElement;
+            const paste = screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' });
+            const scan = screen.getByRole('button', { name: 'Scan QR', exact: true });
+
+            expect(box.contains(paste)).toBe(true);
+            expect(box.contains(scan)).toBe(true);
+            // Both follow the text in the box, Paste before Scan QR.
+            expect(textarea.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(paste.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            // Nothing sits beside the label any more.
+            expect(document.querySelector('label[for="xc-mnemonic"]').parentElement.querySelector('button')).toBeNull();
+
+            const status = document.getElementById('xc-mnemonic-status');
+            const hint = document.getElementById(`${textarea.id}-hint`);
+            expect(box.contains(status)).toBe(false);
+            expect(hint.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(status).toHaveTextContent(/0 (\/ 12 )?words/);
+
+            fireEvent.click(scan);
+            expect(screen.getByRole('button', { name: 'Cancel scan', exact: true })).toHaveAttribute('aria-pressed', 'true');
+        },
+    );
+
+    it('shows a refused clipboard read as the form error, not inside the phrase box', async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { readText: vi.fn().mockRejectedValue(new Error('denied')) },
+        });
+        renderImport();
+        const box = screen.getByLabelText('Recovery phrase').parentElement;
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Clipboard access was denied. Paste manually instead.');
+        expect(box.contains(alert)).toBe(false);
     });
 
     it('explains FreeWallet format detection and shows its 12-word target', () => {

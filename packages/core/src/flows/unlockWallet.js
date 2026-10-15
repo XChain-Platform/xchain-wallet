@@ -76,7 +76,7 @@ export class PassphraseMismatchError extends Error {
 /**
  * @typedef {Object} UnlockRecordOpts
  * @property {import('../schemas/wallet.js').Wallet} wallet
- * @property {string} password
+ * @property {string} [password]              required when masterKey is omitted
  * @property {Uint8Array} [masterKey]      already-derived key, forwarded to SoftwareSigner.unlock, which copies it; never zeroed here, the caller zeroes its own buffer
  * @property {string} [bip39Passphrase]   honoured ONLY for a legacy record (§15.6 capture); a stored `encryptedPassphrase` always wins
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
@@ -100,15 +100,15 @@ export async function unlockWalletRecord({
     sdkRegistry,
 }) {
     if (!wallet) throw new Error('unlockWalletRecord: wallet is required');
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('unlockWalletRecord: password is required');
+    if (masterKey === undefined && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('unlockWalletRecord: either password or masterKey is required');
     }
     if (!chainRegistry) throw new Error('unlockWalletRecord: chainRegistry is required');
-    // A stored passphrase makes the password the only secret the unlock needs,
-    // so only a legacy record (passphrase enabled, nothing captured yet) with
-    // nothing typed can fail here. Caught before the KDF runs, so the
-    // user-facing sentence is what reaches the screen instead of the signer's
-    // internal precondition.
+    // A stored passphrase removes the need for a caller-supplied 25th word,
+    // whether this unlock uses a password or an already-derived key. Only a
+    // legacy record (passphrase enabled, nothing captured yet) with nothing
+    // typed can fail here. Caught before the KDF runs, so the user-facing
+    // sentence reaches the screen instead of the signer's internal precondition.
     const hasStoredPassphrase = typeof wallet.encryptedPassphrase === 'string'
         && wallet.encryptedPassphrase.length > 0;
     if (wallet.passphraseEnabled && !hasStoredPassphrase
@@ -178,6 +178,9 @@ export async function unlockWallet({
     }
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
+    if (wallet.id !== walletId) {
+        throw new Error('unlockWallet: loaded wallet record does not match walletId');
+    }
     return unlockWalletRecord({
         wallet,
         password,

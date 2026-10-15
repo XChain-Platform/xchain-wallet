@@ -9,7 +9,7 @@
 // a literal, so this test cannot drift either.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -45,8 +45,8 @@ function messagingWith(listActions, chainId) {
 
 // Read the option values of the first "Action" picker, blank option dropped.
 async function actionOptions() {
-    const label = await screen.findByText('Action', { selector: 'span' });
-    const select = within(label.closest('label')).getByRole('combobox');
+    // The kit Select labels its native select, so the label names the combobox.
+    const select = await screen.findByRole('combobox', { name: 'Action' });
     await waitFor(() => expect(select.querySelectorAll('option').length).toBeGreaterThan(1));
     return [...select.querySelectorAll('option')].map((o) => o.value).filter(Boolean);
 }
@@ -105,14 +105,14 @@ describe('BatchComposerForm fallback action list', () => {
         expect(await actionOptions()).toEqual(expected);
     });
 
-    it('drops the Bitcoin-only actions on a Litecoin chain, as the Parallel composer does', async () => {
+    it('drops the Bitcoin-only actions on a Litecoin network, as the Parallel composer does', async () => {
         mountBatch(vi.fn(async () => { throw new Error('sdk down'); }), LTC);
         const options = await actionOptions();
         for (const btcOnly of BTC_EXCLUSIVE_ACTIONS) expect(options).not.toContain(btcOnly);
         expect(options).toEqual([...COMMON_ACTIONS].filter((a) => a !== 'BATCH' && a !== 'FILE').sort());
     });
 
-    it('blocks Review when a chain switch strands a queued Bitcoin-only step', async () => {
+    it('blocks Review when a network switch strands a queued Bitcoin-only step', async () => {
         const messaging = messagingWith(vi.fn(async () => { throw new Error('sdk down'); }), BTC);
         messaging.getAddressesByChain = vi.fn(async () => ({ [BTC]: [FROM], [LTC]: [{ ...FROM, id: 'address-2' }] }));
         render(
@@ -121,9 +121,11 @@ describe('BatchComposerForm fallback action list', () => {
             </MessagingProvider>,
         );
         await actionOptions();
-        const pick = (name) => within(screen.getByText(name, { selector: 'span' }).closest('label')).getByRole('combobox');
+        const pick = (name) => screen.getByRole('combobox', { name });
         fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
-        fireEvent.change(pick('Chain'), { target: { value: LTC } });
+        // The chain is a ChainPicker: open it and choose Litecoin.
+        fireEvent.click(screen.getByRole('button', { name: /^Network: / }));
+        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });

@@ -181,8 +181,39 @@ export async function importSingleWif({
         },
     ];
 
-    await vault.wallets.put(walletRecord);
-    await vault.addresses.put(addressRecord);
+    // New records must not replace an existing secret if an id generator
+    // collision occurs.
+    if (await vault.wallets.get(walletRecord.id)) {
+        throw new Error(`importSingleWif: wallet id collision "${walletRecord.id}"`);
+    }
+    if (await vault.addresses.get(addressRecord.id)) {
+        throw new Error(`importSingleWif: address id collision "${addressRecord.id}"`);
+    }
+
+    let walletPutAttempted = false;
+    let addressPutAttempted = false;
+    try {
+        walletPutAttempted = true;
+        await vault.wallets.put(walletRecord);
+        addressPutAttempted = true;
+        await vault.addresses.put(addressRecord);
+    } catch (error) {
+        const rollbackErrors = [];
+        if (addressPutAttempted) {
+            try { await vault.addresses.delete(addressRecord.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (walletPutAttempted) {
+            try { await vault.wallets.delete(walletRecord.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (rollbackErrors.length > 0) {
+            throw new AggregateError(
+                [error, ...rollbackErrors],
+                'importSingleWif: persistence and rollback failed',
+                { cause: error },
+            );
+        }
+        throw error;
+    }
 
     return { wallet: walletRecord, address: addressRecord };
 }

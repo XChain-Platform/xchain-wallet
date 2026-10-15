@@ -206,4 +206,53 @@ describe('removeWallet', () => {
         expect(cacheCleanup.gatedContent).toHaveBeenCalledOnce();
         expect(cacheCleanup.pendingGeneratedKeys).toHaveBeenCalledWith('target');
     });
+
+    it('keeps pending transactions for a surviving wallet or a different network', async () => {
+        const { records, vault } = makeVault();
+        records.accounts.push(
+            { id: 'account-target', walletId: 'target' },
+            { id: 'account-other', walletId: 'other' },
+        );
+        records.addresses.push(
+            {
+                id: 'address-target', accountId: 'account-target', address: 'shared',
+                chain: 'bitcoin', network: 'mainnet',
+            },
+            {
+                id: 'address-other', accountId: 'account-other', address: 'shared',
+                chain: 'bitcoin', network: 'mainnet',
+            },
+            {
+                id: 'address-target-only', accountId: 'account-target', address: 'target-only',
+                chain: 'bitcoin', network: 'mainnet',
+            },
+        );
+        records.pendingTxs.push(
+            {
+                id: 'tx-shared', fromAddress: 'shared',
+                chain: 'bitcoin', network: 'mainnet',
+            },
+            {
+                id: 'tx-other-network', fromAddress: 'shared',
+                chain: 'bitcoin', network: 'testnet',
+            },
+            {
+                id: 'tx-target', fromAddress: 'target-only',
+                chain: 'bitcoin', network: 'mainnet',
+            },
+            {
+                id: 'tx-target-other-network', fromAddress: 'target-only',
+                chain: 'bitcoin', network: 'testnet',
+            },
+        );
+
+        const result = await removeWallet({ vault, walletId: 'target' });
+
+        expect(records.pendingTxs.map(({ id }) => id)).toEqual([
+            'tx-shared',
+            'tx-other-network',
+            'tx-target-other-network',
+        ]);
+        expect(result.removed.pendingTxs).toBe(1);
+    });
 });

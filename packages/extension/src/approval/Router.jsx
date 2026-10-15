@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { i18n } from '@xchain-wallet/core';
-import { Screen } from '@xchain-wallet/core/ui';
+import { ListPage, Screen } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
 import { ConnectApproval } from './kinds/ConnectApproval.jsx';
@@ -25,16 +25,6 @@ const SIGN_APPROVAL_KINDS = new Set([
     'coSign',
     'signIn',
 ]);
-const APPROVAL_UNAVAILABLE_MESSAGE =
-    'This approval is no longer available. Close this window and try again from the site.';
-
-function approvalLoadErrorMessage(error) {
-    if (error?.name === 'ApprovalNotFoundError'
-        || error?.name === 'RuntimeConnectionError') {
-        return APPROVAL_UNAVAILABLE_MESSAGE;
-    }
-    return error?.message || 'Failed to load request.';
-}
 
 function getRequestId() {
     const params = new URLSearchParams(window.location.search);
@@ -65,13 +55,27 @@ function ApprovalRoute() {
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
+        setData(null);
+        setError(null);
         if (!id) {
             setError('Missing approval id in URL.');
             return;
         }
+        let cancelled = false;
         fetchApproval(id)
-            .then(setData)
-            .catch((err) => setError(approvalLoadErrorMessage(err)));
+            .then((request) => {
+                if (cancelled) return;
+                if (!request || typeof request !== 'object'
+                    || request.id !== id || typeof request.kind !== 'string'
+                    || !Object.prototype.hasOwnProperty.call(request, 'payload')) {
+                    throw new Error('Approval response did not match this request.');
+                }
+                setData(request);
+            })
+            .catch((err) => {
+                if (!cancelled) setError(err?.message || 'Failed to load request.');
+            });
+        return () => { cancelled = true; };
     }, [id]);
 
     const reject = useCallback(async () => {
@@ -103,14 +107,18 @@ function ApprovalRoute() {
     if (error) {
         return (
             <Screen variant="small">
-                <div role="alert" className={styles.error}>{error}</div>
+                <ListPage>
+                    <div role="alert" className={styles.error}>{error}</div>
+                </ListPage>
             </Screen>
         );
     }
     if (!data) {
         return (
             <Screen variant="small">
-                <p aria-live="polite">{t('extension.approval.loading')}</p>
+                <ListPage>
+                    <p aria-live="polite">{t('extension.approval.loading')}</p>
+                </ListPage>
             </Screen>
         );
     }
@@ -121,9 +129,11 @@ function ApprovalRoute() {
     if (!SIGN_APPROVAL_KINDS.has(data.kind)) {
         return (
             <Screen variant="popup">
-                <div role="alert" className={styles.error}>
-                    {t('extension.approval.unsupported')}
-                </div>
+                <ListPage>
+                    <div role="alert" className={styles.error}>
+                        {t('extension.approval.unsupported')}
+                    </div>
+                </ListPage>
             </Screen>
         );
     }

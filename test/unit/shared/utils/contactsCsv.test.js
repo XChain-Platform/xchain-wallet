@@ -78,7 +78,7 @@ describe('contacts CSV', () => {
         }]);
     });
 
-    it('removes repeated rows and rejects an address assigned to another contact', () => {
+    it('refuses repeated rows and addresses assigned to another contact', () => {
         const csv = 'id,name,chain,address\n'
             + `a,Alice,bitcoin,${BTC}\n`
             + `a,Alice,bitcoin,${BTC.toUpperCase()}\n`
@@ -87,9 +87,30 @@ describe('contacts CSV', () => {
 
         expect(parsed.duplicates).toBe(1);
         expect(parsed.records.map(({ record }) => record.name)).toEqual(['Alice']);
+        expect(parsed.failures).toEqual([
+            {
+                subject: 'Alice',
+                message: 'Line 3: address already belongs to Alice (line 2).',
+            },
+            {
+                subject: 'Bob',
+                message: 'Line 4: address already belongs to Alice (line 2).',
+            },
+        ]);
+    });
+
+    it('refuses duplicate names but permits the same address text on another chain', () => {
+        const shared = 'mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn';
+        const csv = 'id,name,chain,address\n'
+            + `a,Alice,bitcoin,${shared}\n`
+            + `b, alice ,litecoin,${LTC}\n`
+            + `c,Carol,litecoin,${shared}\n`;
+        const parsed = contactsFromCsv(csv, { now: CREATED });
+
+        expect(parsed.records.map(({ record }) => record.name)).toEqual(['Alice', 'Carol']);
         expect(parsed.failures).toEqual([{
-            subject: 'Bob',
-            message: 'Line 4: address duplicates line 2.',
+            subject: 'alice',
+            message: 'Line 3: contact name already belongs to Alice (line 2).',
         }]);
     });
 
@@ -100,6 +121,11 @@ describe('contacts CSV', () => {
             .toThrow('Line 2: unterminated quoted field.');
         expect(() => contactsFromCsv(`name,chain,address\n"Alice"x,bitcoin,${BTC}\n`))
             .toThrow('Line 2: unexpected character after closing quote.');
+    });
+
+    it('rejects unknown columns instead of silently discarding their values', () => {
+        expect(() => contactsFromCsv(`name,chain,address,nickname\nAlice,bitcoin,${BTC},Al\n`))
+            .toThrow('Line 1: unknown "nickname" column.');
     });
 
     it('rejects malformed and wrong-coin addresses per row', () => {

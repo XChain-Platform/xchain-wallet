@@ -103,7 +103,7 @@ function pointerYml(entries) {
 }
 
 /** A signed full release directory whose four pointers belong to `channel`. */
-function makeRelease(name, channel, extra = {}) {
+function makeRelease(name, channel, extra = {}, gate = 'enforced') {
     const dir = join(work, name);
     mkdirSync(dir, { recursive: true });
     const all = { ...ARTIFACTS, ...OTHER_DESKTOP, ...extra };
@@ -130,7 +130,7 @@ function makeRelease(name, channel, extra = {}) {
     execFileSync('bash', ['-c',
         `. "${join(root, 'tools/release/lib.sh')}" && `
         + `xr_write_manifest "${dir}" "${TAG}" "${'0'.repeat(40)}" `
-        + `"2026-07-31T00:00:00Z" "enforced" "${join(root, 'tools/release/expected-artifacts.txt')}"`],
+        + `"2026-07-31T00:00:00Z" "${gate}" "${join(root, 'tools/release/expected-artifacts.txt')}"`],
     { env: process.env });
 
     execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
@@ -474,6 +474,29 @@ for (const [label, edit, reason] of [
     const r = await run(['--input', dir, '--tag', TAG, '--target', target]);
     assert.equal(r.status, 1, `${label} is refused:\n${r.out}`);
     assert.match(r.out, reason);
+    assert.equal(existsSync(join(target, 'desktop')), false, `${label}: nothing was uploaded`);
+    assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
+        `${label}: the manifest was not uploaded either`);
+}
+
+// A release signed with the dev-mock gate skipped: every desktop client
+// refuses it, so publish.sh must refuse it before anything goes up, on the
+// production feed past a rehearsal record bound to its manifest and on the
+// staging feed, which no rehearsal record guards.
+for (const [label, channel, args, staging] of [
+    ['production', 'stable', [], false],
+    ['staging', 'staging', ['--staging'], true],
+]) {
+    const dir = makeRelease(`release-gate-skipped-${channel}`, channel, {}, 'SKIPPED');
+    assert.match(readFileSync(join(dir, 'RELEASE_HASHES.txt'), 'utf8'), /^# dev-mock-gate: SKIPPED$/m,
+        `${label}: the fixture manifest records the skipped gate`);
+    if (!staging) writeRehearsalRecord(dir);
+    const target = makeTarget(`feed-gate-skipped-${channel}`, { staging });
+    const r = await run(['--input', dir, '--tag', TAG, '--target', target, ...args]);
+    if (!staging) writeRehearsalRecord(prodRelease);
+    assert.equal(r.status, 1, `${label}: a SKIPPED-gate release is refused:\n${r.out}`);
+    assert.match(r.out, /POINTER-REFUSED\s+the signed manifest records the dev-mock gate as 'SKIPPED'/,
+        `${label}: the pointer gate names the skipped gate:\n${r.out}`);
     assert.equal(existsSync(join(target, 'desktop')), false, `${label}: nothing was uploaded`);
     assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
         `${label}: the manifest was not uploaded either`);
@@ -1101,5 +1124,7 @@ for (const order of [['desktop', 'android'], ['android', 'desktop']]) {
         + 'downstream symptom the operator would misread');
 }
 
+// Stop the gpg-agent the throwaway GNUPGHOME spawned before removing it.
+spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: { ...process.env, GNUPGHOME: gnupg } });
 rmSync(work, { recursive: true, force: true });
 console.log('publish-feed.smoke.js: ok');

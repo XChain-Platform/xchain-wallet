@@ -211,7 +211,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         await expect(page.getByText(/Will likely fail/i)).toHaveCount(0);
 
         // that browser leg, stated outright rather than left implied by
-        // the panel's absence above. "Could not verify (N)" is PreflightPanel's
+        // the panel's absence above. "Couldn't verify (N)" is PreflightPanel's
         // `unverified` disclosure, and it is the OTHER way a good payment can
         // be made to look doubtful: not a fail verdict, but a confirm page
         // hedging about checks it could not run. A bare native payment carries
@@ -220,7 +220,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         // to hedge about - the user sees a clean confirm surface. This asserts
         // on the rendered TEXT rather than the panel testid on purpose, so it
         // still holds if a future report ever renders here.
-        await expect(page.getByText(/Could not verify/i)).toHaveCount(0);
+        await expect(page.getByText(/Couldn't verify/i)).toHaveCount(0);
     });
 });
 

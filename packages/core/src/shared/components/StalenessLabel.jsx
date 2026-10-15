@@ -19,13 +19,13 @@
 // `lastSyncedAt = null` when they have no fetch history yet, and the
 // component renders nothing rather than misleading copy.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { formatElapsedTime, formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './StalenessLabel.module.css';
+import { t } from '../../i18n/index.js';
 
 const TICK_MS = 30_000;
-const EXACT_VISIBLE_MS = 2_500;
 
 /**
  * @param {object} props
@@ -35,49 +35,28 @@ const EXACT_VISIBLE_MS = 2_500;
  */
 export function StalenessLabel({ lastSyncedAt, warnAfterMs, className }) {
     const [, setTick] = useState(0);
-    const [showExact, setShowExact] = useState(false);
-    const revealTimer = useRef(null);
     const online = useOnlineStatus();
 
     useEffect(() => {
         if (!online || lastSyncedAt === null || lastSyncedAt === undefined) return undefined;
-        const id = setInterval(() => setTick((t) => t + 1), TICK_MS);
+        const id = setInterval(() => setTick((n) => n + 1), TICK_MS);
         return () => clearInterval(id);
     }, [lastSyncedAt, online]);
-
-    useEffect(() => () => clearTimeout(revealTimer.current), []);
 
     if (lastSyncedAt === null || lastSyncedAt === undefined) return null;
 
     const diffMs = Math.max(0, Date.now() - lastSyncedAt);
     const stale = !online || (typeof warnAfterMs === 'number' && diffMs >= warnAfterMs);
-    const text = online ? `Updated ${formatAgo(diffMs)}` : 'Offline, showing saved data';
-    const exact = formatLocalDateTime(lastSyncedAt);
-    const visibleText = showExact && exact ? `Last updated ${exact}` : text;
-
-    const revealForTouch = (event) => {
-        if (event.pointerType === 'mouse') return;
-        clearTimeout(revealTimer.current);
-        setShowExact(true);
-        revealTimer.current = setTimeout(() => setShowExact(false), EXACT_VISIBLE_MS);
-    };
+    const text = online ? t('components.stalenessLabel.updated', { when: formatAgo(diffMs) }) : t('components.stalenessLabel.offline');
 
     return (
         <span
             className={`${styles.label} ${stale ? styles.stale : ''} ${className || ''}`}
             role="status"
             aria-live="off"
-            aria-label={exact ? `${text}. Last synced: ${exact}` : text}
-            title={exact || undefined}
-            tabIndex={0}
-            onFocus={() => setShowExact(true)}
-            onBlur={() => setShowExact(false)}
-            onKeyDown={(event) => {
-                if (event.key === 'Escape') event.currentTarget.blur();
-            }}
-            onPointerUp={revealForTouch}
+            title={formatLocalDateTime(lastSyncedAt) || undefined}
         >
-            {visibleText}
+            {text}
         </span>
     );
 }

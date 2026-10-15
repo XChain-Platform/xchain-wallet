@@ -19,10 +19,11 @@
 // Fetch cadence: polled every 5s on-screen, paused on hidden tab.
 // Reuses the AirdropForm / OrderbookPanel visibility-gated pattern.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, AddressText, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, AddressText, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from './WatcherResultPanel.jsx';
@@ -38,6 +39,7 @@ import {
     divideDecimalStrings,
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
@@ -58,6 +60,7 @@ const NUMERIC_CELL_STYLE = {
  */
 export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
     const [balancesHidden] = useBalancesHidden();
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
@@ -71,6 +74,22 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+    const mountedRef = useRef(false);
+    const autopayRequestRef = useRef(0);
+    const panelVersionRef = useRef(0);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
+
+    useEffect(() => {
+        panelVersionRef.current += 1;
+        setConfirmOrder(null);
+        setSubmitting(false);
+        setSubmitError(null);
+        setWatcherResult(null);
+    }, [walletId, chainId, tick1, tick2]);
 
     useEffect(() => {
         setAddresses([]);
@@ -116,6 +135,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         /** @type {Map<string, any>} */ (new Map()),
     );
     const loadAutopay = useCallback(async () => {
+        const requestId = ++autopayRequestRef.current;
+        if (mountedRef.current) setAutopayByIndex(new Map());
         if (typeof messaging.listAutopayOrders !== 'function') return;
         try {
             if (typeof messaging.resolveAutopayIndexes === 'function') {
@@ -126,17 +147,26 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             for (const r of records || []) {
                 if (r?.orderActionIndex != null) map.set(String(r.orderActionIndex), r);
             }
-            setAutopayByIndex(map);
+            if (mountedRef.current && requestId === autopayRequestRef.current) {
+                setAutopayByIndex(map);
+            }
         } catch { /* toggle simply not shown */ }
     }, [messaging, walletId, chainId]);
-    useEffect(() => { loadAutopay(); }, [loadAutopay]);
+    useEffect(() => {
+        loadAutopay();
+        return () => { autopayRequestRef.current += 1; };
+    }, [loadAutopay]);
 
     async function handleAutopayToggle(record) {
+        const panelVersion = panelVersionRef.current;
         try {
             await messaging.setAutopayEnabled({ id: record.id, enabled: record.autopay !== true });
+            if (!mountedRef.current || panelVersion !== panelVersionRef.current) return;
             await loadAutopay();
         } catch (err) {
-            setLoadError(readFailureMessage(err, 'change autopay for this order'));
+            if (mountedRef.current && panelVersion === panelVersionRef.current) {
+                setLoadError(readFailureMessage(err, 'change autopay for this order'));
+            }
         }
     }
 
@@ -148,19 +178,21 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             return undefined;
         }
         let cancelled = false;
+        let requestId = 0;
         setOrdersLoading(true);
         setLoadError(null);
         const tick = async () => {
             if (cancelled) return;
             if (typeof document !== 'undefined'
                 && document.visibilityState === 'hidden') return;
+            const currentRequest = ++requestId;
             try {
                 const results = await Promise.all(addresses.map((addr) =>
                     messaging.getMarketOrders({
                         chainId, tick1, tick2, address: addr.address,
                     }).then((resp) => ({ addr, rows: extractRows(resp) }))
                 ));
-                if (cancelled) return;
+                if (cancelled || currentRequest !== requestId) return;
                 const flat = [];
                 for (const { addr, rows } of results) {
                     for (const row of rows) flat.push({ ...row, __owner: addr });
@@ -169,7 +201,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 setLoadError(null);
                 setOrdersLoading(false);
             } catch (err) {
-                if (!cancelled) {
+                if (!cancelled && currentRequest === requestId) {
                     setLoadError(readFailureMessage(err, 'load your open orders'));
                     setOrdersLoading(false);
                 }
@@ -201,6 +233,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         if (!confirmOrder || submitting || cancelLane.composing) return;
         setSubmitting(true);
         setSubmitError(null);
+        const panelVersion = panelVersionRef.current;
         const orderActionIndex = String(confirmOrder.action_index);
         try {
             const result = await cancelLane.run({
@@ -211,6 +244,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
                 submitExtra: { orderActionIndex },
             });
+            if (!mountedRef.current || panelVersion !== panelVersionRef.current) return;
             if (cancelLane.isWatcherMode) {
                 setWatcherResult(result);
                 return;
@@ -218,7 +252,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             setConfirmOrder(null);
             setOrders((prev) => prev.filter((o) => o.action_index !== confirmOrder.action_index));
         } catch (err) {
-            if (!isUserRejection(err)) {
+            if (mountedRef.current && panelVersion === panelVersionRef.current
+                && !isUserRejection(err)) {
                 setSubmitError(err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
@@ -228,7 +263,9 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     }));
             }
         } finally {
-            setSubmitting(false);
+            if (mountedRef.current && panelVersion === panelVersionRef.current) {
+                setSubmitting(false);
+            }
         }
     }
 
@@ -259,23 +296,24 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
     return (
         <section
-            aria-label="Open orders"
+            aria-label={t('components.openOrdersPanel.openOrders')}
             aria-busy={addressesLoading || ordersLoading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Open orders</p>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('components.openOrdersPanel.openOrders')}</p>
             {addressesLoading || ordersLoading ? (
-                <StatusMessage variant="status">Loading open orders…</StatusMessage>
+                <StatusMessage variant="status">{t('components.openOrdersPanel.loadingOpenOrders')}</StatusMessage>
             ) : null}
             {loadError ? (
                 <StatusMessage
                     variant="error"
                     recovery={{
-                        label: 'Try again',
+                        label: t('common.tryAgain'),
                         onAction: () => {
                             if (addresses.length === 0) {
                                 setAddressRetryKey((key) => key + 1);
@@ -295,7 +333,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     fontSize: 'var(--xc-text-sm)',
                     textAlign: 'center',
                 }}>
-                    No open orders on this market.
+                    {t('components.openOrdersPanel.noOpenOrdersOnThis')}
                 </p>
             ) : null}
             {rows.length > 0 ? (
@@ -309,16 +347,16 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         color: 'var(--xc-text-muted)',
                         fontSize: '0.75rem',
                     }}>
-                        <span>Side</span>
-                        <span style={NUMERIC_CELL_STYLE}>Price</span>
-                        <span style={NUMERIC_CELL_STYLE}>Size ({tick1})</span>
-                        <span style={NUMERIC_CELL_STYLE}>Filled</span>
-                        <span style={{ textAlign: 'right' }}>Action</span>
+                        <span>{t('components.placeOrderPanel.side')}</span>
+                        <span style={NUMERIC_CELL_STYLE}>{t('components.placeOrderPanel.price')}</span>
+                        <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.size')}{tick1})</span>
+                        <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.filled')}</span>
+                        <span style={{ textAlign: 'right' }}>{t('actionDetail.title')}</span>
                     </div>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '28rem' }}>
-                        {rows.map((r) => (
+                        {rows.map((r, index) => (
                             <li
-                                key={r.actionIndex}
+                                key={`${r.actionIndex}-${r.raw.__owner?.id ?? r.raw.__owner?.address ?? 'owner'}-${index}`}
                                 style={{
                                     display: 'grid',
                                     gridTemplateColumns: ORDER_GRID_COLUMNS,
@@ -329,17 +367,17 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                 }}
                             >
                                 <span style={{
-                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)',
+                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)',
                                     fontWeight: 600,
                                 }}>
-                                    {r.side === 'buy' ? 'Buy' : 'Sell'}
+                                    {r.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
                                 </span>
                                 <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.price}</span>
                                 <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.size}</span>
                                 <span style={NUMERIC_CELL_STYLE}>
                                     {r.filled > 0
-                                        ? (balancesHidden ? '••••• filled' : `${r.filled}/${r.size} filled`)
-                                        : <span style={{ color: 'var(--xc-fg-muted)' }}>open</span>}
+                                        ? (balancesHidden ? t('components.openOrdersPanel.filled2') : t('components.openOrdersPanel.filled3', { filled: r.filled, size: r.size }))
+                                        : <span style={{ color: 'var(--xc-fg-muted)' }}>{t('components.openOrdersPanel.open')}</span>}
                                 </span>
                                 <Button
                                     variant="danger"
@@ -350,29 +388,24 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                     }}
                                     disabled={submitting}
                                 >
-                                    Cancel
+                                    {t('common.cancel')}
                                 </Button>
                                 {(() => {
                                     const consent = autopayByIndex.get(String(r.actionIndex));
                                     if (!consent) return null;
                                     const on = consent.autopay === true;
                                     return (
-                                        <label style={{
+                                        <div style={{
                                             gridColumn: '1 / -1',
-                                            display: 'flex',
-                                            gap: '0.35rem',
-                                            alignItems: 'center',
                                             fontSize: '0.7rem',
                                             color: 'var(--xc-text-muted)',
-                                            cursor: 'pointer',
                                         }}>
-                                            <input
-                                                type="checkbox"
+                                            <Switch
+                                                label={t('components.openOrdersPanel.coinpayAutoPay', { value: on ? 'on' : 'off (notify-only)' })}
                                                 checked={on}
                                                 onChange={() => handleAutopayToggle(consent)}
                                             />
-                                            CoinPay auto-pay {on ? 'on' : 'off (notify-only)'}
-                                        </label>
+                                        </div>
                                     );
                                 })()}
                             </li>
@@ -386,22 +419,23 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     noValidate
                     style={{
                         marginTop: '0.5rem',
-                        padding: '0.5rem',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: '4px',
+                        padding: 'var(--xc-card-pad)',
+                        border: 'var(--xc-card-border)',
+                        background: 'var(--xc-card-bg)',
+                        borderRadius: 'var(--xc-card-radius)',
                     }}
                 >
                     <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
-                        Cancel order #{String(confirmOrder.action_index)}?
-                        {confirmOwner ? <> from <AddressText address={confirmOwner.address} /></> : null}
+                        {t('components.openOrdersPanel.cancelOrder')}{String(confirmOrder.action_index)}?
+                        {confirmOwner ? <> {t('components.openOrdersPanel.from')} <AddressText address={confirmOwner.address} /></> : null}
                     </p>
                     <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem' }}>
-                        This submits a cancellation transaction for the remaining order. Once confirmed, it cannot be undone.
+                        {t('components.openOrdersPanel.thisSubmitsACancellationTransaction')}
                     </p>
+                    {demoGuard.note}
+                    {demoGuard.dialog}
                     {submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
+                        <StatusMessage variant="error">{submitError}</StatusMessage>
                     ) : null}
                     <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.5rem' }}>
                         <Button
@@ -411,16 +445,16 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                             onClick={() => setConfirmOrder(null)}
                             disabled={submitting}
                         >
-                            Back
+                            {t('common.back')}
                         </Button>
                         <Button
                             type="submit"
                             variant="danger"
                             size="sm"
                             loading={submitting || cancelLane.composing}
-                            disabled={submitting || cancelLane.composing}
+                            disabled={demoGuard.blocked || submitting || cancelLane.composing}
                         >
-                            Cancel order
+                            {t('components.openOrdersPanel.cancelOrder2')}
                         </Button>
                     </div>
                 </form>

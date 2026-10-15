@@ -61,6 +61,33 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
         expect(row.quantity).toBe('50000000');
     });
 
+    it('rounds excess explorer precision half away from zero at the atomic boundary', () => {
+        const out = tokensFromBalances({
+            data: [
+                { tick: 'DOWN', amount: '1.2344', decimals: 3 },
+                { tick: 'HALF', amount: '1.2345', decimals: 3 },
+                { tick: 'INDIVISIBLE', amount: '41.5', decimals: 0 },
+            ],
+        });
+        expect(out.map((row) => row.quantity)).toEqual(['1234', '1235', '42']);
+    });
+
+    it('keeps very large supplies exact at every divisibility', () => {
+        const data = Array.from({ length: 19 }, (_, divisibility) => ({
+            tick: `D${divisibility}`,
+            amount: divisibility === 0
+                ? '123456789012345678901234567890'
+                : `123456789012345678901234567890.${'0'.repeat(divisibility - 1)}1`,
+            decimals: divisibility,
+        }));
+        const out = tokensFromBalances({ data });
+        for (const row of out) {
+            const scale = 10n ** BigInt(row.divisibility);
+            const remainder = row.divisibility === 0 ? 0n : 1n;
+            expect(row.quantity).toBe((123456789012345678901234567890n * scale + remainder).toString());
+        }
+    });
+
     it('passes an already-atomic quantity/divisibility row through untouched', () => {
         const [row] = tokensFromBalances({ data: [{ tick: 'L', quantity: '5', divisibility: 3 }] });
         expect(row.divisibility).toBe(3);

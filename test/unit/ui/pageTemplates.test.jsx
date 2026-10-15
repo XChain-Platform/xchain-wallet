@@ -17,6 +17,8 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { parse } from '@babel/parser';
+import postcss from 'postcss';
 import { createRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
@@ -24,6 +26,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
 import { FormErrorSummary } from '../../../packages/core/src/ui/FormErrorSummary.jsx';
 import { FormSection } from '../../../packages/core/src/ui/FormSection.jsx';
+import { Input } from '../../../packages/core/src/ui/Input.jsx';
 import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 import { EmptyState } from '../../../packages/core/src/ui/EmptyState.jsx';
 import { SectionHeader } from '../../../packages/core/src/ui/SectionHeader.jsx';
@@ -40,6 +43,56 @@ function uiDir() {
     return join(dir, 'packages', 'core', 'src', 'ui');
 }
 const css = (name) => readFileSync(join(uiDir(), name), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const coreSrcDir = () => join(uiDir(), '..');
+
+function filesBelow(dir, suffix) {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return filesBelow(path, suffix);
+        return entry.name.endsWith(suffix) ? [path] : [];
+    });
+}
+
+function routeTemplateRoots() {
+    const routesDir = join(coreSrcDir(), 'shared', 'routes');
+    const roots = new Map();
+
+    for (const jsxPath of filesBelow(routesDir, '.jsx')) {
+        const tree = parse(readFileSync(jsxPath, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const styleImports = new Map();
+        for (const statement of tree.program.body) {
+            if (statement.type !== 'ImportDeclaration' || !statement.source.value.endsWith('.module.css')) continue;
+            const local = statement.specifiers.find((specifier) => specifier.type === 'ImportDefaultSpecifier')?.local.name;
+            if (local) styleImports.set(local, join(dirname(jsxPath), statement.source.value));
+        }
+
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'JSXOpeningElement'
+                && node.name.type === 'JSXIdentifier'
+                && ['Screen', 'ListPage', 'FormPage'].includes(node.name.name)
+            ) {
+                const className = node.attributes.find((attribute) => attribute.type === 'JSXAttribute'
+                    && attribute.name.name === 'className')?.value?.expression;
+                if (className?.type === 'MemberExpression'
+                    && className.object.type === 'Identifier'
+                    && className.property.type === 'Identifier'
+                    && styleImports.has(className.object.name)
+                ) {
+                    const cssPath = styleImports.get(className.object.name);
+                    if (!roots.has(cssPath)) roots.set(cssPath, new Set());
+                    roots.get(cssPath).add(className.property.name);
+                }
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+    }
+    return roots;
+}
 
 // The body of the first `@media <query> { ... }` block, braces balanced.
 function mediaBlock(text, query) {
@@ -103,7 +156,7 @@ describe('<FormErrorSummary>', () => {
                 <FormErrorSummary errors={[
                     { id: 'ticker', label: 'Ticker', message: 'Ticker is required.' },
                     { id: 'amount', label: 'Amount', message: 'Amount must be positive.' },
-                ]} />
+                ]} focusKey={1} />
             </form>,
         );
 
@@ -114,6 +167,35 @@ describe('<FormErrorSummary>', () => {
 
         fireEvent.click(links[1]);
         expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
+    });
+
+    it('names the field once when the message already opens with its label', () => {
+        render(
+            <FormErrorSummary errors={[
+                { id: 'password', label: 'Password', message: 'Password must be at least 8 characters.' },
+                { id: 'w5', label: 'Word 5', message: 'Word 5 does not match your written copy.' },
+                { id: 'w1', label: 'Word 1', message: 'Word 12 is missing.' },
+                { id: 'confirm', label: 'Confirm password', message: 'Passwords do not match.' },
+            ]} focusKey={1} />,
+        );
+
+        const links = within(screen.getByRole('alert', { name: 'Form errors' })).getAllByRole('link');
+        expect(links.map((link) => link.textContent)).toEqual([
+            'Password must be at least 8 characters.',
+            'Word 5 does not match your written copy.',
+            'Word 1: Word 12 is missing.',
+            'Confirm password: Passwords do not match.',
+        ]);
+    });
+
+    it('does not show a summary until the form has been submitted', () => {
+        const errors = [{ id: 'amount', label: 'Amount', message: 'Amount must be positive.' }];
+        const { rerender } = render(<FormErrorSummary errors={errors} focusKey={0} />);
+
+        expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull();
+
+        rerender(<FormErrorSummary errors={errors} focusKey={1} />);
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toBeInTheDocument();
     });
 
     it('focuses the same error again when the submit attempt changes', () => {
@@ -181,6 +263,21 @@ describe('<FormPage>', () => {
         expect(ref.current).toBeInstanceOf(HTMLFormElement);
     });
 
+    it('renders a reusable form fragment without nesting another form', () => {
+        render(
+            <form aria-label="Parent form">
+                <FormPage as="div" label="Embedded fields">
+                    <input aria-label="Name" />
+                </FormPage>
+            </form>,
+        );
+
+        const fragment = screen.getByRole('group', { name: 'Embedded fields' });
+        expect(fragment.tagName).toBe('DIV');
+        expect(within(fragment).queryByRole('form')).toBeNull();
+        expect(within(fragment).getByLabelText('Name')).toBeInTheDocument();
+    });
+
     it('renders the same DOM whatever the viewport or shell says', () => {
         // The width rule is CSS only: a JS width check would flash the wrong
         // layout on first paint and could disagree with the stylesheet.
@@ -194,7 +291,7 @@ describe('<FormPage>', () => {
         expect(narrow).toBe(wide);
     });
 
-    it('marks a sectioned form so its sections, not the form, become cards', () => {
+    it('marks a sectioned form so its sections receive shared divider spacing', () => {
         const { container } = render(
             <FormPage sectioned>
                 <FormSection title="Recipient"><input aria-label="To" /></FormSection>
@@ -225,17 +322,22 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
         expect(ruleBody(base, '.section')).not.toMatch(/background|box-shadow/);
     });
 
-    it('divides narrow sections with a rule above each heading after the first', () => {
-        expect(ruleBody(baseLayer(text), '.section + .section')).toMatch(/border-top:\s*1px solid var\(--xc-border\)/);
+    it('separates sections with a divider and the shared section gap token', () => {
+        const base = baseLayer(text);
+        expect(ruleBody(base, '.sectioned > .body')).toMatch(/gap:\s*var\(--xc-section-gap\)/);
+        expect(ruleBody(base, '.section + .section')).toMatch(/padding-top:\s*var\(--xc-section-gap\)/);
+        expect(ruleBody(base, '.section + .section')).toMatch(/border-top:\s*1px solid var\(--xc-border\)/);
     });
 
-    it('puts a plain form in one centred 560px card when wide', () => {
-        expect(ruleBody(wide, '.form')).toMatch(/max-width:\s*560px/);
-        expect(ruleBody(wide, '.form')).toMatch(/margin:[^;]*auto/);
-        const card = ruleBody(wide, '.form:not(.sectioned)');
-        expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
-        expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
-        expect(card).toMatch(/padding:\s*var\(--xc-space-6\)/);
+    it('puts every form in one centred 560px card when wide', () => {
+        const card = ruleBody(wide, '.form');
+        expect(css('tokens.css')).toMatch(/--xc-form-card-max-width:\s*560px/);
+        expect(card).toMatch(/max-width:\s*var\(--xc-form-card-max-width\)/);
+        expect(card).toMatch(/margin:\s*0 auto/);
+        expect(card).toMatch(/background:\s*var\(--xc-card-bg\)/);
+        expect(card).toMatch(/border:\s*var\(--xc-card-border\)/);
+        expect(card).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
+        expect(card).toMatch(/padding:\s*var\(--xc-card-pad\)/);
     });
 
     it('keeps the card inside the pane at the 600px tablet boundary', () => {
@@ -246,10 +348,17 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
         expect(tokens).toMatch(/\*,\s*\*::before,\s*\*::after\s*\{\s*box-sizing:\s*border-box/s);
     });
 
-    it('stacks one card per section for a sectioned form when wide', () => {
-        const card = ruleBody(wide, '.sectioned .section');
-        expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
-        expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
+    it('keeps sections bare inside the sectioned form card when wide', () => {
+        expect(ruleBody(wide, '.sectioned > .body > .section')).toBeNull();
+        expect(ruleBody(wide, '.sectioned > .body > .section + .section')).toBeNull();
+    });
+
+    it('flattens a reusable form fragment inside its parent form card', () => {
+        const fragment = ruleBody(wide, 'form .form');
+        expect(fragment).toMatch(/max-width:\s*none/);
+        expect(fragment).toMatch(/padding:\s*0/);
+        expect(fragment).toMatch(/background:\s*transparent/);
+        expect(fragment).toMatch(/box-shadow:\s*none/);
     });
 
     it('lets the action row wrap', () => {
@@ -296,6 +405,25 @@ describe('<FormSection>', () => {
         render(<FormSection title="Fee" headingLevel="h3"><span /></FormSection>);
         expect(screen.getByRole('heading', { level: 3, name: 'Fee' })).toBeInTheDocument();
     });
+
+    it('separates sibling fields with the shared form gap token', () => {
+        render(
+            <FormSection title="Recipient">
+                <Input label="Address" />
+                <Input label="Amount" />
+            </FormSection>,
+        );
+
+        // The label is a direct child of the field wrapper; the input sits one
+        // level deeper inside the control hit area.
+        const addressField = screen.getByText('Address', { selector: 'label' }).parentElement;
+        const amountField = screen.getByText('Amount', { selector: 'label' }).parentElement;
+        expect(addressField.parentElement).toBe(amountField.parentElement);
+        expect([...addressField.parentElement.children]).toEqual([addressField, amountField]);
+        expect(ruleBody(css('FormPage.module.css'), '.sectionBody'))
+            .toMatch(/gap:\s*var\(--xc-form-gap\)/);
+        expect(css('tokens.css')).toMatch(/--xc-form-gap:\s*var\(--xc-space-4\)/);
+    });
 });
 
 describe('<ListPage>', () => {
@@ -322,18 +450,101 @@ describe('<ListPage>', () => {
     });
 });
 
-describe('ListPage.module.css: readable list width', () => {
+describe('ListPage.module.css: fluid list width', () => {
     const text = css('ListPage.module.css');
 
-    it('fills narrow panes and caps wide panes at a centred readable measure', () => {
+    it('fills the Screen content box without adding page geometry', () => {
         expect(ruleBody(text, '.page')).toMatch(/width:\s*100%/);
-        expect(ruleBody(text, '.page')).toMatch(/max-width:\s*48rem/);
-        expect(ruleBody(text, '.page')).toMatch(/margin-inline:\s*auto/);
+        expect(ruleBody(text, '.page')).not.toMatch(/max-width|margin(?:-inline)?\s*:/);
         expect(text).not.toMatch(/@media|@container/);
     });
 
     it('lets the toolbar wrap', () => {
         expect(ruleBody(text, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
+    });
+
+    it('uses the shared section rhythm and tightens a header to its content', () => {
+        expect(ruleBody(text, '.page')).toMatch(/gap:\s*var\(--xc-section-gap\)/);
+        expect(ruleBody(text, '.page > [data-xc-section-header] + *'))
+            .toMatch(/margin-block-start:\s*calc\(var\(--xc-section-header-gap\) - var\(--xc-section-gap\)\)/);
+    });
+});
+
+describe('page gutter ownership', () => {
+    const screenPath = join(uiDir(), 'Screen.module.css');
+    const screenText = readFileSync(screenPath, 'utf8');
+    const screenRoot = postcss.parse(screenText);
+
+    it('keeps page gutter use in Screen and tier values in the shell', () => {
+        const users = filesBelow(coreSrcDir(), '.module.css')
+            .filter((file) => readFileSync(file, 'utf8').includes('var(--xc-page-gutter)'));
+        expect(users).toEqual([screenPath]);
+
+        const tokens = css('tokens.css');
+        expect(tokens).toMatch(/--xc-page-gutter:\s*var\(--xc-space-3\)/);
+        expect(tokens).toMatch(/--xc-page-top:\s*var\(--xc-space-3\)/);
+
+        const shell = readFileSync(join(coreSrcDir(), 'shared', 'components', 'LeftNav.module.css'), 'utf8');
+        // One gutter on every tier: the shell sets only the top inset per tier.
+        expect(shell).not.toMatch(/--xc-page-gutter:/);
+        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
+    });
+
+    it('keeps scrolling, an end-edge scrollbar lane, and page padding on Screen body', () => {
+        const body = screenRoot.nodes.find((node) => node.type === 'rule' && node.selector === '.body');
+        const declarations = Object.fromEntries(body.nodes
+            .filter((node) => node.type === 'decl')
+            .map((node) => [node.prop, node.value]));
+        expect(declarations.padding).toBe('var(--xc-page-top) var(--xc-page-gutter)');
+        // Safari 16 lacks scrollbar-gutter, so the reservation sits behind @supports.
+        const guarded = screenRoot.nodes.find((node) => node.type === 'atrule'
+            && node.name === 'supports' && node.params === '(scrollbar-gutter: stable)');
+        const guardedBody = guarded?.nodes.find((node) => node.type === 'rule' && node.selector === '.body');
+        expect(guardedBody?.nodes.find((node) => node.prop === 'scrollbar-gutter')?.value).toBe('stable');
+        const guardedScrollArea = guarded?.nodes.find((node) => node.type === 'rule' && node.selector === '.scrollArea');
+        expect(guardedScrollArea?.nodes.find((node) => node.prop === 'scrollbar-gutter')?.value).toBe('stable');
+        expect(declarations).not.toHaveProperty('scrollbar-width');
+        expect(declarations).not.toHaveProperty('scrollbar-color');
+    });
+
+    it('keeps route template root classes free of page geometry', () => {
+        const faults = [];
+        const roots = routeTemplateRoots();
+        expect([...roots.values()].reduce((count, names) => count + names.size, 0)).toBeGreaterThan(3);
+
+        for (const [file, classNames] of roots) {
+            const stylesheet = postcss.parse(readFileSync(file, 'utf8'));
+            stylesheet.walkRules((rule) => {
+                if (rule.parent.type !== 'root') return;
+                for (const className of classNames) {
+                    const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const directRoot = new RegExp(`^\\.${escaped}(?:\\.${escaped})*(?::[\\w-]+(?:\\([^)]*\\))?)*$`);
+                    if (!rule.selectors?.some((selector) => directRoot.test(selector.trim()))) continue;
+                    rule.walkDecls(/^(?:padding(?:-.+)?|margin(?:-.+)?|max-width)$/, (decl) => {
+                        faults.push(`${file}:${decl.source.start.line} .${className} sets ${decl.prop}`);
+                    });
+                }
+            });
+        }
+
+        expect(faults).toEqual([]);
+    });
+
+    it('guards every relational selector for Chrome 102', () => {
+        const faults = [];
+        for (const file of filesBelow(coreSrcDir(), '.module.css')) {
+            postcss.parse(readFileSync(file, 'utf8')).walkRules((rule) => {
+                if (!rule.selector.includes(':has(')) return;
+                let parent = rule.parent;
+                while (parent && !(parent.type === 'atrule'
+                    && parent.name === 'supports'
+                    && parent.params.includes('selector(:has('))) parent = parent.parent;
+                if (!parent) faults.push(file);
+            });
+        }
+        expect(faults).toEqual([]);
     });
 });
 
@@ -378,11 +589,41 @@ describe('<SectionHeader>', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Expired' })).toBeInTheDocument();
         expect(screen.getByText('Do not pay these.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Expired' }).parentElement.parentElement)
+            .toHaveAttribute('data-xc-section-header');
     });
 
     it('honours the heading level and id', () => {
         render(<SectionHeader title="Rows" as="h3" id="rows-h" />);
         expect(screen.getByRole('heading', { level: 3 })).toHaveAttribute('id', 'rows-h');
+    });
+});
+
+describe('list page rhythm tokens', () => {
+    const tokens = css('tokens.css');
+    const sectionHeader = css('SectionHeader.module.css');
+    const emptyState = css('EmptyState.module.css');
+    const balanceList = readFileSync(
+        join(coreSrcDir(), 'shared', 'components', 'BalanceList.module.css'),
+        'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+
+    it('defines one section gap, header gap, and list row padding', () => {
+        expect(tokens).toMatch(/--xc-section-gap:\s*var\(--xc-space-4\)/);
+        expect(tokens).toMatch(/--xc-section-header-gap:\s*var\(--xc-space-2\)/);
+        expect(tokens).toMatch(/--xc-list-row-padding:\s*var\(--xc-space-3\)/);
+    });
+
+    it('uses gaps instead of child margins inside headers and empty states', () => {
+        expect(ruleBody(sectionHeader, '.text')).toMatch(/gap:\s*var\(--xc-space-1\)/);
+        expect(ruleBody(sectionHeader, '.description')).toMatch(/margin:\s*0/);
+        expect(ruleBody(emptyState, '.wrap')).toMatch(/gap:\s*var\(--xc-section-header-gap\)/);
+        expect(ruleBody(emptyState, '.actions')).not.toMatch(/margin/);
+    });
+
+    it('uses the shared padding for balance rows and list footer rows', () => {
+        expect(ruleBody(balanceList, '.row')).toMatch(/padding:\s*var\(--xc-list-row-padding\)/);
+        expect(ruleBody(balanceList, '.hiddenToggle')).toMatch(/padding:\s*var\(--xc-list-row-padding\)/);
     });
 });
 

@@ -129,7 +129,7 @@ describe('Litecoin receive flow', () => {
         render(provider(messaging, <Receive walletId={WALLET_ID} />));
 
         const address = await screen.findByRole('textbox', {
-            name: 'Copy payment link for receive address',
+            name: 'Litecoin savings',
         });
         expect(address).toHaveValue(SOURCE.address);
         expect(address.value).toMatch(/^ltc1q/);
@@ -321,8 +321,8 @@ describe('Litecoin history flow', () => {
         });
         render(provider(messaging, <History walletId={WALLET_ID} />));
 
-        const row = await screen.findByRole('button', { name: /Send.*Confirmed/i });
-        expect(row).toHaveTextContent(/Litecoin/);
+        // An incoming SEND reads as Receive; the asset icon overlay carries the chain.
+        const row = await screen.findByRole('button', { name: /Receive.*Confirmed/i });
         expect(row).toHaveTextContent('+0.125 LTC');
         expect(messaging.getAddressHistory).toHaveBeenCalledWith({
             chainId: CHAIN,

@@ -10,6 +10,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useLayoutEffect, useState } from 'react';
 import { userEvent } from '../../helpers/userEvent.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,6 +21,10 @@ const LONG_NAME = 'A token name long enough to wrap cleanly on a narrow wallet s
 const balanceListCss = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/components/BalanceList.module.css',
+), 'utf8');
+const tokenPickerSource = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/TokenPicker.jsx',
 ), 'utf8');
 const balances = {
     'bitcoin-mainnet': [{
@@ -77,6 +82,26 @@ afterEach(() => {
 });
 
 describe('TokenPicker asset visibility and filtering', () => {
+    it('keeps exactly one asset-kind tab in the keyboard tab order', async () => {
+        mount();
+        await screen.findByText(LONG_NAME);
+        const all = screen.getByRole('tab', { name: 'All' });
+        const tokens = screen.getByRole('tab', { name: 'Tokens' });
+
+        expect(all).toHaveAttribute('aria-selected', 'true');
+        expect(all).toHaveAttribute('tabindex', '0');
+        expect(tokens).toHaveAttribute('aria-selected', 'false');
+        expect(tokens).toHaveAttribute('tabindex', '-1');
+
+        all.focus();
+        fireEvent.keyDown(all, { key: 'ArrowLeft' });
+        expect(tokens).toHaveFocus();
+        expect(all).toHaveAttribute('aria-selected', 'false');
+        expect(all).toHaveAttribute('tabindex', '-1');
+        expect(tokens).toHaveAttribute('aria-selected', 'true');
+        expect(tokens).toHaveAttribute('tabindex', '0');
+    });
+
     it('shows persisted pins first and exposes an accessible persistent toggle', async () => {
         const messaging = makeMessaging({
             getSettings: vi.fn().mockResolvedValue({
@@ -124,19 +149,19 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(screen.getByRole('button', { name: /^Select Dogecoin\b/ })).toBeInTheDocument();
     });
 
-    it('filters by display name and reports an empty search result', async () => {
+    it('searches ticker, name, and chain-scoped asset id case-insensitively', async () => {
         mount();
         const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
         await screen.findByText(LONG_NAME);
 
-        fireEvent.change(search, { target: { value: 'wrp123' } });
-        expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
-        await waitFor(() => {
-            expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
-        });
+        fireEvent.change(search, { target: { value: 'WrP123' } });
+        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
         expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
 
-        fireEvent.change(search, { target: { value: 'wrap cleanly' } });
+        fireEvent.change(search, { target: { value: 'WrAp ClEaNlY' } });
+        await waitFor(() => expect(screen.getByText(LONG_NAME)).toBeInTheDocument());
+
+        fireEvent.change(search, { target: { value: 'BiTcOiN-MaInNeT:wRp123' } });
         await waitFor(() => expect(screen.getByText(LONG_NAME)).toBeInTheDocument());
 
         fireEvent.change(search, { target: { value: 'missing asset' } });
@@ -148,6 +173,41 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(search).toHaveValue('');
         expect(screen.queryByRole('button', { name: 'Clear token search' })).toBeNull();
         expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
+    });
+
+    it('sorts held assets before zero-balance assets for Receive', async () => {
+        mount({ purpose: 'receive' });
+
+        await screen.findByText('Zero Bitcoin token');
+        expect(screen.getAllByRole('listitem').map((item) => item.dataset.balanceKey))
+            .toEqual([
+                'bitcoin-mainnet:BTC',
+                'bitcoin-mainnet:WRP123',
+                'litecoin-mainnet:LTC',
+                'bitcoin-mainnet:ZERO',
+                'litecoin-mainnet:LZERO',
+                'dogecoin-mainnet:DOGE',
+            ]);
+    });
+
+    it('collapses zero balances when the small-balance setting is enabled', async () => {
+        mount({
+            purpose: 'receive',
+            messaging: makeMessaging({
+                getSettings: vi.fn().mockResolvedValue({
+                    privacy: { hideSmallBalances: true },
+                    smallBalanceThreshold: 'dust',
+                }),
+            }),
+        });
+
+        expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
+        expect(screen.queryByText('Zero Bitcoin token')).toBeNull();
+        expect(screen.queryByText('Zero Litecoin token')).toBeNull();
+        const toggle = await screen.findByRole('button', { name: 'Show 4 small balances' });
+        fireEvent.click(toggle);
+        expect(screen.getByText('Zero Bitcoin token')).toBeInTheDocument();
+        expect(screen.getByText('Zero Litecoin token')).toBeInTheDocument();
     });
 
     it('keeps long names on one line and ellipsizes them', () => {
@@ -222,6 +282,81 @@ describe('TokenPicker asset visibility and filtering', () => {
 });
 
 describe('TokenPicker keyboard and return behavior', () => {
+    // The asset-kind tabs are the kit Tabs, so the tab stop is declared once
+    // in Tabs.jsx and the route renders no tab buttons of its own.
+    it('declares one tab stop for each asset-kind tab', () => {
+        const tabsSource = readFileSync(join(process.cwd(), 'packages/core/src/ui/Tabs.jsx'), 'utf8');
+        expect(tokenPickerSource).toMatch(/<Tabs\b/);
+        expect(tokenPickerSource).not.toMatch(/role="tab"/);
+        const kindTab = tabsSource.match(/<button[\s\S]*?role="tab"[\s\S]*?>/)?.[0] || '';
+        expect(kindTab.match(/\btabIndex=/g)).toHaveLength(1);
+    });
+
+    it('applies the current search before Enter chooses a chain', async () => {
+        const onSelect = vi.fn();
+        mount({ onSelect });
+        await screen.findByText(LONG_NAME);
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+
+        fireEvent.change(search, { target: { value: 'Litecoin' } });
+        fireEvent.keyDown(search, { key: 'Enter' });
+
+        expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: 'litecoin-mainnet',
+            tick: 'LTC',
+        }));
+    });
+
+    it('announces loaded results and moves from search to either end with arrow keys', async () => {
+        mount();
+        await screen.findByText(LONG_NAME);
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        const rows = screen.getAllByRole('button', { name: /^Select / });
+
+        expect(search).toHaveAttribute('aria-controls', 'xc-token-picker-results');
+        fireEvent.keyDown(search, { key: 'ArrowUp' });
+        expect(rows.at(-1)).toHaveFocus();
+        search.focus();
+        fireEvent.keyDown(search, { key: 'ArrowDown' });
+        expect(rows[0]).toHaveFocus();
+    });
+
+    it('does not commit rows from the previous wallet while the next wallet loads', async () => {
+        let switchWallet;
+        const sawStaleRows = vi.fn();
+        const messaging = makeMessaging({
+            getWalletBalances: vi.fn((walletId) => (
+                walletId === 'wallet-1' ? Promise.resolve(balances) : new Promise(() => {})
+            )),
+        });
+        function WalletHarness() {
+            const [walletId, setWalletId] = useState('wallet-1');
+            switchWallet = setWalletId;
+            useLayoutEffect(() => {
+                if (walletId === 'wallet-2') {
+                    sawStaleRows(Boolean(document.querySelector('[data-balance-key="bitcoin-mainnet:WRP123"]')));
+                }
+            }, [walletId]);
+            return (
+                <MessagingProvider shell="web" messaging={messaging}>
+                    <TokenPicker
+                        purpose="send"
+                        walletId={walletId}
+                        onSelect={() => {}}
+                        onBack={() => {}}
+                    />
+                </MessagingProvider>
+            );
+        }
+        render(<WalletHarness />);
+        await screen.findByText(LONG_NAME);
+
+        act(() => switchWallet('wallet-2'));
+
+        expect(sawStaleRows).toHaveBeenCalledWith(false);
+        expect(screen.getByRole('status', { name: 'Loading balances' })).toBeInTheDocument();
+    });
+
     it('roves one token-row tab stop and closes with Escape', async () => {
         const user = userEvent.setup();
         const onBack = vi.fn();

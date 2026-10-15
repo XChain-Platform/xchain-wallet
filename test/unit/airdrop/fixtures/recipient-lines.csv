@@ -1,0 +1,8 @@
+
+address,label
+bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu,primary
+not-an-address,invalid
+"still-not-valid","label
+continues here"
+bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu,duplicate
+bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080,wrong network

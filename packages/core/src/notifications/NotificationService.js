@@ -132,6 +132,11 @@ function isInboundFor(address, data) {
     return Boolean(data.destination) && data.destination === address;
 }
 
+function addressLabel(addr) {
+    const walletName = typeof addr.walletName === 'string' ? addr.walletName.trim() : '';
+    return walletName ? `${walletName} wallet's ${addr.label}` : addr.label;
+}
+
 export class NotificationService {
     /**
      * @param {Object} deps
@@ -186,6 +191,7 @@ export class NotificationService {
         this._log = taggedLogger(logger, 'notify');
 
         this._started = false;
+        this._syncGeneration = 0;
         /** @type {Map<string, { unsub: () => void, chainId: string }>} subKey -> entry */
         this._subs = new Map();
         /** @type {Map<string, import('../sdk/SDKRegistry.js').XChainSDKLike>} chainId -> connected sdk */
@@ -200,19 +206,22 @@ export class NotificationService {
     async start() {
         if (this._started) return this;
         this._started = true;
-        await this._sync();
+        const generation = ++this._syncGeneration;
+        await this._sync(generation);
         return this;
     }
 
     /** Reconcile subscriptions against the current active-address set. */
     async refresh() {
         if (!this._started) return this;
-        await this._sync();
+        const generation = ++this._syncGeneration;
+        await this._sync(generation);
         return this;
     }
 
     /** Tear everything down. */
     stop() {
+        this._syncGeneration += 1;
         for (const { unsub } of this._subs.values()) {
             try { unsub(); } catch (e) { this._log.warn('NotificationService: unsubscribe failed', e); }
         }
@@ -227,7 +236,7 @@ export class NotificationService {
     }
 
     /** Reconcile live subscriptions to match the desired active-address set. */
-    async _sync() {
+    async _sync(generation) {
         let active;
         try {
             active = await this._getActiveAddresses();
@@ -235,6 +244,7 @@ export class NotificationService {
             this._log.error('NotificationService: getActiveAddresses failed', e);
             return;
         }
+        if (!this._started || generation !== this._syncGeneration) return;
 
         /** @type {Map<string, import('./getActiveAddresses.js').ActiveAddress>} */
         const desired = new Map();
@@ -259,6 +269,10 @@ export class NotificationService {
                 try {
                     sdk = this._getSdkForChain(a.chainId);
                     await sdk.connectWs();
+                    if (!this._started || generation !== this._syncGeneration) {
+                        try { if (sdk.disconnectWs) sdk.disconnectWs(); } catch { /* best-effort */ }
+                        return;
+                    }
                     this._conns.set(a.chainId, sdk);
                 } catch (e) {
                     this._log.error(`NotificationService: connectWs failed for ${a.chainId}`, e);
@@ -301,6 +315,17 @@ export class NotificationService {
     async _handle(addr, msg) {
         if (!msg || !msg.type) return;
 
+        let settings = null;
+        let settingsReadable = true;
+        try {
+            settings = await this._getSettings();
+        } catch (e) {
+            this._log.error('NotificationService: getSettings failed', e);
+            settingsReadable = false;
+        }
+        if (settings?.activeNetwork && addr.network
+            && settings.activeNetwork !== addr.network) return;
+
         // Recording that the network holds one of our transactions is an
         // OBSERVATION, not a notification, so it runs ahead of both gates
         // below. A replayed frame is still evidence a node had it, and the
@@ -326,16 +351,11 @@ export class NotificationService {
         // catch_up events are historical replays sent on (re)connect, not a
         // live occurrence, so never notify on them.
         if (msg.catch_up) return;
+        if (!settingsReadable) return;
         const data = msg.data || {};
 
-        let settings;
-        try {
-            settings = await this._getSettings();
-        } catch (e) {
-            this._log.error('NotificationService: getSettings failed', e);
-            return;
-        }
         const flags = (settings && settings.notifications) || {};
+        const destinationLabel = addressLabel(addr);
 
         /** @type {{ kind: string, title: string, body: string } | null} */
         let plan = null;
@@ -351,8 +371,8 @@ export class NotificationService {
                 if (flags.incomingPending === false) break;
                 const incoming = transferText(data, addr.address);
                 plan = incoming
-                    ? { kind: 'incoming-pending', title: `${incoming} pending`, body: `Payment to your ${addr.label} address is waiting for confirmation.` }
-                    : { kind: 'incoming-pending', title: 'Payment pending', body: `A payment to your ${addr.label} address is waiting for confirmation.` };
+                    ? { kind: 'incoming-pending', title: `${incoming} pending`, body: `Payment to your ${destinationLabel} address is waiting for confirmation.` }
+                    : { kind: 'incoming-pending', title: 'Payment pending', body: `A payment to your ${destinationLabel} address is waiting for confirmation.` };
                 break;
             }
             case 'NEW_ACTION': {
@@ -367,8 +387,8 @@ export class NotificationService {
                     if (!flags.txConfirmations) break;
                     const sent = transferText(data);
                     plan = sent
-                        ? { kind: 'tx-confirmed', title: `${sent} confirmed`, body: `Your ${addr.label} transaction is confirmed.` }
-                        : { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your ${addr.label} transaction is confirmed.` };
+                        ? { kind: 'tx-confirmed', title: `${sent} confirmed`, body: `Your ${destinationLabel} transaction is confirmed.` }
+                        : { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your ${destinationLabel} transaction is confirmed.` };
                 } else if (isInboundFor(addr.address, data)) {
                     // An inbound action landed at our address. A MESSAGE is its
                     // own notification kind (gated by its own flag); everything
@@ -384,8 +404,8 @@ export class NotificationService {
                         if (!flags.incomingReceipts) break;
                         const received = transferText(data, addr.address);
                         plan = received
-                            ? { kind: 'incoming-receipt', title: `${received} received`, body: `Payment arrived at your ${addr.label} address.` }
-                            : { kind: 'incoming-receipt', title: 'Payment received', body: `A payment arrived at your ${addr.label} address.` };
+                            ? { kind: 'incoming-receipt', title: `${received} received`, body: `Payment arrived at your ${destinationLabel} address.` }
+                            : { kind: 'incoming-receipt', title: 'Payment received', body: `A payment arrived at your ${destinationLabel} address.` };
                     }
                 }
                 break;
@@ -438,6 +458,11 @@ export class NotificationService {
         const transactionKey = TX_DEDUP_KINDS.has(plan.kind) && txHash ? `${addr.chainId}:${txHash}` : null;
         if (transactionKey && this._wasAnnounced(transactionKey)) return;
 
+        // Reserve before awaiting the adapter. Address subscriptions can fan
+        // out sibling rows concurrently, and every sibling must observe the
+        // first delivery as claimed even while its UI/OS surface is pending.
+        if (transactionKey) this._markAnnounced(transactionKey);
+
         let delivered = true;
         try {
             delivered = await this._notify({
@@ -458,7 +483,7 @@ export class NotificationService {
         }
         // A false return lets an adapter report that permission or host state
         // refused every visible delivery surface.
-        if (transactionKey && delivered !== false) this._markAnnounced(transactionKey);
+        if (transactionKey && delivered === false) this._announced.delete(transactionKey);
     }
 
     /** Whether this (chain, tx_hash) pair was already announced as received within the TTL. */

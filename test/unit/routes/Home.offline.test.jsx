@@ -10,6 +10,20 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { flows } from '../../../packages/core/src/index.js';
+import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
+
+const reachability = vi.hoisted(() => ({ overall: 'normal' }));
+
+vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
+    useReachability: () => ({
+        loading: false,
+        overall: reachability.overall,
+        perChain: [],
+        refresh: vi.fn(),
+        lastChecked: null,
+        error: null,
+    }),
+}));
 
 const WALLET = { id: 'offline-wallet', name: 'Offline Wallet' };
 const BALANCES = {
@@ -26,11 +40,11 @@ function setNavigatorOnline(online) {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: online });
 }
 
-function mountHome(messaging, onSend) {
-    render(
+function mountHome(messaging, onSend, props = {}) {
+    return render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
-                <Home activeWalletId={WALLET.id} onSend={onSend} onReceive={() => {}} />
+                <Home activeWalletId={WALLET.id} onSend={onSend} onReceive={() => {}} {...props} />
             </ToastHost>
         </MessagingProvider>,
     );
@@ -39,6 +53,8 @@ function mountHome(messaging, onSend) {
 afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    localStorage.clear();
+    reachability.overall = 'normal';
     delete navigator.onLine;
 });
 
@@ -47,6 +63,8 @@ describe('Home offline behavior', () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         setNavigatorOnline(true);
         const onSend = vi.fn();
+        const onSwap = vi.fn();
+        const onCreateToken = vi.fn();
         const messaging = {
             listWallets: vi.fn().mockResolvedValue([WALLET]),
             listAccounts: vi.fn().mockResolvedValue([]),
@@ -55,9 +73,9 @@ describe('Home offline behavior', () => {
             getSettings: vi.fn().mockResolvedValue({}),
             getAddressesByChain: vi.fn().mockResolvedValue({}),
         };
-        mountHome(messaging, onSend);
+        mountHome(messaging, onSend, { onSwap, onCreateToken });
 
-        await waitFor(() => expect(screen.getByText('BTC · Bitcoin')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy());
         expect(screen.getByText(/^Updated /)).toBeTruthy();
 
         // A failed background read leaves the last successful rows and sync
@@ -66,7 +84,7 @@ describe('Home offline behavior', () => {
         vi.setSystemTime(Date.now() + flows.BALANCE_POLL_INTERVAL_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
-        expect(screen.getByText('BTC · Bitcoin')).toBeTruthy();
+        expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
 
         setNavigatorOnline(false);
@@ -79,6 +97,14 @@ describe('Home offline behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         expect(onSend).not.toHaveBeenCalled();
         expect(screen.getByText(/Sending needs a network connection/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Swap' }));
+        expect(onSwap).not.toHaveBeenCalled();
+        expect(screen.getByText(/Swapping needs a network connection/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+        expect(onCreateToken).not.toHaveBeenCalled();
+        expect(screen.getByText(/Creating a token needs a network connection/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
         messaging.getWalletBalances.mockResolvedValue(BALANCES);
         setNavigatorOnline(true);
@@ -88,5 +114,43 @@ describe('Home offline behavior', () => {
         await waitFor(() => expect(screen.queryByText(/Showing cached balances/)).toBeNull());
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         expect(onSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('cold-starts from cached balances when services are offline but the device interface is online', async () => {
+        setNavigatorOnline(true);
+        reachability.overall = 'offline';
+        writeBalanceCache(WALLET.id, null, {
+            balances: BALANCES,
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        });
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn().mockResolvedValue(BALANCES),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+        };
+
+        const view = mountHome(messaging, vi.fn());
+
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
+        expect(screen.getByText(/Showing cached balances/)).toBeTruthy();
+        expect(screen.queryByText(/Updating balances/)).toBeNull();
+        expect(screen.queryByLabelText('Loading balances')).toBeNull();
+        expect(messaging.getWalletBalances).not.toHaveBeenCalled();
+
+        reachability.overall = 'normal';
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <Home activeWalletId={WALLET.id} onSend={() => {}} onReceive={() => {}} />
+                </ToastHost>
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1));
+        expect(screen.queryByText(/Showing cached balances/)).toBeNull();
     });
 });

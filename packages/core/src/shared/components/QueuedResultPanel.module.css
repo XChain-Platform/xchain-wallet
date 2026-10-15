@@ -11,9 +11,9 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    padding: var(--xc-space-4);
+    padding: var(--xc-card-pad);
     border: 1px solid var(--xc-warning, #b8860b);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-card-radius);
     background: var(--xc-surface-raised);
 }
 
@@ -27,13 +27,13 @@
 }
 
 .queuedIcon {
-    font-size: var(--xc-text-2xl, 1.5rem);
+    font-size: var(--xc-icon-xl);
     line-height: 1;
 }
 
 .queuedTitle {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     margin: 0;
     text-align: center;
     color: var(--xc-warning, #b8860b);
@@ -44,7 +44,8 @@
 .queuedHint {
     margin: 0;
     color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-type-body-size);
+    font-weight: var(--xc-type-body-weight);
     text-align: center;
     max-width: 100%;
     overflow-wrap: anywhere;
@@ -71,10 +72,6 @@
 }
 
 @media (max-width: 360px) {
-    .queuedCard {
-        padding: var(--xc-space-3);
-    }
-
     .actions {
         width: 100%;
     }

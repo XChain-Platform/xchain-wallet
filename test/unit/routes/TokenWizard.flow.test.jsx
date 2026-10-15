@@ -15,7 +15,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 const ADDRESSES = {
-    'bitcoin-mainnet': [{
+    'bitcoin-regtest': [{
         id: 'addr-1',
         address: 'bc1qexampleexampleexampleexampleexampleex',
         publicKey: '02ab',
@@ -24,16 +24,21 @@ const ADDRESSES = {
     }],
 };
 
-function mountWizard({ composeForConfirm = vi.fn().mockResolvedValue({
-    psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
-}) } = {}) {
+function mountWizard({
+    composeForConfirm = vi.fn().mockResolvedValue({
+        psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
+    }),
+    walletMode = 'full',
+    messagingOverrides = {},
+} = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         issueToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
+        ...messagingOverrides,
     };
     render(
         React.createElement(
@@ -45,9 +50,33 @@ function mountWizard({ composeForConfirm = vi.fn().mockResolvedValue({
     return messaging;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    delete navigator.onLine;
+});
 
 describe('TokenWizard guided flow', () => {
+    it('blocks token composition with one plain reason while the device is offline', async () => {
+        Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+        const composeForConfirm = vi.fn();
+        mountWizard({ composeForConfirm });
+
+        fireEvent.click(await screen.findByText('Meme token'));
+        await screen.findByLabelText('Fee paid by');
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'OFFLINE' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
+        const continueButton = screen.getByRole('button', { name: 'Continue to confirmation' });
+        expect(continueButton).toBeDisabled();
+        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('supports keyboard submission, accurate progress, Back retention, and a complete review', async () => {
         mountWizard();
 
@@ -55,8 +84,9 @@ describe('TokenWizard guided flow', () => {
         fireEvent.click(screen.getByText('Utility token'));
         expect(await screen.findByText('Step 2 of 4: Network')).toBeTruthy();
         await screen.findByLabelText('Fee paid by');
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
 
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         expect(await screen.findByText('Step 3 of 4: Details')).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'UTILITY' },
@@ -79,10 +109,10 @@ describe('TokenWizard guided flow', () => {
             'Utility token',
             'Useful Token',
             'UTILITY',
-            '1000',
+            '1000 UTILITY',
             '8',
             'Membership credits',
-            '25',
+            '25 UTILITY',
             'XCHAIN',
         ]) {
             expect(screen.getAllByText(value).length).toBeGreaterThan(0);
@@ -96,7 +126,7 @@ describe('TokenWizard guided flow', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByText('Step 2 of 4: Network')).toBeTruthy();
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         expect(screen.getByLabelText('Token name (ticker)').value).toBe('UTILITY');
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
         fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
@@ -109,7 +139,7 @@ describe('TokenWizard guided flow', () => {
 
         fireEvent.click(await screen.findByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'MEME' },
         });
@@ -127,7 +157,7 @@ describe('TokenWizard guided flow', () => {
         const messaging = mountWizard();
         fireEvent.click(await screen.findByText('Utility token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'UTILITY' },
         });
@@ -148,7 +178,7 @@ describe('TokenWizard guided flow', () => {
         const messaging = mountWizard();
         fireEvent.click(await screen.findByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'MEME' },
         });
@@ -161,11 +191,59 @@ describe('TokenWizard guided flow', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it.each(['Collectible', 'Limited edition'])(
+        'requires the Image URL before reviewing the %s template',
+        async (templateName) => {
+            const messaging = mountWizard();
+            fireEvent.click(await screen.findByText(templateName));
+            await screen.findByLabelText('Fee paid by');
+            fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
+            fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+                target: { value: 'ART' },
+            });
+            if (templateName === 'Limited edition') {
+                fireEvent.change(screen.getByLabelText('Edition size'), { target: { value: '10' } });
+                fireEvent.change(screen.getByLabelText('Copies per mint'), { target: { value: '1' } });
+            }
+
+            fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+            expect(await screen.findByRole('alert'))
+                .toHaveTextContent('Image URL is required for this template.');
+            expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        },
+    );
+
+    it('rejects exponent notation in a create-time callback amount', async () => {
+        const messaging = mountWizard();
+        fireEvent.click(await screen.findByText('Custom'));
+        await screen.findByLabelText('Fee paid by');
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'CALLBACK' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
+        fireEvent.click(screen.getByRole('button', { name: /Advanced settings/i }));
+        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+            target: { value: 'XCHAIN' },
+        });
+        fireEvent.change(screen.getByLabelText('Payout per unit'), {
+            target: { value: '1e2' },
+        });
+        fireEvent.change(screen.getByLabelText('Callback allowed from block'), {
+            target: { value: '1000' },
+        });
+
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Callback payout per unit must be a positive number.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('does not validate hidden fields left by a different template', async () => {
         mountWizard();
         fireEvent.click(await screen.findByText('Custom'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'SWITCHED' },
         });
@@ -173,15 +251,48 @@ describe('TokenWizard guided flow', () => {
         fireEvent.change(screen.getByLabelText('Transfer ownership to (optional)'), {
             target: { value: 'not-an-address' },
         });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Transfer ownership address is not valid',
+        );
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
+        expect(screen.queryByRole('alert')).toBeNull();
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 
         expect(await screen.findByText('Step 4 of 4: Review')).toBeTruthy();
         expect(screen.queryByText(/Transfer ownership address is not valid/i)).toBeNull();
+    });
+
+    it('starts only one watcher build when review is submitted twice', async () => {
+        let resolveBuild;
+        const buildActionPsbtRequest = vi.fn(() => new Promise((resolve) => {
+            resolveBuild = resolve;
+        }));
+        mountWizard({
+            walletMode: 'watcher',
+            messagingOverrides: { buildActionPsbtRequest },
+        });
+
+        fireEvent.click(await screen.findByText('Meme token'));
+        await screen.findByLabelText('Fee paid by');
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'ONCE' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        const review = screen.getByRole('form', { name: 'Review token issuance' });
+
+        fireEvent.submit(review);
+        fireEvent.submit(review);
+
+        expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+        resolveBuild({ psbtHex: '70736274ff00', chainId: 'bitcoin-mainnet' });
+        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
     });
 });

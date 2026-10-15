@@ -26,6 +26,7 @@
 // it explicitly.
 
 import { useEffect, useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import {
     activatePanicMode,
     deactivatePanicMode,
@@ -33,6 +34,7 @@ import {
     getPanicRemainingMs,
 } from '../../../flows/panicMode.js';
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 export function PanicModeRow() {
     const [state, setState] = useState(getPanicModeState);
@@ -70,38 +72,22 @@ export function PanicModeRow() {
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
-    const buttonStyle = {
-        background: 'var(--xc-surface-raised)',
-        color: 'var(--xc-text)',
-        border: '1px solid var(--xc-border-strong)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-1) var(--xc-space-3)',
-        fontSize: 'var(--xc-text-sm)',
-        cursor: 'pointer',
-    };
-    const dangerButtonStyle = {
-        ...buttonStyle,
-        border: '1px solid var(--xc-danger)',
-        color: 'var(--xc-danger-fg)',
-        fontWeight: 600,
-    };
-
     if (isActive) {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Panic mode is active</span>
+                    <span style={labelStyle}>{t('settings.panic.panicModeIsActive')}</span>
                     <span style={ROW_HINT}>
-                        Signing is frozen until the timer expires.{' '}
+                        {t('settings.panic.signingIsFrozenUntilThe')}{' '}
                         <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                             {formatPanicCountdown(remainingMs)}
                         </span>{' '}
-                        remaining.
+                        {t('settings.panic.remaining')}
                     </span>
                 </div>
-                <button type="button" onClick={handleDeactivate} style={buttonStyle}>
-                    Deactivate
-                </button>
+                <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDeactivate}>
+                    {t('settings.panic.deactivate')}
+                </Button>
             </div>
         );
     }
@@ -110,19 +96,18 @@ export function PanicModeRow() {
         return (
             <div style={{ ...ROW, alignItems: 'flex-start' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Confirm panic mode</span>
+                    <span style={labelStyle}>{t('settings.panic.confirmPanicMode')}</span>
                     <span style={ROW_HINT}>
-                        Freeze all signing for 24 hours? Balances and history remain readable, and
-                        you can deactivate the freeze from this setting.
+                        {t('settings.panic.freezeAllSigningFor24')}
                     </span>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <button type="button" onClick={() => setConfirming(false)} style={buttonStyle}>
-                        Cancel
-                    </button>
-                    <button type="button" onClick={handleActivate} style={dangerButtonStyle}>
-                        Confirm 24-hour freeze
-                    </button>
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setConfirming(false)}>
+                        {t('common.cancel')}
+                    </Button>
+                    <Button type="button" size="sm" variant="danger" icon={null} onClick={handleActivate}>
+                        {t('settings.panic.confirm24HourFreeze')}
+                    </Button>
                 </div>
             </div>
         );
@@ -131,16 +116,14 @@ export function PanicModeRow() {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={labelStyle}>Panic mode</span>
+                <span style={labelStyle}>{t('settings.panic.panicMode')}</span>
                 <span style={ROW_HINT}>
-                    Activate to freeze ALL signing for 24 hours. Balances and history stay readable; new
-                    sends, multisig contributions, and message signatures will refuse until the timer
-                    expires or you deactivate.
+                    {t('settings.panic.activateToFreezeAllSigning')}
                 </span>
             </div>
-            <button type="button" onClick={() => setConfirming(true)} style={dangerButtonStyle}>
-                Activate
-            </button>
+            <Button type="button" size="sm" variant="danger" icon={null} onClick={() => setConfirming(true)}>
+                {t('settings.developer.activate2')}
+            </Button>
         </div>
     );
 }

@@ -148,7 +148,7 @@ test.describe('responsive: one interface at every width', () => {
                 await page.getByRole('main').evaluate((main) => { main.scrollTop = 0; });
 
                 const walletName = page.getByRole('heading', { level: 1 });
-                const password = page.getByLabel('Password');
+                const password = page.getByLabel('Password', { exact: true });
                 const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
                 const forgot = page.getByRole('button', { name: 'Forgot password?' });
 
@@ -162,6 +162,19 @@ test.describe('responsive: one interface at every width', () => {
                 await expectAboveFold(forgot, `${viewport.name} Forgot password link`);
             });
         }
+
+        // The link hides itself with the hidden attribute while its panel is
+        // open, which works only while no author display rule outranks the
+        // attribute. jsdom applies no stylesheet, so only a browser shows it.
+        await test.step('Forgot password leaves the screen while its panel is open', async () => {
+            const forgot = page.getByRole('button', { name: 'Forgot password?' });
+            await forgot.click();
+            await expect(page.getByRole('alertdialog', { name: 'Restore wallet access' })).toBeVisible();
+            await expect(forgot).toBeHidden();
+            await page.getByRole('alertdialog', { name: 'Restore wallet access' })
+                .getByRole('button', { name: 'Cancel', exact: true }).click();
+            await expect(forgot).toBeVisible();
+        });
     });
 
     test('every primary screen fits, from the 360px popup to desktop', async ({ page }) => {

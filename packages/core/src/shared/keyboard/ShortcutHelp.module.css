@@ -1,61 +1,88 @@
 /* §34.3 shortcut-help modal. Theme-token driven; tracks light/dark + forced
    contrast automatically. */
 
+/* Fixed to the viewport, not the content pane, so the scrim also dims the
+   app header and the navigation, as every other modal's scrim does. */
 .overlay {
-    position: absolute;
+    position: fixed;
+    box-sizing: border-box;
     inset: 0;
-    z-index: var(--xc-z-overlay);
-    background: rgba(0, 0, 0, 0.45);
+    /* --xc-viewport-h is the visible height less the top inset the body pads
+       by; this box starts at the true top, so it adds that inset back or the
+       scrim stops short of the bottom edge on a notched phone. */
+    max-height: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
+    z-index: var(--xc-z-modal);
+    background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 10vh;
+    padding-block: min(10vh, var(--xc-space-8));
     padding-inline: var(--xc-space-4);
+    /* Now fixed to the viewport, the panel keeps clear of the notch and the
+       home indicator. */
+    padding-top: calc(min(10vh, var(--xc-space-8)) + env(safe-area-inset-top, 0));
+    padding-bottom: calc(min(10vh, var(--xc-space-8)) + env(safe-area-inset-bottom, 0));
 }
 
 .panel {
+    box-sizing: border-box;
     width: 100%;
     max-width: 480px;
-    max-height: 78vh;
+    /* Overlay-relative bound first; the viewport-aware cap below wins where supported. */
+    max-height: 100%;
+    max-height: min(78vh, 100%);
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: var(--xc-surface-raised, var(--xc-surface));
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
+    box-shadow: var(--xc-shadow-modal);
     overflow: hidden;
 }
 
+/* The same header as the command palette and the shared overlay surface:
+   centred title, one md close control in a fixed end cell. */
 .header {
-    display: flex;
+    display: grid;
+    grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr) var(--xc-control-h-md);
     align-items: center;
-    justify-content: space-between;
-    padding: var(--xc-space-3) var(--xc-space-4);
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+    min-height: var(--xc-control-h-md);
+    padding: var(--xc-space-2) var(--xc-space-4);
     border-bottom: 1px solid var(--xc-border);
 }
 
-.title { font-size: var(--xc-text-md); font-weight: 600; color: var(--xc-text); }
+.title {
+    grid-column: 2;
+    min-width: 0;
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--xc-text);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
 
 .close {
+    grid-column: 3;
     display: inline-flex;
-    background: transparent;
-    border: 0;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    padding: var(--xc-space-1);
-    border-radius: var(--xc-radius-sm);
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    min-width: var(--xc-tap-min);
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
     align-items: center;
     justify-content: center;
 }
 
-.close:hover, .close:focus-visible { color: var(--xc-text); outline: none; }
 .close svg { width: 18px; height: 18px; }
 
-.body { padding: var(--xc-space-3) var(--xc-space-4); overflow-y: auto; }
+.body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--xc-space-3) var(--xc-space-4);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
 
 .group { margin-bottom: var(--xc-space-4); }
 .group:last-child { margin-bottom: 0; }
@@ -99,13 +126,4 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     margin: var(--xc-space-3) 0 0;
-}
-
-/* Box-shadow focus rings are not painted in forced-colors mode, so give
- * this control a real outline there (WCAG 2.4.7). */
-@media (forced-colors: active) {
-    .close:focus-visible {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
 }

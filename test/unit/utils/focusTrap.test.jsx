@@ -159,6 +159,16 @@ function RemovedOpenerHarness() {
     );
 }
 
+function ContainerInitialHarness() {
+    const ref = useRef(null);
+    useFocusTrap(ref, { active: true, initialFocusRef: ref });
+    return (
+        <div ref={ref} role="dialog" aria-modal="true" aria-label="Scanner" tabIndex={-1}>
+            <button type="button">Back to wallet</button>
+        </div>
+    );
+}
+
 function FocusLayer({ name, onClose, children }) {
     const ref = useRef(null);
     useFocusTrap(ref, { active: true });
@@ -201,6 +211,12 @@ describe('useFocusTrap opener handling', () => {
         fireEvent.click(screen.getByTestId('inside'));
         await flush();
         expect(document.activeElement).toBe(opener);
+    });
+
+    it('prefers the first meaningful control when the requested target is the dialog', async () => {
+        render(<ContainerInitialHarness />);
+        await flush();
+        expect(screen.getByRole('button', { name: 'Back to wallet' })).toHaveFocus();
     });
 
     it.each([

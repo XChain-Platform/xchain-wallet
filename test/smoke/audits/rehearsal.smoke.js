@@ -859,6 +859,16 @@ const check = (over) => assertRecord({
                 + 'rehearsal-matrix.mjs names a device. Re-state the README status bullet from the '
                 + 'matrix rather than editing this assertion.');
         }
+        // Hold the two tool sources' prose to the same answer; a pattern spans wrapped `//` lines.
+        for (const file of ['tools/release/rehearse.mjs', 'tools/release/rehearsal-matrix.mjs']) {
+            const src = readFileSync(join(root, file), 'utf8');
+            for (const stale of [/DD4[\s/*]+is[\s/*]+the[\s/*]+open[\s/*]+question/i,
+                /before[\s/*]+DD4[\s/*]+lands/i, /still[\s/*]+blocked[\s/*]+on[\s/*]+DD4/i]) {
+                assert.doesNotMatch(src, stale,
+                    `${file} says DD4 is still open, but every lane in rehearsal-matrix.mjs names a device. `
+                    + 'Re-state the prose from the LANES data rather than editing this assertion.');
+            }
+        }
     }
 
     // Keep the release key out of the blocker prose: K1 exists, so it blocks no lane.
@@ -1030,5 +1040,7 @@ const check = (over) => assertRecord({
 }
 
 server.close();
+// Stop the gpg-agent the throwaway GNUPGHOME spawned before removing it.
+spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: gpgEnv });
 rmSync(work, { recursive: true, force: true });
 process.stdout.write('rehearsal.smoke.js: ok\n');

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -110,7 +110,6 @@ export function StakeDetail({
     // Quick-action "More" popover.
     const [moreOpen, setMoreOpen] = useState(false);
     const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const moreButtonRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
     useEffect(() => {
         if (!moreOpen) return undefined;
         const onDown = (e) => {
@@ -120,7 +119,7 @@ export function StakeDetail({
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
             setMoreOpen(false);
-            moreButtonRef.current?.focus();
+            moreWrapRef.current?.querySelector('button')?.focus();
         };
         window.addEventListener('mousedown', onDown);
         window.addEventListener('keydown', onKey);
@@ -295,7 +294,6 @@ export function StakeDetail({
 
     return wrap(
         <>
-            <SectionHeader title="Position details" />
             {/* Hero: what's staked, where, how it's doing. */}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Staked</dt>
@@ -373,130 +371,132 @@ export function StakeDetail({
             {/* Quick actions: squared 4-up grid, disabled without handlers. */}
             {kind === 'validator' ? (
                 <div className={local.quickActions} role="group" aria-label="Stake actions">
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.DollarIcon /></span>}
                         onClick={onClaimRewards}
                         disabled={!onClaimRewards || compareDecimalStrings(pending, '0') !== 1}
                         title={compareDecimalStrings(pending, '0') === 1 ? 'Claim pending rewards' : 'No pending rewards'}
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
-                        <span>Claim</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Claim
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.UnlockIcon /></span>}
                         onClick={onUnstake}
                         disabled={!onUnstake || !primaryStake}
                         title="Unstake"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.UnlockIcon /></span>
-                        <span>Unstake</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Unstake
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.KeyIcon /></span>}
                         onClick={onDelegate}
                         disabled={!onDelegate || !primaryStake}
                         title="Delegate a new signing key"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                        <span>Delegate</span>
-                    </button>
+                        Delegate
+                    </Button>
                     <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            ref={moreButtonRef}
-                            type="button"
-                            className={local.quickAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.MoreIcon /></span>}
                             aria-haspopup="menu"
                             aria-expanded={moreOpen}
                             onClick={() => setMoreOpen((o) => !o)}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
-                        </button>
+                            More
+                        </Button>
                         {moreOpen ? (
                             <div className={local.quickActionMoreMenu} role="menu">
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    block
+                                    icon={<Icon.UnlinkIcon />}
                                     role="menuitem"
-                                    className={local.quickActionMoreItem}
+                                    data-destructive="true"
                                     onClick={onRevokeDelegation ? () => { setMoreOpen(false); onRevokeDelegation(); } : undefined}
                                     disabled={!onRevokeDelegation || !primaryDelegation}
                                 >
-                                    <span aria-hidden="true"><Icon.UnlinkIcon /></span>
-                                    <span>Revoke delegation</span>
-                                </button>
-                                <button
-                                    type="button"
+                                    Revoke delegation
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    block
+                                    icon={<Icon.LineChartIcon />}
                                     role="menuitem"
-                                    className={local.quickActionMoreItem}
                                     onClick={onOpenOperatorDashboard ? () => { setMoreOpen(false); onOpenOperatorDashboard(); } : undefined}
                                     disabled={!onOpenOperatorDashboard || !primaryStake}
                                 >
-                                    <span aria-hidden="true"><Icon.LineChartIcon /></span>
-                                    <span>Operator view</span>
-                                </button>
+                                    Operator view
+                                </Button>
                             </div>
                         ) : null}
                     </div>
                 </div>
             ) : (
                 <div className={local.quickActions} role="group" aria-label="Stake actions">
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.PlusIcon /></span>}
                         onClick={() => onStakeMore?.(contractPositionSeed)}
                         disabled={!onStakeMore}
                         title="Stake more into this contract"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                        <span>Add stake</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Add stake
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.UnlockIcon /></span>}
                         onClick={() => onUnstake?.(contractPositionSeed)}
                         disabled={!onUnstake || activeContractStakes.length === 0}
                         title="Start unstaking (cooldown applies)"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.UnlockIcon /></span>
-                        <span>Unstake</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Unstake
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.KeyIcon /></span>}
                         onClick={() => onDelegate?.(contractPositionSeed)}
                         disabled={!onDelegate || activeContractStakes.length === 0}
                         title="Rotate the position's signing key"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                        <span>Delegate</span>
-                    </button>
+                        Delegate
+                    </Button>
                     <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            ref={moreButtonRef}
-                            type="button"
-                            className={local.quickAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.MoreIcon /></span>}
                             aria-haspopup="menu"
                             aria-expanded={moreOpen}
                             onClick={() => setMoreOpen((o) => !o)}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
-                        </button>
+                            More
+                        </Button>
                         {moreOpen ? (
                             <div className={local.quickActionMoreMenu} role="menu">
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    block
+                                    icon={<Icon.ContractIcon />}
                                     role="menuitem"
-                                    className={local.quickActionMoreItem}
                                     onClick={onOpenContract ? () => { setMoreOpen(false); onOpenContract(); } : undefined}
                                     disabled={!onOpenContract}
                                 >
-                                    <span aria-hidden="true"><Icon.ContractIcon /></span>
-                                    <span>View contract</span>
-                                </button>
+                                    View contract
+                                </Button>
                             </div>
                         ) : null}
                     </div>
@@ -505,6 +505,7 @@ export function StakeDetail({
 
             <SectionHeader title="Position activity" />
             <div className={local.tabBar} role="tablist" aria-label="Stake detail view">
+                {/* Native buttons carry tab semantics because the kit has no tab primitive. */}
                 {tabs.map((t) => (
                     <button
                         key={t.id}
@@ -523,18 +524,20 @@ export function StakeDetail({
                 rewards.length === 0 ? (
                     <EmptyState title="No reward events yet" body="Reward events for this stake appear here." />
                 ) : (
-                    <ul className={local.eventList}>
+                    <ul className={local.eventList} aria-label="Reward events">
                         {rewards.slice(0, 25).map((r, i) => (
                         <li key={`${String(r.action_index ?? i)}:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.eventAmount}>
+                            <ListRow
+                                title={(
+                                    <span className={local.eventAmount}>
                                     {fmt(r.amount ?? r.reward)} XCHAIN
-                                </span>
-                                <span className={local.eventMeta}>{detailText(r.status)}</span>
-                                <span className={local.eventWhen}>
+                                    </span>
+                                )}
+                                subtitle={<span className={local.eventMeta}>{detailText(r.status)}</span>}
+                                trailing={<span className={local.eventWhen}>
                                     {r.block_index ? `block ${fmt(r.block_index)}` : '-'}
-                                </span>
-                            </div>
+                                </span>}
+                            />
                         </li>
                         ))}
                     </ul>
@@ -545,18 +548,20 @@ export function StakeDetail({
                 delegations.length === 0 ? (
                     <EmptyState title="No delegated signing key" body="Signing-key delegations for this stake appear here." />
                 ) : (
-                    <ul className={local.eventList}>
+                    <ul className={local.eventList} aria-label="Signing-key delegations">
                         {delegations.slice(0, 25).map((d, i) => (
                         <li key={`${String(d.delegation_id ?? i)}:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.eventAmount}>
+                            <ListRow
+                                title={(
+                                    <span className={local.eventAmount}>
                                     <code>{d.signing_pubkey || d.SIGNING_PUBKEY || '(none)'}</code>
-                                </span>
-                                <span className={local.eventMeta}>{stakingRowState(d, height)}</span>
-                                <span className={local.eventWhen}>
+                                    </span>
+                                )}
+                                subtitle={<span className={local.eventMeta}>{stakingRowState(d, height)}</span>}
+                                trailing={<span className={local.eventWhen}>
                                     {d.block_index ? `block ${fmt(d.block_index)}` : ''}
-                                </span>
-                            </div>
+                                </span>}
+                            />
                         </li>
                         ))}
                     </ul>
@@ -567,27 +572,27 @@ export function StakeDetail({
                 activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
                     <EmptyState title="No contract positions" body="Staking positions for this contract appear here." />
                 ) : (
-                    <ul className={local.eventList}>
+                    <ul className={local.eventList} aria-label="Contract positions">
                             {activeContractStakes.map((s, i) => (
                                 <li key={`s:${String(s.action_index ?? i)}:${i}`}>
-                                    <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(s.amount)} {detailText(s.tick)}</span>
-                                        <span className={local.eventMeta}>
+                                    <ListRow
+                                        title={<span className={local.eventAmount}>{fmt(s.amount)} {detailText(s.tick)}</span>}
+                                        subtitle={<span className={local.eventMeta}>
                                             key <code>{s.signing_pubkey || 'None'}</code>
-                                        </span>
-                                        <span className={local.eventWhen}>staked</span>
-                                    </div>
+                                        </span>}
+                                        trailing={<span className={local.eventWhen}>staked</span>}
+                                    />
                                 </li>
                             ))}
                             {pendingContractUnstakes.map((u, i) => (
                                 <li key={`u:${String(u.action_index ?? i)}:${i}`}>
-                                    <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>
-                                        <span className={local.eventMeta}>
+                                    <ListRow
+                                        title={<span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>}
+                                        subtitle={<span className={local.eventMeta}>
                                             releasing, slashable until block {fmt(u.cooldown_end_block)}
-                                        </span>
-                                        <span className={local.eventWhen}>cooldown</span>
-                                    </div>
+                                        </span>}
+                                        trailing={<span className={local.eventWhen}>cooldown</span>}
+                                    />
                                 </li>
                             ))}
                     </ul>
@@ -598,18 +603,18 @@ export function StakeDetail({
                 slashEvents.length === 0 ? (
                     <EmptyState title="No slash events" body="Slash events against this position appear here." />
                 ) : (
-                    <ul className={local.eventList}>
+                    <ul className={local.eventList} aria-label="Slash events">
                         {slashEvents.slice(0, 25).map((ev, i) => (
                         <li key={`sl:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.slashAmount}>{ev.amount == null || ev.amount === '' ? '-' : `-${fmt(ev.amount)}`} {detailText(ev.tick)}</span>
-                                <span className={local.eventMeta}>
+                            <ListRow
+                                title={<span className={local.slashAmount}>{ev.amount == null || ev.amount === '' ? '-' : `-${fmt(ev.amount)}`} {detailText(ev.tick)}</span>}
+                                subtitle={<span className={local.eventMeta}>
                                     to <AddressText address={detailText(ev.destination_address || ev.destination)} truncate={false} />
-                                </span>
-                                <span className={local.eventWhen}>
+                                </span>}
+                                trailing={<span className={local.eventWhen}>
                                     {ev.block_index ? `block ${fmt(ev.block_index)}` : '-'}
-                                </span>
-                            </div>
+                                </span>}
+                            />
                         </li>
                         ))}
                     </ul>

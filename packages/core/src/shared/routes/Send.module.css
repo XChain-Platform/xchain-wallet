@@ -1,41 +1,3 @@
-.pickerLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin-bottom: var(--xc-space-3);
-}
-
-.picker {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.fromLine {
-    display: flex;
-    align-items: baseline;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    margin-bottom: var(--xc-space-3);
-}
-
-.fromLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
@@ -61,11 +23,8 @@
 }
 
 .saveRecipient {
+    composes: card from '../../ui/Card.module.css';
     margin-top: var(--xc-space-4);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
 }
 
 .saveRecipientActions {
@@ -108,21 +67,19 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--xc-space-1) var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     margin: var(--xc-space-2) 0 0;
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .advancedReviewList {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--xc-space-2) var(--xc-space-4);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     margin: 0 0 var(--xc-space-3);
+    padding: var(--xc-space-1);
 }
 
 .detailsLabel {
@@ -133,6 +90,7 @@
     letter-spacing: 0.04em;
     margin: 0;
     align-self: center;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .detailsValue {
@@ -140,29 +98,48 @@
     color: var(--xc-text);
     margin: 0;
     word-break: break-word;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
 }
 
-.warnings {
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
-    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
+    border-top: var(--xc-table-row-divider);
 }
 
-.warning {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
+@media not all and (min-width: 400px) {
+    .detailsList,
+    .advancedReviewList {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsLabel {
+        padding-bottom: 0;
+    }
+
+    .detailsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: 0;
+    }
 }
-.warning + .warning {
-    margin-top: var(--xc-space-1);
+
+.detailsValue code,
+.coinControlValue,
+.coinControlSummary dd,
+.txid,
+.successMono {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .testSendGate {
-    border: 1px solid color-mix(in srgb, var(--xc-accent-primary, #2563eb) 50%, transparent);
-    background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 8%, transparent);
+    border: 1px solid var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 8%, transparent);
     padding: var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
     margin-bottom: var(--xc-space-3);
@@ -188,22 +165,6 @@
     flex-wrap: wrap;
 }
 
-.amountBlock {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-/* The shared Input component carries `margin-bottom: var(--xc-space-3)`
-   on its wrapper (Input.module.css). Inside the Send form's amount
-   block we want the footer (USD / balance / Max) flush under the
-   field, so zero that out via a structural selector; overriding the
-   CSS-module class name from outside isn't reachable. */
-.amountBlock > div:first-child,
-.amountFieldWrap > div:first-child {
-    margin-bottom: 0;
-}
-
 /* Matched contact name shown as a small pill right after the "To" label, so
    it reads as a distinct value without needing a colon after "To". */
 .toContactName {
@@ -211,8 +172,9 @@
     align-items: center;
     vertical-align: middle;
     margin-inline-start: var(--xc-space-2);
+    /* The pill keeps a 1px block inset because the spacing scale starts at 4px. */
     padding: 1px var(--xc-space-2);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 14%, transparent);
     color: var(--xc-accent-text);
     font-size: var(--xc-text-xs);
@@ -220,15 +182,12 @@
 }
 
 .pastedRecipient {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: var(--xc-space-1) var(--xc-space-2);
     margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
 }
 
 .pastedRecipientLabel {
@@ -243,53 +202,6 @@
     font-size: var(--xc-text-xs);
 }
 
-.amountFooter {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--xc-space-3);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin-top: var(--xc-space-1);
-}
-
-.amountFooterRight {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.amountUnitSwap {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    background: transparent;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.amountUnitSwap:hover,
-.amountUnitSwap:focus-visible {
-    color: var(--xc-text);
-}
-
-.amountUnitSwap svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-}
-
-.amountFieldWrap {
-    position: relative;
-}
-
 .rbfRow {
     display: flex;
     align-items: flex-start;
@@ -298,28 +210,9 @@
     cursor: pointer;
 }
 
-.rbfLabel {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    font-weight: 500;
-    flex: 1;
-}
-
-.rbfHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 400;
-    line-height: 1.3;
-}
-
 .coinControlList {
+    composes: card from '../../ui/Card.module.css';
     margin: var(--xc-space-2) 0 var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
     box-sizing: border-box;
     min-inline-size: 0;
     width: 100%;
@@ -341,24 +234,8 @@
     gap: var(--xc-space-2);
 }
 
-.coinControlActions button {
-    min-height: var(--xc-tap-min);
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
-    color: var(--xc-accent-text);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.coinControlActions button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 .coinControlRows {
+    composes: scrollArea from '../../ui/Screen.module.css';
     max-height: 18rem;
     margin-top: var(--xc-space-2);
     overflow-y: auto;
@@ -395,6 +272,7 @@
 .coinControlDust {
     display: inline-block;
     margin-inline-start: var(--xc-space-2);
+    /* The compact badge keeps a 1px block inset below the spacing scale. */
     padding: 1px var(--xc-space-1);
     border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 55%, transparent);
     border-radius: var(--xc-radius-sm);
@@ -423,29 +301,12 @@
 }
 
 .coinControlSummary dd {
+    /* The value needs a 2px offset below the spacing scale. */
     margin: 2px 0 0;
     color: var(--xc-text);
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);
     overflow-wrap: anywhere;
-}
-
-.advancedSelectLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    margin: var(--xc-space-3) 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 500;
-}
-
-.advancedSelectLabel select {
-    min-height: var(--xc-tap-min);
-    padding: var(--xc-space-2);
-    color: var(--xc-text);
-    background: var(--xc-bg);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
 }
 
 .successTitle {
@@ -498,7 +359,7 @@
     justify-content: center;
     width: 3rem;
     height: 3rem;
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     background: var(--xc-success-fill);
     color: var(--xc-on-success);
     font-size: 1.5rem;
@@ -513,19 +374,17 @@
 }
 
 .successSummary {
+    composes: card from '../../ui/Card.module.css';
     margin: 0;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
     gap: var(--xc-space-2) var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
 }
 
 .successRow {
     display: flex;
     flex-direction: column;
+    /* The compact summary needs a 2px gap below the spacing scale. */
     gap: 2px;
     min-width: 0;
 }
@@ -577,16 +436,39 @@
 }
 .successLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) * 0.5);
     border-radius: var(--xc-radius-sm);
 }
 
-.heroWrap {
+.heroAsset {
+    margin: 0 auto var(--xc-space-3);
+}
+
+.assetPickerControl {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-1);
-    margin: 0 0 var(--xc-space-3);
+}
+
+.assetPickerButton {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-tap-min);
+    height: var(--xc-tap-min);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-text);
+    cursor: pointer;
+}
+
+.assetPickerButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
 }
 
 .heroIconWrapInteractive {
@@ -606,23 +488,12 @@
 
 .heroIconWrapInteractive:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 4px;
-}
-
-.heroName {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    color: var(--xc-text);
-    text-align: center;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-top: var(--xc-space-1);
+    outline-offset: var(--xc-space-1);
 }
 
 .heroIconWrap {
     position: relative;
+    /* Hero artwork stays 88px because the icon scale stops at 24px. */
     width: 88px;
     height: 88px;
     display: flex;
@@ -631,6 +502,7 @@
 }
 
 .heroIconImg {
+    /* Hero artwork stays 88px because the icon scale stops at 24px. */
     width: 88px;
     height: 88px;
     border-radius: 50%;
@@ -640,6 +512,7 @@
 }
 
 .heroIconLetter {
+    /* Hero artwork stays 88px because the icon scale stops at 24px. */
     width: 88px;
     height: 88px;
     border-radius: 50%;
@@ -647,14 +520,16 @@
     align-items: center;
     justify-content: center;
     font-weight: 700;
+    /* The hero monogram stays 36px because the type scale stops at 24px. */
     font-size: 36px;
     line-height: 1;
 }
 
 .heroChainOverlay {
     position: absolute;
-    inset-inline-end: -2px;
-    bottom: -2px;
+    inset-inline-end: calc(var(--xc-space-1) * -0.5);
+    bottom: calc(var(--xc-space-1) * -0.5);
+    /* The hero chain artwork stays 32px because the icon scale stops at 24px. */
     width: 32px;
     height: 32px;
     border-radius: 50%;
@@ -674,13 +549,10 @@
 }
 
 .recipientRow {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .recipientRowHead {
@@ -694,4 +566,29 @@
     font-size: var(--xc-text-sm);
     font-weight: 600;
     color: var(--xc-text-muted);
+}
+
+/* Native font scaling enlarges labels without changing the CSS viewport.
+   Phone-width review grids and action rows reflow before their text competes
+   for the same line. */
+@media not all and (min-width: 480px) {
+    .detailsList,
+    .advancedReviewList {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsLabel {
+        align-self: start;
+    }
+
+    .successTxidRow,
+    .saveRecipientActions,
+    .recipientRowHead {
+        flex-wrap: wrap;
+    }
+
+    .successTxidRow > .txid {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
 }

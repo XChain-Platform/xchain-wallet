@@ -9,12 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
+import { useSettings } from '../hooks/useSettings.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
@@ -77,9 +79,18 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const variant = screenVariantFor(shell);
 
     // Live registry read (re-rendered on every descriptor mutation), so a
-    // synced chain reaches the market picker without a restart.
+    // synced chain reaches the market picker without a restart. Scoped to
+    // the active network like the Dispenser explorer: the registry knows
+    // every network, and a wallet on Regtest must neither query mainnet
+    // feeds nor badge the featured token with the mainnet coin. Empty while
+    // settings load, so nothing escapes the filter; a shell that cannot read
+    // settings gets the default network.
+    const { settings, loading: settingsLoading } = useSettings();
     const supportedChains = useSupportedChains(chainRegistry);
-    const chains = useMemo(() => supportedChains.map((d) => d.id), [supportedChains]);
+    const chains = useMemo(() => {
+        if (settingsLoading) return [];
+        return flowsLib.filterChainIdsByActiveNetwork(supportedChains.map((d) => d.id), settings, chainRegistry);
+    }, [supportedChains, settings, settingsLoading]);
     // A representative chain for the featured-token icon (prefer Bitcoin).
     const defaultChainId = useMemo(
         () => chains.find((id) => coinFromChainId(id) === 'bitcoin') || chains[0] || null,
@@ -109,7 +120,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     // different coin/token. Demo wallets are served fabricated feeds; real
     // wallets fan out across every supported chain in parallel.
     useEffect(() => {
-        if (!tick) return undefined;
+        if (!tick || chains.length === 0) return undefined;
         let cancelled = false;
         const marketKey = `${walletId || ''}:${tick}:${chains.join(',')}`;
         const hasCachedRows = loadedMarketKeyRef.current === marketKey;
@@ -129,7 +140,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         });
 
         if (walletId && flowsLib.isDemoWallet(walletId)) {
-            const demo = flowsLib.synthesizeDemoMarketActivity(tick);
+            const demo = flowsLib.synthesizeDemoMarketActivity(tick, { chainIds: chains });
             if (!cancelled) {
                 setOffers(uniqueRows(demo.offers, marketRowIdentity));
                 setSales(uniqueRows(demo.sales, marketRowIdentity));
@@ -249,19 +260,21 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
     const iconChainId = selected.chainId || defaultChainId;
     const marketSelector = (
-        <button
+        <Button
             type="button"
             className={styles.marketSelector}
             onClick={() => setPicking(true)}
             aria-label={`Change market (currently ${selected.displayName || tick})`}
         >
-            <TickerIcon chainId={iconChainId} tick={tick} size={40} />
-            <span className={styles.marketSelectorText}>
-                <span className={styles.marketSelectorName}>{selected.displayName || tick}</span>
-                <span className={styles.marketSelectorSub}>{tick}</span>
+            <span className={styles.marketSelectorContent}>
+                <TickerIcon chainId={iconChainId} tick={tick} size={40} />
+                <span className={styles.marketSelectorText}>
+                    <span className={styles.marketSelectorName}>{selected.displayName || tick}</span>
+                    <span className={styles.marketSelectorSub}>{tick}</span>
+                </span>
+                <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
             </span>
-            <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
-        </button>
+        </Button>
     );
 
     return (
@@ -308,31 +321,21 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const onClick = typeof onOpenDispenser === 'function' && actionIndex
                                         ? () => onOpenDispenser(chainId, actionIndex)
                                         : undefined;
-                                    const content = (
-                                        <>
-                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                            <span className={styles.rowText}>
-                                                <span className={styles.rowTitle}>
-                                                    {isDispenserPriceStale(row)
-                                                        ? dispenserRateLabel(row)
-                                                        : row.give_amount
-                                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
-                                                            : 'Open dispenser'}
-                                                </span>
-                                                <span className={styles.rowSub}>
-                                                    {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
-                                                </span>
-                                            </span>
-                                            {onClick ? <Icon.ForwardIcon /> : null}
-                                        </>
-                                    );
+                                    const title = isDispenserPriceStale(row)
+                                        ? dispenserRateLabel(row)
+                                        : row.give_amount
+                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
+                                            : 'Open dispenser';
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `offer:${index}`}>
-                                            {onClick ? (
-                                                <button type="button" className={styles.row} onClick={onClick}>
-                                                    {content}
-                                                </button>
-                                            ) : <div className={styles.row}>{content}</div>}
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                                subtitle={remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : undefined}
+                                                chevron={onClick ? <Icon.ForwardIcon /> : false}
+                                                onClick={onClick}
+                                            />
                                         </li>
                                     );
                                 })}
@@ -376,12 +379,11 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             : `Buy ${tick}`);
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `order:${i}`}>
-                                            <div className={styles.row}>
-                                                <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                                <span className={styles.rowText}>
-                                                    <span className={styles.rowTitle}>{title}</span>
-                                                </span>
-                                            </div>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                            />
                                         </li>
                                     );
                                 })}
@@ -418,24 +420,20 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const soldTick = row.give_tick || tick;
                                     const payAsset = row.get_tick || row.get_coin || '';
                                     const get = row.get_amount;
-                                    const ts = Number(row.timestamp || row.block_time || 0);
-                                    const dateLabel = ts > 0
-                                        ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                        : '';
+                                    const timestamp = row.timestamp || row.block_time;
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `sale:${i}`}>
-                                            <div className={styles.row}>
-                                                <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                                <span className={styles.rowText}>
-                                                    <span className={styles.rowTitle}>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={(
+                                                    <>
                                                         {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
                                                         {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
-                                                    </span>
-                                                    <span className={styles.rowSub}>
-                                                        {dateLabel}
-                                                    </span>
-                                                </span>
-                                            </div>
+                                                    </>
+                                                )}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
+                                            />
                                         </li>
                                     );
                                 })}
@@ -470,10 +468,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
                                     const giveQty = row.give_amount ?? row.giveAmount ?? null;
                                     const getQty = row.get_amount ?? row.getAmount ?? null;
-                                    const ts = Number(row.timestamp || row.block_time || 0);
-                                    const dateLabel = ts > 0
-                                        ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                        : '';
+                                    const timestamp = row.timestamp || row.block_time;
                                     const isSell = giveTick.toUpperCase() === tick;
                                     const title = isSell
                                         ? (giveQty != null && getQty != null
@@ -484,13 +479,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             : `Bought ${tick}`);
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `swap:${i}`}>
-                                            <div className={styles.row}>
-                                                <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                                <span className={styles.rowText}>
-                                                    <span className={styles.rowTitle}>{title}</span>
-                                                    <span className={styles.rowSub}>{dateLabel}</span>
-                                                </span>
-                                            </div>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
+                                            />
                                         </li>
                                     );
                                 })}

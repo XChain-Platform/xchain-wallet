@@ -1,0 +1,66 @@
+.chip {
+    box-sizing: border-box;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    height: var(--xc-control-h-sm);
+    padding: 0 var(--xc-space-3);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-radius-pill);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.staticChip {
+    background: var(--xc-control-bg-hover);
+    color: var(--xc-text);
+}
+
+.toggle {
+    appearance: none;
+    min-height: var(--xc-tap-min);
+    background: var(--xc-control-bg);
+    color: var(--xc-text);
+    cursor: pointer;
+    transition: background var(--xc-transition), border-color var(--xc-transition), transform var(--xc-transition);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .toggle:hover:not(:disabled):not(.pressed) {
+        background: var(--xc-control-bg-hover);
+        border-color: var(--xc-control-border-hover);
+    }
+}
+
+.toggle:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.toggle:active:not(:disabled):not(.pressed) {
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-border-hover);
+}
+
+.pressed {
+    background: var(--xc-control-selected);
+    border-color: var(--xc-control-selected);
+    color: var(--xc-control-selected-text);
+}
+
+.toggle:focus-visible {
+    outline: 2px solid var(--xc-control-focus-ring);
+    outline-offset: 2px;
+}
+
+.toggle:disabled {
+    cursor: not-allowed;
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    opacity: var(--xc-disabled-opacity);
+}

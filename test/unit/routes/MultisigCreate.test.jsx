@@ -117,10 +117,14 @@ async function fillValidDraft(messaging) {
 afterEach(() => cleanup());
 
 describe('MultisigCreate local cosigner', () => {
-    it('describes Bitcoin support without exposing internal specification text', async () => {
+    it('keeps setup guidance in a compact disclosure', async () => {
         await mount(mkMessaging());
-        expect(screen.getByText(/currently available only on Bitcoin networks/i)).toBeTruthy();
+        const summary = screen.getByText('How multisig setup works');
+        const disclosure = summary.closest('details');
+        expect(disclosure).not.toHaveAttribute('open');
+        expect(disclosure).toHaveTextContent(/available only on Bitcoin networks/i);
         expect(screen.queryByText(/§10\.3/)).toBeNull();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('auto-fills the master fingerprint from the unlocked wallet', async () => {
@@ -173,7 +177,7 @@ describe('MultisigCreate local cosigner', () => {
             fireEvent.click(screen.getByRole('button', { name: /^Network:/i }));
         });
         await act(async () => {
-            fireEvent.click(screen.getByRole('option', { name: /Bitcoin BTC.*testnet/i }));
+            fireEvent.click(screen.getAllByRole('option', { name: 'Bitcoin BTC' })[1]);
         });
 
         expect(screen.getByText(/select a local address on the chosen network/i)).toBeTruthy();
@@ -181,6 +185,63 @@ describe('MultisigCreate local cosigner', () => {
 });
 
 describe('MultisigCreate key validation', () => {
+    it('round trips a shared cosigner setup into the editable key fields', async () => {
+        await mount(mkMessaging());
+        const payload = JSON.stringify({
+            type: 'xchain-multisig-cosigner',
+            version: 1,
+            network: 'testnet',
+            address: 'tb1qexternal',
+            xpub: EXTERNAL.xpub,
+            pubkey: EXTERNAL.pubkey,
+            fingerprint: 'AABBCCDD',
+            derivationPath: EXTERNAL.path,
+        });
+        fireEvent.change(screen.getByLabelText(/Shared cosigner setup/i), {
+            target: { value: payload },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
+
+        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('aabbccdd');
+        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+    });
+
+    it('refuses a shared cosigner setup for another network with plain copy', async () => {
+        await mount(mkMessaging());
+        const payload = JSON.stringify({
+            type: 'xchain-multisig-cosigner',
+            version: 1,
+            network: 'mainnet',
+            xpub: MAINNET_EXTERNAL.xpub,
+            pubkey: MAINNET_EXTERNAL.pubkey,
+            fingerprint: 'aabbccdd',
+            derivationPath: MAINNET_EXTERNAL.path,
+        });
+        fireEvent.change(screen.getByLabelText(/Shared cosigner setup/i), {
+            target: { value: payload },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
+
+        expect(screen.getByText('Shared cosigner setup is for a different network than this wallet.')).toBeTruthy();
+    });
+
+    it.each([
+        ['', /Threshold is required/i],
+        ['0', /Threshold must be at least 1/i],
+        ['-1', /Threshold must be at least 1/i],
+        ['1.5', /Threshold must be a whole number/i],
+    ])('explains an invalid threshold of %j before review', async (value, message) => {
+        await mount(mkMessaging());
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value } });
+        });
+
+        expect(screen.getByText(message)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
     it('rejects a compressed-looking value that is not a secp256k1 point', async () => {
         await mount(mkMessaging());
         await pickLocalAddress();
@@ -251,6 +312,25 @@ describe('MultisigCreate key validation', () => {
 });
 
 describe('MultisigCreate review', () => {
+    it('returns from review without submitting the compose form again', async () => {
+        const messaging = mkMessaging();
+        await fillValidDraft(messaging);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        });
+        expect(screen.getByRole('form', { name: 'Review multisig' })).toBeTruthy();
+
+        let clickAllowed;
+        await act(async () => {
+            clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        });
+
+        expect(clickAllowed).toBe(false);
+        expect(screen.getByRole('form', { name: 'Create multisig' })).toBeTruthy();
+        expect(screen.queryByRole('form', { name: 'Review multisig' })).toBeNull();
+        expect(messaging.createMultisigConfig).not.toHaveBeenCalled();
+    });
+
     it('reviews the complete policy before creating it and wraps long keys', async () => {
         const messaging = mkMessaging({
             createMultisigConfig: vi.fn(async (request) => ({
@@ -284,6 +364,53 @@ describe('MultisigCreate review', () => {
             scheme: 'p2wsh-multisig',
             threshold: 2,
         }));
+    });
+
+    it('returns from review with every entered value kept', async () => {
+        await fillValidDraft(mkMessaging());
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('11223344');
+        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+    });
+
+    it('review display matches the built config by showing canonical keys and numeric threshold', async () => {
+        await fillValidDraft(mkMessaging());
+        fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value: '02' } });
+        fireEvent.change(screen.getAllByLabelText(/Public key \(hex/i)[1], {
+            target: { value: EXTERNAL.pubkey.toUpperCase() },
+        });
+        fireEvent.change(screen.getAllByLabelText(/Master fingerprint/i)[1], {
+            target: { value: 'AABBCCDD' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(/2-of-2 SegWit multi-signature/i)).toBeTruthy();
+        expect(screen.queryByText(/02-of-2/)).toBeNull();
+        expect(screen.getByText(EXTERNAL.pubkey)).toBeTruthy();
+        expect(screen.getByText('aabbccdd')).toBeTruthy();
+    });
+
+    it('shows plain copy when config creation rejects the reviewed values', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const messaging = mkMessaging({
+            createMultisigConfig: vi.fn(async () => {
+                throw new Error('createMultisigConfig: encoder exploded');
+            }),
+        });
+        await fillValidDraft(messaging);
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Confirm multisig' }));
+
+        const alert = await screen.findByRole('alert');
+        consoleError.mockRestore();
+        expect(alert).toHaveTextContent(
+            'Failed to create multisig configuration.',
+        );
+        expect(screen.queryByText(/createMultisigConfig|encoder exploded/i)).toBeNull();
     });
 });
 

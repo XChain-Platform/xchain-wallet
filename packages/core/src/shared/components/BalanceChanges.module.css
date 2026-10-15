@@ -1,17 +1,14 @@
 .root {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
     margin: var(--xc-space-3) 0;
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
 }
 
 .heading {
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--xc-text-muted);
@@ -44,7 +41,7 @@
     column-gap: var(--xc-space-3);
     align-items: baseline;
     padding: var(--xc-space-1) 0;
-    border-bottom: 1px dashed var(--xc-border-soft, var(--xc-border));
+    border-bottom: 1px solid var(--xc-border-soft, var(--xc-border));
 }
 
 .row:last-child {
@@ -63,6 +60,8 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    direction: ltr;
+    unicode-bidi: isolate;
     word-break: break-all;
 }
 

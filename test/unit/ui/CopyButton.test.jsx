@@ -15,14 +15,9 @@ const haptic = vi.hoisted(() => ({
     tap: vi.fn(),
     error: vi.fn(),
 }));
-const liveRegion = vi.hoisted(() => ({ announce: vi.fn() }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     useHapticFeedback: () => haptic,
-}));
-
-vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
-    useToast: () => liveRegion,
 }));
 
 import { CopyButton } from '../../../packages/core/src/ui/CopyButton.jsx';
@@ -42,6 +37,13 @@ describe('<CopyButton>', () => {
         delete globalThis.Capacitor;
     });
 
+    it('stays filled by default and takes the outlined look only when asked', () => {
+        const { rerender } = render(<CopyButton value="abc" label="Copy" />);
+        expect(screen.getByRole('button', { name: 'Copy' }).className).not.toMatch(/outlined/);
+        rerender(<CopyButton value="abc" label="Copy" appearance="outlined" />);
+        expect(screen.getByRole('button', { name: 'Copy' }).className).toMatch(/outlined/);
+    });
+
     it('renders its label and calls clipboard.writeText on click', async () => {
         render(<CopyButton value="abc123" label="Copy address" />);
         const btn = screen.getByRole('button', { name: 'Copy address' });
@@ -50,6 +52,20 @@ describe('<CopyButton>', () => {
         await waitFor(() => {
             expect(clipboard.writeText).toHaveBeenCalledWith('abc123');
         });
+    });
+
+    it.each([
+        ['address', 'bc1qexactaddress', 'Copy address'],
+        ['transaction ID', 'aabbcc001122', 'Copy transaction ID'],
+        ['amount', '1234567.8900', 'Copy amount'],
+    ])('copies an exact %s value and names it in the confirmation', async (_kind, value, label) => {
+        render(<CopyButton value={value} label={label} />);
+        fireEvent.click(screen.getByRole('button', { name: label }));
+
+        await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith(value));
+        expect(screen.getByRole('button', { name: `Copied: ${label.slice(5)}` }))
+            .toHaveTextContent(`Copied: ${label.slice(5)}`);
+        expect(screen.getByRole('status')).toHaveTextContent(`Copied: ${label.slice(5)}`);
     });
 
     it('flips label to "Copied" briefly after a successful write', async () => {
@@ -62,11 +78,14 @@ describe('<CopyButton>', () => {
             render(<CopyButton value="x" feedbackMs={100} />);
             fireEvent.click(screen.getByRole('button'));
             await waitFor(() => {
-                expect(screen.getByRole('button')).toHaveTextContent('Copied');
+                expect(screen.getByRole('button')).toHaveTextContent('Copied: value');
             });
             expect(haptic.tap).toHaveBeenCalledOnce();
             expect(haptic.error).not.toHaveBeenCalled();
-            expect(liveRegion.announce).toHaveBeenCalledWith('Copied');
+            const announcement = screen.getByRole('status');
+            expect(announcement).toHaveTextContent('Copied: value');
+            expect(announcement).toHaveAttribute('aria-live', 'polite');
+            expect(announcement).toHaveAttribute('aria-atomic', 'true');
             expect(screen.getByRole('button')).not.toHaveAttribute('aria-live');
             act(() => {
                 vi.advanceTimersByTime(101);
@@ -84,9 +103,9 @@ describe('<CopyButton>', () => {
             </div>,
         );
         fireEvent.click(screen.getByRole('button'));
-        await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
-        expect(liveRegion.announce).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied: value'));
         expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByRole('status')).toHaveTextContent('Copied: value');
     });
 
     it('names clipboard unavailability when every copy path is refused', async () => {
@@ -99,6 +118,87 @@ describe('<CopyButton>', () => {
         expect(clipboard.writeText).toHaveBeenCalled();
         expect(haptic.error).toHaveBeenCalledOnce();
         expect(haptic.tap).not.toHaveBeenCalled();
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveAttribute('aria-live', 'assertive');
+        expect(alert).toHaveAttribute('aria-atomic', 'true');
+        expect(alert).toHaveTextContent('Copy failed: the clipboard is unavailable.');
+    });
+
+    it('announces each copy once while ordinary rerenders leave the announcement intact', async () => {
+        const view = render(<CopyButton value="x" />);
+        const button = screen.getByRole('button');
+        button.focus();
+        fireEvent.click(button);
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Copied'));
+        const first = screen.getByRole('status');
+        expect(first).toHaveTextContent('Copied');
+        expect(button).toHaveFocus();
+
+        view.rerender(<CopyButton value="x" />);
+        expect(screen.getByRole('status')).toBe(first);
+
+        fireEvent.click(button);
+        await waitFor(() => expect(screen.getByRole('status')).not.toBe(first));
+        expect(screen.getAllByText('Copied: value')).toHaveLength(2);
+        expect(button).toHaveFocus();
+    });
+
+    it('uses the shared legacy fallback when clipboard.writeText rejects', async () => {
+        clipboard.writeText = vi.fn().mockRejectedValue(new Error('permission denied'));
+        const execCommand = vi.fn().mockReturnValue(true);
+        Object.defineProperty(document, 'execCommand', {
+            configurable: true,
+            value: execCommand,
+        });
+
+        try {
+            render(<CopyButton value="txid-abc" label="Copy transaction ID" />);
+            fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
+
+            await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
+            expect(clipboard.writeText).toHaveBeenCalledWith('txid-abc');
+            expect(execCommand).toHaveBeenCalledWith('copy');
+            expect(haptic.tap).toHaveBeenCalledOnce();
+            expect(haptic.error).not.toHaveBeenCalled();
+        } finally {
+            delete document.execCommand;
+        }
+    });
+
+    it('uses the shared legacy fallback when the Clipboard API is missing', async () => {
+        delete globalThis.navigator.clipboard;
+        const execCommand = vi.fn().mockReturnValue(true);
+        Object.defineProperty(document, 'execCommand', {
+            configurable: true,
+            value: execCommand,
+        });
+
+        try {
+            render(<CopyButton value="bc1qaddress" label="Copy address" />);
+            fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+
+            await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
+            expect(execCommand).toHaveBeenCalledWith('copy');
+            expect(haptic.tap).toHaveBeenCalledOnce();
+            expect(haptic.error).not.toHaveBeenCalled();
+        } finally {
+            delete document.execCommand;
+        }
+    });
+
+    it('reports failure without rejecting when clipboard access itself throws', async () => {
+        Object.defineProperty(globalThis.navigator, 'clipboard', {
+            configurable: true,
+            get() { throw new Error('clipboard unavailable'); },
+        });
+        render(<CopyButton value="bc1qaddress" label="Copy address" />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('button')).toHaveTextContent('Copy failed: the clipboard is unavailable.');
+        });
+        expect(haptic.error).toHaveBeenCalledOnce();
     });
 
     it('uses ariaLabel when provided, otherwise falls back to the visible label', () => {

@@ -40,14 +40,16 @@ import {
     Status,
     STACK,
 } from './_settingsPrimitives.jsx';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
+import { t } from '../../../i18n/index.js';
 
 export function PrivacySection() {
     const { settings, loading, error, update } = useSettings();
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const onToggle = async (field, next) => {
         setSaveError(null);
@@ -67,8 +69,8 @@ export function PrivacySection() {
             {shellCapabilities().socksProxy && (
                 <>
                     <ToggleRow
-                        label="Tor routing"
-                        hint="Desktop only: send wallet traffic through a local Tor SOCKS5 proxy at 127.0.0.1:9050; Tor must already be running because unreachable requests fail rather than quietly going direct."
+                        label={t('settings.privacy.torRouting')}
+                        hint={t('settings.privacy.desktopOnlySendWalletTraffic')}
                         checked={settings.privacy.torRouting}
                         onChange={(v) => onToggle('torRouting', v)}
                     />
@@ -79,58 +81,58 @@ export function PrivacySection() {
                 its stored desktop preference cannot affect local traffic. */}
             {!shellCapabilities().socksProxy && (
                 <ToggleRow
-                    label="Tor routing"
-                    hint="Not available on this platform or shell because browser wallets cannot open a wallet-only SOCKS connection and extension proxies affect the entire browser; the desktop app can route only wallet traffic through Tor."
+                    label={t('settings.privacy.torRouting')}
+                    hint={t('settings.privacy.notAvailableOnThisPlatform')}
                     checked={false}
                     disabled
                     onChange={() => {}}
                 />
             )}
             <ToggleRow
-                label="Change-address rotation"
-                hint="Imported-key and watch-only sends keep the spending address, while HD wallets use the next internal change address when available and list rotated leftovers as “Change #N”."
+                label={t('settings.privacy.changeAddressRotation')}
+                hint={t('settings.privacy.importedKeyAndWatchOnly')}
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
             <PrivacySaveError visible={saveError === 'changeAddressRotation'} />
             <ToggleRow
-                label="Blur sensitive data on blur"
-                hint="Blur the entire wallet display while its window or tab is unfocused or hidden, then reveal it again when focus returns."
+                label={t('settings.privacy.blurSensitiveDataOnBlur')}
+                hint={t('settings.privacy.blurTheEntireWalletDisplay')}
                 checked={Boolean(settings.privacy.blurOnBlur)}
                 onChange={(v) => onToggle('blurOnBlur', v)}
             />
             <PrivacySaveError visible={saveError === 'blurOnBlur'} />
             <ToggleRow
-                label="Labels survive restore"
-                hint="In the browser extension, batch label and contact edits into one on-chain publish prompt per unlock window while keeping manual publishing and restoration available in Backup."
+                label={t('settings.privacy.labelsSurviveRestore')}
+                hint={t('settings.privacy.inTheBrowserExtensionBatch')}
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
             <PrivacySaveError visible={saveError === 'labelsSurviveRestore'} />
             <ToggleRow
-                label="Haptic feedback"
-                hint="Allow vibration for tap, success, warning, and error events when supported; OS or in-app reduced-motion settings suppress haptics."
+                label={t('settings.privacy.hapticFeedback')}
+                hint={t('settings.privacy.allowVibrationForTapSuccess')}
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'hapticsEnabled'} />
             <ToggleRow
-                label="Native coin price data"
-                hint="Allow CoinGecko requests for native-coin details, fallback fiat rates, and enabled price alerts; turning this off blocks those requests and hides the details and chart, while explorer-backed on-chain oracle rates can still appear."
+                label={t('settings.notifications.nativeCoinPriceData')}
+                hint={t('settings.privacy.allowCoingeckoRequestsForNative')}
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'priceDataEnabled'} />
             <ToggleRow
-                label="Fetch token metadata"
-                hint="Fetch Token Information Standard (TIS) JSON and referenced media from issuer-selected hosts when linked by a token description; turning this off shows only on-chain fields without TIS or remote-media requests."
+                label={t('settings.privacy.fetchTokenMetadata')}
+                hint={t('settings.privacy.fetchTokenInformationStandardTis')}
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'metadataFetchEnabled'} />
             <ToggleRow
-                label="Always require hardware cross-check confirm"
-                hint={`Require the "I've verified path + address" checkbox for every hardware-wallet sign instead of only for large amounts, first-time recipients, and multisig signs.`}
+                label={t('settings.privacy.alwaysRequireHardwareCrossCheck')}
+                hint={t('settings.privacy.requireTheIVeVerified')}
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
@@ -143,9 +145,7 @@ export function PrivacySection() {
 
 function PrivacySaveError({ visible }) {
     return visible ? (
-        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-            Could not save this privacy setting. Try again.
-        </span>
+        <Status text={t('settings.privacy.couldNotSaveThisPrivacy')} tone="error" />
     ) : null;
 }
 
@@ -171,20 +171,24 @@ function ClipboardAutoClearRow({ settings, update }) {
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={ROW_VALUE}>
-                    Clipboard auto-clear
+                    {t('settings.privacy.clipboardAutoClear')}
                 </span>
                 <span style={ROW_HINT}>
-                    Set to 0 to keep them until they are replaced; otherwise, clear sensitive clipboard copies after this many seconds.
+                    {t('settings.privacy.setTo0ToKeep')}
                 </span>
             </div>
             <input
                 type="number"
+                inputMode="numeric"
+                enterKeyHint="done"
+                autoComplete="off"
                 min={CLIPBOARD_AUTO_CLEAR_MIN}
                 max={CLIPBOARD_AUTO_CLEAR_MAX}
                 step="1"
                 value={current}
                 onChange={onChange}
-                aria-label="Clipboard auto-clear seconds"
+                onWheel={blurNumberInputOnWheel}
+                aria-label={t('settings.privacy.clipboardAutoClearSeconds')}
                 style={{ ...INPUT, width: '6rem' }}
             />
             <PrivacySaveError visible={saveError} />
@@ -213,25 +217,25 @@ function FormDraftTtlRow({ settings, update }) {
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={ROW_VALUE}>
-                    Form draft retention
+                    {t('settings.privacy.formDraftRetention')}
                 </span>
                 <span style={ROW_HINT}>
-                    Keep in-progress send and sign-message fields through a tab close or wallet lock until the retention window expires, or disable persistence and clear saved drafts on the next form load by selecting "Off."
+                    {t('settings.privacy.keepInProgressSendAnd')}
                 </span>
             </div>
             <select
                 value={current}
                 onChange={onChange}
-                aria-label="Form draft retention"
+                aria-label={t('settings.privacy.formDraftRetention')}
                 style={{
                     ...SELECT,
                     width: '7.5rem',
                 }}
             >
-                <option value={FORM_DRAFT_TTL_OFF}>Off</option>
-                <option value={FORM_DRAFT_TTL_1H}>1 hour</option>
-                <option value={FORM_DRAFT_TTL_24H}>24 hours</option>
-                <option value={FORM_DRAFT_TTL_7D}>7 days</option>
+                <option value={FORM_DRAFT_TTL_OFF}>{t('settings.privacy.off')}</option>
+                <option value={FORM_DRAFT_TTL_1H}>{t('settings.developer.1Hour')}</option>
+                <option value={FORM_DRAFT_TTL_24H}>{t('settings.privacy.24Hours')}</option>
+                <option value={FORM_DRAFT_TTL_7D}>{t('history.filters.last7Days')}</option>
             </select>
             <PrivacySaveError visible={saveError} />
         </div>

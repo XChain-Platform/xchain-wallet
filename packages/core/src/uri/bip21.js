@@ -37,6 +37,14 @@ export class InvalidBip21Error extends Error {
 
 const BIP21_AMOUNT_RE = /^\d+(?:\.\d*)?$/;
 const BIP21_MAX_DECIMALS = 8;
+const TOKEN_AMOUNT_MAX_DECIMALS = 18;
+
+function amountDecimalsFor(params) {
+    return typeof params?.tick === 'string' && params.tick.length > 0
+        ? TOKEN_AMOUNT_MAX_DECIMALS
+        : BIP21_MAX_DECIMALS;
+}
+const STANDARD_PARAM_KEYS = new Set(['amount', 'label', 'message']);
 
 /**
  * Return the canonical BIP21 decimal representation of an amount.
@@ -44,9 +52,10 @@ const BIP21_MAX_DECIMALS = 8;
  * one-satoshi request cannot turn into scientific notation or lose precision.
  *
  * @param {string | number | null | undefined} amount
+ * @param {number} [maxDecimals]
  * @returns {string | undefined}
  */
-export function normalizeBip21Amount(amount) {
+export function normalizeBip21Amount(amount, maxDecimals = BIP21_MAX_DECIMALS) {
     if (amount === undefined || amount === null || amount === '') return undefined;
     const raw = String(amount);
     if (!BIP21_AMOUNT_RE.test(raw)) {
@@ -54,8 +63,8 @@ export function normalizeBip21Amount(amount) {
     }
 
     const [rawWhole, rawFraction = ''] = raw.split('.');
-    if (rawFraction.length > BIP21_MAX_DECIMALS) {
-        throw new Error(`amount must have at most ${BIP21_MAX_DECIMALS} decimal places`);
+    if (rawFraction.length > maxDecimals) {
+        throw new Error(`amount must have at most ${maxDecimals} decimal places`);
     }
     const whole = rawWhole.replace(/^0+(?=\d)/, '');
     const fraction = rawFraction.replace(/0+$/, '');
@@ -132,12 +141,14 @@ export function parseBip21Uri(uri) {
                         uri,
                     );
                 }
-                if (decodedKey.startsWith('req-')) {
-                    const bare = decodedKey.slice(4);
+                const lowerKey = decodedKey.toLowerCase();
+                if (lowerKey.startsWith('req-')) {
+                    const bare = lowerKey.slice(4);
                     required.push(bare);
-                    params[decodedKey] = decodedVal;
+                    params[`req-${bare}`] = decodedVal;
                 } else {
-                    params[decodedKey] = decodedVal;
+                    const key = STANDARD_PARAM_KEYS.has(lowerKey) ? lowerKey : decodedKey;
+                    params[key] = decodedVal;
                 }
             }
         }
@@ -145,7 +156,7 @@ export function parseBip21Uri(uri) {
 
     if (params.amount !== undefined) {
         try {
-            const amount = normalizeBip21Amount(params.amount);
+            const amount = normalizeBip21Amount(params.amount, amountDecimalsFor(params));
             if (amount === undefined) {
                 delete params.amount;
             } else {
@@ -204,7 +215,10 @@ export function encodeBip21Uri({ scheme, address, amount, label, message, params
     if (message !== undefined) merged.message = String(message);
 
     if (merged.amount !== undefined) {
-        const normalizedAmount = normalizeBip21Amount(merged.amount);
+        const normalizedAmount = normalizeBip21Amount(
+            merged.amount,
+            amountDecimalsFor(merged),
+        );
         if (normalizedAmount === undefined) delete merged.amount;
         else merged.amount = normalizedAmount;
     }

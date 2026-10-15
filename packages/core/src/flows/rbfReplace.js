@@ -30,6 +30,12 @@
 
 import { t } from '../i18n/index.js';
 
+const activeBroadcasts = new WeakMap();
+
+function normalizedHash(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
 export class RbfNotSupportedError extends Error {
     constructor(reason) {
         super(reason || t('flows.rbf.unsupportedBuild'));
@@ -79,8 +85,7 @@ export function isReplaceCallAvailable(messaging) {
  *
  * Replaceable when:
  *   - blockIndex === 0 (still in mempool)
- *   - action is a coin-moving kind (SEND / SWEEP / DISPENSE / DIVIDEND
- *     / AIRDROP / EXECUTE / DEPOSIT / WITHDRAW)
+ *   - action is SEND
  *   - txHash is present
  *   - the chain's descriptor declares `feeStrategy.rbfSupported: true`
  *     (Dogecoin declares false, and the same cap governs Send and
@@ -88,9 +93,7 @@ export function isReplaceCallAvailable(messaging) {
  *     the transaction could signal replaceability
  *   - the pending record says the signed transaction enabled RBF; a missing
  *     flag refuses because the wallet cannot prove the transaction signalled
- *
- * Phase 4 adds support for additional action kinds; the kind list is
- * deliberately conservative for now.
+ *   - the local record is neither failed nor already replaced
  *
  * @param {{ action?: string, blockIndex?: number, txHash?: string, chainId?: string }} entry
  * @param {{ descriptor?: { displayName?: string, feeStrategy?: { rbfSupported?: boolean } } | null }} [opts]
@@ -114,11 +117,7 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
         return { ok: false, reason: t('flows.rbf.alreadyConfirmed') };
     }
     const action = String(entry.action || '').toUpperCase();
-    const REPLACEABLE_ACTIONS = new Set([
-        'SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP',
-        'EXECUTE', 'DEPOSIT', 'WITHDRAW',
-    ]);
-    if (!REPLACEABLE_ACTIONS.has(action)) {
+    if (action !== 'SEND') {
         return { ok: false, reason: t('flows.rbf.actionUnsupported', { action }) };
     }
     if (descriptor?.feeStrategy?.rbfSupported !== true) {
@@ -126,6 +125,9 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
         return { ok: false, reason: t('send.rbf.unsupported', { chain }) };
     }
     if ((entry.pending?.rbf ?? entry.rbf) !== true) {
+        return { ok: false, reason: t('flows.rbf.notAllowed') };
+    }
+    if (entry.pending?.failed === true || entry.pending?.replaced === true) {
         return { ok: false, reason: t('flows.rbf.notAllowed') };
     }
     return { ok: true };
@@ -169,14 +171,39 @@ export async function sendRbfRequest({ messaging, request } = {}) {
         // hash as originalTxHash, which is the natural mistake here
         // (every other strategy takes the original), so it is rejected
         // rather than forwarded.
-        if (request.restoreTxHash === request.originalTxHash) {
+        if (normalizedHash(request.restoreTxHash) === normalizedHash(request.originalTxHash)) {
             throw new RbfInvalidEntryError(
                 'replaceTx: restoreTxHash must differ from originalTxHash; '
                 + 'originalTxHash is the cancel transaction being replaced.',
             );
         }
     }
-    return messaging.replaceTx(request);
+    if (request.preview === true) return messaging.replaceTx(request);
+
+    const lane = JSON.stringify([
+        request.walletId || '', request.chainId, normalizedHash(request.originalTxHash),
+    ]);
+    const fingerprint = JSON.stringify([
+        request.strategy, normalizedHash(request.restoreTxHash), request.feeRate ?? null,
+    ]);
+    let lanes = activeBroadcasts.get(messaging);
+    if (!lanes) {
+        lanes = new Map();
+        activeBroadcasts.set(messaging, lanes);
+    }
+    const active = lanes.get(lane);
+    // Share an identical request, but refuse a competing replacement for the same transaction.
+    if (active?.fingerprint === fingerprint) return active.promise;
+    if (active) throw new RbfInvalidEntryError('replaceTx: a replacement is already in progress');
+
+    const promise = Promise.resolve().then(() => messaging.replaceTx(request));
+    lanes.set(lane, { fingerprint, promise });
+    try {
+        return await promise;
+    } finally {
+        if (lanes.get(lane)?.promise === promise) lanes.delete(lane);
+        if (lanes.size === 0) activeBroadcasts.delete(messaging);
+    }
 }
 
 /**
@@ -253,7 +280,7 @@ export function cancelUndoSnapshot({ entry, result, walletId } = {}) {
     // A host that echoed the original hash back as the replacement did
     // not actually broadcast a replacement; there is nothing to undo and
     // a restore built from it would be a self-replacement.
-    if (cancelTxHash === originalTxHash) return null;
+    if (normalizedHash(cancelTxHash) === normalizedHash(originalTxHash)) return null;
     return { chainId, originalTxHash, cancelTxHash, walletId };
 }
 

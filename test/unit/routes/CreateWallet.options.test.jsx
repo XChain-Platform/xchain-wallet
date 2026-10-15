@@ -94,14 +94,19 @@ describe('CreateWallet security options', () => {
     it('warns that the enabled BIP39 passphrase is required and exact', async () => {
         draw();
         fillPasswords();
-        fireEvent.click(screen.getByLabelText(/^Use a BIP39 passphrase \(advanced\)/));
+        fireEvent.click(screen.getByRole('switch', {
+            name: /^Use a BIP39 passphrase \(advanced\)/,
+        }));
 
         expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /missing or mistyped passphrase opens a different wallet without warning/,
         );
-        expect(screen.getByText(/Required when enabled/)).toHaveTextContent(
+        // The warning says it once; the field hint does not repeat it.
+        expect(screen.getAllByText(/Capitalization and spaces matter/)).toHaveLength(1);
+        expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /Capitalization and spaces matter/,
         );
+        expect(screen.getByText('Required when enabled.')).toBeTruthy();
         fireEvent.focus(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
         const tip = (await screen.findByRole('tooltip')).textContent;
         expect(tip).toMatch(/extra secret combines with your recovery phrase/i);
@@ -180,24 +185,45 @@ describe('MnemonicGrid narrow layout', () => {
         expect(screen.queryByText('abandon')).toBeNull();
     });
 
+    it('requires a fresh reveal when returning to an earlier phrase', () => {
+        const view = render(<MnemonicGrid mnemonic="abandon ability able about" />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        expect(screen.getByText('abandon')).toBeInTheDocument();
+
+        view.rerender(<MnemonicGrid mnemonic="zoo zone zero zebra" />);
+        expect(screen.queryByText('zoo')).not.toBeInTheDocument();
+
+        view.rerender(<MnemonicGrid mnemonic="abandon ability able about" />);
+        expect(screen.queryByText('abandon')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Reveal recovery phrase' }))
+            .toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('keeps onboarding controls contained and compact in short landscape screens', () => {
         const onboardingCss = css('packages/core/src/shared/routes/Onboarding.module.css');
         const createCss = css('packages/core/src/shared/routes/CreateWallet.module.css');
         const importCss = css('packages/core/src/shared/routes/ImportWallet.module.css');
         const screenCss = css('packages/core/src/ui/Screen.module.css');
 
-        expect(onboardingCss).toMatch(/\.actionsFull\s*\{[^}]*width:\s*100%;/s);
+        // Onboarding actions live in FormPage now; the route keeps only its artwork rules.
+        expect(onboardingCss).not.toMatch(/\.actionsFull/);
         expect(onboardingCss).toMatch(/@media \(max-height:\s*520px\)/);
-        expect(createCss).toMatch(/\.wordCountOption\s*\{[^}]*flex-wrap:\s*wrap;/s);
+        // The word-count choice is the kit RadioGroup, whose option text column shrinks and wraps.
+        expect(css('packages/core/src/ui/RadioGroup.module.css')).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(createCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
+        // A full-width rendered legend erases the box's top border; floated, it sits inside the box.
+        expect(createCss).toMatch(/\.wordCountRow\s*>\s*legend\s*\{[^}]*float:\s*left;/s);
         expect(createCss).toMatch(/\.confirmRow\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/@media \(max-height:\s*520px\)/);
         expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*flex-wrap:\s*wrap;/s);
         expect(importCss).toMatch(/\.mnemonicHeader\s*>\s*\*\s*\{[^}]*min-width:\s*0;/s);
         expect(importCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
-        expect(importCss).toMatch(/\.laneSwitcher\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
-        expect(importCss).toMatch(/\.laneTab\s*\{[^}]*min-width:\s*0;/s);
+        // The import lane switcher is the kit Tabs bar: it fills the row and
+        // scrolls its tabs instead of letting them push the screen wider.
+        const tabsCss = readFileSync(resolve(process.cwd(), 'packages/core/src/ui/Tabs.module.css'), 'utf8');
+        expect(tabsCss).toMatch(/\.tabs\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow-x:\s*auto;/s);
         expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
     });
 });

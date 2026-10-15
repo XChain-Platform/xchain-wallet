@@ -9,11 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import {
     formatWithThousands,
@@ -29,7 +30,12 @@ import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { unclaimedRewards, effectiveStakingRows } from '../../flows/stakingDashboard.js';
+import {
+    unclaimedRewards,
+    effectiveStakingRows,
+    stakingRowState,
+    stakingActivationBlock,
+} from '../../flows/stakingDashboard.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -114,6 +120,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // wallet holds addresses on (the address + fee sections follow along).
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     // Only for the fiat preview: the display currency, and whether the user
     // has opted out of third-party price data (§45 / privacy.priceDataEnabled).
     const { settings } = useSettings();
@@ -139,6 +146,14 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
+    const [reviewRequest, setReviewRequest] = useState(
+        /** @type {{ params: Record<string, string>, full: boolean, availableAmt: string } | null} */ (null),
+    );
+
+    useEffect(() => {
+        setChainId(initialChainId);
+    }, [initialChainId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -158,13 +173,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your staking addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
@@ -222,7 +237,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     const [r, c] = await Promise.all([
                         messaging.getRewardsForAddress({ chainId, address }),
                         typeof messaging.getRewardClaimsForAddress === 'function'
-                            ? messaging.getRewardClaimsForAddress({ chainId, address }).catch(() => null)
+                            ? messaging.getRewardClaimsForAddress({ chainId, address })
                             : Promise.resolve(null),
                     ]);
                     rewards = extractRows(r);
@@ -248,14 +263,20 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         () => effectiveStakingRows(positions?.stakes, positions?.height),
         [positions],
     );
+    const pendingStakes = useMemo(
+        () => (positions?.stakes || []).filter((stake) => (
+            stakingRowState(stake, positions?.height) === 'pending'
+        )),
+        [positions],
+    );
     const stakedKeys = useMemo(() => {
         const keys = [];
-        for (const s of activeStakes) {
+        for (const s of [...activeStakes, ...pendingStakes]) {
             const k = s.signing_pubkey || s.SIGNING_PUBKEY;
             if (k && !keys.includes(k)) keys.push(k);
         }
         return keys;
-    }, [activeStakes]);
+    }, [activeStakes, pendingStakes]);
 
     useEffect(() => {
         if (isUnstake && !signingPubkey && stakedKeys.length > 0) {
@@ -283,6 +304,18 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         const totals = unclaimedRewards({ rewards: positions.rewards, claims: positions.claims });
         return totals.unclaimed;
     }, [positions, isUnstake, signingPubkey, activeStakes]);
+
+    const selectedUnlockHeight = useMemo(() => {
+        if (!isUnstake || activeStakes.some((stake) => (
+            (stake.signing_pubkey || stake.SIGNING_PUBKEY) === signingPubkey
+        ))) return null;
+        const heights = pendingStakes
+            .filter((stake) => (stake.signing_pubkey || stake.SIGNING_PUBKEY) === signingPubkey)
+            .map(stakingActivationBlock)
+            .filter((block) => block !== null)
+            .sort((a, b) => a - b);
+        return heights[0] ?? null;
+    }, [isUnstake, activeStakes, pendingStakes, signingPubkey]);
 
     // Prefill with the full balance (the common case is still "take it
     // all"), but stop overwriting once the user edits: a positions
@@ -404,32 +437,34 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
-    async function openConfirmScreen() {
-        if (!actionParams) {
+    async function openConfirmScreen(request) {
+        if (!request?.params) {
             setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
             return;
         }
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
-        setSubmitError(null);
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
+            setSubmitError(null);
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: isUnstake ? 'UNSTAKE' : 'COLLECT', params: actionParams },
+                actionData: { action: isUnstake ? 'UNSTAKE' : 'COLLECT', params: request.params },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
-                    params: actionParams,
-                    full: isWholeAmount,
+                    params: request.params,
+                    full: request.full,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -442,6 +477,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -469,6 +506,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRateValid = feePick.mode !== 'custom'
+        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     // The legacy absent-AMOUNT bytes mean "everything", so they are sent only
     // when the entered amount EQUALS a known total. Any other valid amount is
@@ -483,8 +522,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         () => stakingActionParams({ isUnstake, signingPubkey, amount, availableAmt }),
         [isUnstake, signingPubkey, amount, availableAmt],
     );
-    const isPartial = amountValid && !isWholeAmount;
-
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) {
@@ -497,34 +534,67 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 setFormError('Signing public key must be exactly 64 hexadecimal characters.');
                 return;
             }
+            if (selectedUnlockHeight !== null) {
+                setFormError(`This stake cannot be unstaked until block ${formatWithThousands(String(selectedUnlockHeight))}.`);
+                return;
+            }
         }
         if (!totalKnown) {
             setFormError(TOTAL_LOADING_MESSAGE[isUnstake ? 'unstake' : 'claim']);
             return;
         }
         const normalized = normalizedAmount;
-        if (!amountValid) {
-            setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
+        if (!normalized) {
+            setFormError('Enter an amount.');
+            return;
+        }
+        if (!/^[0-9]+(\.[0-9]+)?$/.test(normalized)) {
+            setFormError('Amount must be a positive number.');
+            return;
+        }
+        if (compareAmounts(normalized, '0') !== 1) {
+            setFormError('Amount must be greater than zero.');
+            return;
+        }
+        if ((normalized.split('.')[1] || '').length > 8 || !amountValid) {
+            setFormError('Amount can have at most 8 decimal places.');
             return;
         }
         if (availableAmt != null && compareAmounts(normalized, availableAmt) === 1) {
             setFormError(`Amount exceeds the ${formatWithThousands(String(availableAmt))} XCHAIN available.`);
             return;
         }
+        if (!customFeeRateValid) {
+            setFormError('Enter a custom network fee rate greater than zero.');
+            return;
+        }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        const request = {
+            params: { ...actionParams },
+            full: isWholeAmount,
+            availableAmt: String(availableAmt),
+        };
+        if (singleEncode) { void openConfirmScreen(request); return; }
+        setReviewRequest(request);
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
-        if (!actionParams) {
+        if (stage === 'submitting' || submitInFlightRef.current) return;
+        const request = reviewRequest || (actionParams ? {
+            params: actionParams,
+            full: isWholeAmount,
+            availableAmt: String(availableAmt),
+        } : null);
+        if (!request) {
             setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
             return;
         }
+        const actionParams = request.params;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -540,7 +610,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
-                full: isWholeAmount,
+                full: request.full,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -578,25 +648,41 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
     function handleBuildAnother() {
         setResult(null);
         setSubmitError(null);
+        setReviewRequest(null);
+        setStage('form');
+    }
+
+    function leaveReview() {
+        setReviewRequest(null);
         setStage('form');
     }
 
     const header = (
         <PageHeader
-            onBack={stage === 'review' ? () => setStage('form') : onBack}
+            onBack={stage === 'review' ? leaveReview : onBack}
             backDisabled={stage === 'submitting' || actionConfirm.composing}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
                     : verb}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
+    );
 
     if (loadError) {
         return wrap(
@@ -645,8 +731,15 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const reviewed = reviewRequest || {
+            params: actionParams,
+            full: isWholeAmount,
+            availableAmt: String(availableAmt),
+        };
+        const isPartial = !reviewed.full;
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -674,23 +767,25 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 <p className={styles.summary}>
                     {isUnstake
                         ? (isPartial
-                            ? `Unstake ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN from signing public key ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The rest stays staked; the unstaked amount returns after the cooldown.`
-                            : `Unstake signing public key ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The full active balance for this public key returns after the cooldown.`)
+                            ? `Unstake ${formatWithThousands(reviewed.params?.AMOUNT)} XCHAIN from signing public key ${reviewed.params?.SIGNING_PUBKEY?.slice(0, 12)}. The rest stays staked; the unstaked amount returns after the cooldown.`
+                            : `Unstake signing public key ${reviewed.params?.SIGNING_PUBKEY?.slice(0, 12)}. The full active balance for this public key returns after the cooldown.`)
                         : (isPartial
-                            ? `Claim ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
+                            ? `Claim ${formatWithThousands(reviewed.params?.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
                             : 'Claim all pending staking rewards for this address.')}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Amount</dt>
                     <dd className={styles.detailsValue}>
                         {isPartial
-                            ? `${formatWithThousands(actionParams?.AMOUNT)} XCHAIN`
-                            : `${availableAmt != null ? formatWithThousands(String(availableAmt)) : 'All'} XCHAIN (full ${isUnstake ? 'balance' : 'pending rewards'})`}
+                            ? `${formatWithThousands(reviewed.params?.AMOUNT)} XCHAIN`
+                            : `${formatWithThousands(reviewed.availableAmt)} XCHAIN (full ${isUnstake ? 'balance' : 'pending rewards'})`}
                     </dd>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -699,7 +794,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         <>
                             <dt className={styles.detailsLabel}>Signing public key</dt>
                             <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                                {actionParams?.SIGNING_PUBKEY}
+                                {reviewed.params?.SIGNING_PUBKEY}
                             </dd>
                         </>
                     ) : null}
@@ -780,6 +875,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} staking`}
             onSubmit={handleReview}
             status={formError ? (
@@ -798,11 +894,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 </Button>
             )}
         >
-            <NetworkField
+            <ChainPicker
+                label="Network"
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField

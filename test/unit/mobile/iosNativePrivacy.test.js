@@ -24,10 +24,14 @@ describe('iOS native privacy boundaries', () => {
         expect(entries.map(([key]) => key).sort()).toEqual([
             'NSCameraUsageDescription',
             'NSFaceIDUsageDescription',
+            'NSLocalNetworkUsageDescription',
+            'NSPhotoLibraryUsageDescription',
         ]);
         expect(Object.fromEntries(entries)).toMatchObject({
             NSCameraUsageDescription: expect.stringMatching(/camera.*scan QR codes/i),
             NSFaceIDUsageDescription: expect.stringMatching(/Face ID.*unlock.*does not approve/i),
+            NSLocalNetworkUsageDescription: expect.stringMatching(/nodes.*services.*local network/i),
+            NSPhotoLibraryUsageDescription: expect.stringMatching(/photo library.*attachments.*imports/i),
         });
         for (const [, text] of entries) expect(text).not.toMatch(/[<$>&]|\$\(/);
     });
@@ -47,5 +51,17 @@ describe('iOS native privacy boundaries', () => {
         expect(coordinator).toMatch(
             /UIApplication\.didEnterBackgroundNotification[\s\S]*?closedItself\(open, \.interrupted\)/,
         );
+    });
+
+    it('contains root overscroll inside the themed WKWebView document', () => {
+        const controller = read('packages/mobile/ios/App/App/MainViewController.swift');
+        const didLoad = controller.match(
+            /override func capacitorDidLoad\(\) \{([\s\S]*?)\n    \}/,
+        );
+
+        expect(didLoad).not.toBeNull();
+        expect(didLoad[1]).toMatch(/webView\?\.scrollView\.bounces = false/);
+        expect(didLoad[1]).toMatch(/webView\?\.scrollView\.alwaysBounceVertical = false/);
+        expect(didLoad[1]).toMatch(/webView\?\.scrollView\.alwaysBounceHorizontal = false/);
     });
 });

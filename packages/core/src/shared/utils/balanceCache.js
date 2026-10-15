@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 // Home's last complete display state is device-local and disposable. The
-// wallet and account ids live in both the key and value so malformed or
-// misplaced storage can never put one wallet's balances on another.
+// Wallet, account and network ids live in both the key and value so malformed
+// or misplaced storage cannot cross any display boundary.
 
-const NS = 'xc:balanceCache:';
+const NS = 'xc:balanceCache:v2:';
 const clearedWallets = new Set();
 
 function scopePart(value) {
@@ -23,24 +23,34 @@ function walletPrefix(walletId) {
     return `${NS}${scopePart(walletId)}:`;
 }
 
-function cacheKey(walletId, accountId) {
-    return `${walletPrefix(walletId)}${scopePart(accountId)}`;
+function cacheKey(walletId, accountId, activeNetwork) {
+    return `${walletPrefix(walletId)}${scopePart(accountId)}:${scopePart(activeNetwork)}`;
+}
+
+function networkScope(activeNetwork) {
+    if (activeNetwork === undefined) return 'mainnet';
+    return typeof activeNetwork === 'string' && activeNetwork ? activeNetwork : null;
 }
 
 /**
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} accountId
+ * @param {string | null} [activeNetwork]
  * @returns {{ balances: Record<string, any[]>, activeByChain: Record<string, any>, fetchedAt: number } | null}
  */
-export function readBalanceCache(walletId, accountId) {
+export function readBalanceCache(walletId, accountId, activeNetwork) {
     if (typeof walletId !== 'string' || !walletId) return null;
+    const network = networkScope(activeNetwork);
+    if (!network) return null;
     const normalizedAccountId = typeof accountId === 'string' && accountId ? accountId : null;
     try {
         if (typeof localStorage === 'undefined') return null;
-        const raw = localStorage.getItem(cacheKey(walletId, normalizedAccountId));
+        const raw = localStorage.getItem(cacheKey(walletId, normalizedAccountId, network));
         if (!raw) return null;
         const stored = JSON.parse(raw);
-        if (stored?.walletId !== walletId || stored?.accountId !== normalizedAccountId) return null;
+        if (stored?.walletId !== walletId
+            || stored?.accountId !== normalizedAccountId
+            || stored?.activeNetwork !== network) return null;
         if (!stored.balances || typeof stored.balances !== 'object' || Array.isArray(stored.balances)) return null;
         if (!Number.isFinite(stored.fetchedAt) || stored.fetchedAt < 0) return null;
         const activeByChain = stored.activeByChain
@@ -58,20 +68,24 @@ export function readBalanceCache(walletId, accountId) {
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} accountId
  * @param {{ balances: Record<string, any[]>, activeByChain?: Record<string, any>, fetchedAt: number }} value
+ * @param {string | null} [activeNetwork]
  */
-export function writeBalanceCache(walletId, accountId, value) {
+export function writeBalanceCache(walletId, accountId, value, activeNetwork) {
     if (typeof walletId !== 'string' || !walletId) return;
     // Removal can race an explorer request that already holds this wallet's
     // addresses. Keep that late result from recreating storage before reload.
     if (clearedWallets.has(walletId)) return;
     if (!value?.balances || typeof value.balances !== 'object' || Array.isArray(value.balances)) return;
     if (!Number.isFinite(value.fetchedAt) || value.fetchedAt < 0) return;
+    const network = networkScope(activeNetwork);
+    if (!network) return;
     const normalizedAccountId = typeof accountId === 'string' && accountId ? accountId : null;
     try {
         if (typeof localStorage === 'undefined') return;
-        localStorage.setItem(cacheKey(walletId, normalizedAccountId), JSON.stringify({
+        localStorage.setItem(cacheKey(walletId, normalizedAccountId, network), JSON.stringify({
             walletId,
             accountId: normalizedAccountId,
+            activeNetwork: network,
             balances: value.balances,
             activeByChain: value.activeByChain || {},
             fetchedAt: value.fetchedAt,

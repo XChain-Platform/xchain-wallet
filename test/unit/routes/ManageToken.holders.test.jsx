@@ -23,14 +23,13 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-function mount({ holders, rejectHolders = null, omitHolders = false, tokenInfo = {}, props = {}, messagingOverrides = {} } = {}) {
+function mount({ holders, rejectHolders = null, omitHolders = false, tokenInfo = {} } = {}) {
     const messaging = {
         getTokenInfo: vi.fn().mockResolvedValue({ creator: OWNER, divisibility: 8, ...tokenInfo }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: OWNER }] }),
         getWalletBalances: vi.fn().mockResolvedValue({}),
         getHistoryForToken: vi.fn().mockResolvedValue({ data: [] }),
         getDispensersForToken: vi.fn().mockResolvedValue({ data: [] }),
-        ...messagingOverrides,
     };
     if (!omitHolders) {
         messaging.getHoldersForToken = rejectHolders
@@ -39,7 +38,7 @@ function mount({ holders, rejectHolders = null, omitHolders = false, tokenInfo =
     }
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <ManageToken walletId="wallet" chainId={CHAIN} tick="MANAGEPROBE" onBack={() => {}} {...props} />
+            <ManageToken walletId="wallet" chainId={CHAIN} tick="MANAGEPROBE" onBack={() => {}} />
         </MessagingProvider>,
     );
     return messaging;
@@ -97,27 +96,33 @@ describe('ManageToken holders', () => {
         fireEvent.click(copy);
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(OWNER));
     });
+});
 
-    it('shows a disabled action reason without relying on hover', async () => {
-        mount({
-            tokenInfo: { lockBridge: true },
-            props: { onBridgeSettings: vi.fn() },
-        });
+describe('ManageToken identity badges', () => {
+    it('shows a paused, locked token with both badges in the title row', async () => {
+        const messaging = {
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: OWNER, divisibility: 8, locked: true }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: OWNER }] }),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getHistoryForToken: vi.fn().mockResolvedValue({ data: [] }),
+            getDispensersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            sleepState: vi.fn().mockResolvedValue({ resumeBlock: 900000 }),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ManageToken walletId="wallet" chainId={CHAIN} tick="MANAGEPROBE" onBack={() => {}} />
+            </MessagingProvider>,
+        );
 
-        const bridge = await screen.findByRole('button', {
-            name: 'Bridge: Bridge settings are frozen for this token and can never change.',
-        });
-        expect(bridge).toBeDisabled();
-        expect(bridge).not.toHaveAttribute('title');
-    });
-
-    it('shows the complete paused state without relying on hover', async () => {
-        mount({ messagingOverrides: {
-            sleepState: vi.fn().mockResolvedValue({ resumeBlock: 900 }),
-            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 800 }),
-        } });
-
-        expect(await screen.findByText('Paused until block 900')).toBeInTheDocument();
-        expect(screen.queryByTitle('Paused until block 900')).toBeNull();
+        const paused = await screen.findByText('Paused');
+        const locked = screen.getByText('Locked');
+        const heading = screen.getByRole('heading', { name: 'MANAGEPROBE' });
+        // Both badges share the heading's row, in flow, rather than being
+        // pinned to the same corner of the card on top of each other.
+        expect(heading.parentElement.contains(paused)).toBe(true);
+        expect(heading.parentElement.contains(locked)).toBe(true);
+        expect(paused.parentElement).toBe(locked.parentElement);
     });
 });

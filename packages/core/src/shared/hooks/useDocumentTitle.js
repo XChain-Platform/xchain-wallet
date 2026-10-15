@@ -77,7 +77,9 @@ export function documentTitleFor({ statusState, onboardingStep, unlockedView }) 
 
 export function useDocumentTitle({ statusState, onboardingStep, unlockedView, enabled = true }) {
     useEffect(() => {
-        if (!enabled || typeof document === 'undefined') return;
+        if (!enabled || typeof document === 'undefined') return undefined;
+        const previousTitle = document.title;
         document.title = documentTitleFor({ statusState, onboardingStep, unlockedView });
+        return () => { document.title = previousTitle; };
     }, [enabled, onboardingStep, statusState, unlockedView]);
 }

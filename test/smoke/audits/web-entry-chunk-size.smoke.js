@@ -15,25 +15,36 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const viteConfig = readFileSync(resolve(repoRoot, 'packages/web/vite.config.js'), 'utf8');
+const budgetSource = readFileSync(resolve(repoRoot, 'packages/web/bundleBudget.js'), 'utf8');
 
-const limitMatch = viteConfig.match(/WEB_ENTRY_CHUNK_SIZE_LIMIT\s*=\s*([\d_]+)/);
-assert.ok(limitMatch, 'web build declares a main entry chunk size limit');
+const jsLimitMatch = budgetSource.match(/WEB_INITIAL_JS_SIZE_LIMIT\s*=\s*([\d_]+)/);
+assert.ok(jsLimitMatch, 'web build declares an initial JavaScript size limit');
+assert.equal(
+    Number(jsLimitMatch[1].replaceAll('_', '')),
+    900_000,
+    'web initial JavaScript ceiling remains 900,000 bytes',
+);
 
-const limit = Number(limitMatch[1].replaceAll('_', ''));
-assert.equal(limit, 1_000_000, 'web main entry chunk ceiling remains 1,000,000 bytes');
-assert.match(
-    viteConfig,
-    /output\.isEntry[\s\S]{0,100}?output\.name === 'index'/,
-    'entry chunk guard identifies the main index entry',
+const cssLimitMatch = budgetSource.match(/WEB_INITIAL_CSS_SIZE_LIMIT\s*=\s*([\d_]+)/);
+assert.ok(cssLimitMatch, 'web build declares an initial CSS size limit');
+assert.equal(
+    Number(cssLimitMatch[1].replaceAll('_', '')),
+    100_000,
+    'web initial CSS ceiling remains 100,000 bytes',
 );
 assert.match(
-    viteConfig,
-    /Buffer\.byteLength\(entry\.code\)/,
-    'entry chunk guard measures emitted bytes',
+    budgetSource,
+    /output\.isEntry[\s\S]{0,100}?output\.name === entryName/,
+    'initial bundle guard identifies the main index entry',
+);
+assert.match(
+    budgetSource,
+    /for \(const fileName of chunk\.imports\)/,
+    'initial bundle guard follows static chunk imports',
 );
 assert.ok(
-    viteConfig.includes('entryChunkSizePlugin,'),
-    'web build enables the entry chunk size guard',
+    viteConfig.includes('initialBundleSizePlugin,'),
+    'web build enables the initial bundle size guard',
 );
 assert.match(
     viteConfig,
@@ -46,4 +57,4 @@ assert.match(
     'unused UI barrel exports do not preload the QR encoder',
 );
 
-console.log('web-entry-chunk-size smoke: 6 passed');
+console.log('web-entry-chunk-size smoke: 9 passed');

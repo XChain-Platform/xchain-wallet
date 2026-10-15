@@ -82,7 +82,7 @@ const DEFAULT_POLICY = {
         'wss://explorer.xchain.io',
         'ws://localhost:18080',
     ],
-    'worker-src': ["'self'", 'blob:'],
+    'worker-src': ["'self'"],
     'object-src': ["'none'"],
     'base-uri': ["'none'"],
     'form-action': ["'none'"],

@@ -11,14 +11,18 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
-    ChainBadge,
+    Checkbox,
+    Chip,
+    CopyButton,
     EmptyState,
     Icon,
-    InfoTip,
     Input,
     ListPage,
     PageHeader,
+    RadioGroup,
     Screen,
+    SegmentedControl,
+    SectionHeader,
     Skeleton,
     StatusMessage,
     VerifiedBadge,
@@ -33,6 +37,7 @@ import {
     undoCancel,
 } from '../../flows/rbfReplace.js';
 import { rbfFailureMessage } from '../utils/rbfFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -48,20 +53,25 @@ import {
     tickerForDescriptor,
     transactionExplorerLinks,
 } from '../../registry/coinTicker.js';
-import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import {
+    groupHistoryEntries,
+    groupHistoryItemsByLocalDay,
+} from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
     compareMergedEntries,
     mempoolRowToEntry,
+    mergeMonotonicChainHeights,
     mergePendingEntries,
     pendingDisplayState,
     pendingTxToEntry,
 } from '../utils/pendingHistory.js';
-import { t } from '../../i18n/index.js';
+import { getFormatLocale, t } from '../../i18n/index.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
+import { ActivityRow } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import {
     applyHistoryFilters,
@@ -75,8 +85,11 @@ import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useResponsivePlaceholder } from '../../ui/Input.jsx';
+import { AddressText, truncateAddress } from '../../ui/AddressText.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
+import { shareOrCopy, ShareOutcome } from '../share.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { transactionReceiptText } from '../utils/transactionReceipt.js';
 import {
@@ -85,11 +98,12 @@ import {
     formatHistoryAmount,
     formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
+import { activityRowAmount } from '../utils/activityAmount.js';
 import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
-import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -104,9 +118,53 @@ import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+// Session-scoped so the filters survive opening a transaction and coming
+// back, but a new session starts from the default view.
 const HISTORY_VIEW_STATE_STORAGE_KEY = 'xc:historyViewState';
 const HISTORY_PAGE_SIZE = 100;
+const EMPTY_PEER_CACHE = Object.freeze({});
 const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
+
+function historyEntryPageAliases(entry) {
+    const aliases = [entry?.key].filter(Boolean);
+    const chainId = String(entry?.chainId || '');
+    const actionIndex = String(entry?.actionIndex || '');
+    const txHash = String(entry?.txHash || '').trim().toLowerCase();
+    if (chainId && actionIndex) aliases.push(`action:${chainId}:${actionIndex}`);
+    if (chainId && txHash) aliases.push(`tx:${chainId}:${txHash}`);
+    return aliases;
+}
+
+function historyItemPageAliases(item) {
+    if (item?.kind === 'entry') return historyEntryPageAliases(item.entry);
+    if (item?.kind === 'group') {
+        return [`group:${item.key}`, ...historyEntryPageAliases(item.leader)];
+    }
+    return [];
+}
+
+/**
+ * Keep every previously rendered item inside the window when a refresh adds
+ * rows ahead of it. Transaction aliases let a pending row become confirmed
+ * without being counted as a second item.
+ */
+export function retainedHistoryItemCount(previousItems, nextItems, visibleCount, pageSize = HISTORY_PAGE_SIZE) {
+    const next = Array.isArray(nextItems) ? nextItems : [];
+    if (next.length === 0) return 0;
+    const count = Math.max(0, Number(visibleCount) || 0);
+    const retainedAliases = new Set(
+        (Array.isArray(previousItems) ? previousItems : [])
+            .slice(0, count)
+            .flatMap(historyItemPageAliases),
+    );
+    let lastRetainedIndex = -1;
+    next.forEach((item, index) => {
+        if (historyItemPageAliases(item).some((alias) => retainedAliases.has(alias))) {
+            lastRetainedIndex = index;
+        }
+    });
+    return Math.min(next.length, Math.max(pageSize, count, lastRetainedIndex + 1));
+}
 
 function historyChainFilterKey(walletId) {
     return `${HISTORY_CHAIN_FILTER_KEY}:${walletId || 'none'}`;
@@ -126,6 +184,8 @@ function readHistoryViewState(walletId, accountId, initialSearchQuery) {
             historyViewStateStorageKey(walletId, accountId),
         );
         const parsed = raw ? JSON.parse(raw) : null;
+        // A History opened with its own search (TokenDetail's scoped link)
+        // starts from that search, not from an unrelated remembered view.
         if (!parsed || parsed.initialSearchQuery !== initialSearchQuery) return null;
         return parsed;
     } catch {
@@ -140,6 +200,21 @@ function writeHistoryViewState(walletId, accountId, state) {
             JSON.stringify(state),
         );
     } catch { /* best-effort */ }
+}
+
+function formatFilterDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return value;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    try {
+        return date.toLocaleDateString(getFormatLocale(), {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+    } catch {
+        return value;
+    }
 }
 
 function readPersistedGroupingMode(walletId) {
@@ -451,13 +526,43 @@ function historyAmountDirection(entry) {
     return source.toLowerCase() === address.toLowerCase() ? 'out' : 'in';
 }
 
+/**
+ * The amount a row prints in its amount column. A settled SEND prints its
+ * own figure. So does a blockless SEND that carries no pending metadata (a
+ * synthesized demo row or an older shell's row): it has no pending
+ * annotation to print instead, and without this its amount column said
+ * only "pending", beside a status chip that already says Pending, where
+ * Home's Activity tab prints the same row's amount.
+ */
 function settledAmountAnnotation(entry) {
-    if (!entry?.blockIndex || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry.blockIndex && entry.pending) return null;
     const raw = entry.raw || {};
     const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     const tick = raw.tick ?? raw.TICK ?? raw.token;
     if (amount == null || !tick) return null;
     return { amount: String(amount), tick: String(tick), direction: historyAmountDirection(entry) };
+}
+
+/**
+ * Splits the timeline into its day headings and the runs of rows between
+ * them, so each run renders as one flush card list.
+ *
+ * @param {Array<{ kind: string, key: string, label?: string }>} items
+ * @returns {Array<{ kind: 'day', key: string, label: string } | { kind: 'rows', key: string, items: Array<object> }>}
+ */
+export function timelineRuns(items) {
+    const runs = [];
+    for (const item of items) {
+        if (item.kind === 'day') {
+            runs.push(item);
+            continue;
+        }
+        const last = runs[runs.length - 1];
+        if (last && last.kind === 'rows') last.items.push(item);
+        else runs.push({ kind: 'rows', key: `rows:${item.key ?? item.entry?.key ?? runs.length}`, items: [item] });
+    }
+    return runs;
 }
 
 /**
@@ -508,16 +613,17 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { showToast } = useToast();
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const browserOnline = useOnlineStatus();
     const rememberedViewRef = useRef(undefined);
     if (rememberedViewRef.current === undefined) {
-        rememberedViewRef.current = readHistoryViewState(
-            walletId,
-            accountId,
-            initialSearchQuery,
-        );
+        rememberedViewRef.current = readHistoryViewState(walletId, accountId, initialSearchQuery);
     }
     const rememberedView = rememberedViewRef.current;
+    const proofSettings = useSettings();
+    const activeNetwork = proofSettings.loading
+        ? null
+        : (proofSettings.settings?.activeNetwork || 'mainnet');
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -553,6 +659,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [groupingMode, setGroupingModeState] = useState(
         /** @type {'grouped' | 'flat'} */ (() => readPersistedGroupingMode(walletId)),
     );
+    const [dayGroupingNowMs, setDayGroupingNowMs] = useState(Date.now);
     const setGroupingMode = (mode) => {
         setGroupingModeState(mode);
         writePersistedGroupingMode(walletId, mode);
@@ -569,45 +676,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         /** @type {Set<string>} */ (new Set(rememberedView?.statuses || [])),
     );
     // The inclusive endpoints cover exactly 30 local calendar days.
-    const [dateFrom, setDateFrom] = useState(
-        () => rememberedView?.dateFrom ?? isoDateDaysAgo(29),
-    );
-    const [dateTo, setDateTo] = useState(
-        () => rememberedView?.dateTo ?? isoDateDaysAgo(0),
-    );
+    const [dateFrom, setDateFrom] = useState(() => rememberedView?.dateFrom ?? isoDateDaysAgo(29));
+    const [dateTo, setDateTo] = useState(() => rememberedView?.dateTo ?? isoDateDaysAgo(0));
     const [dateError, setDateError] = useState('');
+    const [phoneFiltersOpen, setPhoneFiltersOpen] = useState(false);
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(Boolean(rememberedView?.moreFiltersOpen));
-    // The export modal controls only the file representation. Row selection
-    // remains owned by the History filters so the file matches the list.
-    const [exportModalOpen, setExportModalOpen] = useState(false);
-    const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
-    const [exportColumns, setExportColumns] = useState(
-        /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
-    );
-    const [exporting, setExporting] = useState(false);
-    const [exportProgress, setExportProgress] = useState({ completed: 0, total: 0 });
-    const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
-    const exportAbortRef = useRef(/** @type {AbortController | null} */ (null));
-    const exportTime = useLongOperationStatus(exporting);
-    useEffect(() => () => exportAbortRef.current?.abort(), []);
-    const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
-    // M2.3: the open row is remembered by TRANSACTION as well as by key.
-    // A pending entry is keyed on its hash and a confirmed one on its
-    // action index, so the key of the row the user is reading changes at
-    // the moment the transaction confirms, and changes again if a shallow
-    // reorg reassigns that index. Without a second handle the detail
-    // closes itself exactly when it finally has something new to say.
-    const selectedTxRef = useRef(/** @type {{ chainId: string, txHash: string } | null} */ (null));
-    const [peerCache, setPeerCache] = useState(
-        /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
-    );
-    // §24.6 / Cluster Y FOLLOWUP 4; once a detached-window's initial
-    // route resolves, ref-flag this so we don't re-select on every
-    // re-render or after the user manually navigates away from the row.
-    const initialFocusFiredRef = useRef(false);
-    const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const timelineRef = useRef(/** @type {HTMLUListElement | null} */ (null));
-
     useEffect(() => {
         writeHistoryViewState(walletId, accountId, {
             initialSearchQuery,
@@ -624,6 +697,48 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         walletId, accountId, initialSearchQuery, searchQuery, actionTypeFilter,
         statusFilter, dateFrom, dateTo, crossChainOnly, multisigOnly, moreFiltersOpen,
     ]);
+    // The export modal controls only the file representation. Row selection
+    // remains owned by the History filters so the file matches the list.
+    const [exportModalOpen, setExportModalOpen] = useState(false);
+    const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
+    const [exportColumns, setExportColumns] = useState(
+        /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
+    );
+    const [exporting, setExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState({ completed: 0, total: 0 });
+    const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
+    const exportAbortRef = useRef(/** @type {AbortController | null} */ (null));
+    const exportTime = useLongOperationStatus(exporting);
+    useEffect(() => () => exportAbortRef.current?.abort(), []);
+    const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
+    const selectedKeyRef = useRef(selectedKey);
+    selectedKeyRef.current = selectedKey;
+    // M2.3: the open row is remembered by TRANSACTION as well as by key.
+    // A pending entry is keyed on its hash and a confirmed one on its
+    // action index, so the key of the row the user is reading changes at
+    // the moment the transaction confirms, and changes again if a shallow
+    // reorg reassigns that index. Without a second handle the detail
+    // closes itself exactly when it finally has something new to say.
+    const selectedTxRef = useRef(/** @type {{ chainId: string, txHash: string } | null} */ (null));
+    const [peerCache, setPeerCache] = useState(
+        /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
+    );
+    const peerCacheRef = useRef(peerCache);
+    peerCacheRef.current = peerCache;
+    // §24.6 / Cluster Y FOLLOWUP 4; once a detached-window's initial
+    // route resolves, ref-flag this so we don't re-select on every
+    // re-render or after the user manually navigates away from the row.
+    const initialFocusFiredRef = useRef(false);
+    const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const timelineRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+    const fullSearchPlaceholder = t('history.filters.searchPlaceholder');
+    const searchPlaceholder = useResponsivePlaceholder(
+        fullSearchPlaceholder,
+        t('history.filters.searchLabel'),
+    );
+    const searchDescriptionId = searchPlaceholder !== fullSearchPlaceholder
+        ? 'history-search-description'
+        : undefined;
 
     const closeSelectedRow = useCallback(() => {
         if (!selectedKey) return;
@@ -654,11 +769,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
-        const cached = readHistoryCache(walletId, accountId);
+        if (!activeNetwork) return undefined;
+        const cached = readHistoryCache(walletId, accountId, activeNetwork);
         setAddressesByChain(null);
         setEntries(cached?.entries || []);
         setHistoryFetchedAt(cached?.fetchedAt || null);
-        setHistoryLoaded(Boolean(cached));
+        setHistoryLoaded(Boolean(cached?.entries?.length));
         setShowingCachedHistory(!isNavigatorOnline() && Boolean(cached));
         setLoadingChains(new Set());
         setRefreshing(false);
@@ -686,6 +802,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                         .map(([cid]) => cid),
                 );
+                if (!cached?.entries?.length) setLoadingChains(all);
                 // When the caller asked us to scope to a specific coin
                 // family (e.g. arrived from the Bitcoin TokenDetail's
                 // History button), narrow enabledChains to only those
@@ -713,10 +830,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setAddressesByChain(cached.addressesByChain);
                     return;
                 }
-                setLoadError(err?.message || 'Failed to load addresses.');
+                setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
+    }, [walletId, accountId, messaging, initialChainCoin, addressesReload, activeNetwork]);
 
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
@@ -726,7 +843,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // isn't in the registry.
     useEffect(() => {
         let cancelled = false;
-        const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+        if (!activeNetwork) return undefined;
+        const btcChain = chainRegistry.byCoin('bitcoin')
+            .find((descriptor) => descriptor.networkKind === activeNetwork)?.id;
         if (!btcChain) return undefined;
         setMultisigAddress(null);
         messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
@@ -736,7 +855,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             })
             .catch(() => { /* no multisig configured; chip stays disabled */ });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, activeNetwork]);
 
     // M2.1: pending rows have to keep the same timestamp between polls or
     // they would jump around the list, so the moment WE first saw each one is
@@ -835,7 +954,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             return;
         }
         if (!browserOnline) {
-            const cached = readHistoryCache(walletId, accountId);
+            const cached = readHistoryCache(walletId, accountId, activeNetwork);
             if (cached) {
                 setEntries(cached.entries);
                 setHistoryFetchedAt(cached.fetchedAt);
@@ -1095,14 +1214,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 entries: merged.entries,
                 addressesByChain,
                 fetchedAt,
-            });
+            }, activeNetwork);
             setRefreshing(false);
         }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
             setLoadingChains(new Set());
             setRefreshing(false);
-            const cached = readHistoryCache(walletId, accountId);
+            const cached = readHistoryCache(walletId, accountId, activeNetwork);
             if (historyLoadedRef.current) {
                 // Rows are already on screen (live or saved): keep them, say
                 // so, and name the saved copy when one exists.
@@ -1123,7 +1242,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         });
 
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, refreshTick, walletId, accountId, browserOnline]);
+    }, [addressesByChain, messaging, refreshTick, walletId, accountId, browserOnline, activeNetwork]);
 
     // Lowercase set of every wallet address across every chain. Used by
     // the action-type filter to discriminate Send (wallet is source)
@@ -1174,6 +1293,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return tips;
     }, [entries, indexerWatermarkByChainId]);
 
+    // The row click reads these through a ref so the callback, and with it
+    // every memoised row, stays stable across the polling beat.
+    const detailSourceRef = useRef({ chainTipByChainId: {}, indexerWatermarkByChainId: {}, walletAddressSet: [] });
+    detailSourceRef.current = { chainTipByChainId, indexerWatermarkByChainId, walletAddressSet };
+
     // §28.3: fetch the indexer watermark (latest processed block)
     // per loaded chain so the TxStatusTimeline's Indexed stage reflects real
     // indexer progress rather than the confirmed-implies-indexed fallback.
@@ -1201,7 +1325,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             for (const { cid, watermark } of results) {
                 if (Number.isFinite(watermark) && watermark > 0) next[cid] = watermark;
             }
-            setIndexerWatermarkByChainId(next);
+            setIndexerWatermarkByChainId((previous) => (
+                mergeMonotonicChainHeights(previous, next)
+            ));
         });
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, walletId, browserOnline, refreshTick]);
@@ -1238,7 +1364,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // no checkpointable block yet). Off for demo wallets and when the user
     // opts out via `verifyProofs` (default on). The map is keyed by
     // entry.key; EntryRow badges from it.
-    const proofSettings = useSettings();
     const [fiatToggleBusy, setFiatToggleBusy] = useState(false);
     const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
         && !flowsLib.isDemoWallet(walletId);
@@ -1320,51 +1445,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     });
 
     const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
-    const filtersActive = Boolean(
-        searchQuery
-        || actionTypeFilter.size > 0
-        || statusFilter.size > 0
-        || dateFrom
-        || dateTo
-        || chainFilterActive
-        || crossChainOnly
-        || multisigOnly
-    );
-
-    const activeFilterDescription = useMemo(() => {
-        const reasons = [];
-        const trimmedSearch = searchQuery.trim();
-        if (trimmedSearch) {
-            reasons.push(t('history.empty.filterSearch', { query: trimmedSearch }));
-        }
-        if (dateFrom || dateTo) {
-            reasons.push(t('history.empty.filterDate', {
-                from: dateFrom || t('history.filters.anyDate'),
-                to: dateTo || t('history.filters.anyDate'),
-            }));
-        }
-        if (chainFilterActive) reasons.push(t('history.empty.filterChains'));
-        if (actionTypeFilter.size > 0) {
-            const labels = ACTION_TYPE_OPTIONS
-                .filter((option) => actionTypeFilter.has(option.id))
-                .map((option) => option.label)
-                .join(', ');
-            reasons.push(t('history.empty.filterActions', { actions: labels }));
-        }
-        if (statusFilter.size > 0) {
-            const labels = STATUS_OPTIONS
-                .filter((option) => statusFilter.has(option.id))
-                .map((option) => option.label)
-                .join(', ');
-            reasons.push(t('history.empty.filterStatuses', { statuses: labels }));
-        }
-        if (crossChainOnly) reasons.push(t('history.empty.filterCrossChain'));
-        if (multisigOnly) reasons.push(t('history.empty.filterMultisig'));
-        return reasons.join('; ');
-    }, [
-        searchQuery, dateFrom, dateTo, chainFilterActive, actionTypeFilter,
-        statusFilter, crossChainOnly, multisigOnly,
-    ]);
+    const activeFilterCount = [
+        Boolean(searchQuery),
+        actionTypeFilter.size > 0,
+        statusFilter.size > 0,
+        Boolean(dateFrom || dateTo),
+        chainFilterActive,
+        crossChainOnly,
+        multisigOnly,
+    ].filter(Boolean).length;
+    const filtersActive = activeFilterCount > 0;
 
     const toggleSetMember = (setter) => (id) => {
         setter((prev) => {
@@ -1489,10 +1579,36 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [visibleEntries, groupingMode],
     );
 
+    useEffect(() => {
+        let timer = null;
+        const schedule = () => {
+            const now = Date.now();
+            const nextDay = new Date(now);
+            nextDay.setHours(24, 0, 0, 0);
+            timer = setTimeout(() => {
+                setDayGroupingNowMs(Date.now());
+                schedule();
+            }, Math.max(1_000, nextDay.getTime() - now));
+        };
+        const refresh = () => {
+            clearTimeout(timer);
+            setDayGroupingNowMs(Date.now());
+            schedule();
+        };
+        schedule();
+        globalThis.addEventListener?.('focus', refresh);
+        return () => {
+            clearTimeout(timer);
+            globalThis.removeEventListener?.('focus', refresh);
+        };
+    }, []);
+
     // Filtering and grouping still run over the complete result set, while the
     // DOM grows in bounded steps. This keeps exports and group membership exact
     // without making the browser lay out thousands of row buttons at once.
     const listScope = useMemo(() => [
+        walletId,
+        accountId || '',
         groupingMode,
         searchQuery,
         dateFrom,
@@ -1503,13 +1619,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [...actionTypeFilter].sort().join(','),
         [...statusFilter].sort().join(','),
     ].join('\u0000'), [
-        groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
+        walletId, accountId, groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
         enabledChains, actionTypeFilter, statusFilter,
     ]);
     const [listWindow, setListWindow] = useState(() => ({
         scope: '',
         count: HISTORY_PAGE_SIZE,
     }));
+    const pagedItemsRef = useRef({ scope: '', items: [] });
     const [groupMemberLimits, setGroupMemberLimits] = useState(
         /** @type {Record<string, number>} */ ({}),
     );
@@ -1517,11 +1634,35 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         ? listWindow.count
         : HISTORY_PAGE_SIZE;
     const renderedItems = groupedItems.slice(0, visibleItemCount);
+    const renderedTimelineItems = useMemo(
+        () => groupHistoryItemsByLocalDay(renderedItems, dayGroupingNowMs)
+            .flatMap((dayGroup) => [
+                { kind: 'day', key: `day-heading:${dayGroup.key}`, label: dayGroup.label },
+                ...dayGroup.items,
+            ]),
+        [renderedItems, dayGroupingNowMs],
+    );
 
     useEffect(() => {
         setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
         setGroupMemberLimits({});
     }, [listScope]);
+
+    useEffect(() => {
+        const previous = pagedItemsRef.current;
+        if (previous.scope === listScope) {
+            setListWindow((window) => {
+                if (window.scope !== listScope) return window;
+                const count = retainedHistoryItemCount(
+                    previous.items,
+                    groupedItems,
+                    window.count,
+                );
+                return count === window.count ? window : { ...window, count };
+            });
+        }
+        pagedItemsRef.current = { scope: listScope, items: groupedItems };
+    }, [groupedItems, listScope]);
 
     const showMoreItems = () => {
         setListWindow((prev) => {
@@ -1640,55 +1781,82 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setRefreshTick((n) => n + 1);
     }, [messaging]);
 
+    // Every shell routes a row to the standalone detail page; only a host
+    // that wires no handler falls back to the inline expand.
+    const opensDetail = typeof onSelectEntry === 'function';
     const onRowClick = useCallback((entry) => {
         // When the parent shell wired the navigation callback, send the
         // selected entry up so it can route to the standalone ActionDetail
         // page. Falls back to the legacy inline expand for builds /
         // contexts where no handler is provided.
         if (typeof onSelectEntry === 'function') {
-            onSelectEntry(entry);
+            onSelectEntry({
+                ...entry,
+                detailContext: {
+                    chainTip: detailSourceRef.current.chainTipByChainId[entry.chainId] ?? null,
+                    indexerWatermark: detailSourceRef.current.indexerWatermarkByChainId[entry.chainId] ?? null,
+                    walletAddresses: [...detailSourceRef.current.walletAddressSet],
+                },
+            });
             return;
         }
-        const closing = selectedKey === entry.key;
+        const closing = selectedKeyRef.current === entry.key;
+        selectedKeyRef.current = closing ? null : entry.key;
         selectedTxRef.current = closing ? null : rememberedSelection(entry);
         setSelectedKey(closing ? null : entry.key);
         if (entry.link?.peerChainId && entry.link.peerActionIndex) {
             const pKey = peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex);
-            if (!peerCache[pKey]) {
+            if (!peerCacheRef.current[pKey]) {
                 if (!browserOnline) {
-                    setPeerCache((prev) => ({
-                        ...prev,
-                        [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
-                    }));
+                    setPeerCache((prev) => {
+                        const next = {
+                            ...prev,
+                            [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
+                        };
+                        peerCacheRef.current = next;
+                        return next;
+                    });
                     return;
                 }
-                setPeerCache((prev) => ({
-                    ...prev,
-                    [pKey]: { loading: true, action: null, error: null },
-                }));
+                setPeerCache((prev) => {
+                    const next = {
+                        ...prev,
+                        [pKey]: { loading: true, action: null, error: null },
+                    };
+                    peerCacheRef.current = next;
+                    return next;
+                });
                 messaging.getActionByIndex({
                     chainId: entry.link.peerChainId,
                     actionIndex: entry.link.peerActionIndex,
                 })
                     .then((action) => {
-                        setPeerCache((prev) => ({
-                            ...prev,
-                            [pKey]: { loading: false, action, error: null },
-                        }));
+                        setPeerCache((prev) => {
+                            const next = {
+                                ...prev,
+                                [pKey]: { loading: false, action, error: null },
+                            };
+                            peerCacheRef.current = next;
+                            return next;
+                        });
                     })
                     .catch((err) => {
-                        setPeerCache((prev) => ({
-                            ...prev,
-                            [pKey]: {
-                                loading: false,
-                                action: null,
-                                error: err?.message || String(err),
-                            },
-                        }));
+                        setPeerCache((prev) => {
+                            const next = {
+                                ...prev,
+                                [pKey]: {
+                                    loading: false,
+                                    action: null,
+                                    error: userFacingMessage(err, 'Could not load the linked action. Try again.'),
+                                },
+                            };
+                            peerCacheRef.current = next;
+                            return next;
+                        });
                     });
             }
         }
-    }, [messaging, onSelectEntry, peerCache, selectedKey]);
+    }, [browserOnline, messaging, onSelectEntry]);
 
     const onTimelineKeyDown = (event) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -1715,9 +1883,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             backLabel={t('common.backToHome')}
             title={t('history.title')}
             trailing={(
-                <button
-                    type="button"
-                    className={refreshing ? styles.refreshing : undefined}
+                <Button
+                    variant="ghost"
+                    icon={(
+                        <span className={refreshing ? styles.refreshing : undefined}>
+                            <Icon.RefreshIcon />
+                        </span>
+                    )}
                     aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
                     title={networkOffline
                         ? t('history.offline.refreshTitle')
@@ -1731,9 +1903,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         setRefreshing(true);
                         setRefreshTick((n) => n + 1);
                     }}
-                >
-                    <Icon.RefreshIcon />
-                </button>
+                />
             )}
         />
     );
@@ -1804,17 +1974,60 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     body={t('history.empty.noAddressesBody')}
                     actionLabel={onReceive ? t('home.receive') : undefined}
                     onAction={onReceive}
-                    icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                    actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
                 />
             </ListPage>,
         );
     }
 
     return wrap(
-        <ListPage toolbar={(
-            <div className={styles.filterCard} role="group" aria-label={t('history.filters.label')}>
+        <ListPage toolbar={entries.length > 0 ? (
+            <>
+                <div className={styles.toolbarTop}>
+                    <div className={styles.phoneFilterToggle}>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            block
+                            icon={<Icon.FilterIcon />}
+                            aria-expanded={phoneFiltersOpen}
+                            aria-controls="history-filter-panel"
+                            onClick={() => setPhoneFiltersOpen((open) => !open)}
+                        >
+                            {t('history.filters.toggle', { count: activeFilterCount })}
+                        </Button>
+                    </div>
+                    {/* Export stays outside the collapsible filter card so it is
+                        reachable while the filters are folded away. */}
+                    <Button
+                        className={`${styles.toolbarControl} ${styles.exportButton}`}
+                        variant="secondary"
+                        icon={null}
+                        aria-haspopup="dialog"
+                        aria-expanded={exportModalOpen}
+                        aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                        onClick={() => setExportModalOpen(true)}
+                        disabled={visibleEntries.length === 0}
+                    >
+                        {t('history.export.open')}
+                    </Button>
+                    {visibleEntries.length === 0 ? (
+                        <span
+                            id="history-export-disabled-reason"
+                            className={styles.visuallyHidden}
+                        >
+                            {t('history.export.noMatchingRows')}
+                        </span>
+                    ) : null}
+                </div>
+                <div
+                    id="history-filter-panel"
+                    className={`${styles.filterCard} ${phoneFiltersOpen ? styles.filterCardOpen : ''}`}
+                    role="group"
+                    aria-label={t('history.filters.label')}
+                >
                 <div className={styles.searchRow}>
-                    <input
+                    <Input
                         ref={searchInputRef}
                         type="search"
                         enterKeyHint="search"
@@ -1822,12 +2035,18 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         autoCorrect="off"
                         spellCheck={false}
                         className={styles.searchInput}
-                        placeholder={t('history.filters.searchPlaceholder')}
+                        placeholder={searchPlaceholder}
                         aria-label={t('history.filters.searchLabel')}
+                        aria-describedby={searchDescriptionId}
                         value={searchQuery}
                         onChange={(ev) => setSearchQuery(ev.target.value)}
                         autoComplete="off"
                     />
+                    {searchDescriptionId ? (
+                        <span id={searchDescriptionId} className="sr-only">
+                            {fullSearchPlaceholder}
+                        </span>
+                    ) : null}
                     {searchQuery ? (
                         <Button
                             type="button"
@@ -1864,24 +2083,18 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 </div>
                 <div className={styles.dateTools}>
                     <div className={styles.datePresets} role="group" aria-label={t('history.filters.datePresets')}>
-                        <button
-                            type="button"
-                            className={`${styles.chip} ${activeDatePreset === '7' ? styles.chipActive : ''}`}
-                            aria-pressed={activeDatePreset === '7'}
-                            onClick={() => setDatePreset(7)}
-                        >{t('history.filters.last7Days')}</button>
-                        <button
-                            type="button"
-                            className={`${styles.chip} ${activeDatePreset === '30' ? styles.chipActive : ''}`}
-                            aria-pressed={activeDatePreset === '30'}
-                            onClick={() => setDatePreset(30)}
-                        >{t('history.filters.last30Days')}</button>
-                        <button
-                            type="button"
-                            className={`${styles.chip} ${activeDatePreset === 'all' ? styles.chipActive : ''}`}
-                            aria-pressed={activeDatePreset === 'all'}
-                            onClick={() => setDatePreset(null)}
-                        >{t('history.filters.allDates')}</button>
+                        <Chip
+                            pressed={activeDatePreset === '7'}
+                            onPressedChange={() => setDatePreset(7)}
+                        >{t('history.filters.last7Days')}</Chip>
+                        <Chip
+                            pressed={activeDatePreset === '30'}
+                            onPressedChange={() => setDatePreset(30)}
+                        >{t('history.filters.last30Days')}</Chip>
+                        <Chip
+                            pressed={activeDatePreset === 'all'}
+                            onPressedChange={() => setDatePreset(null)}
+                        >{t('history.filters.allDates')}</Chip>
                     </div>
                     <span className={styles.dateZone}>{t('history.filters.dateZone')}</span>
                 </div>
@@ -1890,16 +2103,26 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 ) : null}
                 {dateFrom || dateTo ? (
                     <div className={styles.activeDateRange}>
-                        <span>{t('history.filters.activeRange', { from: dateFrom || t('history.filters.anyDate'), to: dateTo || t('history.filters.anyDate') })}</span>
-                        <button type="button" onClick={() => setDatePreset(null)}>{t('history.filters.clearDateRange')}</button>
+                        <span>{t('history.filters.activeRange', {
+                            from: dateFrom ? formatFilterDate(dateFrom) : t('history.filters.anyDate'),
+                            to: dateTo ? formatFilterDate(dateTo) : t('history.filters.anyDate'),
+                        })}</span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
+                            onClick={() => setDatePreset(null)}
+                        >
+                            {t('history.filters.clearDateRange')}
+                        </Button>
                     </div>
                 ) : null}
 
                 <div className={styles.filterFooter}>
-                    <button
-                        type="button"
-                        className={`${styles.filterDisclosure} ${moreFiltersOpen ? styles.filterDisclosureActive : ''}`}
-                        onClick={() => setMoreFiltersOpen((v) => !v)}
+                    <Chip
+                        className={styles.toolbarControl}
+                        pressed={moreFiltersOpen}
+                        onPressedChange={() => setMoreFiltersOpen((v) => !v)}
                         aria-expanded={moreFiltersOpen}
                         aria-controls="history-more-filters"
                     >
@@ -1907,40 +2130,32 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         {moreFiltersOpen
                             ? <DoubleChevron direction="up" />
                             : <DoubleChevron direction="down" />}
-                    </button>
-                    <button
-                        type="button"
-                        className={`${styles.filterDisclosure} ${showFiatInHistory ? styles.filterDisclosureActive : ''}`}
-                        aria-pressed={showFiatInHistory}
-                        onClick={toggleShowFiatInHistory}
+                    </Chip>
+                    <Chip
+                        className={styles.toolbarControl}
+                        pressed={showFiatInHistory}
+                        onPressedChange={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
                         aria-busy={fiatToggleBusy}
+                        aria-label={showFiatInHistory
+                            ? undefined
+                            : t('history.filters.showFiatOff')}
+                        title={t('history.filters.fiatHelp')}
                     >
                         {showFiatInHistory
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
-                            : t('history.filters.showFiat')}
-                    </button>
-                    <InfoTip
-                        aria={t('history.filters.fiatHelp')}
-                        label={t('history.filters.fiatHelp')}
-                        placement="bottom"
+                            : t('history.filters.fiatOff')}
+                    </Chip>
+                    <SegmentedControl
+                        className={styles.toolbarControl}
+                        aria-label={t('history.filters.groupingMode')}
+                        value={groupingMode}
+                        onChange={setGroupingMode}
+                        items={[
+                            { id: 'grouped', label: t('history.filters.grouped') },
+                            { id: 'flat', label: t('history.filters.flat') },
+                        ]}
                     />
-                    <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={groupingMode === 'grouped'}
-                            onClick={() => setGroupingMode('grouped')}
-                            className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
-                        >{t('history.filters.grouped')}</button>
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={groupingMode === 'flat'}
-                            onClick={() => setGroupingMode('flat')}
-                            className={`${styles.segBtn} ${groupingMode === 'flat' ? styles.segBtnActive : ''}`}
-                        >{t('history.filters.flat')}</button>
-                    </div>
                 </div>
 
                 {moreFiltersOpen ? (
@@ -1996,20 +2211,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         />
 
                         {multisigAddress ? (
-                            <button
-                                type="button"
-                                className={`${styles.chip} ${multisigOnly ? styles.chipActive : ''}`}
+                            <Button
+                                variant={multisigOnly ? 'primary' : 'ghost'}
+                                size="sm"
+                                icon={null}
                                 aria-pressed={multisigOnly}
                                 onClick={() => setMultisigOnly((v) => !v)}
                             >
                                 {t('history.filters.multisigOnly')}
-                            </button>
+                            </Button>
                         ) : null}
 
                     </div>
                 ) : null}
-            </div>
-        )}>
+                </div>
+            </>
+        ) : null}>
 
             {!browserOnline || showingCachedHistory ? (
                 <StatusMessage
@@ -2053,11 +2270,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         title={searchQuery.trim()
                             ? t('history.empty.noSearchResultsTitle', { query: searchQuery.trim() })
                             : t('history.empty.noMatchesTitle')}
-                        body={t('history.empty.noMatchesBody', {
-                            filters: activeFilterDescription,
-                        })}
+                        body={t('history.empty.noMatchesBody')}
                         actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
+                    />
+                ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
+                    // An empty read while balances could not be checked proves
+                    // nothing, so the page says that once instead of "No
+                    // activity yet" beside the stale-balances notice.
+                    <BalancesUncheckedState
+                        onRetry={() => {
+                            recheckBalances();
+                            setRefreshTick((n) => n + 1);
+                        }}
+                        onReceive={onReceive}
                     />
                 ) : (
                     <EmptyState
@@ -2067,43 +2293,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         body={crossChainOnly
                             ? t('history.empty.noCrossChainBody')
                             : t('history.empty.noActivityBody')}
+                        actionLabel={!crossChainOnly && onReceive
+                            ? t('history.empty.startReceiving')
+                            : undefined}
+                        onAction={!crossChainOnly ? onReceive : undefined}
+                        actionIcon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
                     />
                 )
             ) : null}
 
-            {historyFetchedAt ? (
+            {historyFetchedAt && entries.length > 0 ? (
                 <div className={styles.resultsHeader}>
-                    <div>
-                        {historyFetchedAt && loadingChains.size === 0 ? (
-                            <StalenessLabel lastSyncedAt={historyFetchedAt} />
-                        ) : null}
-                        <div className={styles.paginationCount} aria-live="polite">
-                            {t('history.matchCount', { count: visibleEntries.length })}
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                        {visibleEntries.length === 0 ? (
-                            <span
-                                id="history-export-disabled-reason"
-                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}
-                            >
-                                {entries.length > 0
-                                    ? t('history.export.noMatchingRows')
-                                    : t('history.export.noRows')}
-                            </span>
-                        ) : null}
-                        <button
-                            type="button"
-                            className={styles.exportTrigger}
-                            aria-haspopup="dialog"
-                            aria-expanded={exportModalOpen}
-                            aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
-                            onClick={() => setExportModalOpen(true)}
-                            disabled={visibleEntries.length === 0}
-                        >
-                            {t('history.export.open')}
-                        </button>
-                    </div>
+                    {historyFetchedAt && loadingChains.size === 0 ? (
+                        <StalenessLabel lastSyncedAt={historyFetchedAt} />
+                    ) : <span />}
                 </div>
             ) : null}
 
@@ -2113,7 +2316,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 aria-label={t('history.title')}
                 onKeyDown={onTimelineKeyDown}
             >
-                {renderedItems.map((item) => {
+                {timelineRuns(renderedTimelineItems).map((run) => (run.kind === 'day' ? (
+                    <li key={run.key}><SectionHeader as="h2" title={run.label} /></li>
+                ) : (
+                    // The rows under one heading are one flush card with dividers.
+                    <li key={run.key}>
+                        <ul className={styles.rowList}>
+                {run.items.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
                         const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
@@ -2133,13 +2342,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     key={entry.key}
                                                     entry={entry}
                                                     selected={selectedKey === entry.key}
+                                                    opensDetail={opensDetail}
                                                     showConnector={
                                                         item.subkind === 'link-pair'
                                                             ? false
                                                             : connectorByKey.has(entry.key)
                                                     }
                                                     onClick={onRowClick}
-                                                    peerCache={peerCache}
+                                                    peerCache={selectedKey === entry.key ? peerCache : EMPTY_PEER_CACHE}
                                                     isFull={isFull}
                                                     chainTip={chainTipByChainId[entry.chainId]}
                                                     indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
@@ -2183,9 +2393,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             key={entry.key}
                             entry={entry}
                             selected={selectedKey === entry.key}
+                            opensDetail={opensDetail}
                             showConnector={connectorByKey.has(entry.key)}
                             onClick={onRowClick}
-                            peerCache={peerCache}
+                            peerCache={selectedKey === entry.key ? peerCache : EMPTY_PEER_CACHE}
                             isFull={isFull}
                             chainTip={chainTipByChainId[entry.chainId]}
                             indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
@@ -2199,6 +2410,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         />
                     );
                 })}
+                        </ul>
+                    </li>
+                )))}
             </ul>
             {visibleItemCount < groupedItems.length ? (
                 <div className={styles.pagination} aria-live="polite">
@@ -2226,7 +2440,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed, networkAvailable = true }) {
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
     const { settings } = useSettings();
@@ -2330,10 +2544,17 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         nativeFiatValue,
         balancesHidden,
         fiatCurrency,
+        detailTransferDirection(entry, walletAddresses),
     );
     const explorerButtons = explorerLinksFor(entry, settings);
 
-    const fullRows = fullDetailRows(entry, balancesHidden);
+    const fullRows = fullDetailRows(
+        entry,
+        balancesHidden,
+        chainTip,
+        walletAddresses,
+        explorerButtons,
+    );
     // Redact entry + peer raw payloads before stringifying. Cheap walk;
     // returns the same shape so the JSON pretty-printer indents identically.
     const rawForDisplay = balancesHidden ? redactAmountFields(entry.raw) : entry.raw;
@@ -2443,6 +2664,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             id: 'rbf-cancel',
             label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
             icon: <Icon.XIcon />,
+            danger: true,
             disabled: rbfBusy !== null || !networkAvailable,
             disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
             onClick: () => runRbf('cancel'),
@@ -2452,6 +2674,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     // user opts into these six public transaction facts, never addresses,
     // memos, contact data, wallet identifiers, or arbitrary raw fields.
     const receipt = transactionReceiptText(entry, { settings, balancesHidden });
+    moreOptions.push({
+        id: 'share-receipt',
+        label: 'Share receipt',
+        icon: <Icon.UploadIcon />,
+        onClick: async () => {
+            setMoreOpen(false);
+            const outcome = await shareOrCopy({
+                title: 'XChain transaction receipt',
+                text: receipt,
+            }, receipt);
+            if (outcome === ShareOutcome.COPIED) {
+                showToast({ message: 'Transaction receipt copied.' });
+            } else if (outcome === ShareOutcome.UNAVAILABLE) {
+                showToast({ message: 'Sharing is unavailable.' });
+            }
+        },
+    });
     moreOptions.push({
         id: 'copy-receipt',
         label: 'Copy receipt',
@@ -2487,7 +2726,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             }
             setContactSaveStage('saved');
         } catch (err) {
-            setContactSaveError(err?.message || 'Save failed.');
+            setContactSaveError(userFacingMessage(err, 'Could not save this contact. Try again.'));
             setContactSaveStage('editing');
         }
     }
@@ -2502,6 +2741,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             {isPending ? (
                 <PendingDetailPanel
                     entry={entry}
+                    transferDirection={detailTransferDirection(entry, walletAddresses)}
                     balancesHidden={balancesHidden}
                     onDismissFailed={onDismissFailed}
                 />
@@ -2559,46 +2799,46 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             <span>{link.label} <span aria-hidden="true">↗</span></span>
                         </a>
                     ) : (
-                        <button
+                        <Button
                             key={link.id}
-                            type="button"
-                            className={styles.detailAction}
-                            disabled
-                            title={OFFLINE_ACTION_REASON}
-                            aria-describedby="history-offline-action-reason"
-                        >
-                            {link.iconImg ? (
+                            variant="secondary"
+                            block
+                            icon={link.iconImg ? (
                                 <img
                                     src={link.iconImg}
                                     alt=""
                                     aria-hidden="true"
                                     className={styles.detailActionFavicon}
                                 />
-                            ) : (
-                                <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
-                            )}
-                            <span>{link.label}</span>
-                        </button>
+                            ) : link.icon}
+                            disabled
+                            title={OFFLINE_ACTION_REASON}
+                            aria-describedby="history-offline-action-reason"
+                        >
+                            {link.label}
+                        </Button>
                     ))}
                     <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            type="button"
-                            className={styles.detailAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<Icon.MoreIcon />}
                             aria-haspopup="menu"
                             aria-expanded={moreOpen}
                             onClick={() => setMoreOpen((o) => !o)}
                         >
-                            <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>{t('history.detail.more')}</span>
-                        </button>
+                            {t('history.detail.more')}
+                        </Button>
                         {moreOpen ? (
                             <div className={styles.moreMenu} role="menu">
                                 {moreOptions.length > 0 ? (
                                     moreOptions.map((opt) => (
+                                        /* Native menu items keep the menu role and its custom focus model. */
                                         <button
                                             key={opt.id}
                                             type="button"
                                             role="menuitem"
+                                            data-destructive={opt.danger ? 'true' : undefined}
                                             className={styles.moreMenuItem}
                                             onClick={opt.onClick}
                                             disabled={Boolean(opt.disabled)}
@@ -2614,6 +2854,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                         </button>
                                     ))
                                 ) : (
+                                    /* Native menu items keep the menu role and its custom focus model. */
                                     <button
                                         type="button"
                                         role="menuitem"
@@ -2647,19 +2888,17 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 did. */}
             {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                 <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
-                    <label className={styles.saveContactLabel}>
-                        {t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
-                        <input
-                            type="text"
-                            enterKeyHint="go"
-                            className={styles.saveContactInput}
-                            value={contactName}
-                            onChange={(e) => setContactName(e.target.value)}
-                            autoFocus
-                            maxLength={80}
-                            placeholder={t('common.contactName')}
-                        />
-                    </label>
+                    <Input
+                        type="text"
+                        label={t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
+                        enterKeyHint="go"
+                        autoComplete="off"
+                        value={contactName}
+                        onChange={(e) => setContactName(e.target.value)}
+                        autoFocus
+                        maxLength={80}
+                        placeholder={t('common.contactName')}
+                    />
                     {contactSaveError ? (
                         <StatusMessage variant="error" className={styles.saveContactError}>{contactSaveError}</StatusMessage>
                     ) : null}
@@ -2692,6 +2931,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             {/* Tab strip: matches Home's HomeTabs visual rhythm. */}
             <div className={styles.detailTabs} role="tablist" aria-label={t('history.detail.view')}>
                 {detailTabs.map((t) => (
+                    /* Native buttons preserve the tablist's roving tab semantics. */
                     <button
                         key={t.id}
                         type="button"
@@ -2733,44 +2973,51 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                     <>
                         <div className={styles.rawJsonWrap}>
                             <span className={styles.rawJsonCopy}>
-                                <CopyIconButton
+                                <HistoryCopyButton
                                     value={decodeActionToText(rawForDisplay)}
                                     label={t('history.detail.copyRawJson')}
                                 />
                             </span>
-                            <pre className={styles.detailDecoded}>
+                            <pre className={styles.detailDecoded} tabIndex={0}>
                                 {decodeActionToText(rawForDisplay)}
                             </pre>
                         </div>
                         {isLinked ? (
                             <div className={styles.detailPeerBlock}>
-                                <h2 className={styles.detailSectionHeading}>
-                                    {t('history.detail.peerHeading', {
+                                <SectionHeader
+                                    title={t('history.detail.peerHeading', {
                                         ticker: entry.link.peerCoinTicker,
                                         index: entry.link.peerActionIndex,
                                     })}
-                                </h2>
+                                    className={styles.detailSectionHeading}
+                                />
                                 {peer?.loading ? (
-                                    <p className={styles.empty}>{t('history.detail.loadingPeer')}</p>
+                                    <StatusMessage>{t('history.detail.loadingPeer')}</StatusMessage>
                                 ) : peer?.error ? (
-                                    <p className={styles.error}>{t('history.detail.peerError', { error: peer.error })}</p>
+                                    <StatusMessage variant="error">
+                                        {t('history.detail.peerError', { error: peer.error })}
+                                    </StatusMessage>
                                 ) : peer?.action ? (
                                     <div className={styles.rawJsonWrap}>
                                         <span className={styles.rawJsonCopy}>
-                                            <CopyIconButton
+                                            <HistoryCopyButton
                                                 value={decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
                                                 label={t('history.detail.copyPeerRawJson')}
                                             />
                                         </span>
-                                        <pre className={styles.detailDecoded}>
+                                        <pre className={styles.detailDecoded} tabIndex={0}>
                                             {decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
                                         </pre>
                                     </div>
                                 ) : (
-                                    <p className={styles.empty}>{t('history.detail.peerUnavailable', {
-                                        ticker: entry.link.peerCoinTicker,
-                                        index: entry.link.peerActionIndex,
-                                    })}</p>
+                                    <EmptyState
+                                        title={t('history.detail.peerUnavailableTitle')}
+                                        body={t('history.detail.peerUnavailable', {
+                                            ticker: entry.link.peerCoinTicker,
+                                            index: entry.link.peerActionIndex,
+                                        })}
+                                        titleAs="h3"
+                                    />
                                 )}
                             </div>
                         ) : null}
@@ -2835,6 +3082,32 @@ function failedReasonOf(stored) {
     return { reason: h.message, details: raw };
 }
 
+const DESTINATION_SLOT = '\u0000';
+
+/**
+ * One decoded output, "+100 BTC to <address>". The address keeps both ends
+ * on one line with a copy button after it; printed whole, it wrapped across
+ * two lines on a phone with no way to copy it.
+ */
+function PendingOutputLine({ text, destination }) {
+    const [before, after = ''] = String(text).split(DESTINATION_SLOT);
+    if (!destination) return <>{before}{after}</>;
+    return (
+        <span className={styles.copyableValue}>
+            <span className={styles.copyableText}>
+                {before}
+                <AddressText address={destination} size="md" />
+                {after}
+            </span>
+            <HistoryCopyButton
+                value={destination}
+                label={t('history.copy.walletAddress')}
+                visibleLabel={t('common.copy')}
+            />
+        </span>
+    );
+}
+
 /**
  * M2.3 pending branch of the detail card. Everything a user can be told
  * honestly about a transaction that has been sent and not yet indexed:
@@ -2848,7 +3121,7 @@ function failedReasonOf(stored) {
  *
  * @param {{ entry: any, balancesHidden?: boolean }} props
  */
-function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) {
+function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed, transferDirection = null }) {
     const state = pendingStateOf(entry);
     const copy = state ? pendingCopyFor(state, entry) : null;
     const warning = state != null && PENDING_WARNING_STATES.has(state);
@@ -2937,17 +3210,23 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 promise under this heading: "not reported yet" would say
                 more data is coming, and none is. */}
             {settled && desc.kind === 'none' ? null : (
-                <h2 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h2>
+                <SectionHeader
+                    title={t('pending.detail.decodedHeading')}
+                    className={styles.detailSectionHeading}
+                />
             )}
             {desc.kind === 'send' || desc.kind === 'local' ? (
                 <ul className={styles.pendingOutputs}>
                     {desc.outputs.map((o, i) => (
                         <li key={`${o.destination}:${i}`}>
-                            {t('pending.detail.sendOutput', {
-                                amount: amountOf(o.amount),
-                                tick: o.tick,
-                                destination: o.destination,
-                            })}
+                            <PendingOutputLine
+                                text={t('pending.detail.sendOutput', {
+                                    amount: amountOf(o.amount),
+                                    tick: o.tick,
+                                    destination: DESTINATION_SLOT,
+                                })}
+                                destination={o.destination}
+                            />
                             {o.memo ? (
                                 <span className={styles.pendingMemo}>
                                     {' '}{t('pending.detail.memo', { memo: o.memo })}
@@ -2961,7 +3240,11 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 for a settled transaction nothing more is coming, so the
                 outputs stand on their own. */}
             {desc.kind === 'local' && !settled ? (
-                <p className={styles.pendingHelp}>{t('pending.detail.localRecordNote')}</p>
+                <p className={styles.pendingHelp}>{transferDirection === 'in'
+                    ? t('pending.detail.localRecordNoteIn')
+                    : transferDirection === 'self'
+                        ? t('pending.detail.localRecordNoteSelf')
+                        : t('pending.detail.localRecordNote')}</p>
             ) : null}
             {desc.kind === 'segments' ? (
                 <>
@@ -2992,14 +3275,14 @@ function capitalize(s) {
  * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
  * are skipped so the table only shows what's actually populated.
  */
-function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency) {
+function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency, transferDirection = null) {
     if (!entry) return [];
     const rows = [];
 
     // Action: just the colored bubble. The action number now lives
     // on its own "Index" row below Block.
     rows.push(['Action', (
-        <span className={styles.actionTag}>{entry.action ? actionDisplayLabel(entry.action) : '-'}</span>
+        <span className={styles.actionTag}>{entry.action ? detailActionLabel(entry, transferDirection) : '-'}</span>
     )]);
 
     // Fiat-display toggle. Only rendered when the caller resolved a
@@ -3026,6 +3309,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
                 {balancesHidden
                     ? '•••••'
                     : formatHistoryAmount(nativeAmount, historyAmountDirection(entry))}
+                {' '}{nativeTick}
                 {nativeFiatValue != null ? (
                     <span className={styles.rowRelativeTime}>
                         {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue, fiatCurrency)})
@@ -3047,19 +3331,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
         <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
     )]);
 
-    // Network uses the same badge as list rows so custom chain names and
-    // non-mainnet kinds come from the descriptor rather than id parsing.
-    if (entry.chainId) {
-        const descriptor = chainRegistry.get(entry.chainId);
-        rows.push(['Network', (
-            <span className={styles.copyableValue}>
-                {descriptor
-                    ? <ChainBadge descriptor={descriptor} size="sm" />
-                    : <span>{entry.chainId}</span>}
-            </span>
-        )]);
-    }
-    // Hero stays minimal: Action, Status, Network, Time only. Block,
+    // Hero stays minimal: Action, Status, and Time only. Block,
     // Index, Tx hash, Source, Destination, Amount, Memo, and every
     // per-action field live in the Details tab below.
     if (entry.timestamp) rows.push(['Time', formatTimestamp(entry.timestamp)]);
@@ -3071,11 +3343,47 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
  * table for fields a user typically needs to paste somewhere else
  * (action_index, tx_hash, source / destination addresses).
  */
+/**
+ * A Details value with its copy button after it. A long identifier (an
+ * address, a transaction ID) keeps both ends on one line and copies in
+ * full; the button says "Copy" and names what it copies to assistive tech.
+ * The button used to sit first with its whole name as text, which wrapped
+ * to two lines on a phone and pushed every value out of line.
+ */
 function CopyableValue({ display, fullValue, ariaLabel }) {
+    const full = String(fullValue ?? '');
+    const identifier = typeof display === 'string' && display === full && full.length > 14 && !/\s/.test(full);
     return (
         <span className={styles.copyableValue}>
-            <CopyIconButton value={fullValue} label={ariaLabel} />
-            <span className={styles.copyableText}>{display}</span>
+            <span className={styles.copyableText}>
+                {identifier ? <AddressText address={full} size="md" /> : display}
+            </span>
+            <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('common.copy')} />
+        </span>
+    );
+}
+
+function HistoryCopyButton({ value, label = t('history.copy.clipboard'), visibleLabel = label }) {
+    const [copied, setCopied] = useState(false);
+    const onCopied = () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+    return (
+        <span
+            role="status"
+            aria-live="polite"
+            title={copied ? t('history.copy.copiedTitle') : label}
+        >
+            <CopyButton
+                value={value}
+                label={visibleLabel}
+                ariaLabel={label}
+                onCopied={onCopied}
+            />
+            <span className={styles.visuallyHidden}>
+                {copied ? t('history.copy.copied') : ''}
+            </span>
         </span>
     );
 }
@@ -3085,8 +3393,8 @@ const DETAIL_FIELD_LABELS = Object.freeze({
     action_index: 'Action number',
     address: 'Address',
     block_index: 'Block',
-    chain: 'Chain',
-    chain_id: 'Chain',
+    chain: 'Network',
+    chain_id: 'Network',
     destination: 'To',
     source: 'From',
     time: 'Time',
@@ -3126,36 +3434,6 @@ function copyLabelForDetailField(key) {
     return null;
 }
 
-function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
-    const [copied, setCopied] = useState(false);
-    const { showToast, announce } = useToast();
-    const haptic = useHapticFeedback();
-    const handleClick = async (event) => {
-        event.stopPropagation();
-        const text = String(value ?? '');
-        const { ok } = await copyText(text);
-        if (ok) {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-            haptic.tap();
-            announce(t('history.copy.copied'));
-            return;
-        }
-        showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
-    };
-    return (
-        <button
-            type="button"
-            onClick={handleClick}
-            className={styles.copyIconButton}
-            aria-label={copied ? t('history.copy.copied') : label}
-            title={copied ? t('history.copy.copiedTitle') : label}
-        >
-            {copied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
-        </button>
-    );
-}
-
 /**
  * Comprehensive field-by-field dump shown in the Details tab. Lists
  * every entry-level identifier plus every key in `entry.raw`, in a
@@ -3163,60 +3441,105 @@ function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
  * transaction in one place. The curated hero table at the top of the
  * page covers the most-relevant fields; this is the long-form view.
  */
-function fullDetailRows(entry, balancesHidden = false) {
+function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAddresses = null, explorerLinks = []) {
     if (!entry) return [];
     const rows = [];
     const raw = entry.raw || {};
+    const transfer = detailTransfer(entry, walletAddresses);
+    const action = String(entry.action || '').toUpperCase();
+    const rawAsset = firstPopulatedValue(raw, ['tick', 'TICK', 'token', 'TOKEN']);
+    const asset = rawAsset || (action === 'SEND' || action === 'RECEIVE'
+        ? nativeTickerForEntry(entry)
+        : null);
+    const amount = firstPopulatedValue(raw, ['amount', 'AMOUNT', 'quantity', 'QUANTITY']);
+    const fee = firstPopulatedValue(entry, ['fee', 'networkFee', 'network_fee'])
+        || firstPopulatedValue(raw, [
+            'network_fee', 'networkFee', 'miner_fee', 'minerFee', 'tx_fee', 'txFee', 'fee', 'FEE',
+        ]);
+    const nativeTicker = nativeTickerForEntry(entry);
+    const explicitConfirmations = firstPopulatedValue(entry, ['confirmations'])
+        || firstPopulatedValue(raw, ['confirmations', 'CONFIRMATIONS']);
+    const block = finitePositiveNumber(entry.blockIndex ?? raw.block_index ?? raw.blockIndex);
+    const tip = finitePositiveNumber(chainTip);
+    const confirmations = finiteNonNegativeNumber(explicitConfirmations)
+        ?? (block != null && tip != null && tip >= block ? tip - block + 1 : null);
+    const timestamp = entry.timestamp ?? raw.timestamp ?? raw.block_time ?? raw.blockTime;
+    const memo = firstPopulatedValue(raw, ['memo', 'MEMO']);
+    const primaryExplorer = Array.isArray(explorerLinks) ? explorerLinks[0] : null;
+    const actionIndex = firstPopulatedValue(entry, ['actionIndex']);
+    const txHash = firstPopulatedValue(entry, ['txHash', 'txid']);
+    const entrySource = firstPopulatedValue(entry, ['source']);
+    const walletAddress = firstPopulatedValue(entry, ['address']);
 
-    if (entry.action) rows.push(['Action', actionDisplayLabel(entry.action)]);
-    if (entry.actionIndex) {
+    if (entry.action) rows.push(['Action', detailActionLabel(entry, transfer.amountDirection)]);
+    if (actionIndex) {
         rows.push(['Action number', (
             <CopyableValue
-                display={formatDecimalAmount(entry.actionIndex)}
-                fullValue={String(entry.actionIndex)}
+                display={formatDecimalAmount(actionIndex)}
+                fullValue={actionIndex}
                 ariaLabel={t('history.copy.actionNumber')}
             />
         )]);
     }
-    // Split chainId (e.g. 'bitcoin-regtest') into two rows so the
-    // chain family and network kind read separately.
+    // The chain family reads from the chainId (e.g. 'bitcoin-regtest').
+    // The network kind is not printed: the wallet never labels it (the
+    // network is a Settings choice), so a "Network: Regtest" row was the one
+    // place the detail page did.
     if (entry.chainId) {
-        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
-        if (coin) rows.push(['Chain', capitalize(coin)]);
-        rows.push(['Network', capitalize(network)]);
+        const [coin = ''] = String(entry.chainId).split('-');
+        if (coin) rows.push(['Network', capitalize(coin)]);
     }
-    if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
-    else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
-    if (entry.timestamp) {
-        rows.push(['Time', <RelativeTime timestamp={entry.timestamp} />]);
-    }
-    if (entry.txHash) {
+    if (txHash) {
         rows.push(['Transaction ID', (
             <CopyableValue
-                display={entry.txHash}
-                fullValue={entry.txHash}
+                display={txHash}
+                fullValue={txHash}
                 ariaLabel={t('common.copyTransactionId')}
             />
         )]);
     }
-    if (entry.source) {
+    if (entrySource) {
         rows.push(['From', (
             <CopyableValue
-                display={entry.source}
-                fullValue={entry.source}
+                display={entrySource}
+                fullValue={entrySource}
                 ariaLabel={t('history.copy.fromAddress')}
             />
         )]);
     }
-    if (entry.address) {
+    if (walletAddress) {
         rows.push(['Address', (
             <CopyableValue
-                display={entry.address}
-                fullValue={entry.address}
+                display={walletAddress}
+                fullValue={walletAddress}
                 ariaLabel={t('history.copy.walletAddress')}
             />
         )]);
     }
+
+    rows.push(['Direction', transfer.label]);
+    rows.push(['Amount', amount != null && asset ? (
+        balancesHidden
+            ? `••••• ${asset}`
+            : `${formatDetailAmount(amount, transfer.amountDirection)} ${asset}`
+    ) : '-']);
+    rows.push(['Network fee', fee != null && nativeTicker ? (
+        balancesHidden ? `••••• ${nativeTicker}` : `${formatDisplayAmount(fee)} ${nativeTicker}`
+    ) : '-']);
+    rows.push(['Counterparty', transfer.counterparty ? (
+        <CopyableValue
+            display={transfer.counterparty}
+            fullValue={transfer.counterparty === 'Self' ? entry.address : transfer.counterparty}
+            ariaLabel={t('history.detail.copyCounterparty')}
+        />
+    ) : '-']);
+    rows.push(['Confirmations', confirmations == null ? '-' : formatDecimalAmount(confirmations)]);
+    rows.push(['Block', block == null ? '-' : formatDecimalAmount(block)]);
+    rows.push(['Time', formatTimestamp(timestamp)]);
+    rows.push(['Memo', memo ?? '-']);
+    rows.push(['Explorer', primaryExplorer?.url ? (
+        <a href={primaryExplorer.url} target="_blank" rel="noopener noreferrer">{t('history.detail.openInExplorer')} <span aria-hidden="true">↗</span></a>
+    ) : '-']);
 
     // Every other raw key, sorted alphabetically. Skip the
     // entry-level fields we already surfaced above so we don't print
@@ -3232,6 +3555,11 @@ function fullDetailRows(entry, balancesHidden = false) {
         'tx_hash', 'txHash', 'TX_HASH',
         'source', 'SOURCE',
         'address', 'ADDRESS',
+        'amount', 'AMOUNT', 'quantity', 'QUANTITY',
+        'memo', 'MEMO',
+        'network_fee', 'networkFee', 'miner_fee', 'minerFee',
+        'tx_fee', 'txFee', 'fee', 'FEE',
+        'confirmations', 'CONFIRMATIONS',
         'params', 'PARAMS',
     ]);
     const rawKeys = Object.keys(raw).sort();
@@ -3285,9 +3613,109 @@ function fullDetailRows(entry, balancesHidden = false) {
     return rows;
 }
 
+function firstPopulatedValue(source, keys) {
+    for (const key of keys) {
+        const value = source?.[key];
+        if (!isEmptyDetailValue(value)) return String(value).trim();
+    }
+    return null;
+}
+
+function finitePositiveNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function finiteNonNegativeNumber(value) {
+    if (isEmptyDetailValue(value)) return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function nativeTickerForEntry(entry) {
+    const coin = coinOfChainId(entry?.chainId);
+    const descriptor = chainRegistry.get(entry?.chainId) || (coin ? { coin } : null);
+    return NATIVE_TICKER_BY_COIN(descriptor) || '';
+}
+
+function formatDetailAmount(amount, direction) {
+    const formatted = formatHistoryAmount(amount, direction);
+    if (direction !== 'self' || !formatted || /^[+-]/.test(String(amount).trim())) return formatted;
+    return /[1-9]/.test(String(amount)) ? `±${formatted}` : formatted;
+}
+
+function detailTransfer(entry, walletAddresses) {
+    const raw = entry?.raw || {};
+    const source = firstPopulatedValue(raw, ['source', 'SOURCE'])
+        || firstPopulatedValue(entry, ['source']);
+    const destination = firstPopulatedValue(raw, ['destination', 'DESTINATION', 'recipient', 'RECIPIENT']);
+    const own = new Set(
+        (walletAddresses instanceof Set ? [...walletAddresses] : (walletAddresses || []))
+            .map((address) => String(address).toLowerCase()),
+    );
+    if (entry?.address) own.add(String(entry.address).toLowerCase());
+    const sourceIsOurs = Boolean(source) && own.has(source.toLowerCase());
+    const destinationIsOurs = Boolean(destination) && own.has(destination.toLowerCase());
+    const action = String(entry?.action || '').toUpperCase();
+    const peer = peerAddressOfEntry(entry);
+    const safePeer = isEmptyDetailValue(peer) ? null : peer;
+    if (action !== 'SEND' && action !== 'RECEIVE') {
+        return { label: '-', amountDirection: null, counterparty: safePeer };
+    }
+    if (sourceIsOurs && destinationIsOurs) {
+        return { label: 'Self', amountDirection: 'self', counterparty: 'Self' };
+    }
+    const pendingDirection = entry?.pending?.direction;
+    const direction = sourceIsOurs ? 'out'
+        : destinationIsOurs ? 'in'
+        : pendingDirection === 'out' || pendingDirection === 'in' ? pendingDirection
+        : source && entry?.address ? 'in'
+        : null;
+    if (direction === 'out') {
+        return { label: 'Sent', amountDirection: 'out', counterparty: destination };
+    }
+    if (direction === 'in') {
+        return { label: 'Received', amountDirection: 'in', counterparty: source };
+    }
+    return { label: '-', amountDirection: null, counterparty: safePeer };
+}
+
+/**
+ * Which way a SEND or RECEIVE row moved value, resolved the same way the
+ * detail table's Sent / Received row is: 'in', 'out', 'self', or null when
+ * the row is not a transfer or its direction is unknown. The detail page
+ * header names the transaction by this, so an incoming SEND reads Receive.
+ *
+ * @param {any} entry
+ * @param {Iterable<string> | null | undefined} walletAddresses
+ * @returns {'in' | 'out' | 'self' | null}
+ */
+export function detailTransferDirection(entry, walletAddresses) {
+    return detailTransfer(entry, walletAddresses).amountDirection;
+}
+
+/**
+ * The name the detail page gives the action: a plain transfer is named by
+ * the way value moved (the protocol calls both sides SEND, so an incoming
+ * one would read as money leaving), and every other action keeps its
+ * protocol name.
+ *
+ * @param {any} entry
+ * @param {'in' | 'out' | 'self' | null} direction  from detailTransferDirection
+ * @returns {string}
+ */
+export function detailActionLabel(entry, direction) {
+    const action = String(entry?.action || '').toUpperCase();
+    if (action === 'SEND' || action === 'RECEIVE') {
+        if (direction === 'in') return actionDisplayLabel('RECEIVE');
+        if (direction === 'out' || direction === 'self') return actionDisplayLabel('SEND');
+    }
+    return actionDisplayLabel(entry?.action);
+}
+
 function isEmptyDetailValue(value) {
     if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
-    return typeof value === 'string' && /^(?:undefined|null|nan)$/i.test(value.trim());
+    return typeof value === 'string' && /^(?:|undefined|null|nan|[+-]?infinity)$/i.test(value.trim());
 }
 
 function isRemovedAccessListValue(key, value) {
@@ -3321,16 +3749,17 @@ function formatNumberWithCommas(value) {
 function explorerLinksFor(entry, settings) {
     const links = [];
     if (!entry) return links;
-    const txHash = entry.txHash;
+    const txHash = firstPopulatedValue(entry, ['txHash', 'txid']);
+    const actionIndex = firstPopulatedValue(entry, ['actionIndex']);
     const [coin = '', networkKind = 'mainnet'] = String(entry.chainId || '').split('-');
 
     // XChain actions have their own detail page. Plain transfers keep the
     // third-party transaction links below when that network has coverage.
-    const hasActionIndex = entry.actionIndex != null && entry.actionIndex !== '';
-    const xchainUrl = hasActionIndex ? explorerPageUrl({
+    const hasActionIndex = actionIndex != null;
+    const xchainUrl = (hasActionIndex || txHash) ? explorerPageUrl({
         chainId: entry.chainId,
-        kind: 'action',
-        value: entry.actionIndex,
+        kind: hasActionIndex ? 'action' : 'transaction',
+        value: hasActionIndex ? actionIndex : txHash,
         settings,
     }) : null;
     if (xchainUrl) {
@@ -3412,7 +3841,7 @@ function RecipientsBlock({ entry }) {
             setName(defaultName);
             setStage('loaded');
         } catch (err) {
-            setError(err?.message || 'Failed to load recipients.');
+            setError(userFacingMessage(err, 'Failed to load recipients.'));
             setStage('idle');
         }
     }
@@ -3438,7 +3867,7 @@ function RecipientsBlock({ entry }) {
             });
             setStage('saved');
         } catch (err) {
-            setError(err?.message || 'Save failed.');
+            setError(userFacingMessage(err, 'Could not save these recipients. Try again.'));
             setStage('loaded');
         }
     }
@@ -3467,7 +3896,7 @@ function RecipientsBlock({ entry }) {
                         ? t('history.recipients.showHolders')
                         : t('history.recipients.showRecipients')}
                 </Button>
-                {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
+                <StatusMessage variant="error">{error}</StatusMessage>
             </div>
         );
     }
@@ -3483,9 +3912,9 @@ function RecipientsBlock({ entry }) {
     if (stage === 'saved') {
         return (
             <div style={blockStyle}>
-                <span style={headingStyle} role="status">
+                <StatusMessage variant="success">
                     {t('history.recipients.saved', { count: recipients.length, name: name.trim() })}
-                </span>
+                </StatusMessage>
             </div>
         );
     }
@@ -3501,9 +3930,6 @@ function RecipientsBlock({ entry }) {
             {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
             {recipients.length > 0 ? (
                 <div style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                    padding: 'var(--xc-space-1)',
                     fontFamily: 'monospace',
                     fontSize: 'var(--xc-text-xs)',
                     color: 'var(--xc-text)',
@@ -3532,24 +3958,14 @@ function RecipientsBlock({ entry }) {
                 />
             )}
             {recipients.length > 0 ? (
-                <div style={{ display: 'flex', gap: 'var(--xc-space-1)', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input
+                <div className={styles.recipientContactActions}>
+                    <Input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         maxLength={120}
                         aria-label={t('common.contactName')}
                         disabled={stage === 'saving'}
-                        style={{
-                            flex: 1,
-                            minWidth: 200,
-                            background: 'var(--xc-bg)',
-                            color: 'var(--xc-text)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-sm)',
-                        }}
                     />
                     <Button
                         type="button"
@@ -3562,9 +3978,7 @@ function RecipientsBlock({ entry }) {
                     </Button>
                 </div>
             ) : null}
-            {error ? (
-                <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
-            ) : null}
+            <StatusMessage variant="error">{error}</StatusMessage>
         </div>
     );
 }
@@ -3772,96 +4186,126 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
+/**
+ * True when `label` is the name the wallet generated for an address
+ * ("BTC Address #1", "LTC Change #2", "Imported Address") rather than one the
+ * user chose. A generated name only repeats the coin, which the row's asset
+ * mark already shows, so a row names the receiving address only when the
+ * user named it.
+ *
+ * @param {string} label
+ * @param {string | undefined} chainId
+ * @returns {boolean}
+ */
+export function isGeneratedAddressLabel(label, chainId) {
+    let text = String(label || '').trim();
+    if (!text || text === 'Imported Address') return true;
+    const ticker = tickerForCoin(coinOfChainId(chainId) || '');
+    if (ticker && text.startsWith(`${ticker} `)) text = text.slice(ticker.length + 1);
+    return /^(Address|Change|Dispenser)( #\d+)?$/.test(text);
+}
+
+/** Divisibility a record states for its own token; 8 when it states none. */
+function recordDivisibility(raw) {
+    const stated = Number(raw?.divisibility);
+    if (Number.isInteger(stated) && stated >= 0) return stated;
+    return raw?.divisible === false ? 0 : 8;
+}
+
+export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
+    const [balancesHidden] = useBalancesHidden();
     const settledAmount = settledAmountAnnotation(entry);
+    const actionKind = classifyEntryAction(entry, walletAddresses);
     const receiveLabel = entry.receiveLabel
-        && classifyEntryAction(entry, walletAddresses) === 'receive'
+        && actionKind === 'receive'
+        && !isGeneratedAddressLabel(entry.receiveLabel, entry.chainId)
         ? entry.receiveLabel
         : '';
+    const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });
+    const rawTick = entry.raw?.tick ?? entry.raw?.TICK ?? entry.raw?.token;
+    const tick = String(settledAmount?.tick || rawTick || nativeTick || '?');
+    // A settled sweep or issue prints the amount Home prints, from the same
+    // formatter; its record carries base units.
+    const baseUnitAmount = !settledAmount && entry.blockIndex
+        && (actionKind === 'sweep' || actionKind === 'issue')
+        ? activityRowAmount(entry, { divisibility: recordDivisibility(entry.raw) })
+        : '';
+    // Hidden balances mask the figure here as they do on Home and in the
+    // pending annotation; the ticker stays, since it is not an amount.
+    const amount = settledAmount ? (
+        <span
+            data-history-amount={settledAmount.direction || 'unknown'}
+            aria-label={balancesHidden ? undefined : formatHistoryAmountForSpeech(
+                settledAmount.amount,
+                settledAmount.tick,
+                settledAmount.direction,
+            )}
+        >
+            {balancesHidden ? '•••••' : formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+        </span>
+    ) : entry.blockIndex ? (baseUnitAmount ? (
+        <span data-history-amount="unknown">
+            {balancesHidden ? '•••••' : baseUnitAmount} {tick}
+        </span>
+    ) : tick) : (
+        <>
+            <PendingRowLabel entry={entry} />
+            <PendingAmountLabel entry={entry} />
+        </>
+    );
+    const namedContext = contractRowLabel(entry)
+        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '');
+    // A row names its counterparty, so a send shows where it went. The
+    // address keeps both identifying ends: an end-clipped one showed only its
+    // first characters on a phone.
+    const counterparty = namedContext ? '' : (peerAddressOfEntry(entry) || entry.source || '');
+    const contextLabel = namedContext || counterparty;
+    const contextText = namedContext || truncateAddress(counterparty);
+    const linkedTo = entry.link
+        ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
+        : '';
+    const rowDescription = entry.blockIndex ? [
+        t('history.row.block', { block: formatDecimalAmount(entry.blockIndex) }),
+        chainTip ? t('history.row.confirmations', {
+            count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
+        }) : '',
+    ].filter(Boolean).join(', ') : '';
     return (
         <li data-history-key={entry.key}>
-            <button
-                type="button"
+            <ActivityRow
                 onClick={() => onClick(entry)}
                 data-history-row
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
-                aria-expanded={selected}
-            >
-                {showConnector ? (
-                    <span className={styles.connector} aria-hidden="true" />
-                ) : null}
-                <span className={styles.rowHeader}>
-                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{entry.chainId}</span>}
-                    <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
-                    {entry.link ? (
-                        <span
-                            className={styles.crosschainBadge}
-                            title={t('history.row.linkedTo', {
-                                ticker: entry.link.peerCoinTicker,
-                                index: entry.link.peerActionIndex,
-                            })}
-                        >
-                            🔗
-                        </span>
-                    ) : null}
-                    <StatusPill status={classifyEntryStatus(entry)} />
-                    {verify ? (
-                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
-                    ) : null}
-                </span>
-                <span className={styles.rowSourceAddress} title={entry.source || undefined}>
-                    {entry.source || '-'}
-                </span>
-                {receiveLabel ? (
-                    <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
-                ) : null}
-                {contractRowLabel(entry) ? (
-                    <span className={styles.rowContractLabel}>
-                        {contractRowLabel(entry)}
-                    </span>
-                ) : null}
-                <span className={styles.rowMeta}>
-                    {entry.blockIndex ? (
-                        <>
-                            <span>{t('history.row.block', {
-                                block: formatDecimalAmount(entry.blockIndex),
-                            })}</span>
-                            {settledAmount ? (
-                                <span
-                                    className={styles.pendingAmount}
-                                    data-history-amount={settledAmount.direction || 'unknown'}
-                                    aria-label={formatHistoryAmountForSpeech(
-                                        settledAmount.amount,
-                                        settledAmount.tick,
-                                        settledAmount.direction,
-                                    )}
-                                >
-                                    {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
-                                </span>
-                            ) : null}
-                            {chainTip ? (
-                                <span className={styles.confirmationsPill}>
-                                    {t('history.row.confirmations', {
-                                        count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
-                                    })}
-                                </span>
-                            ) : null}
-                        </>
-                    ) : (
-                        <>
-                            <PendingRowLabel entry={entry} />
-                            <PendingAmountLabel entry={entry} />
-                        </>
-                    )}
-                    {entry.timestamp ? (
-                        <RelativeTime
-                            className={styles.rowRelativeTime}
-                            timestamp={entry.timestamp}
-                        />
-                    ) : null}
-                </span>
-            </button>
+                // A row that opens the detail page is a link to it, not a
+                // disclosure: no expand chevron and no expanded state.
+                aria-expanded={opensDetail ? undefined : selected}
+                chainId={entry.chainId}
+                tick={tick}
+                isNative={tick === nativeTick}
+                label={actionDisplayLabel(actionKind) || actionDisplayLabel(entry.action)}
+                context={(
+                    <>
+                        {linkedTo ? <span role="img" aria-label={linkedTo} title={linkedTo}>🔗</span> : null}
+                        {verify ? (
+                            <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
+                        ) : null}
+                        {contextLabel ? <span title={contextLabel}>{contextText}</span> : null}
+                    </>
+                )}
+                amount={amount}
+                status={classifyEntryStatus(entry)}
+                statusLabels={{
+                    confirmed: t('history.status.confirmed'),
+                    failed: t('history.status.failed'),
+                    pending: t('history.status.pending'),
+                }}
+                timestamp={entry.timestamp}
+                selected={selected}
+                aria-description={rowDescription || undefined}
+                decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}
+                trailing={opensDetail ? null : <DoubleChevron direction={selected ? 'up' : 'down'} />}
+            />
             {selected ? (
                 <DetailCard
                     entry={entry}
@@ -3872,6 +4316,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                     walletId={walletId}
                     showFiatInHistory={showFiatInHistory}
                     fiatCurrency={fiatCurrency}
+                    walletAddresses={walletAddresses}
                     onDismissFailed={onDismissFailed}
                     networkAvailable={networkAvailable}
                 />
@@ -3887,12 +4332,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
 function GroupCard({ item, expanded, onToggle }) {
     const [balancesHidden] = useBalancesHidden();
     const d = chainRegistry.get(item.leader.chainId);
-    // §28.3: link-pair groups span two chains; surface both badges so
-    // the user sees the cross-chain relationship without expanding.
-    // Other subkinds keep their single-chain header.
     const isLinkPair = item.subkind === 'link-pair';
-    const peer = isLinkPair ? item.members[0] : null;
-    const peerDescriptor = peer ? chainRegistry.get(peer.chainId) : null;
     const newest = item.members[0];
     // Only issue-mint group summaries embed a financial amount
     // ("Launched TICK (supply 12345)"); strip the supply parenthetical
@@ -3901,39 +4341,33 @@ function GroupCard({ item, expanded, onToggle }) {
     const displaySummary = (balancesHidden && item.subkind === 'issue-mint')
         ? stripSupplyParenthetical(item.summary)
         : item.summary;
+    const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(item.leader.chainId) });
+    const tick = String(item.leader.raw?.tick ?? item.leader.raw?.TICK ?? nativeTick ?? '?');
     return (
-        <button
-            type="button"
+        <ActivityRow
             onClick={onToggle}
             data-history-row
             className={`${styles.row} ${styles.groupCard} ${expanded ? styles.groupCardExpanded : ''}`}
             aria-expanded={expanded}
-        >
-            <span className={styles.rowHeader}>
-                {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{item.leader.chainId}</span>}
-                {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
-                    <>
-                        <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
-                        <ChainBadge descriptor={peerDescriptor} size="sm" />
-                    </>
-                ) : null}
-                <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
-                {!isLinkPair ? (
-                    <span className={styles.groupCount}>{item.members.length}</span>
-                ) : null}
-            </span>
-            <span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>
-            <span className={styles.rowMeta}>
-                {newest?.timestamp ? (
-                    <RelativeTime timestamp={newest.timestamp}>
-                        {(when) => t('history.group.latest', { when })}
-                    </RelativeTime>
-                ) : '-'}
-                <span className={styles.groupChevron} aria-hidden="true">
-                    <DoubleChevron direction={expanded ? 'up' : 'down'} />
-                </span>
-            </span>
-        </button>
+            chainId={item.leader.chainId}
+            tick={tick}
+            isNative={tick === nativeTick}
+            label={groupBadgeLabel(item.subkind)}
+            context={isLinkPair ? 'Linked' : `${item.members.length}`}
+            amount={displaySummary}
+            status={classifyEntryStatus(item.leader)}
+            statusLabels={{
+                confirmed: t('history.status.confirmed'),
+                failed: t('history.status.failed'),
+                pending: t('history.status.pending'),
+            }}
+            timestamp={newest?.timestamp}
+            selected={expanded}
+            aria-description={newest?.timestamp
+                ? t('history.group.latest', { when: formatTimestamp(newest.timestamp) })
+                : undefined}
+            trailing={<DoubleChevron direction={expanded ? 'up' : 'down'} />}
+        />
     );
 }
 
@@ -4049,21 +4483,6 @@ function shortenAddress(addr) {
     return `${addr.slice(0, 16)}…${addr.slice(-8)}`;
 }
 
-/**
- * Per-row success / error / pending indicator. Reads the entry's
- * classified status and renders a colored pill so the user can scan a
- * long list and pick out failures at a glance.
- */
-function StatusPill({ status }) {
-    if (status === 'confirmed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title={t('history.status.confirmed')}>{t('history.status.confirmed')}</span>;
-    }
-    if (status === 'failed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title={t('history.status.failed')}>{t('history.status.failed')}</span>;
-    }
-    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title={t('history.status.pending')}>{t('history.status.pending')}</span>;
-}
-
 function formatTimestamp(ts) {
     return formatLocalDateTime(ts) || '-';
 }
@@ -4108,7 +4527,7 @@ function decodeActionToText(row) {
     try {
         return JSON.stringify(row, null, 2);
     } catch (err) {
-        return String(err);
+        return userFacingMessage(err, 'This action data could not be displayed.');
     }
 }
 
@@ -4196,7 +4615,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
 
     const close = () => {
         setOpen(false);
-        triggerRef.current?.focus();
+        triggerRef.current?.querySelector('button')?.focus();
     };
 
     useEffect(() => {
@@ -4208,7 +4627,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
             setOpen(false);
-            triggerRef.current?.focus();
+            triggerRef.current?.querySelector('button')?.focus();
         };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
@@ -4230,23 +4649,24 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
 
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
-            <button
-                ref={triggerRef}
-                type="button"
-                className={styles.chainPickerBtn}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => setOpen((v) => !v)}
-                onKeyDown={(event) => {
-                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                    event.preventDefault();
-                    if (!open) setOpen(true);
-                    focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
-                }}
-            >
-                <span className={styles.chainPickerLeft}>{summary}</span>
-                <SingleChevron direction="down" />
-            </button>
+            <div ref={triggerRef}>
+                <Chip
+                    pressed={!isAll}
+                    className={styles.chainPickerLeft}
+                    aria-haspopup="listbox"
+                    aria-expanded={open}
+                    onClick={() => setOpen((v) => !v)}
+                    onKeyDown={(event) => {
+                        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                        event.preventDefault();
+                        if (!open) setOpen(true);
+                        focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
+                    }}
+                >
+                    <span className={styles.chainPickerLeft}>{summary}</span>
+                    <SingleChevron direction="down" />
+                </Chip>
+            </div>
             {open ? (
                 <ul
                     ref={menuRef}
@@ -4265,6 +4685,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
                         const icon = typeof iconForId === 'function' ? iconForId(opt.id) : null;
                         return (
                             <li key={opt.id}>
+                                {/* Native options preserve the custom multiselect listbox keyboard model. */}
                                 <button
                                     type="button"
                                     className={`${styles.chainPickerOption} ${active ? styles.chainPickerOptionActive : ''}`}
@@ -4433,6 +4854,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
 
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
+            {/* A native trigger retains the ref-driven focus handoff for this rich custom listbox. */}
             <button
                 ref={triggerRef}
                 type="button"
@@ -4458,7 +4880,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     ) : (
                         <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
                     )}
-                    <span>{selectedDesc ? selectedDesc.displayName : t('history.filters.allChains')}</span>
+                    <span>{selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}</span>
                 </span>
                 <SingleChevron direction="down" />
             </button>
@@ -4470,6 +4892,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     onKeyDown={(event) => handleListboxKeyDown(event, menuRef, close)}
                 >
                     <li>
+                        {/* Native options preserve the rich listbox keyboard model. */}
                         <button
                             type="button"
                             role="option"
@@ -4478,7 +4901,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                             onClick={() => choose('all')}
                         >
                             <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>{t('history.filters.allChains')}</span>
+                            <span>{t('common.allNetworks')}</span>
                         </button>
                     </li>
                     {activeChainIds.map((cid) => {
@@ -4486,6 +4909,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                         const isSel = selectedId === cid;
                         return (
                             <li key={cid}>
+                                {/* Native options preserve the rich listbox keyboard model. */}
                                 <button
                                     type="button"
                                     role="option"
@@ -4594,11 +5018,21 @@ const MODAL_CARD = {
     padding: 'var(--xc-space-3)',
     width: 'min(420px, 90vw)',
     maxHeight: '80vh',
-    overflowY: 'auto',
+    minHeight: 0,
+    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-3)',
     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.25)',
+};
+const MODAL_BODY = {
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-3)',
 };
 const MODAL_FIELDSET = {
     border: '1px solid var(--xc-border)',
@@ -4615,14 +5049,10 @@ const MODAL_LEGEND = {
     fontSize: 'var(--xc-text-xs)',
     padding: '0 var(--xc-space-1)',
 };
-const MODAL_LABEL = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-};
 const MODAL_ACTIONS = {
     display: 'flex',
+    flex: '0 0 auto',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: 'var(--xc-space-2)',
 };
@@ -4671,92 +5101,76 @@ function ExportModal({
                 aria-modal="true"
                 aria-labelledby="xc-history-export-title"
             >
-                <h2 id="xc-history-export-title" style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
+                <SectionHeader id="xc-history-export-title" title={t('history.export.title')} />
 
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-format"
-                            value="csv"
-                            checked={format === 'csv'}
-                            onChange={() => setFormat('csv')}
-                            disabled={exporting}
-                        />
-                        {t('history.export.csv')}
-                    </label>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-format"
-                            value="json"
-                            checked={format === 'json'}
-                            onChange={() => setFormat('json')}
-                            disabled={exporting}
-                        />
-                        {t('history.export.json')}
-                    </label>
-                </fieldset>
+                <div style={MODAL_BODY}>
+                    <RadioGroup
+                        style={MODAL_FIELDSET}
+                        legend={t('history.export.format')}
+                        name="export-format"
+                        value={format}
+                        onChange={setFormat}
+                        disabled={exporting}
+                        options={[
+                            { value: 'csv', label: t('history.export.csv') },
+                            { value: 'json', label: t('history.export.json') },
+                        ]}
+                    />
 
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
-                    {flowsLib.EXPORT_COLUMNS.map((col) => {
-                        const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
-                        const label = col === 'fiatCurrency'
-                            ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
-                            : detail.label;
-                        return (
-                            <label key={col} style={MODAL_LABEL} title={detail.description}>
-                                <input
-                                    type="checkbox"
+                    <fieldset style={MODAL_FIELDSET}>
+                        <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
+                        {flowsLib.EXPORT_COLUMNS.map((col) => {
+                            const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
+                            const label = col === 'fiatCurrency'
+                                ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
+                                : detail.label;
+                            return (
+                                <Checkbox
+                                    key={col}
+                                    label={label}
+                                    description={detail.description}
+                                    title={detail.description}
                                     checked={columns.has(col)}
                                     onChange={() => toggleColumn(col)}
                                     disabled={exporting}
                                 />
-                                <span>
-                                    <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
-                                    <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                                        {detail.description}
-                                    </span>
-                                </span>
-                            </label>
-                        );
-                    })}
-                </fieldset>
-
-                <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
-                    {t('history.export.rowCount', { count: visibleCount })}
-                </p>
-
-                {exporting ? (
-                    <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
-                        {t('history.export.progress', {
-                            completed: progress.completed,
-                            total: progress.total,
+                            );
                         })}
-                        {operationTime.showElapsed
-                            ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
-                            : ''}
+                    </fieldset>
+
+                    <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                        {t('history.export.rowCount', { count: visibleCount })}
                     </p>
-                ) : null}
-                {operationTime.timedOut ? (
-                    <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
-                        {t('history.export.slow')}
-                    </p>
-                ) : null}
-                {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
+
+                    {exporting ? (
+                        <StatusMessage variant="info">
+                            {t('history.export.progress', {
+                                completed: progress.completed,
+                                total: progress.total,
+                            })}
+                            {operationTime.showElapsed
+                                ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
+                                : ''}
+                        </StatusMessage>
+                    ) : null}
+                    {operationTime.timedOut ? (
+                        <StatusMessage variant="warning" role="alert">{t('history.export.slow')}</StatusMessage>
+                    ) : null}
+                    <StatusMessage variant="error">{error}</StatusMessage>
+                </div>
 
                 <div style={MODAL_ACTIONS}>
-                    <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>
-                    <button
-                        type="button"
-                        className={styles.chip}
+                    <Button variant="ghost" size="sm" onClick={onClose}>
+                        {t('common.cancel')}
+                    </Button>
+                    <Button
+                        variant="primary"
+                        size="sm"
                         onClick={onConfirm}
                         disabled={exporting || visibleCount === 0 || columns.size === 0}
                     >
                         {exporting ? t('history.export.preparing') : t('history.export.confirm')}
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

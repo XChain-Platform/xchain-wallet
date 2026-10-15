@@ -95,3 +95,6 @@ release-artifacts/
 # Throwaway venue worktrees. Release rehearsals and e2e runs check a second
 # tree out beside this one; nested worktrees are git plumbing, never content.
 /_s*-venue*/
+
+# Local scratch: lane worktrees, throwaway probes and their screenshots.
+/tmp/

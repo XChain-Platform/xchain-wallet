@@ -8,6 +8,7 @@ import {
     formatActivityTime,
     formatLocalDateTime,
 } from '../utils/dateTime.js';
+import { t } from '../../i18n/index.js';
 
 const TICK_MS = 30_000;
 const LONG_PRESS_MS = 500;
@@ -36,10 +37,13 @@ export function RelativeTime({ timestamp, className, children }) {
         return () => clearInterval(id);
     }, [exact, label, timestamp]);
 
-    useEffect(() => () => {
-        clearTimeout(pressTimer.current);
-        clearTimeout(revealTimer.current);
-    }, []);
+    useEffect(() => {
+        setShowExact(false);
+        return () => {
+            clearTimeout(pressTimer.current);
+            clearTimeout(revealTimer.current);
+        };
+    }, [timestamp]);
 
     if (!label || !exact) return null;
 
@@ -65,13 +69,7 @@ export function RelativeTime({ timestamp, className, children }) {
             className={className}
             dateTime={Number.isNaN(ms) ? undefined : new Date(ms).toISOString()}
             title={exact}
-            aria-label={`${label}. Exact time: ${exact}`}
-            tabIndex={0}
-            onFocus={() => setShowExact(true)}
-            onBlur={() => setShowExact(false)}
-            onKeyDown={(event) => {
-                if (event.key === 'Escape') event.currentTarget.blur();
-            }}
+            aria-label={t('components.relativeTime.exactTime', { label, exact })}
             onPointerDown={onPointerDown}
             onPointerUp={cancelPress}
             onPointerCancel={cancelPress}

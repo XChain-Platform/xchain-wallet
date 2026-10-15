@@ -24,7 +24,7 @@ describe('shared z-index tokens', () => {
 
     it('uses semantic layers for shared stacking surfaces', () => {
         const cases = [
-            ['shared/components/BottomTabBar.module.css', ['sticky', 'overlay', 'modal']],
+            ['shared/components/BottomTabBar.module.css', ['sticky', 'modal']],
             ['shared/components/HeaderSettingsButton.module.css', ['dropdown']],
             ['shared/commandPalette/CommandPalette.module.css', ['overlay']],
             ['shared/components/NoticeModal.module.css', ['modal']],

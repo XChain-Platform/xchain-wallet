@@ -55,6 +55,7 @@ function makeWatcher(over = {}) {
         notify,
         markTriggered,
         intervalMs: over.intervalMs,
+        now: over.now,
     });
     return { watcher, getNativePrices, notify, markTriggered, listArmedAlerts, getSettings, alerts, settings, state };
 }
@@ -241,6 +242,46 @@ describe('PriceAlertWatcher', () => {
         expect(getNativePrices).toHaveBeenCalledTimes(1);
         expect(getNativePrices.mock.calls[0][0].chainIds).toEqual(['bitcoin-mainnet', 'litecoin-mainnet']);
         expect(notify).toHaveBeenCalledTimes(2);
+    });
+
+    it('fetches and evaluates each alert in its saved fiat currency', async () => {
+        const getNativePrices = vi.fn(async ({ chainIds, fiatCurrency }) => ({
+            prices: Object.fromEntries(chainIds.map((chainId) => [chainId, {
+                priceFiat: fiatCurrency === 'eur' ? 65000 : 71000,
+            }])),
+        }));
+        const { watcher, notify } = makeWatcher({
+            alerts: [
+                armedAlert({ id: 'usd', targetFiat: 70000, fiatCurrency: 'usd' }),
+                armedAlert({ id: 'eur', targetFiat: 70000, fiatCurrency: 'eur' }),
+            ],
+            getNativePrices,
+        });
+
+        await watcher.pollOnce();
+
+        expect(getNativePrices.mock.calls.map(([request]) => request.fiatCurrency)).toEqual(['usd', 'eur']);
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify.mock.calls[0][0].data.alertId).toBe('usd');
+    });
+
+    it('does not fire from errored or expired price results', async () => {
+        const now = 1_000_000;
+        const getNativePrices = vi.fn()
+            .mockResolvedValueOnce({
+                prices: { 'bitcoin-mainnet': { priceFiat: 71000, fetchedAt: now } },
+                error: 'refresh failed',
+            })
+            .mockResolvedValueOnce({
+                prices: { 'bitcoin-mainnet': { priceFiat: 71000, fetchedAt: now - 300_001 } },
+            });
+        const { watcher, notify, markTriggered } = makeWatcher({ getNativePrices, now: () => now });
+
+        await watcher.pollOnce();
+        await watcher.pollOnce();
+
+        expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).not.toHaveBeenCalled();
     });
 
     it('suppresses the OS notification during quiet hours but still marks the alert triggered', async () => {

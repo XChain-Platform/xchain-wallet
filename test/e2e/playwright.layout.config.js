@@ -14,6 +14,9 @@
 //     pnpm --dir test/e2e exec playwright test --config playwright.layout.config.js
 //     ... --project=iphone-17-pro          one venue only
 //     LAYOUT_VENUES=android-lg-k51-large-text ...   Android 1.3 font scale
+//     LAYOUT_VENUES=android-lg-k51-largest-text ... 1.5, the largest the app honours
+//                                           (both go in through the app's native
+//                                           font-scale path; see sweep.js)
 //     LAYOUT_PORT=5342 ...                  own dev server, when another tree holds 5173
 //     LAYOUT_SCHEME=dark ...                dark palette (OS colour scheme), with the
 //                                           contrast checks; default runs stay light
@@ -44,7 +47,12 @@ const VENUES = [
     { name: 'android-lg-k51', use: phone('chromium', 411, 814, 1.75) },
     {
         name: 'android-lg-k51-large-text',
-        metadata: { rootFontSize: '130%' },
+        metadata: { fontScale: 1.3 },
+        use: phone('chromium', 411, 814, 1.75),
+    },
+    {
+        name: 'android-lg-k51-largest-text',
+        metadata: { fontScale: 1.5 },
         use: phone('chromium', 411, 814, 1.75),
     },
     { name: 'android-small-360', use: phone('chromium', 360, 640, 2) },
@@ -52,7 +60,7 @@ const VENUES = [
     { name: 'iphone-se-375', use: { ...devices['iPhone SE'] } },
     { name: 'ipad-11', use: { ...devices['iPad Pro 11'] } },
 ];
-const DEFAULT_VENUES = VENUES.filter((venue) => venue.name !== 'android-lg-k51-large-text');
+const DEFAULT_VENUES = VENUES.filter((venue) => !venue.metadata?.fontScale);
 
 export function selectVenues(value) {
     if (!value) return DEFAULT_VENUES;

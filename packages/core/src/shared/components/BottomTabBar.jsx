@@ -10,10 +10,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
-import { activeLeftNavItem, formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
+import {
+    formatBadgeCount,
+    isNavItemActive,
+    navItem,
+} from './LeftNav.jsx';
+import { ROUTE_NAV_SECTIONS, TAB_BAR_DESTINATIONS } from '../routeRegistry.js';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import PLATFORM_LINKS from '../platform-links.json';
+import { t } from '../../i18n/index.js';
 
 /**
  * §24.3 / G054: mobile bottom-sheet navigation.
@@ -45,36 +53,33 @@ import { useFocusTrap } from '../utils/focusTrap.js';
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
+ * @param {() => void} [props.onCommandPalette]
+ * @param {string} [props.platformCurrent] web-only key used to expose sibling platform sites in the More sheet
  * @param {boolean} [props.hasVmAddress] gates the Contracts sheet row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the row is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops the Send tab and the Receive sheet row
  * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
  */
 
-const PRIMARY_TABS = [
-    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-    // `spendable` marks the two rows signer mode promises are gone.
-    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
-    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-];
+// The thumb-row tabs, in TAB_BAR_DESTINATIONS order, with the sidebar's labels
+// and icons. `spendable` marks the Send row signer mode promises is gone.
+const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map(navItem);
 
 const SHEET_PRIMARY = [
-    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
-    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
-    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
-    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
-    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
+    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
+    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
+    { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; a pending count also dots the More tab.
-    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
+    { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
 function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
-    const routeGroup = activeLeftNavItem(currentView);
-    if (routeGroup === 'settings') return 'more';
-    return primaryTabs.some((tab) => tab.id === routeGroup) ? routeGroup : 'home';
+    const section = ROUTE_NAV_SECTIONS[currentView];
+    return primaryTabs.some((tab) => tab.id === section) ? section : null;
 }
 
 function scrollMainToTop() {
@@ -88,6 +93,8 @@ export function BottomTabBar({
     onLock,
     onOpenSettings,
     onOpenWalletPicker,
+    onCommandPalette,
+    platformCurrent,
     hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
@@ -147,11 +154,11 @@ export function BottomTabBar({
     // dot on the More tab itself or the user would never see it while collapsed.
     const sheetHasUnread = sheetRows.some((row) => badges[row.id] > 0);
     const activeTab = bottomTabOwner(currentView, primaryTabs);
-    const moreActive = activeTab === 'more';
+    const settingsActive = isNavItemActive('settings', currentView);
     const primaryIds = primaryTabs.map((tab) => tab.id);
     const tabStop = (rovingTab && [...primaryIds, 'more'].includes(rovingTab))
         ? rovingTab
-        : (moreActive ? 'more' : (activeTab || primaryIds[0]));
+        : (activeTab || primaryIds[0]);
 
     const onBarKeyDown = (e) => {
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -170,9 +177,29 @@ export function BottomTabBar({
         tabs[next].click();
     };
 
+    const onSheetKeyDown = (e) => {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const current = e.target.closest?.('[data-xc-menu-item]');
+        if (!current || !sheetRef.current?.contains(current)) return;
+        const rows = Array.from(sheetRef.current.querySelectorAll(
+            '[data-xc-menu-item]:not(:disabled):not([aria-disabled="true"])',
+        ));
+        const index = rows.indexOf(current);
+        if (index < 0 || rows.length === 0) return;
+        let next = null;
+        if (e.key === 'ArrowDown') next = (index + 1) % rows.length;
+        if (e.key === 'ArrowUp') next = (index - 1 + rows.length) % rows.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = rows.length - 1;
+        if (next === null) return;
+        e.preventDefault();
+        rows[next]?.focus();
+    };
+
     return (
         <>
-            <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
+            <nav className={styles.bar} aria-label={t('components.bottomTabBar.bottomNavigation')} onKeyDown={onBarKeyDown}>
+                {/* Navigation tabs stay native buttons to preserve roving focus and full-row semantics. */}
                 {primaryTabs.map((tab) => {
                     const active = tab.id === activeTab;
                     return (
@@ -202,8 +229,7 @@ export function BottomTabBar({
                     type="button"
                     data-bottom-tab="more"
                     tabIndex={tabStop === 'more' ? 0 : -1}
-                    className={`${styles.tab} ${sheetOpen || moreActive ? styles.tabActive : ''}`}
-                    aria-current={moreActive ? 'page' : undefined}
+                    className={`${styles.tab} ${sheetOpen ? styles.tabActive : ''}`}
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
                     onFocus={() => setRovingTab('more')}
@@ -215,42 +241,26 @@ export function BottomTabBar({
                             <span className={styles.tabDot} aria-hidden="true" />
                         ) : null}
                     </span>
-                    <span className={styles.tabLabel}>More</span>
+                    <span className={styles.tabLabel}>{t('history.detail.more')}</span>
                 </button>
             </nav>
 
             {sheetOpen ? (
-                <>
-                    <div
-                        className={styles.scrim}
-                        onClick={() => setSheetOpen(false)}
-                        aria-hidden="true"
-                        role="presentation"
-                        tabIndex={-1}
-                    />
-                    <div
-                        ref={sheetRef}
-                        id="xc-bottom-sheet"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="xc-bottom-sheet-title"
-                        className={styles.sheet}
-                    >
-                        <div className={styles.sheetHeader}>
-                            <div className={styles.handle} aria-hidden="true" />
-                            <h2 className={styles.sheetTitle}>More</h2>
-                            <button
-                                type="button"
-                                className={styles.sheetClose}
-                                onClick={() => setSheetOpen(false)}
-                                aria-label="Close more navigation"
-                            >
-                                <Icon.XIcon />
-                            </button>
-                        </div>
-                        <div className={styles.sheetBody}>
+                <OverlaySurface
+                    variant="sheet"
+                    surfaceRef={sheetRef}
+                    id="xc-bottom-sheet"
+                    title={<h2 className={styles.sheetTitle}>{t('history.detail.more')}</h2>}
+                    titleId="xc-bottom-sheet-dialog-title"
+                    aria-labelledby="xc-bottom-sheet-dialog-title"
+                    closeLabel="Close more navigation"
+                    onClose={() => setSheetOpen(false)}
+                    onBackdrop={() => setSheetOpen(false)}
+                    onKeyDown={onSheetKeyDown}
+                >
+                            {/* Navigation rows stay native buttons to preserve full-row menu semantics. */}
                             {/* Safari needs an explicit list role because this class removes list styling. */}
-                            <ul className={styles.sheetList} role="list">
+                            <ul className={styles.sheetList} role="list" data-xc-menu-list="rows">
                                 {sheetRows.map((row) => {
                                     const active = isNavItemActive(row.id, currentView);
                                     return (
@@ -258,6 +268,7 @@ export function BottomTabBar({
                                             <button
                                                 type="button"
                                                 className={`${styles.sheetItem} ${active ? styles.sheetItemActive : ''}`}
+                                                data-xc-menu-item
                                                 aria-current={active ? 'page' : undefined}
                                                 onClick={() => {
                                                     setSheetOpen(false);
@@ -269,7 +280,7 @@ export function BottomTabBar({
                                                 </span>
                                                 <span className={styles.sheetLabel}>{row.label}</span>
                                                 {badges[row.id] > 0 ? (
-                                                    <span className={styles.sheetBadge} aria-label={`${badges[row.id]} unread`}>
+                                                    <span className={styles.sheetBadge} aria-label={t('components.leftNav.unread', { value: badges[row.id] })}>
                                                         {formatBadgeCount(badges[row.id])}
                                                     </span>
                                                 ) : null}
@@ -280,12 +291,31 @@ export function BottomTabBar({
                             </ul>
                             <div className={styles.sheetDivider} />
                             {/* Safari needs an explicit list role because this class removes list styling. */}
-                            <ul className={styles.sheetList} role="list">
+                            <ul className={styles.sheetList} role="list" data-xc-menu-list="rows">
+                                {onCommandPalette ? (
+                                    <li>
+                                        <button
+                                            type="button"
+                                            className={styles.sheetItem}
+                                            data-xc-menu-item
+                                            onClick={() => {
+                                                setSheetOpen(false);
+                                                onCommandPalette();
+                                            }}
+                                        >
+                                            <span className={styles.sheetIcon} aria-hidden="true">
+                                                <Icon.SearchIcon />
+                                            </span>
+                                            <span>{t('routes.addressList.search')}</span>
+                                        </button>
+                                    </li>
+                                ) : null}
                                 {onOpenWalletPicker ? (
                                     <li>
                                         <button
                                             type="button"
                                             className={styles.sheetItem}
+                                            data-xc-menu-item
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onOpenWalletPicker();
@@ -294,15 +324,19 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.MoreIcon />
                                             </span>
-                                            <span>Switch wallet</span>
+                                            <span>{t('components.bottomTabBar.switchWallet')}</span>
                                         </button>
                                     </li>
                                 ) : null}
                                 {onOpenSettings ? (
                                     <li>
+                                        {/* Settings is a rail row on desktop, so it marks
+                                            the current page here the same way. */}
                                         <button
                                             type="button"
-                                            className={styles.sheetItem}
+                                            className={`${styles.sheetItem} ${settingsActive ? styles.sheetItemActive : ''}`}
+                                            data-xc-menu-item
+                                            aria-current={settingsActive ? 'page' : undefined}
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onOpenSettings();
@@ -311,7 +345,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.GearIcon />
                                             </span>
-                                            <span>Settings</span>
+                                            <span>{t('home.settings')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -320,6 +354,8 @@ export function BottomTabBar({
                                         <button
                                             type="button"
                                             className={styles.sheetItem}
+                                            data-xc-menu-item
+                                            data-destructive="true"
                                             onClick={() => {
                                                 setSheetOpen(false);
                                                 onLock();
@@ -328,14 +364,32 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.LockIcon />
                                             </span>
-                                            <span>Lock wallet</span>
+                                            <span>{t('home.lockWallet')}</span>
                                         </button>
                                     </li>
                                 ) : null}
+                                {platformCurrent ? PLATFORM_LINKS.links
+                                    .filter((site) => site.key !== platformCurrent)
+                                    .map((site) => (
+                                        <li key={site.key}>
+                                            <a
+                                                className={styles.sheetItem}
+                                                data-xc-menu-item
+                                                href={site.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ textDecoration: 'none' }}
+                                                onClick={() => setSheetOpen(false)}
+                                            >
+                                                <span className={styles.sheetIcon} aria-hidden="true">
+                                                    <Icon.ExternalLinkIcon />
+                                                </span>
+                                                <span>{site.label}</span>
+                                            </a>
+                                        </li>
+                                    )) : null}
                             </ul>
-                        </div>
-                    </div>
-                </>
+                </OverlaySurface>
             ) : null}
         </>
     );

@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
-import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
 import {
@@ -50,6 +49,16 @@ function renderForm(Form, messaging) {
     );
 }
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    return { promise, resolve, reject };
+}
+
 function pickLitecoinMainnet() {
     const option = screen.getAllByRole('option', { name: /Litecoin/ })
         .find((item) => !/testnet|regtest/i.test(item.textContent || ''));
@@ -63,23 +72,34 @@ afterEach(() => {
 });
 
 describe('message signing inputs', () => {
-    it('labels the address choices and updates the selection with the signing chain', async () => {
+    it('labels the address choices and updates the selection with the signing network', async () => {
         renderForm(SignMessageForm, messagingFor());
         await screen.findByRole('option', { name: 'Savings: bc1qexample' });
         expect(screen.getByRole('option', { name: 'Spending: bc1qspending' })).toBeTruthy();
-        const picker = await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
         pickLitecoinMainnet();
 
         await waitFor(() => expect(screen.getByLabelText('Address').value).toBe('ltc'));
-        expect(screen.getByRole('button', { name: /Chain: Litecoin/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /Network: Litecoin/ })).toBeTruthy();
+    });
+
+    it('does not render the selected network kind', async () => {
+        renderForm(SignMessageForm, messagingFor({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                'bitcoin-regtest': [{ id: 'btc-regtest', address: 'bcrt1qexample', source: 'hd' }],
+            }),
+        }));
+
+        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 });
 
 describe('signature verification inputs and results', () => {
     it('names each required input beside the disabled verify action', async () => {
         renderForm(VerifySignatureForm, messagingFor());
-        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/ });
         const action = screen.getByRole('button', { name: 'Verify signature' });
 
         expect(action).toBeDisabled();
@@ -97,10 +117,10 @@ describe('signature verification inputs and results', () => {
         expect(action).not.toHaveAttribute('aria-describedby');
     });
 
-    it('accepts wrapped base64 and verifies against the selected chain', async () => {
+    it('accepts wrapped base64 and verifies against the selected network', async () => {
         const verifyMessageRequest = vi.fn().mockResolvedValue({ valid: true });
         renderForm(VerifySignatureForm, messagingFor({ verifyMessageRequest }));
-        const picker = await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
         pickLitecoinMainnet();
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'ltc1qcounterparty' } });
@@ -114,21 +134,21 @@ describe('signature verification inputs and results', () => {
             message: 'exact message\nsecond line',
             signature: 'c2lnbmF0dXJl',
         }));
-        expect(screen.getByRole('status').textContent)
-            .toBe(en['verifySignature.valid']);
+        expect(screen.getByRole('status'))
+            .toHaveTextContent('Valid signature. Signature matches this message and address.');
     });
 
     it('rejects malformed base64 before calling the verifier', async () => {
         const verifyMessageRequest = vi.fn();
         renderForm(VerifySignatureForm, messagingFor({ verifyMessageRequest }));
-        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'not base64!' } });
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
-        expect(screen.getByRole('status').textContent)
-            .toBe(en['verifySignature.malformed']);
+        expect(screen.getByRole('status'))
+            .toHaveTextContent('Malformed signature. Enter a base64-encoded signature.');
         expect(verifyMessageRequest).not.toHaveBeenCalled();
     });
 
@@ -136,14 +156,43 @@ describe('signature verification inputs and results', () => {
         renderForm(VerifySignatureForm, messagingFor({
             verifyMessageRequest: vi.fn().mockResolvedValue({ valid: false }),
         }));
-        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
-        await waitFor(() => expect(screen.getByRole('status').textContent)
-            .toBe(en['verifySignature.invalid']));
+        await waitFor(() => expect(screen.getByRole('status'))
+            .toHaveTextContent("Invalid signature. Signature doesn't match this message and address."));
+        // A failed check takes the error tone but stays a polite status.
+        expect(screen.getByRole('status')).toHaveAttribute('data-variant', 'error');
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('does not show a pending result after an input changes', async () => {
+        const pending = deferred();
+        const verifyMessageRequest = vi.fn()
+            .mockImplementationOnce(() => pending.promise)
+            .mockResolvedValueOnce({ valid: false });
+        renderForm(VerifySignatureForm, messagingFor({ verifyMessageRequest }));
+        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'older message' } });
+        fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'newer message' } });
+        pending.resolve({ valid: true });
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Verify signature' })).not.toBeDisabled());
+        expect(screen.queryByText(/Valid signature/)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        await waitFor(() => expect(screen.getByRole('status'))
+            .toHaveTextContent("Invalid signature. Signature doesn't match this message and address."));
+        expect(verifyMessageRequest).toHaveBeenLastCalledWith(expect.objectContaining({
+            message: 'newer message',
+        }));
     });
 
     it('normalizes valid base64 without accepting arbitrary text', () => {

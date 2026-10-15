@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useState } from 'react';
 import styles from './AddressText.module.css';
 
 /**
@@ -26,31 +27,33 @@ export function truncateAddress(address) {
 /**
  * Monospace address display.
  *
- * - When `truncate` is true (default), addresses longer than 14
- *   characters render as `first6…last6`. Full address available via
- *   `title` and `aria-label`.
+ * Long identifiers render as `first6…last6` unless the context explicitly
+ * requires the full value. Focusing a truncated value reveals the full
+ * identifier without wrapping it, and copying always writes the full value.
  *
  * - When `highlight` is set, the address renders as three spans:
  *   first 6 (head, accent) / middle (muted) / last 6 (tail, accent).
  *   This is the §21.5 "checksum-positional highlighting" treatment.
- *   Combines with `truncate`: the head and tail still mark the
- *   identifying ends, with the muted middle pointing at the elided
- *   characters.
+ *   The head and tail still mark the identifying ends, with the muted
+ *   middle pointing at the elided characters.
  *
  * @param {object} props
  * @param {string} props.address
  * @param {boolean} [props.truncate]
  * @param {boolean} [props.highlight]
  * @param {'sm' | 'md'} [props.size]
+ * @param {string} [props.className]
+ * @param {boolean} [props.focusable]   false when a focusable control already owns the value, such as a read-only field's preview
  */
-export function AddressText({ address, truncate = true, highlight = false, size = 'md' }) {
-    const cls = `${styles.addr} ${styles[size]}`;
+export function AddressText({ address, truncate = true, highlight = false, size = 'md', className = '', focusable = true }) {
+    const [focused, setFocused] = useState(false);
+    const cls = `${styles.addr} ${styles[size]} ${className}`.trim();
     if (typeof address !== 'string' || address.length === 0) {
-        return <span className={cls}>…</span>;
+        return <span className={cls} dir="ltr">…</span>;
     }
     if (address.length <= 14) {
         return (
-            <span className={cls} title={address} aria-label={address}>
+            <span className={cls} title={address} aria-label={address} dir="ltr">
                 {address}
             </span>
         );
@@ -58,18 +61,41 @@ export function AddressText({ address, truncate = true, highlight = false, size 
     const head = address.slice(0, 6);
     const tail = address.slice(-6);
     const middleFull = address.slice(6, -6);
+    // Only a truncated value is held to one line. A full value (truncate=false)
+    // wraps, so a read-only Receive field never clips the address.
+    const displayStyle = !truncate ? { overflowWrap: 'anywhere' } : {
+        display: 'inline-block',
+        maxWidth: '100%',
+        overflowX: focused ? 'auto' : 'hidden',
+        verticalAlign: 'bottom',
+        whiteSpace: 'nowrap',
+        wordBreak: 'normal',
+    };
+    const commonProps = {
+        className: cls,
+        title: address,
+        'aria-label': address,
+        dir: 'ltr',
+        // A preview drawn over a focusable input stays out of the tab order:
+        // the input is the one stop for that value.
+        tabIndex: focusable ? 0 : undefined,
+        style: displayStyle,
+        onFocus: focusable ? () => setFocused(true) : undefined,
+        onBlur: focusable ? () => setFocused(false) : undefined,
+        onCopy: (event) => {
+            if (event.clipboardData) {
+                event.clipboardData.setData('text/plain', address);
+                event.preventDefault();
+            }
+        },
+    };
     if (!highlight) {
-        const display = truncate ? truncateAddress(address) : address;
-        return (
-            <span className={cls} title={address} aria-label={address}>
-                {display}
-            </span>
-        );
+        return <span {...commonProps}>{focused || !truncate ? address : truncateAddress(address)}</span>;
     }
     return (
-        <span className={cls} title={address} aria-label={address}>
+        <span {...commonProps}>
             <span className={styles.head}>{head}</span>
-            <span className={styles.middle}>{truncate ? '…' : middleFull}</span>
+            <span className={styles.middle}>{focused || !truncate ? middleFull : '…'}</span>
             <span className={styles.tail}>{tail}</span>
         </span>
     );

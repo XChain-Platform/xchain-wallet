@@ -8,8 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef } from 'react';
+import { Children, cloneElement, forwardRef, isValidElement } from 'react';
+import { submitOnlyFromLastField } from './formEnter.js';
 import styles from './FormPage.module.css';
+
+/**
+ * Disable every submit button in an action row. Used by the demo guard so a
+ * demo wallet can browse the form but never reach a compose.
+ */
+function disableSubmits(node) {
+    return Children.map(node, (child) => {
+        if (!isValidElement(child)) return child;
+        if (child.props?.type === 'submit') return cloneElement(child, { disabled: true });
+        if (child.props?.children != null && typeof child.type === 'symbol') {
+            return cloneElement(child, undefined, disableSubmits(child.props.children));
+        }
+        return child;
+    });
+}
 
 /**
  * Page template for every screen whose job is a form the user fills in and
@@ -19,8 +35,11 @@ import styles from './FormPage.module.css';
  *   narrow (< 600px)  fields sit bare on the page gutter, no card
  *   wide  (>= 600px)  the form sits in one card, a centred 560px column
  *
- * Pass `sectioned` when the children are FormSections: each section then
- * becomes its own card when wide, and a heading-divided block when narrow.
+ * Screen owns the page gutter and top spacing. The wide card centres within
+ * that content box without adding its own top margin.
+ *
+ * Pass `sectioned` when the children are FormSections. The sections share
+ * the form's wide card and are divided from one another at every width.
  * The action row always closes the form, below the last field or section,
  * and its buttons wrap rather than overflow.
  *
@@ -32,9 +51,21 @@ import styles from './FormPage.module.css';
  * @param {import('react').ReactNode} [props.actions]   the action row: primary last, so it ends up on the right
  * @param {import('react').ReactNode} [props.status]    a StatusMessage shown just above the actions
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
- * @param {boolean} [props.sectioned]                   children are FormSections (card per section when wide)
+ * @param {import('react').ReactNode} [props.title]     centred page title for onboarding and other focused forms
+ * @param {import('react').ReactNode} [props.description] supporting copy below `title`
+ * @param {import('react').ReactNode} [props.visual]    optional illustration above `title`
+ * @param {import('react').ReactNode} [props.progress]  step indicator in the page's top row
+ * @param {import('react').ReactNode} [props.topAction] action aligned opposite the progress indicator
+ * @param {'h1' | 'h2'} [props.headingAs]               title heading level; defaults to h1
+ * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef]
+ * @param {boolean} [props.stackedActions]              stack equal-width actions instead of sharing a row
+ * @param {boolean} [props.sectioned]                   children are divider-separated FormSections
+ * @param {boolean} [props.fill]                        the form fills the screen height so a scrolling panel can take the free space and the actions sit at the bottom
+ * @param {boolean} [props.fullWidth]                   wide screens use the whole content width with no card, for reading pages such as the license terms
+ * @param {{ blocked: boolean, note: import('react').ReactNode, dialog: import('react').ReactNode }} [props.demoGuard] from useDemoGuard: in a demo wallet the note replaces `status`, submit buttons are disabled and submission is ignored
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
+ * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
  */
@@ -44,11 +75,24 @@ export const FormPage = forwardRef(function FormPage(
         actions,
         status,
         intro,
+        title,
+        description,
+        visual,
+        progress,
+        topAction,
+        headingAs: Heading = 'h1',
+        titleRef,
+        stackedActions = false,
         sectioned = false,
+        fill = false,
+        fullWidth = false,
         label,
+        demoGuard,
         noValidate = true,
+        as: Root = 'form',
         className,
         children,
+        onKeyDown,
         ...rest
     },
     ref,
@@ -56,21 +100,59 @@ export const FormPage = forwardRef(function FormPage(
     const classNames = [
         styles.form,
         sectioned ? styles.sectioned : null,
+        fill ? styles.fill : null,
+        fullWidth ? styles.fullWidth : null,
         className,
     ].filter(Boolean).join(' ');
+    const demoBlocked = !!demoGuard?.blocked;
+    const guardedSubmit = demoBlocked
+        ? (event) => { event?.preventDefault?.(); }
+        : onSubmit;
+    const semanticProps = Root === 'form'
+        ? { onSubmit: guardedSubmit, noValidate, 'aria-label': label }
+        : { role: 'group', 'aria-label': label };
+    const handleKeyDown = (event) => {
+        onKeyDown?.(event);
+        if (Root === 'form') submitOnlyFromLastField(event);
+    };
+    const hasHeader = title != null || description != null || visual != null;
+    const actionClassName = [
+        styles.actions,
+        stackedActions ? styles.stackedActions : null,
+    ].filter(Boolean).join(' ');
     return (
-        <form
+        <Root
             ref={ref}
             className={classNames}
-            onSubmit={onSubmit}
-            noValidate={noValidate}
-            aria-label={label}
+            {...semanticProps}
             {...rest}
+            onKeyDown={handleKeyDown}
         >
             {intro ? <p className={styles.intro}>{intro}</p> : null}
-            <div className={styles.body}>{children}</div>
-            {status ? <div className={styles.status}>{status}</div> : null}
-            {actions ? <div className={styles.actions}>{actions}</div> : null}
-        </form>
+            {progress != null || topAction != null ? (
+                <div className={styles.topRow}>
+                    <span aria-hidden="true" />
+                    <div className={styles.progress}>{progress}</div>
+                    <div className={styles.topAction}>{topAction}</div>
+                </div>
+            ) : null}
+            {hasHeader ? (
+                <header className={styles.pageHeader}>
+                    {visual != null ? <div className={styles.visual}>{visual}</div> : null}
+                    {title != null ? (
+                        <Heading ref={titleRef} tabIndex={-1} className={styles.title}>
+                            {title}
+                        </Heading>
+                    ) : null}
+                    {description != null ? <p className={styles.description}>{description}</p> : null}
+                </header>
+            ) : null}
+            {/* data-form-stack marks a column the form gap spaces, so a shared row
+                class (an action row, a notice) can drop its own margin inside it. */}
+            {children != null ? <div className={styles.body} data-form-stack="">{children}</div> : null}
+            {demoBlocked || status ? <div className={styles.status}>{demoBlocked ? demoGuard.note : status}</div> : null}
+            {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}
+            {demoBlocked ? demoGuard.dialog : null}
+        </Root>
     );
 });

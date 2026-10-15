@@ -122,8 +122,17 @@ function SkeletonRow({
  * @param {boolean} [props.avatar]
  * @param {number | string} [props.rowHeight]
  * @param {number | string} [props.avatarSize]
+ * @param {string} [props.titleWidth]
+ * @param {string} [props.subtitleWidth]
  */
-function SkeletonList({ rows, avatar = true, rowHeight, avatarSize }) {
+function SkeletonList({
+    rows,
+    avatar = true,
+    rowHeight,
+    avatarSize,
+    titleWidth,
+    subtitleWidth,
+}) {
     const count = Math.max(0, Math.floor(rows));
     return (
         <div className={styles.list} aria-hidden="true">
@@ -133,6 +142,8 @@ function SkeletonList({ rows, avatar = true, rowHeight, avatarSize }) {
                     avatar={avatar}
                     height={rowHeight}
                     avatarSize={avatarSize}
+                    titleWidth={titleWidth}
+                    subtitleWidth={subtitleWidth}
                 />
             ))}
         </div>
