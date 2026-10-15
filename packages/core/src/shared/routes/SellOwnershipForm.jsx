@@ -492,7 +492,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     );
 
     if (loadError) {
-        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
+        return wrap(<ListPage><StatusMessage variant="error">{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain) {
         return wrap(<ListPage><p className={styles.hint}>Loading your addresses.</p></ListPage>);
@@ -544,7 +544,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 label="Review ownership sale"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -669,13 +669,13 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             status={validationError || feeValidationError || formError ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
+                        <StatusMessage variant="error">{validationError}</StatusMessage>
                     ) : null}
                     {feeValidationError ? (
-                        <StatusMessage variant="error" className={styles.error}>{feeValidationError}</StatusMessage>
+                        <StatusMessage variant="error">{feeValidationError}</StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}

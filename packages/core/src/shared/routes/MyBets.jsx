@@ -197,7 +197,6 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
         return wrap(
             <StatusMessage
                 variant="error"
-                className={styles.error}
                 recovery={{ label: 'Try again', onAction: load }}
             >
                 {error}
@@ -267,7 +266,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
 
     return wrap(
         <>
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             <p className={styles.hint}>
                 {rows.length} bet{rows.length === 1 ? '' : 's'} across all of your addresses
                 {openCount ? `, ${openCount} still waiting on a result` : ''}.

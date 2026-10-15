@@ -114,7 +114,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
     if (error) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
+                <StatusMessage variant="error">{error}</StatusMessage>
             </>,
         );
     }
@@ -188,7 +188,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
             <SectionHeader title="Their markets" />
             {!markets ? <p className={styles.hint}>Loading markets…</p> : null}
             {marketsError ? (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     Could not load this address&apos;s markets.
                 </StatusMessage>
             ) : markets && markets.length === 0 ? (

@@ -49,14 +49,14 @@ afterEach(() => {
 });
 
 describe('Settings search', () => {
-    it('uses action-oriented, one-sentence descriptions for inline sections', () => {
+    it('omits redundant inline descriptions and keeps useful ones compact', () => {
         mount();
 
-        expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
-        expect(screen.getByText('Choose the interface language and fiat currency.')).toBeTruthy();
+        expect(screen.queryByText('Choose the theme and motion preference.')).toBeNull();
+        expect(screen.queryByText('Choose the interface language and fiat currency.')).toBeNull();
         expect(screen.getByText('Choose Mainnet or Testnet to control which networks the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
-        expect(screen.getByText('Choose which wallet events trigger notifications, sounds, or price alerts.')).toBeTruthy();
-        expect(screen.getByText('Export or import the address book.')).toBeTruthy();
+        expect(screen.getByText('Wallet events, sounds, and price alerts.')).toBeTruthy();
+        expect(screen.getByText('Address book import and export.')).toBeTruthy();
     });
 
     it('uses sentence case for Settings references in English copy', () => {
@@ -141,10 +141,11 @@ describe('Settings search', () => {
         expect(match.closest('[data-settings-search-highlight="true"]')).toBeTruthy();
     });
 
-    it('describes only the controls available in Appearance', () => {
+    it('does not add generic copy beneath Appearance', () => {
         mount();
 
-        expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Appearance' })).toBeTruthy();
+        expect(screen.queryByText(/wallet theme|interface animation/i)).toBeNull();
         expect(screen.queryByText(/accent color/i)).toBeNull();
     });
 

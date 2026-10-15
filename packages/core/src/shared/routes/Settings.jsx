@@ -358,7 +358,6 @@ export function Settings({
         {
             id: 'appearance',
             title: t('settings.page.appearance'),
-            description: t('settings.page.chooseTheThemeAndMotion'),
             keywords: 'appearance theme system default motion dark light reduced follow',
             kind: 'panel',
             Component: AppearanceSection,
@@ -386,7 +385,6 @@ export function Settings({
         {
             id: 'language-region',
             title: t('settings.page.languageRegion'),
-            description: t('settings.page.chooseTheInterfaceLanguageAnd'),
             keywords: 'language region currency fiat locale custom iso code',
             kind: 'panel',
             Component: LanguageRegionSection,
@@ -527,7 +525,6 @@ export function Settings({
         ...(desktopUpdaterBridge() ? [{
             id: 'updates',
             title: t('settings.page.updates'),
-            description: t('settings.page.checkForANewVersion'),
             keywords: 'updates update check for updates new version upgrade latest release',
             kind: 'panel',
             Component: UpdateCheckPanel,

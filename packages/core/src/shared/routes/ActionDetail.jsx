@@ -60,6 +60,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         if (!browserOnline) return undefined;
         if (!entryProp?.chainId || !entryProp?.address) return undefined;
         if (typeof messaging.getAddressHistory !== 'function') return undefined;
+        // A demo wallet's pending sample row never confirms, and a demo wallet's
+        // addresses never go to an explorer (issue #82).
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
         const { chainId, address } = entryProp;
         let cancelled = false;
         const look = () => {
@@ -91,7 +94,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
             look();
         }, flowsLib.BALANCE_POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(id); };
-    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline]);
+    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline, walletId]);
 
     // Local peer cache: fetched once on mount when the entry is one
     // side of a cross-chain LINK pair. DetailCard handles loading +

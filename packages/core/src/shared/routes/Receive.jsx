@@ -512,6 +512,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         };
     }, [address?.id, activeChainId, loadError, generateError]);
 
+    // The error sits first in the page content, but New address is lower down:
+    // bring the error into view so a failed tap is not silent on a phone.
+    useEffect(() => {
+        if (!generateError) return;
+        document.getElementById('receive-generate-error')?.scrollIntoView?.({ block: 'nearest' });
+    }, [generateError]);
+
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
         if (typeof messaging.verifyReceiveAddress !== 'function') {
@@ -1133,7 +1140,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const body = (
         <>
             {loadError ? (
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+
+            {generateError ? (
+                <StatusMessage variant="error" id="receive-generate-error">{generateError}</StatusMessage>
             ) : null}
 
             {noAddresses ? (
@@ -1158,10 +1169,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         <option key={type} value={type}>{addressTypeLabel(type)}</option>
                     ))}
                 </Select>
-            ) : null}
-
-            {generateError ? (
-                <StatusMessage variant="error" className={styles.error}>{generateError}</StatusMessage>
             ) : null}
 
             {!address && descriptor && addressType && !generating && !generateError ? (
@@ -1285,7 +1292,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         />
                     </div>
                     {amountError ? (
-                        <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
+                        <StatusMessage variant="error">{amountError}</StatusMessage>
                     ) : null}
                     {isHwAddress ? (
                         <section
@@ -1302,11 +1309,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                     {t('receive.addressVerifiedOnYour')} {hwDeviceLabel}{t('receive.itIsSafeToShare')}
                                 </p>
                             ) : hwVerify.status === 'mismatch' ? (
-                                <StatusMessage variant="error" className={styles.error}>
+                                <StatusMessage variant="error">
                                     {t('receive.your')} {hwDeviceLabel} {t('receive.showedADifferentAddressDo')}
                                 </StatusMessage>
                             ) : hwVerify.status === 'error' ? (
-                                <StatusMessage variant="error" className={styles.error}>{hwVerify.message}</StatusMessage>
+                                <StatusMessage variant="error">{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
                                     {t('receive.verifyThisAddressOnYour')} {hwDeviceLabel} {t('receive.beforeSharingItThisProtects')}

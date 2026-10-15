@@ -816,12 +816,12 @@ export const en = {
     'history.empty.startReceiving': 'Start receiving',
     'history.filters.label': 'History filters',
     'history.filters.toggle': 'Filters ({count})',
-    'history.filters.searchPlaceholder': 'Search action, address, token, transaction ID, memo…',
+    'history.filters.searchPlaceholder': 'Search by action, address, token, transaction ID, or memo…',
     'history.filters.searchLabel': 'Search history',
     'history.filters.clearSearch': 'Clear history search',
     'history.filters.fromDate': 'From date',
     'history.filters.toDate': 'To date',
-    'history.filters.additionalDetails': 'Additional details',
+    'history.filters.additionalDetails': 'More filters',
     'history.filters.fiatHelp': "Show local-currency values for the network's own coin.",
     'history.filters.fiatCurrency': 'Fiat: {currency}',
     'history.filters.showFiatOff': 'Show fiat: Off',
@@ -843,20 +843,20 @@ export const en = {
     'history.filters.datePresets': 'Date range presets',
     'history.filters.last7Days': '7 days',
     'history.filters.last30Days': '30 days',
-    'history.filters.allDates': 'All',
-    'history.filters.dateZone': 'Day boundaries use local time.',
-    'history.filters.activeRange': 'Active range: {from} to {to}',
-    'history.filters.anyDate': 'any date',
+    'history.filters.allDates': 'All dates',
+    'history.filters.dateZone': 'Dates use local time.',
+    'history.filters.activeRange': 'Date range: {from} to {to}',
+    'history.filters.anyDate': 'Any date',
     'history.filters.clearDateRange': 'Clear date range',
-    'history.detail.label': 'Action detail',
+    'history.detail.label': 'Transaction details',
     'history.detail.copyCounterparty': 'Copy counterparty address',
     'history.detail.openInExplorer': 'Open in explorer',
-    'history.detail.options': 'Action options',
+    'history.detail.options': 'Transaction actions',
     'history.detail.more': 'More',
     'history.detail.noAdditionalActions': 'No additional actions',
-    'history.detail.view': 'Action detail view',
+    'history.detail.view': 'Transaction detail tabs',
     'history.detail.copyRawJson': 'Copy raw JSON',
-    'history.detail.peerHeading': 'Peer · {ticker} #{index}',
+    'history.detail.peerHeading': 'Linked transaction · {ticker} #{index}',
     'history.detail.loadingPeer': 'Loading the linked transaction…',
     'history.detail.peerError': "Couldn't load the linked transaction. Try again.",
     'history.detail.copyPeerRawJson': 'Copy peer raw JSON',
@@ -897,11 +897,11 @@ export const en = {
     'history.export.open': 'Export…',
     'history.export.title': 'Export history',
     'history.export.format': 'Format',
-    'history.export.csv': 'CSV (RFC-4180; compact, opens in spreadsheets)',
-    'history.export.json': 'JSON (preserves the full row including link / raw)',
+    'history.export.csv': 'CSV (compact; opens in spreadsheets)',
+    'history.export.json': 'JSON (includes linked and raw data)',
     'history.export.columns': 'Columns',
     'history.export.rowCount':
-        '{count, plural, one {# filtered row will be exported.} other {# filtered rows will be exported.}}',
+        '{count, plural, one {# history item will be exported.} other {# history items will be exported.}}',
     'history.export.confirm': 'Export',
     'history.export.preparing': 'Preparing…',
     'history.export.progress': 'Preparing {completed} of {total} rows…',
@@ -1007,13 +1007,15 @@ export const en = {
 
     'extension.connect.title': 'Connect to XChain Wallet?',
     'extension.connect.approve': 'Connect',
-    'extension.connect.declaredName': 'The site calls itself',
+    'extension.connect.declaredName': 'Site-provided name',
     'extension.connect.permissions': 'Requested permissions',
     'extension.connect.permission.accounts':
         'View the accounts you select, including their addresses and balances',
     'extension.connect.permission.chains': 'Use only the networks you select below',
     'extension.connect.permission.signing':
         'Ask separately before signing any message or transaction',
+    'extension.connect.permission.remember':
+        'Remember a later signing approval only if you choose. Revoke it anytime in Connected sites.',
     'extension.connect.chains': 'Networks',
     'extension.connect.chains.requestedHint':
         'Choose from the networks this site requested. You can change this later.',
@@ -1026,7 +1028,7 @@ export const en = {
         'This site can see your primary account.',
 
     'extension.sign.source': 'Source',
-    'extension.sign.declaredName': 'The site calls itself: {name}',
+    'extension.sign.declaredName': 'Site-provided name: {name}',
     'extension.sign.signInAs': 'Sign in as',
     'extension.sign.noSignInAddress': 'This site has no address it may sign in with.',
     'extension.sign.checkingWalletMode': 'Checking wallet mode…',
@@ -1331,8 +1333,7 @@ export const en = {
     'settings.display.resetListPreferences': 'Reset list preferences',
     'settings.display.defaults': 'Defaults',
     'settings.display.resetDisplaySettings': 'Reset display settings',
-    'settings.display.restoresBalanceDisplayOptionsAnd':
-        'Restores balance display options and clears watched, pinned, hidden, and saved list preferences.',
+    'settings.display.restoresBalanceDisplayOptionsAnd': 'Clears token lists and saved filters too.',
     'settings.display.resetToDefaults': 'Reset to defaults',
     'settings.connectedSites.connectedSitesUnavailable': 'Connected sites unavailable: {error}',
     'settings.connectedSites.connectedSitesAndDappPermissions': 'Connected sites and dApp permissions',
@@ -1363,12 +1364,10 @@ export const en = {
     'settings.connectedSites.applying': 'Applying…',
     'settings.connectedSites.apply': 'Apply',
     'settings.connectedSites.blockedSites': 'Blocked sites',
-    'settings.connectedSites.blockedSitesCannotConnectOr':
-        "Blocked sites can't connect or ask you to sign until you unblock them. To block every subdomain, use a pattern like",
+    'settings.connectedSites.blockPatternLead': 'Use',
     'settings.connectedSites.exampleCom': '*.example.com',
-    'settings.connectedSites.andAdd': 'and add',
+    'settings.connectedSites.blockPatternJoin': 'with',
     'settings.connectedSites.exampleCom2': 'example.com',
-    'settings.connectedSites.separatelyToBlockTheMain': 'separately to block the main site too.',
     'settings.connectedSites.noBlockedSites': 'No blocked sites',
     'settings.connectedSites.sitesYouBlockAppearHere': 'Sites you block appear here.',
     'settings.connectedSites.unblock': 'Unblock',
@@ -1597,11 +1596,8 @@ export const en = {
         "URL format is checked here, but the host isn't contacted until the wallet uses it. If it's unreachable, this chain's balances, history and transactions may be unavailable.",
     'settings.endpoints.resetToDefault': 'Reset to default',
     'settings.languageRegion.language': 'Language',
-    'settings.languageRegion.chooseTheLanguageUsedFor':
-        'Choose the language used for wallet navigation, settings, and messages.',
     'settings.languageRegion.fiatCurrency': 'Fiat currency',
-    'settings.languageRegion.showEstimatedWalletValuesIn':
-        'Show estimated wallet values in this currency. Asset balances are unchanged.',
+    'settings.languageRegion.showEstimatedWalletValuesIn': 'Changes estimates, not asset balances.',
     'settings.languageRegion.currencyNotSupported': "{currency} isn't supported. Values are shown in USD.",
     'settings.languageRegion.searchByCodeOrName': 'Search by code or name',
     'settings.languageRegion.supportedFiatCurrencies': 'Supported fiat currencies',
@@ -1648,11 +1644,7 @@ export const en = {
         'Restore every custom shortcut to its built-in binding.',
     'settings.keyboard.resetAllShortcuts': 'Reset all shortcuts',
     'settings.appearance.theme': 'Theme',
-    'settings.appearance.chooseALightOrDark':
-        'Choose a light or dark wallet theme, or follow your device setting.',
     'settings.appearance.reducedMotion': 'Reduced motion',
-    'settings.appearance.controlInterfaceAnimationOrFollow':
-        'Control interface animation, or follow your device accessibility setting.',
     'settings.walletMode.switchToMode': 'Switch to {label} mode?',
     'settings.walletMode.confirmModeChange': 'Confirm mode change',
     'settings.page.searchSettings': 'Search settings…',
@@ -2550,31 +2542,20 @@ export const en = {
     'home.tabs.defi': 'DeFi',
     'home.tabs.activity': 'Activity',
     'settings.notifications.transactionConfirmations': 'Transaction confirmations',
-    'settings.notifications.notifyOnTheFirstConfirmation':
-        'Notify on the first confirmation of a sent transaction.',
+    'settings.notifications.notifyOnTheFirstConfirmation': 'First confirmation of a sent transaction.',
     'settings.notifications.incomingReceipts': 'Incoming receipts',
-    'settings.notifications.notifyWhenAWatchedAddress':
-        'Notify when a watched address receives a transaction.',
+    'settings.notifications.notifyWhenAWatchedAddress': 'Transactions received by watched addresses.',
     'settings.notifications.incomingPendingPayments': 'Incoming pending payments',
-    'settings.notifications.notifyAsSoonAsA':
-        'Notify as soon as a payment to a watched address is seen by the network, before it confirms.',
+    'settings.notifications.notifyAsSoonAsA': 'Seen by the network before confirmation.',
     'settings.notifications.incomingMessages': 'Incoming messages',
-    'settings.notifications.notifyWhenAWatchedAddress2': 'Notify when a watched address receives a message.',
     'settings.notifications.governancePolls': 'Governance polls',
-    'settings.notifications.notifyWhenANewPoll':
-        'Notify when a new poll opens for a token you hold. Binding polls (their result triggers a contract) are flagged.',
+    'settings.notifications.notifyWhenANewPoll': 'Held-token polls; binding polls are flagged.',
     'settings.notifications.deadlines': 'Deadlines',
-    'settings.notifications.notifyBeforeOneOfYour':
-        'Notify before one of your orders, swaps or dispensers expires, or a poll you created or voted in closes.',
+    'settings.notifications.notifyBeforeOneOfYour': 'Before trades, dispensers, or polls close.',
     'settings.notifications.dispenserRunningLow': 'Dispenser running low',
-    'settings.notifications.notifyWhenADispenserYou':
-        'Notify when a dispenser you run is nearly out of stock, so you can top it up before it turns buyers away.',
     'settings.notifications.dispenserFills': 'Dispenser fills',
-    'settings.notifications.notifyWhenADispenserYou2': 'Notify when a dispenser you authored is hit.',
     'settings.notifications.orderFills': 'Order fills',
-    'settings.notifications.notifyWhenADexOrder': 'Notify when a DEX order you placed is matched.',
     'settings.notifications.priceAlerts': 'Price alerts',
-    'settings.notifications.notifyWhenACoinHits': 'Notify when a coin hits a price level you set.',
     'settings.page.thisWallet': 'This wallet',
     'settings.page.manageItsNameExtendedPublic':
         'Manage its name, extended public keys, switching, and removal.',
@@ -2582,14 +2563,12 @@ export const en = {
     'settings.page.chooseTheActiveAccountAnd':
         'Choose the active account and manage change addresses and signer pairing.',
     'settings.page.appearance': 'Appearance',
-    'settings.page.chooseTheThemeAndMotion': 'Choose the theme and motion preference.',
     'settings.page.display': 'Display',
     'settings.page.controlBalanceThresholdsNumberFormatting':
         'Control balance thresholds, number formatting, and pinned or hidden tokens.',
     'settings.page.keyboard': 'Keyboard',
     'settings.page.viewAndRebindShortcuts': 'View and rebind shortcuts.',
     'settings.page.languageRegion': 'Language & region',
-    'settings.page.chooseTheInterfaceLanguageAnd': 'Choose the interface language and fiat currency.',
     'settings.page.privacy': 'Privacy',
     'settings.page.controlNetworkPrivacySensitiveData':
         'Control network privacy, sensitive-data visibility, metadata requests, and restore behavior.',
@@ -2608,11 +2587,10 @@ export const en = {
         'Choose the fee strategy and fee-bumping default for each network.',
     'settings.page.networkEndpoints': 'Network & endpoints',
     'settings.page.setExplorerEncoderAndHub': 'Set explorer, encoder, and hub URLs for each network.',
-    'settings.page.chooseWhichWalletEventsTrigger':
-        'Choose which wallet events trigger notifications, sounds, or price alerts.',
+    'settings.page.chooseWhichWalletEventsTrigger': 'Wallet events, sounds, and price alerts.',
     'settings.page.reviewDappConnectionsAndControl':
         "Review dApp connections and control each site's permissions.",
-    'settings.page.exportOrImportTheAddress': 'Export or import the address book.',
+    'settings.page.exportOrImportTheAddress': 'Address book import and export.',
     'settings.page.automaticDonationSystem': 'Automatic donation system',
     'settings.page.turnAutomaticDonationsOnOr':
         'Turn automatic donations on or off, set per-chain amounts and thresholds, and view lifetime totals.',
@@ -2620,7 +2598,6 @@ export const en = {
     'settings.page.configureRegtestNetworksCustomEndpoints':
         'Configure regtest networks, custom endpoints, local dApp controls, and diagnostics.',
     'settings.page.updates': 'Updates',
-    'settings.page.checkForANewVersion': 'Check for a new version of the desktop wallet.',
     'settings.page.viewVersionLicenseBuildVerification':
         'View version, license, build verification, release signature, and diagnostic details.',
     'settings.page.networkChooseAll':
@@ -2668,32 +2645,21 @@ export const en = {
     'createWallet.requiredWhenEnabled': 'Required when enabled.',
     'settings.thisWallet.deletesTheWalletAndAll':
         'Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery.',
-    'settings.display.collapseBalancesBelowTheSelected':
-        'Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible.',
+    'settings.display.collapseBalancesBelowTheSelected': 'Pinned and escrowed balances stay visible.',
     'settings.display.collapseUnpricedTokensWithoutA':
         'Collapse unpriced tokens without a name or image unless you pinned, watched, issued, or placed them in an order. Hidden tokens stay available from the expandable Hidden tokens list.',
-    'settings.display.chooseWhetherBalanceRowsShow':
-        'Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active.',
-    'settings.display.displayAStarOnEach':
-        'Display a star on each balance row for pinning or unpinning the token on Home.',
-    'settings.display.displayAHideAffordanceOn':
-        'Display a hide affordance on each balance row to collapse the token into the Hidden section.',
-    'settings.display.addATokenByChain':
-        'Add a token by network and ticker to keep it in Balances even when its balance is zero.',
-    'settings.display.pinnedTokensFloatToThe':
-        'Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.',
-    'settings.display.hiddenTokensCollapseIntoThe':
-        'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.',
-    'settings.display.rememberTheLastSelectedChain':
-        'Remember the last selected network filter for each balance and history list until you reset every list to "show all."',
-    'settings.notifications.playASoundWithEach':
-        'Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply.',
+    'settings.display.displayAStarOnEach': 'A star pins or unpins the token on Home.',
+    'settings.display.displayAHideAffordanceOn': "Moves the token to Home's Hidden section.",
+    'settings.display.addATokenByChain': 'Keeps zero-balance tokens in Balances.',
+    'settings.display.pinnedTokensFloatToThe': 'Float to the top; reorder or unpin here.',
+    'settings.display.hiddenTokensCollapseIntoThe': 'Collapse under "Show N hidden"; unhide here.',
+    'settings.display.rememberTheLastSelectedChain': "Keeps each list's chain filter until reset.",
+    'settings.notifications.playASoundWithEach': 'Only while open; quiet hours still apply.',
     'settings.notifications.couldNotSaveTheNotification':
         "Couldn't save the notification sound setting. Try again.",
     'settings.notifications.couldNotSaveThisNotification':
         "Couldn't save this notification sound. Try again.",
-    'settings.notifications.pauseAllNotificationsIncludingPrice':
-        'Pause all notifications, including price alerts, during a daily time window.',
+    'settings.notifications.pauseAllNotificationsIncludingPrice': 'Daily pause, including price alerts.',
     'settings.notifications.couldNotSaveQuietHours': "Couldn't save quiet hours. Try again.",
     'settings.backup.writeItOnPaperOr':
         '{RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.',
@@ -2705,10 +2671,8 @@ export const en = {
         "The labels + contacts are encrypted under a key derived from this wallet's seed and stored on the blockchain. Only someone who already has your seed can decrypt them. The transaction pays a network fee.",
     'settings.backup.decryptsTheLabelsContactsFile':
         "Decrypts the labels + contacts FILE this wallet's seed published on the network below, if any, and merges anything found into this wallet. Nothing already here is removed.",
-    'settings.connectedSites.showsThe50MostRecent':
-        'Shows the 50 most recent changes, with the newest last. Use this history to spot a site that was blocked or unblocked unexpectedly.',
-    'settings.connectedSites.limitsHowManySigningRequests':
-        'Limits how many signing requests a single site can make in a short window; anything over the limit is rejected until the window resets. Lower numbers harden against abuse; higher numbers help during heavy normal use. Defaults: {SIGN_THROTTLE_DEFAULT_BURST} per {value} s.',
+    'settings.connectedSites.showsThe50MostRecent': 'Latest 50 changes, newest last.',
+    'settings.connectedSites.limitsHowManySigningRequests': 'Rejects excess requests until reset.',
     'settings.thisWallet.useAtLeastCharactersA':
         "Use at least {MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger. Keep it safe because it can't be recovered.",
     'settings.thisWallet.anExtendedPublicKeyDoes':

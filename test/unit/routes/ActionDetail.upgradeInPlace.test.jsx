@@ -225,4 +225,21 @@ describe('the standalone detail page upgrades in place when the action confirms'
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
         expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
     });
+
+    it('never polls the explorer for a demo wallet pending row (issue #82)', async () => {
+        // The demo History carries a pending sample row on the wallet's real
+        // address; on mainnet a poll would hand that address to a public
+        // explorer, and the sample row never confirms anyway.
+        globalThis.localStorage.setItem('xc:demoWalletId', 'w1');
+        try {
+            const { messaging } = mount(() => []);
+            await waitFor(() => expect(
+                screen.getByText(/not yet validated by the service/i),
+            ).toBeTruthy());
+            await new Promise((r) => setTimeout(r, 150));
+            expect(messaging.getAddressHistory).not.toHaveBeenCalled();
+        } finally {
+            globalThis.localStorage.removeItem('xc:demoWalletId');
+        }
+    });
 });

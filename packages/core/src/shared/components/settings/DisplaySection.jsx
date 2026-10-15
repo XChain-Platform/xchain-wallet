@@ -391,7 +391,6 @@ export function DisplaySection() {
 
             <FormSection
                 title={t('settings.display.rowAffordances')}
-                description={t('settings.display.chooseWhetherBalanceRowsShow')}
             >
             <div style={ROW}>
                 <Switch

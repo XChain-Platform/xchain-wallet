@@ -11,9 +11,12 @@
 // The balances a wallet SHOWS, as opposed to the balances it can spend.
 //
 // A demo wallet shows sample holdings synthesized from its own address
-// records; its action forms still read the real (empty) balances, which is
-// what the demo banner promises. Home and the command palette both show
-// holdings, and they disagreed: Home synthesized, the palette read the chain,
+// records. Its action forms read the same sample holdings: the host's balance
+// flow answers a demo wallet from the same fixture (issue #82), because the
+// demo lands on mainnet and its addresses must never reach a real explorer.
+//
+// Home and the command palette both show holdings, and they once disagreed:
+// Home synthesized, the palette read the chain,
 // so a palette entry opened a coin's detail screen at 0 while Home listed 100.
 // Every display surface reads through here so the two cannot drift again.
 

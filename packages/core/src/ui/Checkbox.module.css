@@ -35,6 +35,13 @@ label.root {
     cursor: inherit;
 }
 
+/* The global disabled rule forces opacity with !important, which would make
+   this invisible native input paint over the drawn control; the module rule
+   outranks it and keeps the input hidden while disabled. */
+.input:disabled {
+    opacity: 0 !important;
+}
+
 .box {
     grid-column: 1;
     grid-row: 1;

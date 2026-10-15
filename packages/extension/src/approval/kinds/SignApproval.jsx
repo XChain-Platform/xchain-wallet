@@ -639,7 +639,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     }, [chainId, intentKey]);
 
 
-    const title = KIND_TITLE[kind] ?? 'Approval required';
+    const title = KIND_TITLE[kind] ?? 'Approve request';
     const showSavePermanent =
         kind === 'signAction' ||
         (kind === 'signMessage' && !payload?.payload?.alreadyGranted);

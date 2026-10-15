@@ -151,7 +151,7 @@ assert.deepEqual(
 const named = {
     'packages/core/src/shared/components/TokenField.jsx': /<div id=\{errorId\} className=\{inputStyles\.error\} role="alert">\{error\}<\/div>/,
     'packages/core/src/shared/routes/ResumeConfirm.jsx': /<StatusMessage variant="error">\{error\}<\/StatusMessage>/,
-    'packages/core/src/shared/routes/Send.jsx': /<StatusMessage variant="error" className=\{styles\.error\}>\{loadError\}<\/StatusMessage>/,
+    'packages/core/src/shared/routes/Send.jsx': /<StatusMessage variant="error">\{loadError\}<\/StatusMessage>/,
 };
 for (const [path, re] of Object.entries(named)) {
     const f = files.find((x) => x.path === path);

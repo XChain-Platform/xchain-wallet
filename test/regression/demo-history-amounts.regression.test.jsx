@@ -80,7 +80,7 @@ describe('demo wallet amount regression', () => {
         expect(document.body).not.toHaveTextContent('-5,000,000 BTC');
 
         fireEvent.click(row);
-        const detail = await screen.findByRole('region', { name: 'Action detail' });
+        const detail = await screen.findByRole('region', { name: 'Transaction details' });
         expect(detail).toHaveTextContent('demo-bitcoin-regtest-outgoing-1');
         expect(detail).not.toHaveTextContent('-5,000,000 BTC');
         expect(detail).not.toHaveTextContent('+10,000,000,000 BTC');

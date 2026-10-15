@@ -666,7 +666,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{form}</Screen>;
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -723,7 +723,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 label="Review callback"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -869,7 +869,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             label="Execute callback"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -910,7 +910,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}

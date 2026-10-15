@@ -456,7 +456,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         />
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (actionConfirm.open) {
@@ -527,7 +527,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 onSubmit={handleSubmit}
                 intro={decoded?.summary}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -602,7 +602,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             onSubmit={handleReview}
             sectioned
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -645,13 +645,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     iconLabel="Choose publishing address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             {feeds == null ? (
                 <p className={styles.hint}>Loading…</p>
             ) : feedsError ? (
-                <StatusMessage variant="error" className={styles.error}>{feedsError}</StatusMessage>
+                <StatusMessage variant="error">{feedsError}</StatusMessage>
             ) : feeds.length === 0 ? (
                 <p className={styles.hint}>
                     This address has not published any prices yet. The first one you publish starts
