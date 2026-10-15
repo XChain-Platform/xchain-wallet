@@ -23,8 +23,8 @@
 //                    affordance; the passphrase cannot be recovered
 //                    from storage.
 //
-//   error            `<StatusMessage variant="error">` (role="alert") with a
-//                    one-click "Try again" recovery on storage-write failure.
+//   error            an error message (role="alert") above the form card, via
+//                    SettingsInlineForm, with a one-click "Try again" recovery on storage-write failure.
 //
 // Setup verifies the current wallet password so a duress passphrase cannot
 // equal it. Disable remains available to the unlocked session.
