@@ -25,7 +25,10 @@ import {
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
-import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+
+// Home and the app shell mount this hook, so the error-copy tables load only
+// when a sweep actually fails instead of riding in the startup bundle.
+const loadSubmitFailureMessage = () => import('../utils/submitFailureMessage.js');
 
 const DEFAULT_POLL_MS = 60_000;
 // Exported under its own name so the release profiler
@@ -203,7 +206,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                         setError(null);
                     }
                 })
-                .catch((scanError) => {
+                .catch((scanError) => loadSubmitFailureMessage().then(({ submitFailureMessage }) => {
                     // Keep the previous rows on a failed sweep; a transient
                     // outage should not flicker the badge to zero.
                     if (!cancelled) {
@@ -212,7 +215,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                             fallback: "Couldn't load payments due. Check your connection and try again.",
                         }));
                     }
-                })
+                }))
                 .finally(() => {
                     if (!cancelled) setScanning(false);
                 });
