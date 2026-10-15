@@ -202,3 +202,13 @@
     padding-top: 0;
     border-top: 0;
 }
+
+/* One line of the field error (margin plus a 1.4 line of the xs text) stays
+   reserved under the password field until the error replaces it. */
+.passwordField {
+    width: 100%;
+}
+
+.passwordFieldIdle {
+    padding-block-end: calc(var(--xc-help-gap) + var(--xc-text-xs) * 1.4);
+}
