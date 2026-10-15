@@ -564,6 +564,18 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     return rows;
 }
 
+// The one validator stake the demo wallet holds. The DeFi tab rows on every
+// network and the Staking screen read these fields, so the amount and the
+// validator name never differ between the two.
+const DEMO_VALIDATOR_STAKE = {
+    amount: '50000',
+    validator: 'demo-validator-7',
+    apy: '4.2%',
+};
+
+const DEMO_VALIDATOR_STAKE_PRIMARY = `${Number(DEMO_VALIDATOR_STAKE.amount).toLocaleString('en-US')}.00000000 XCHAIN`;
+const DEMO_VALIDATOR_STAKE_SECONDARY = `Delegated to ${DEMO_VALIDATOR_STAKE.validator} · ${DEMO_VALIDATOR_STAKE.apy} APY`;
+
 /**
  * Synthesized DeFi action entries for the demo wallet. Each row is a
  * single discrete on-chain DeFi action (a stake, a dispenser creation,
@@ -594,8 +606,8 @@ export function synthesizeDemoDefiPositions(opts = {}) {
         {
             id: 'demo-stake-xchain-btc-mainnet',
             kind: 'stake', action: 'STAKE', status: 'confirmed',
-            title: 'XCHAIN stake', primary: '10,000.00000000 XCHAIN',
-            secondary: 'Delegated to xchainpub-validator-7 · 4.2% APY', badge: 'Active',
+            title: 'XCHAIN stake', primary: DEMO_VALIDATOR_STAKE_PRIMARY,
+            secondary: DEMO_VALIDATOR_STAKE_SECONDARY, badge: 'Active',
             blockIndex: 12_420, timestamp: ago(60 * 30), confirms: 8,
             chain: 'BITCOIN', chainId: 'bitcoin-mainnet',
         },
@@ -632,8 +644,8 @@ export function synthesizeDemoDefiPositions(opts = {}) {
         {
             id: 'demo-stake-xchain-btc',
             kind: 'stake', action: 'STAKE', status: 'confirmed',
-            title: 'XCHAIN stake', primary: '50,000.00000000 XCHAIN',
-            secondary: 'Delegated to demo-validator-7 · 4.2% APY', badge: 'Active',
+            title: 'XCHAIN stake', primary: DEMO_VALIDATOR_STAKE_PRIMARY,
+            secondary: DEMO_VALIDATOR_STAKE_SECONDARY, badge: 'Active',
             blockIndex: 12_410, timestamp: ago(60 * 60 * 2), confirms: 12,
             chain: 'BITCOIN', chainId: 'bitcoin-regtest',
         },
@@ -702,7 +714,7 @@ const DEMO_STAKING_BY_CHAIN = {
             {
                 stake_id: 'demo-stake-validator',
                 asset: 'XCHAIN',
-                amount: '50000',
+                amount: DEMO_VALIDATOR_STAKE.amount,
                 capability: 'cross_chain',
                 capability_label: 'Validator · cross-chain operator',
                 status: 'active',
