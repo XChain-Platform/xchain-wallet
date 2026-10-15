@@ -1121,8 +1121,8 @@ export function actionStatuses(detail) {
  *
  * `field` is the picker's own visible label, and it is REQUIRED to be specific
  * because several screens carry more than one: a form's is "Network", the
- * add-address modal's is "Coin", a cross-chain swap has "Give chain" and "Get
- * chain". Addressing them by accessible name is possible at all because
+ * add-address modal's is "Coin", a cross-chain swap has "Give network" and "Get
+ * network". Addressing them by accessible name is possible at all because
  * ChainPicker now puts its label in that name; before that fix every picker on
  * a screen answered to the same query, which is a defect for a screen reader
  * user and was a coin flip for this helper.
