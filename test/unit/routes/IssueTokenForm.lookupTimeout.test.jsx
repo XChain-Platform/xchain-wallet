@@ -17,10 +17,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import {
-    IssueTokenForm,
-    TICKER_LOOKUP_TIMEOUT_MS,
-} from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+
+// The form's TICKER_LOOKUP_TIMEOUT_MS. The route module exports only its
+// component, so the bound is restated here.
+const TICKER_LOOKUP_TIMEOUT_MS = 8000;
 
 const TAKEN_ERROR = 'Ticker "HELD" already exists on this network.';
 const WAIT_ERROR = 'Wait for the ticker availability check to finish.';

@@ -72,7 +72,7 @@ const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE'
 
 // How long the ticker availability lookup may run before the form stops
 // waiting on it and lets composition judge the name.
-export const TICKER_LOOKUP_TIMEOUT_MS = 8000;
+const TICKER_LOOKUP_TIMEOUT_MS = 8000;
 
 function isPositiveDecimal(value) {
     const text = String(value || '').trim();
