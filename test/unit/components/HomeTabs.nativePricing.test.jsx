@@ -108,6 +108,56 @@ afterEach(() => {
 });
 
 describe('Home native rows on a real wallet', () => {
+    it.each([
+        ['testnet', 'bitcoin-testnet', 'TBTC'],
+        ['regtest', 'bitcoin-regtest', 'RBTC'],
+    ])('never polls a price source for %s holdings, before or after settings load', async (activeNetwork, chainId, networkCode) => {
+        let resolveSettings;
+        const settings = new Promise((resolve) => { resolveSettings = resolve; });
+        const calls = [];
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: { bitcoin: 'https://mainnet.test' },
+            fetch: async (url) => {
+                calls.push(url);
+                return {
+                    ok: true,
+                    json: async () => ({ data: [
+                        { coin_pair: 'BTC/USD', price: '80000', block_timestamp: FRESH_TS },
+                    ] }),
+                };
+            },
+        });
+        mount({ balances: balancesOf({ [chainId]: [networkCode, '1'] }), settings });
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(calls).toEqual([]);
+
+        resolveSettings({ activeNetwork });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // Test networks carry no fiat value, so nothing is priced at all.
+        expect(calls).toEqual([]);
+    });
+
+    it('reaches no price source when the settings read fails', async () => {
+        const calls = [];
+        configureFiatRateSource({
+            now: () => NOW,
+            fetch: async (url) => {
+                calls.push(url);
+                return { ok: true, json: async () => ({ data: [] }) };
+            },
+        });
+        mount({
+            balances: balancesOf({ 'bitcoin-mainnet': ['BTC', '1'] }),
+            messaging: { getSettings: vi.fn(async () => { throw new Error('settings unavailable'); }) },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // Without the privacy choice the CoinGecko fallback may be opted out.
+        expect(calls).toEqual([]);
+    });
+
     it('prices zero-balance coins from the oracle and drops the "not priced" note', async () => {
         const { calls, release } = venue();
         mount({ balances: balancesOf(ZERO_COINS) });

@@ -103,6 +103,14 @@ describe('userFacingMessage', () => {
     });
 
     it.each([
+        'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received',
+        'The message port closed before a response was received.',
+    ])('keeps Chrome runtime failures out of display copy: %s', (raw) => {
+        expect(userFacingMessage(new Error(raw), FALLBACK)).toBe(FALLBACK);
+        expect(isDeveloperMessage(raw)).toBe(true);
+    });
+
+    it.each([
         ['InvalidPasswordError', 'Incorrect password.'],
         ['HardwareSigningRetryError', 'Your hardware wallet is locked. Unlock it, then select Approve again.'],
         ['RbfPlanError', 'Already confirmed.'],

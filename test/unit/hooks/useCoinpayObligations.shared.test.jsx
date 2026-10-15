@@ -23,7 +23,9 @@
 //      not swallowed by the indirection.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import {
+    render, renderHook, screen, act, waitFor,
+} from '@testing-library/react';
 
 const { messaging } = vi.hoisted(() => ({
     messaging: {
@@ -144,5 +146,27 @@ describe('useSharedCoinpayObligations', () => {
         expect(screen.getByTestId('second')).toHaveTextContent('2');
         expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(1);
         expect(reads()).toBe(ADDRS.length);
+    });
+
+    it('never returns rows from the previous wallet while the next wallet scan is pending', async () => {
+        let finishWalletTwo;
+        const walletTwoAddresses = new Promise((resolve) => { finishWalletTwo = resolve; });
+        messaging.getAddressesByChain.mockImplementation((walletId) => (
+            walletId === 'w2' ? walletTwoAddresses : Promise.resolve({
+                [CHAIN]: ADDRS.map((address) => ({ address })),
+            })
+        ));
+        const { result, rerender } = renderHook(
+            ({ walletId }) => useCoinpayObligations(walletId, 'a1', { pollMs: POLL_MS }),
+            { initialProps: { walletId: 'w1' } },
+        );
+        await waitFor(() => expect(result.current.obligations).toHaveLength(2));
+
+        rerender({ walletId: 'w2' });
+        expect(result.current.obligations).toEqual([]);
+        expect(result.current.payableCount).toBe(0);
+
+        await act(async () => { finishWalletTwo({ [CHAIN]: [] }); });
+        await waitFor(() => expect(result.current.scanning).toBe(false));
     });
 });

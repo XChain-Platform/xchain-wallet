@@ -16,6 +16,7 @@ import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupporte
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
 import { CONNECT_SITE_WARNING } from '@xchain-wallet/core/shared/utils/securityMomentCopy.js';
+import { userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import { getSettings, resolveApproval } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './ConnectApproval.module.css';
@@ -174,10 +175,10 @@ export function ConnectApproval({ id, payload, onReject }) {
             // belt-and-braces in case the browser doesn't honour remove().
             window.close();
         } catch (err) {
-            if (err?.name === 'ApprovalNotFoundError') {
+            if (err?.name === 'ApprovalInterruptedError' || err?.name === 'ApprovalNotFoundError') {
                 setRequestExpired(true);
             } else {
-                setError(err?.message || 'Could not connect this site.');
+                setError(userFacingMessage(err, 'Could not connect this site.'));
             }
             setBusy(false);
         }
@@ -201,7 +202,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                         block
                         onClick={handleApprove}
                         loading={busy}
-                        disabled={!!requestError || approvedChains.length === 0 || accountsMissing}
+                        disabled={busy || !!requestError || approvedChains.length === 0 || accountsMissing}
                     >
                         {t('extension.connect.approve')}
                     </Button>

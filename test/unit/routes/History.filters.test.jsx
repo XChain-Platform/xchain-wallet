@@ -80,7 +80,7 @@ function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp,
 function mountHistory(rowsByChain, addressesByChain = {
     [LTC]: [{ address: LTC_ADDRESS }],
     [DOGE]: [{ address: DOGE_ADDRESS }],
-}, contacts = []) {
+}, contacts = [], watermark = null) {
     let settings = { fiatCurrency: 'USD', showFiatInHistory: false };
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(addressesByChain),
@@ -88,7 +88,7 @@ function mountHistory(rowsByChain, addressesByChain = {
         getLinksForAddress: vi.fn().mockResolvedValue([]),
         getAddressMempool: vi.fn().mockResolvedValue([]),
         getPendingTxsForAddress: vi.fn().mockResolvedValue([]),
-        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
+        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark }),
         getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
         listContacts: vi.fn().mockResolvedValue(contacts),
         getSettings: vi.fn(() => Promise.resolve(settings)),
@@ -127,6 +127,9 @@ beforeEach(() => {
     resetBackStackForTests();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(FIXED_NOW);
+    globalThis.localStorage?.removeItem('xc:chainFilter:history:w1');
+    globalThis.localStorage?.removeItem('xc:historyGroupingMode:w1');
+    globalThis.sessionStorage?.removeItem('xc:historyViewState:w1:a1');
 });
 
 afterEach(() => {
@@ -214,12 +217,87 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:40:${LTC_ADDRESS}`]));
     });
 
+    it('restores combined filters after opening a transaction', async () => {
+        const rows = {
+            [LTC]: [
+                historyRow({ actionIndex: 50, timestamp: secondsAt(0), tick: 'ALPHA', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 51, timestamp: secondsAt(-1), tick: 'BETA', source: LTC_ADDRESS }),
+            ],
+        };
+        const addresses = { [LTC]: [{ address: LTC_ADDRESS }] };
+        let settings = { fiatCurrency: 'USD', showFiatInHistory: false };
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue(addresses),
+            getAddressHistory: vi.fn().mockResolvedValue(rows[LTC]),
+            getLinksForAddress: vi.fn().mockResolvedValue([]),
+            getAddressMempool: vi.fn().mockResolvedValue([]),
+            getPendingTxsForAddress: vi.fn().mockResolvedValue([]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
+            getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn(() => Promise.resolve(settings)),
+            updateSettings: vi.fn((patch) => {
+                settings = { ...settings, ...patch };
+                return Promise.resolve(settings);
+            }),
+        };
+        function NavigationHarness() {
+            const [detailOpen, setDetailOpen] = React.useState(false);
+            return detailOpen ? (
+                <button type="button" onClick={() => setDetailOpen(false)}>Back to history</button>
+            ) : (
+                <History
+                    walletId="w1"
+                    accountId="a1"
+                    onSelectEntry={() => setDetailOpen(true)}
+                />
+            );
+        }
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost><NavigationHarness /></ToastHost>
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
+
+        const today = isoLocal(FIXED_NOW);
+        fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'alpha' } });
+        fireEvent.change(screen.getByLabelText('From date'), { target: { value: today } });
+        fireEvent.change(screen.getByLabelText('To date'), { target: { value: today } });
+        fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
+        chooseOption(/^All action types$/, 'Send');
+        chooseOption(/^All statuses$/, 'Confirmed');
+        await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:50:${LTC_ADDRESS}`]));
+
+        fireEvent.click(view.container.querySelector('button[data-history-row]'));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to history' }));
+
+        expect(await screen.findByLabelText('Search history')).toHaveValue('alpha');
+        expect(screen.getByLabelText('From date')).toHaveValue(today);
+        expect(screen.getByLabelText('To date')).toHaveValue(today);
+        expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Confirmed' })).toBeInTheDocument();
+        await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:50:${LTC_ADDRESS}`]));
+    });
+
     it('shows a receive address label only on incoming payments to that address', async () => {
         const sender = 'mtkxExternalSender1111111111111111111111';
         mountHistory({
             [LTC]: [
-                historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: sender }),
-                historyRow({ actionIndex: 31, timestamp: secondsAt(-1), tick: 'BTC', source: LTC_ADDRESS }),
+                historyRow({
+                    actionIndex: 30,
+                    timestamp: secondsAt(0),
+                    tick: 'BTC',
+                    source: sender,
+                    destination: LTC_ADDRESS,
+                }),
+                historyRow({
+                    actionIndex: 31,
+                    timestamp: secondsAt(-1),
+                    tick: 'BTC',
+                    source: LTC_ADDRESS,
+                    destination: sender,
+                }),
             ],
         }, {
             [LTC]: [{ address: LTC_ADDRESS, label: 'Client invoices' }],
@@ -227,6 +305,8 @@ describe('History filters', () => {
 
         expect(await screen.findByText('Received at Client invoices')).toBeInTheDocument();
         expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
+        expect(screen.getByRole('button', { name: /^Receive Received at Client invoices/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Send mtkxEx/ })).toBeInTheDocument();
     });
 
     it('offers one control to clear the search', async () => {
@@ -446,7 +526,7 @@ describe('History filters', () => {
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
     });
 
-    it('collapses filters behind an active-count button with concise accessible fields in the 360px layout', async () => {
+    it('fits filters and complete row metadata in the 360px layout', async () => {
         const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
 
@@ -454,13 +534,17 @@ describe('History filters', () => {
             const { view } = mountHistory({
                 [LTC]: [historyRow({
                     actionIndex: 30,
+                    blockIndex: 100,
                     timestamp: secondsAt(0),
-                    tick: 'LTC',
+                    tick: 'LITECRED',
                     source: LTC_ADDRESS,
-                    amount: '123456789.12345678',
+                    amount: '100000000',
                 })],
-            });
+            }, undefined, [], 175);
             await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+
+            const amount = view.container.querySelector('[data-history-amount]');
+            expect(amount).toHaveTextContent(/100,000,000 LITECRED/);
 
             const filterToggle = screen.getByRole('button', { name: 'Filters (1)' });
             expect(filterToggle).toHaveAttribute('aria-expanded', 'false');

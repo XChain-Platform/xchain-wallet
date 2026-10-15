@@ -56,7 +56,12 @@ const PROTOCOL_COIN_TICKER = {
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} props.onPay
  * @param {() => void} props.onBack
  */
-export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
+export function ObligationsView(props) {
+    const scope = `${props.walletId || ''}\u0000${props.activeAccountId || ''}`;
+    return <ScopedObligationsView key={scope} {...props} />;
+}
+
+function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
     const { shell, messaging } = useMessaging();
     const variant = screenVariantFor(shell);
 

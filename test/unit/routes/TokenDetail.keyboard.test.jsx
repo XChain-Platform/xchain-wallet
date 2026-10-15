@@ -154,7 +154,8 @@ describe('TokenDetail keyboard navigation', () => {
     });
 
     it('opens the holders list with arrows and reaches every holder control', async () => {
-        mount();
+        // A demo wallet reads no holders (it stays offline), so this uses a real one.
+        mount({ walletId: 'wallet' });
 
         const about = await screen.findByRole('tab', { name: 'About' });
         about.focus();

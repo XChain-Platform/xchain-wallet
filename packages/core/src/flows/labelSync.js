@@ -715,7 +715,7 @@ export async function restoreLabelSyncAfterImport({
 
     const base = {
         restored: false,
-        skipped: /** @type {'wif-only' | 'created' | 'no-chains' | null} */ (null),
+        skipped: /** @type {'wif-only' | 'created' | 'demo' | 'no-chains' | null} */ (null),
         chainId: /** @type {string | null} */ (null),
         updatedAt: /** @type {string | null} */ (null),
         searchedChainIds: /** @type {string[]} */ ([]),
@@ -730,6 +730,9 @@ export async function restoreLabelSyncAfterImport({
     }
     if (wallet.origin === 'created') {
         return { ...base, skipped: 'created' };
+    }
+    if (wallet.origin === 'demo') {
+        return { ...base, skipped: 'demo' };
     }
     const uniqueChainIds = [...new Set(chainIds.filter((id) => typeof id === 'string' && id.length > 0))];
     if (uniqueChainIds.length === 0) {

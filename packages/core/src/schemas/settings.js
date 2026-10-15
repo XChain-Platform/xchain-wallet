@@ -351,6 +351,8 @@ export function createDefaultSettings() {
             labelsSurviveRestore: false,
             clipboardAutoClearSeconds: CLIPBOARD_AUTO_CLEAR_DEFAULT,
             hapticsEnabled: true,
+            alwaysRequireHwExplicitConfirm: false,
+            formDraftTtlMs: FORM_DRAFT_TTL_DEFAULT,
             priceDataEnabled: true,
             metadataFetchEnabled: true,
         },
