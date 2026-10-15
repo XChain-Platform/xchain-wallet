@@ -92,7 +92,7 @@ describe('entering demo mode', () => {
         expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({
             name: 'Demo Wallet',
             origin: 'demo',
-            activeNetwork: 'regtest',
+            activeNetwork: 'mainnet',
         }));
         expect(saveContact).toHaveBeenCalled();
         expect(getDemoWalletId()).toBe('demo-entered');

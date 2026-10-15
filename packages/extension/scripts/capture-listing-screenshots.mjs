@@ -346,11 +346,11 @@ async function seedLicense(page) {
 }
 
 /**
- * Flips Settings → Network to Mainnet. The demo wallet lands on Regtest by
- * design (Onboarding.jsx's Cluster J FOLLOWUP 7 comment: it registers chains
- * on all three networks so the user can look at any of them), but a public
- * store screenshot showing "rBTC" reads as a testing artifact, not the
- * product. NetworkSection.jsx reloads the page on change; 'settings' is not
+ * Flips Settings → Network to Mainnet. The demo wallet lands on Mainnet
+ * since xchain-wallet#78 (Onboarding.jsx's Cluster J FOLLOWUP 7 comment: it
+ * still registers chains on all three networks), so on a current build the
+ * pick changes nothing; it stays as a guard, because a public store
+ * screenshot showing "rBTC" reads as a testing artifact, not the product. NetworkSection.jsx reloads the page on change; 'settings' is not
  * in RESUMABLE_VIEWS (lastViewMemory.js), so the reload lands back on Home.
  */
 async function switchToMainnet(page) {
