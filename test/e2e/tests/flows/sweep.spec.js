@@ -186,7 +186,7 @@ for (const viewport of VIEWPORTS) {
         expect(await main.evaluate((element) => element.scrollTop),
             `${viewport.name}: sweep review did not open at the top`).toBeLessThanOrEqual(1);
         // The chain shows as its icon badge, named for screen readers.
-        await expect(detailValue(review, 'Chain').getByRole('img', { name: 'Bitcoin' })).toBeVisible();
+        await expect(detailValue(review, 'Network').getByRole('img', { name: 'Bitcoin' })).toBeVisible();
         // Addresses are middle-truncated on screen; the accessible name is the full value.
         await expect(detailValue(review, 'From').getByLabel(source, { exact: true })).toBeVisible();
         await expect(detailValue(review, 'Destination').getByLabel(DESTINATION, { exact: true })).toBeVisible();
