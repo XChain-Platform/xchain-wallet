@@ -80,6 +80,7 @@ const PLURAL_ONLY_FILES = [
 const PARTIAL_COPY_FILES = [
     '/settings/AdsSection.jsx',
     '/settings/DeveloperModeSection.jsx',
+    '/routes/CreateBetFeedForm.jsx',
     '/routes/CreateOrderForm.jsx',
     '/routes/DispenserExplorer.jsx',
 ];
