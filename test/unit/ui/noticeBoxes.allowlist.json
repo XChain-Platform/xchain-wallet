@@ -17,7 +17,6 @@
         "packages/core/src/shared/routes/Onboarding.module.css | .licenseParagraphCritical": "An emphasized paragraph inside the license text the user agrees to; part of the legal document, not a message.",
         "packages/core/src/shared/routes/PairSignerForm.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module.",
         "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "An inline dust badge on a coin-control row, not a message.",
-        "packages/core/src/shared/routes/Send.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module.",
         "packages/core/src/shared/routes/TokenWizard.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module."
     },
     "inline": {
