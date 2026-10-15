@@ -2851,6 +2851,7 @@ function AppInner() {
                 >
                     <ShellRouteOutlet
                         routeKey={unlockedView}
+                        walletId={activeWalletId}
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                     >

@@ -2862,6 +2862,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 >
                     <ShellRouteOutlet
                         routeKey={unlockedView}
+                        walletId={activeWalletId}
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                     >
