@@ -452,10 +452,8 @@ body {
 
     .sg-sticky {
         align-items: stretch;
-        margin-right: -16px;
-        margin-left: -16px;
-        padding-right: 16px;
-        padding-left: 16px;
+        margin-inline: -16px;
+        padding-inline: 16px;
     }
 
     .sg-view-switch {
@@ -467,8 +465,7 @@ body {
     .sg-view-switch button {
         flex: 1 1 0;
         min-width: 0;
-        padding-right: 6px;
-        padding-left: 6px;
+        padding-inline: 6px;
     }
 
     .sg-view-width {
@@ -487,7 +484,7 @@ body {
     }
 
     .sg-example-wide {
-        left: auto;
+        inset-inline: auto;
         width: 100%;
         transform: none;
     }
