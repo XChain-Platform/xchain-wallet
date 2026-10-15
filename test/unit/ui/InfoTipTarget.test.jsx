@@ -69,6 +69,25 @@ describe('InfoTip target (slice 2)', () => {
         expect(screen.queryByRole('tooltip')).toBeNull();
     });
 
+    it('does not activate a form control when the help button is inside its label', () => {
+        render(
+            <label>
+                <input type="checkbox" />
+                Enable advanced option
+                <InfoTip aria="Advanced option help" label="Explanation" />
+            </label>,
+        );
+        const checkbox = screen.getByRole('checkbox');
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Advanced option help' }), {
+            pointerType: 'touch',
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced option help' }));
+
+        expect(checkbox).not.toBeChecked();
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Explanation');
+    });
+
     it('opens from the keyboard and closes on Escape', () => {
         render(<InfoTip aria="More info" label="Explanation" />);
         const trigger = screen.getByRole('button', { name: 'More info' });
@@ -103,7 +122,7 @@ describe('InfoTip target (slice 2)', () => {
 
         fireEvent.focus(trigger);
 
-        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(-51px)');
+        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(-51px)');
         expect(screen.getByRole('tooltip').classList.contains(infoTipStyles.placementBottom)).toBe(true);
         expect(screen.getByRole('tooltip').style.maxHeight).toBe('200px');
         expect(screen.getByRole('tooltip').style.maxWidth).toBe('260px');
@@ -121,7 +140,7 @@ describe('InfoTip target (slice 2)', () => {
 
         fireEvent.click(trigger);
 
-        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(60px)');
+        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(60px)');
     });
 
     it('clamps to the visible viewport when a touch viewport is zoomed and panned', () => {
@@ -148,7 +167,7 @@ describe('InfoTip target (slice 2)', () => {
 
             fireEvent.click(trigger);
 
-            expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(-53px)');
+            expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(-53px)');
             expect(screen.getByRole('tooltip').style.minWidth).toBe('180px');
             expect(screen.getByRole('tooltip').style.maxWidth).toBe('184px');
         } finally {
@@ -164,6 +183,11 @@ describe('InfoTip target (slice 2)', () => {
     it('lets long tooltip text wrap inside the viewport', () => {
         expect(infoTipCss).toMatch(/max-width:\s*min\(260px,\s*calc\(100vw/);
         expect(infoTipCss).toMatch(/overflow-wrap:\s*anywhere/);
+    });
+
+    it('centers the bubble in RTL layouts without physical CSS', () => {
+        expect(infoTipCss).toMatch(/\.bubble\s*\{[^}]*inset-inline-start:\s*50%/s);
+        expect(infoTipCss).toMatch(/\[dir='rtl'\]\)\s*\.bubble\s*\{[^}]*--xc-tip-center:\s*50%/s);
     });
 });
 

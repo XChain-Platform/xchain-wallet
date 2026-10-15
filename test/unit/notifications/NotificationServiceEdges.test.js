@@ -88,7 +88,10 @@ describe('NotificationService synchronization edges', () => {
         expect(bad.connectWs).toHaveBeenCalledTimes(1);
         expect(good.connectWs).toHaveBeenCalledTimes(1);
         expect(good.onAddress).toHaveBeenCalledWith('mine', expect.any(Function));
-        expect(logger.error).toHaveBeenCalledTimes(1);
+        // The first failure only arms a bounded retry; the warning comes once
+        // the attempts run out (NotificationService.test.js covers the cap).
+        expect(logger.error).not.toHaveBeenCalled();
+        service.stop();
     });
 
     it('warns at the twenty-first subscription boundary', async () => {

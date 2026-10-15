@@ -213,7 +213,11 @@ export function ConnectedSitesSection() {
                                 title={site.appName || site.origin}
                                 description={(
                                     <>
-                                        <span style={{ display: 'block' }}>{site.origin}</span>
+                                        {/* A site with no app name is titled by its
+                                            origin, so the origin line would repeat it. */}
+                                        {site.appName && site.appName !== site.origin ? (
+                                            <span style={{ display: 'block' }}>{site.origin}</span>
+                                        ) : null}
                                         <span style={ROW_HINT}>
                                             {t('settings.connectedSites.lastUsed')} {formatLastUsed(site.lastUsedAt)} {t('settings.connectedSites.connected')} {formatLastUsed(site.connectedAt)}
                                         </span>

@@ -26,6 +26,10 @@ import { isDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 
+// Home and the app shell mount this hook, so the error-copy tables load only
+// when a sweep actually fails instead of riding in the startup bundle.
+const loadSubmitFailureMessage = () => import('../utils/submitFailureMessage.js');
+
 const DEFAULT_POLL_MS = 60_000;
 // Exported under its own name so the release profiler
 // (tools/release/cold-open-profile.mjs) reads the badge's cadence from the
@@ -158,6 +162,7 @@ function sortKey(expiration) {
  */
 export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
+    const identity = `${walletId || ''}::${accountId || ''}`;
     const { messaging } = useMessaging();
     const [obligations, setObligations] = useState(/** @type {PendingObligation[]} */ ([]));
     const [scanning, setScanning] = useState(false);
@@ -172,7 +177,6 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const refresh = useCallback(() => { runRef.current?.(true); }, []);
 
     useEffect(() => {
-        const identity = `${walletId || ''}::${accountId || ''}`;
         if (identityRef.current !== identity) {
             identityRef.current = identity;
             setObligations([]);
@@ -202,11 +206,16 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                         setError(null);
                     }
                 })
-                .catch((scanError) => {
+                .catch((scanError) => loadSubmitFailureMessage().then(({ submitFailureMessage }) => {
                     // Keep the previous rows on a failed sweep; a transient
                     // outage should not flicker the badge to zero.
-                    if (!cancelled) setError(scanError?.message || "Failed to scan for payments due.");
-                })
+                    if (!cancelled) {
+                        setError(submitFailureMessage(scanError, {
+                            verb: 'load payments due',
+                            fallback: "Couldn't load payments due. Check your connection and try again.",
+                        }));
+                    }
+                }))
                 .finally(() => {
                     if (!cancelled) setScanning(false);
                 });
@@ -234,13 +243,21 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 document.removeEventListener('visibilitychange', onVisible);
             }
         };
-    }, [walletId, accountId, messaging, pollMs]);
+    }, [walletId, accountId, identity, messaging, pollMs]);
 
-    const payableCount = obligations.filter(
+    const visibleObligations = identityRef.current === identity ? obligations : [];
+    const visibleError = identityRef.current === identity ? error : null;
+    const payableCount = visibleObligations.filter(
         (o) => classifyObligation(o.expiration).state !== 'expired',
     ).length;
 
-    return { obligations, scanning, error, refresh, payableCount };
+    return {
+        obligations: visibleObligations,
+        scanning,
+        error: visibleError,
+        refresh,
+        payableCount,
+    };
 }
 
 // One state owner per tree.

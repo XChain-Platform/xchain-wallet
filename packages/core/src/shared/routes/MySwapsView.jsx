@@ -38,7 +38,7 @@ import {
     Skeleton,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { countdownText } from '../../market/obligationStatus.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -218,6 +218,12 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
 
     const load = useCallback(async () => {
         const requestId = ++loadRequestId.current;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setByChain({});
+            setItems([]);
+            setLoadError(null);
+            return;
+        }
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getSwapsForAddress !== 'function') {
             setItems([]); return;

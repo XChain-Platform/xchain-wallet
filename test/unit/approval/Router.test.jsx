@@ -170,4 +170,24 @@ describe('approval messaging', () => {
                 message: 'This approval was interrupted. Return to the site and try again.',
             });
     });
+
+    it.each([
+        'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received',
+        'The message port closed before a response was received.',
+    ])('turns a lost runtime response into an interrupted approval: %s', async (message) => {
+        chrome.runtime.sendMessage.mockImplementation((_request, respond) => {
+            chrome.runtime.lastError = { message };
+            respond(undefined);
+            chrome.runtime.lastError = undefined;
+        });
+        const messaging = await vi.importActual(
+            '../../../packages/extension/src/approval/messaging.js',
+        );
+
+        await expect(messaging.resolveApproval('lost-request', { approved: true }))
+            .rejects.toMatchObject({
+                name: 'ApprovalInterruptedError',
+                message: 'This approval was interrupted. Return to the site and try again.',
+            });
+    });
 });

@@ -166,6 +166,21 @@ describe('operator publisher owner-action lane', () => {
         expect(methods.broadcastAction).not.toHaveBeenCalled();
     });
 
+    it('blocks an invalid custom network fee before review', async () => {
+        const { methods } = mount();
+        await openPublisher();
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
+        await publishValue();
+
+        expect(screen.getAllByRole('alert').some((alert) => (
+            alert.textContent?.includes('Custom fee rate must be greater than zero.')
+        ))).toBe(true);
+        expect(methods.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('preflights before software signing and signs the previewed bytes only after approval', async () => {
         const { methods } = mount();
         await openPublisher();
@@ -177,6 +192,7 @@ describe('operator publisher owner-action lane', () => {
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(OWNER.address.slice(0, 6));
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(OWNER.address.slice(-6));
         expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
+        expect(screen.getByText('Publish 123.45 to feed 700')).toBeInTheDocument();
         expect(methods.composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
             actionData: {
                 action: 'BROADCAST',
@@ -217,6 +233,7 @@ describe('operator publisher owner-action lane', () => {
         fireEvent.click(await screen.findByTestId('confirm-reject'));
 
         await waitFor(() => expect(screen.queryByTestId('confirm-modal')).toBeNull());
+        expect(screen.getByLabelText('Feed reference number')).toHaveValue('700');
         expect(screen.getByLabelText('Value')).toHaveValue('456.78');
         expect(methods.broadcastAction).not.toHaveBeenCalled();
         expect(methods.broadcastActionHw).not.toHaveBeenCalled();

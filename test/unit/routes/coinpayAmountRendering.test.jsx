@@ -36,8 +36,8 @@ import { CoinpayObligationsProvider } from '../../../packages/core/src/shared/ho
 
 const WALLET_ID = 'wallet-a';
 const CHAIN = 'dogecoin-testnet';
-const PAYER = 'nPayerAddressFixture00000000000000';
-const PAYEE = 'nPayeeAddressFixture00000000000000';
+const PAYER = 'ndevmockaaaaaaaaaaaaaaaaaaaaaaaa';
+const PAYEE = 'ndevmockbbbbbbbbbbbbbbbbbbbbbbbb';
 
 function obligation(coinAmount, actionIndex = '648') {
     return {
@@ -76,7 +76,7 @@ describe('ObligationsView: the Payments-due card shows the debt in coins', () =>
             messaging,
         );
 
-        await screen.findByText('Explorer unavailable');
+        await screen.findByText("Couldn't load payments due. Check your connection and try again.");
         expect(screen.queryByText('No payments due')).toBeNull();
     });
 

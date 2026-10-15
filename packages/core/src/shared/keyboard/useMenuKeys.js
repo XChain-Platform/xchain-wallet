@@ -27,9 +27,11 @@
 // not focusable, its search box drives them with aria-activedescendant.
 
 import { useEffect } from 'react';
+import { restoreFocusAfterClose } from '../utils/focusTrap.js';
 
 const POPUP = '[role="menu"], [role="listbox"]';
 const ITEM = '[role="menuitem"], [role="option"], [role="menuitemradio"], [role="menuitemcheckbox"]';
+const popupOpeners = new WeakMap();
 
 function itemsOf(popup) {
     return Array.from(popup.querySelectorAll(ITEM))
@@ -47,6 +49,7 @@ function setRovingItem(items, current) {
 }
 
 function normalizePopup(popup) {
+    popupOpeners.set(popup, openerOf(popup));
     const items = itemsOf(popup);
     if (items.length === 0) return;
     const focused = items.includes(document.activeElement) ? document.activeElement : null;
@@ -82,11 +85,16 @@ export function nextMenuIndex(key, index, count) {
 // After a popup closes the focused item is gone and focus falls to <body>;
 // give it back to the opener unless the app already put it somewhere.
 function restoreToOpener(opener) {
-    if (!opener) return;
     requestAnimationFrame(() => {
-        const now = document.activeElement;
-        if ((!now || now === document.body) && opener.isConnected) opener.focus();
+        restoreFocusAfterClose(opener);
     });
+}
+
+function removedPopups(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return [];
+    const popups = node.matches(POPUP) ? [node] : [];
+    node.querySelectorAll?.(POPUP).forEach((popup) => popups.push(popup));
+    return popups;
 }
 
 /** Handle one delegated menu keydown. */
@@ -132,6 +140,15 @@ function handleMenuKeyDown(e) {
     }
 }
 
+function handleMenuClick(e) {
+    const target = e.target;
+    if (!target || typeof target.closest !== 'function') return;
+    const item = target.closest(ITEM);
+    const popup = item?.closest(POPUP);
+    if (!popup) return;
+    restoreToOpener(openerOf(popup));
+}
+
 /** Installs the delegated menu key handler for the life of the shell. */
 export function useMenuKeys() {
     useEffect(() => {
@@ -149,6 +166,11 @@ export function useMenuKeys() {
                     if (node.matches(POPUP)) popups.add(node);
                     node.querySelectorAll?.(POPUP).forEach((popup) => popups.add(popup));
                 }
+                for (const node of record.removedNodes) {
+                    for (const popup of removedPopups(node)) {
+                        restoreToOpener(popupOpeners.get(popup));
+                    }
+                }
             }
             popups.forEach(normalizePopup);
         });
@@ -159,9 +181,11 @@ export function useMenuKeys() {
             attributeFilter: ['aria-selected', 'aria-checked', 'aria-disabled', 'disabled', 'hidden'],
         });
         document.addEventListener('keydown', handleMenuKeyDown);
+        document.addEventListener('click', handleMenuClick, true);
         return () => {
             observer.disconnect();
             document.removeEventListener('keydown', handleMenuKeyDown);
+            document.removeEventListener('click', handleMenuClick, true);
         };
     }, []);
 }

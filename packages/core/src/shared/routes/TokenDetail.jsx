@@ -13,7 +13,7 @@ import { AddressText, Button, ChainBadge, CopyButton, EmptyState, Icon, Input, L
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
+import { getDemoGatedGroupsForTick, isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
@@ -132,8 +132,9 @@ function TokenDetailContent({
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     // A failed settings read still opens the screen in full mode.
     const walletModeReady = settings !== null || !settingsLoading;
+    const isDemo = isDemoWallet(walletId);
     const browserOnline = useOnlineStatus();
-    const { overall: reachabilityOverall } = useReachability({});
+    const { overall: reachabilityOverall } = useReachability({ chainIds: isDemo ? [] : undefined });
     const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
     const variant = screenVariantFor(shell);
     const tabsId = useId();
@@ -161,7 +162,6 @@ function TokenDetailContent({
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
-    const isDemo = isDemoWallet(walletId);
     // The price section shows outside test networks, including before
     // settings load; the demo wallet prices its synthetic test holdings.
     const fiatSupported = isDemo || (settings
@@ -225,7 +225,7 @@ function TokenDetailContent({
         }
         : queriedNativePrice;
 
-    const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
+    const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative || isDemo });
 
     const handleBack = useCallback(() => {
         onBack();
@@ -257,6 +257,12 @@ function TokenDetailContent({
 
     useEffect(() => {
         if (!holdersOpen || isNative) return undefined;
+        if (isDemo) {
+            setHolders([]);
+            setHoldersLoading(false);
+            setHoldersError(null);
+            return undefined;
+        }
         if (typeof messaging.getHoldersForToken !== 'function') {
             setHoldersError('Holders lookup is not available in this build.');
             return undefined;
@@ -292,7 +298,7 @@ function TokenDetailContent({
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
 
     const loadMoreHolders = useCallback(() => {
         if (holdersLoading || holdersLoadingMore || !holdersHasMore) return;
@@ -325,6 +331,12 @@ function TokenDetailContent({
 
     useEffect(() => {
         if (!holdersOpen || isNative) return undefined;
+        if (isDemo) {
+            setGatedGroups(getDemoGatedGroupsForTick(tick));
+            setGatedLoading(false);
+            setGatedError(null);
+            return undefined;
+        }
         if (typeof messaging.listGatedContent !== 'function') {
             // Older host build without gated-content support; skip silently
             // (no error UI), since pre-feature tokens have no gated entries.
@@ -346,7 +358,7 @@ function TokenDetailContent({
             })
             .finally(() => { if (!cancelled) setGatedLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
 
     const fiat = useMemo(() => {
         if (typeof displayFiatRate !== 'number' || !isFinite(displayFiatRate)) return null;
