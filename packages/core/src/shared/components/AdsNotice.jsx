@@ -66,7 +66,6 @@ export function AdsNotice({
                     variant="primary"
                     onClick={onContinue}
                     block={!isFull}
-                    size={isFull ? undefined : 'sm'}
                     icon={<Icon.CheckIcon />}
                     loading={busy}
                     disabled={busy}
