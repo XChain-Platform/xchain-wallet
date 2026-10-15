@@ -67,10 +67,18 @@ describe('shared rows add no margin to the form gap', () => {
 
     it.each([
         ['IssueTokenForm.module.css', issueCss, ':global([data-form-stack]) > .actions,\n.advancedOptions > .actions', 'margin-top'],
-        ['IssueTokenForm.module.css', issueCss, ':global([data-form-stack]) > .warnings,\n.advancedOptions > .warnings', 'margin-bottom'],
+        ['IssueTokenForm.module.css', issueCss, '.advancedOptions > [data-variant]', 'margin'],
         ['TokenWizard.module.css', wizardCss, ':global([data-form-stack]) > .actions', 'margin-top'],
-        ['TokenWizard.module.css', wizardCss, ':global([data-form-stack]) > .warnings', 'margin-bottom'],
     ])('%s zeroes %s inside a form stack', (_name, css, selector, property) => {
         expect(rule(css, selector)).toMatch(new RegExp(`${property}:\\s*0;`));
+    });
+
+    // Warnings render through StatusMessage, whose row margin the form stack
+    // drops above, so the route modules keep no warning box of their own.
+    it.each([
+        ['IssueTokenForm.module.css', issueCss],
+        ['TokenWizard.module.css', wizardCss],
+    ])('%s draws no warning box of its own', (_name, css) => {
+        expect(css).not.toMatch(/(^|\n)\S*\.warnings?\b[^{]*\{/);
     });
 });
