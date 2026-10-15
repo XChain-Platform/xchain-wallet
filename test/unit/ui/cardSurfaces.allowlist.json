@@ -86,7 +86,6 @@
         "packages/core/src/shared/routes/StakeDetail.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .heroImageFallback": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .fileLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/routes/TokenDetail.module.css | .officialBanner": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/TokenPicker.module.css | .search": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/TokenWizard.module.css | .warnings": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/TokenWizard.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
