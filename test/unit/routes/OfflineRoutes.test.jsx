@@ -160,6 +160,9 @@ describe('offline route behavior from reachability', () => {
         expect(send).toBeDisabled();
         expect(send).toHaveAttribute('title', 'Sending needs a network connection');
         expect(screen.getByText(/cached balance remains available/i)).toBeInTheDocument();
+        // Offline already explains why sending is blocked, so the fee source
+        // notice is not a second message for the same state.
+        expect(screen.queryByText(/fee estimate unavailable/i)).not.toBeInTheDocument();
         fireEvent.submit(document.getElementById('send-form'));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

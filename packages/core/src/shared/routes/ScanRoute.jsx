@@ -317,15 +317,13 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                         {t('scan.classifyPaste')}
                     </Button>
                 )}
+                status={status ? <StatusMessage variant="error">{status}</StatusMessage> : undefined}
             >
                 {!stopped ? (
                     <QrScanner onFrame={handleFrame} alt={t('scan.scannerAlt')} />
                 ) : (
                     <StatusMessage variant="success">{t('scan.routing')}</StatusMessage>
                 )}
-                {status ? (
-                    <StatusMessage variant="error">{status}</StatusMessage>
-                ) : null}
                 <Textarea
                     label={t('scan.pasteLabel')}
                     value={paste}

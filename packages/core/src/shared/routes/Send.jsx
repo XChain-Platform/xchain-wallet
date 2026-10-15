@@ -3881,6 +3881,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeEstimate : null}
+                    // Offline already says sending is blocked, so a fee-source
+                    // notice would be a second message for the same state.
+                    showEstimateNotice={!networkOffline}
                     formatFiat={(coinAmount) => {
                         if (!fiatRate || !coinAmount) return null;
                         const value = coinToFiatExact(String(coinAmount), fiatRate);
