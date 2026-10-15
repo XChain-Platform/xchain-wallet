@@ -110,6 +110,15 @@
     cursor: pointer;
 }
 
+/* The change and depth figures keep their full width. A trailing slot capped at
+   half the row centred an overflowing figure column, so at larger text sizes
+   the depth pill spilled past the button into the row padding; the pair name
+   gives way instead. */
+.marketButton .marketTrailing {
+    flex: 0 0 auto;
+    max-width: none;
+}
+
 .pairChip {
     flex-shrink: 1;
     min-width: 0;
