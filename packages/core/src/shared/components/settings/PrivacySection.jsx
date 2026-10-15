@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
+import { isNativeShell } from '../../nativeShell.js';
 import {
     FORM_DRAFT_TTL_OFF,
     FORM_DRAFT_TTL_1H,
@@ -108,7 +109,9 @@ export function PrivacySection() {
             {!shellCapabilities().socksProxy && (
                 <ToggleRow
                     label={t('settings.privacy.torRouting')}
-                    hint={t('settings.privacy.notAvailableOnThisPlatform')}
+                    hint={t(isNativeShell()
+                        ? 'settings.privacy.notAvailableInNativeApp'
+                        : 'settings.privacy.notAvailableOnThisPlatform')}
                     checked={false}
                     disabled
                     onChange={() => {}}
