@@ -21,6 +21,7 @@ const componentSizes = {
     PageHeader: FIXED_SIZE,
     FormPage: FIXED_SIZE,
     FormErrorSummary: FIXED_SIZE,
+    FormNotice: FIXED_SIZE,
     FormSection: FIXED_SIZE,
     ListPage: FIXED_SIZE,
     EmptyState: FIXED_SIZE,
@@ -114,6 +115,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.FormPage as="div" intro="Form introduction" actions={<UI.Button size="sm">Continue</UI.Button>}>Form body</UI.FormPage>;
     case 'FormErrorSummary':
         return <UI.FormErrorSummary errors={[{ message: 'Check this value' }]} />;
+    case 'FormNotice':
+        return <UI.FormNotice variant={statusVariant === 'error' ? 'error' : 'warning'}>Check the fee before you continue.</UI.FormNotice>;
     case 'FormSection':
         return <UI.FormSection title="Details" description="Supporting information">Section body</UI.FormSection>;
     case 'ListPage':
