@@ -27,15 +27,6 @@
     text-align: center;
 }
 
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
-}
-
 .fromLine {
     composes: card from '../../ui/Card.module.css';
     display: flex;
