@@ -868,7 +868,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                             <option value="counterwallet-legacy">{t('settings.backup.counterwalletLegacy')}</option>
                     </Select>
                     <Input
-                            label={t('settings.backup.addressesToCheck')}
+                            label={t('settings.backup.addressesToCheck2')}
                             type="number"
                             inputMode="numeric"
                             enterKeyHint="go"
