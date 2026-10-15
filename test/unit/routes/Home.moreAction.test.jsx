@@ -132,13 +132,12 @@ describe('Home desktop actions', () => {
             );
             expect(viewportWidth).toBeLessThan(1024);
         } else {
+            // The row reads the content width, not the window, so it stays one
+            // row of equal tiles only where the content beside the sidebar fits it.
             expect(homeStyles).toMatch(
-                /@media \(min-width: 1024px\)[\s\S]*\.actionsFull\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/,
+                /@container \(min-width: \d+px\)[\s\S]*\.actionsFull\s*\{[^}]*grid-auto-flow:\s*column;[^}]*grid-auto-columns:\s*minmax\(0, 1fr\);/,
             );
-            // Labels stay on one line; a full row wraps whole tiles instead.
-            expect(homeStyles).toMatch(
-                /@media \(min-width: 1024px\)[\s\S]*\.actionsFull > button\s*\{[^}]*white-space:\s*nowrap;/,
-            );
+            expect(homeStyles).toMatch(/\.actionsFullWrap\s*\{[^}]*container-type:\s*inline-size;/);
             expect(viewportWidth).toBeGreaterThanOrEqual(1024);
         }
     });

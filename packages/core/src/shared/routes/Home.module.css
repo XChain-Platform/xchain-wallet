@@ -164,10 +164,19 @@
 }
 
 /* Labels wrap only between whole words; a narrower inline padding leaves
-   the eight-column row room for its longest single word. */
+   the eight-column row room for its longest single word. In the four-column
+   grid the icon sits above its label, so a label gets the whole tile width and
+   never runs into the next tile. Tiles start at the top so a two-line label
+   leaves every icon in the row on one line. */
 .actionsFull > button {
     width: 100%;
     padding-inline: var(--xc-space-1);
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--xc-space-1);
+    padding-block: var(--xc-space-2);
+    white-space: normal;
+    text-align: center;
 }
 
 .actionsFull > button,
@@ -175,19 +184,6 @@
     overflow-wrap: normal;
     word-break: keep-all;
     hyphens: none;
-}
-
-/* In the four-column grid the icon sits above its label, so a label gets the
-   whole tile width and never runs into the next tile; a long label wraps
-   between whole words. Tiles start at the top so a two-line label leaves
-   every icon in the row on one line. */
-.actionsFull > button {
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: var(--xc-space-1);
-    padding-block: var(--xc-space-2);
-    white-space: normal;
-    text-align: center;
 }
 
 /* When the content is wide enough for every label beside its icon, all tiles
