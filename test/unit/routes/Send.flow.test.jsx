@@ -19,6 +19,8 @@ import {
 } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
 import { sendToken as submitSendToken } from '../../../packages/core/src/flows/sendToken.js';
+import { makeLedgerFactory } from '../../../packages/core/src/signerFactories/ledger.js';
+import { makeTrezorFactory } from '../../../packages/core/src/signerFactories/trezor.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
@@ -32,6 +34,9 @@ const AMOUNT = '0.01234567';
 const PASSWORD = 'correct horse battery staple';
 const PSBT = '70736274ff';
 const TXID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
+const DEVICE_TX = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffff018403000000000000160014cccccccccccccccccccccccccccccccccccccccc0228304502212222222222222222222222222222222222222222222222222222222222222222222222012102999999999999999999999999999999999999999999999999999999999999999900000000';
+const PREV_TX = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
+    + '00000000160014' + 'bb'.repeat(20) + '00000000';
 
 function composedSend({ amount = AMOUNT, networkFeeSats = 1234, encoding = 'P2SH' } = {}) {
     return {
@@ -68,16 +73,26 @@ function mount({
     encoding,
     messagingOverrides = {},
     overrides = {},
+    hardware = null,
 } = {}) {
+    const sourceAddress = hardware ? {
+        id: 'address-1',
+        address: FROM,
+        publicKey: '02' + 'a'.repeat(64),
+        derivationPath: "m/84'/0'/0'/0/0",
+        source: hardware.kind,
+        signerId: hardware.signer.id,
+        signerLabel: hardware.signer.displayName,
+    } : {
+        id: 'address-1',
+        address: FROM,
+        publicKey: '02ab',
+        derivationPath: "m/84'/0'/0'/0/0",
+        source: 'hd',
+    };
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
-            [CHAIN_ID]: [{
-                id: 'address-1',
-                address: FROM,
-                publicKey: '02ab',
-                derivationPath: "m/84'/0'/0'/0/0",
-                source: 'hd',
-            }],
+            [CHAIN_ID]: [sourceAddress],
         }),
         getActiveAddresses: vi.fn().mockResolvedValue({
             [CHAIN_ID]: { id: 'address-1', address: FROM },
@@ -95,6 +110,12 @@ function mount({
         updateSettings: vi.fn().mockResolvedValue({}),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        listSigners: vi.fn().mockResolvedValue(hardware ? [{
+            id: hardware.signer.id,
+            vendor: hardware.kind,
+            model: hardware.signer.model,
+            firmwareVersion: '9.9.9',
+        }] : []),
         listContacts: vi.fn().mockResolvedValue(contacts),
         saveContact: vi.fn().mockImplementation(async ({ input, record }) => record || {
             ...input,
@@ -117,6 +138,15 @@ function mount({
             if (sendResult instanceof Error) throw sendResult;
             return sendResult;
         }),
+        sendAssetHw: vi.fn().mockImplementation(async (request) => {
+            if (!hardware) throw new Error('No hardware signer configured');
+            const signed = await hardware.signer.signPsbt({
+                psbtHex: request.prebuiltPsbt.psbtHex,
+                chainId: request.chainId,
+                signingPaths: [{ inputIndex: 0, path: request.from.derivationPath }],
+            });
+            return { txid: signed.txid };
+        }),
         buildSendPsbtRequest: vi.fn().mockResolvedValue({
             psbtHex: PSBT,
             encoding: 'P2SH',
@@ -126,6 +156,10 @@ function mount({
         ...messagingOverrides,
         ...overrides,
     };
+    if (hardware) {
+        base.getSignerStatus.mockImplementation(({ chainId }) =>
+            hardware.signer.getStatus({ chainId }));
+    }
     // Send's supporting lookups are not part of this flow contract. Empty
     // host responses keep the test focused on the compose and submit messages.
     const messaging = new Proxy(base, {
@@ -197,6 +231,133 @@ function deferred() {
     let reject;
     const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
     return { promise, resolve, reject };
+}
+
+function appInfoBytes(name = 'Bitcoin', version = '2.2.1') {
+    const ascii = (value) => [...value].map((char) => char.charCodeAt(0));
+    return Uint8Array.from([
+        1,
+        name.length, ...ascii(name),
+        version.length, ...ascii(version),
+        1, 0,
+        0x90, 0x00,
+    ]);
+}
+
+function signingSdkRegistry() {
+    const wallet = {
+        decomposePsbt: vi.fn().mockReturnValue({
+            inputs: [{
+                scriptType: 'p2wpkh',
+                prevTxHash: 'a'.repeat(64),
+                prevTxIndex: 0,
+                value: 1000,
+                sequence: 0xffffffff,
+                witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+                nonWitnessUtxoHex: PREV_TX,
+                sighashType: null,
+                redeemScriptHex: null,
+            }],
+            outputs: [{
+                address: TO,
+                scriptPubKeyHex: '0014' + 'cc'.repeat(20),
+                scriptType: 'p2wpkh',
+                value: 900,
+            }],
+            locktime: 0,
+            txVersion: 2,
+        }),
+        txidOf: vi.fn().mockReturnValue(TXID),
+    };
+    return { get: vi.fn().mockReturnValue({ wallet }) };
+}
+
+async function pairMockHardware(kind, signBehavior = 'approve') {
+    const sdkRegistry = signingSdkRegistry();
+    if (kind === 'ledger') {
+        const transport = {
+            deviceModel: { id: 'nanoX' },
+            send: vi.fn().mockResolvedValue(appInfoBytes()),
+        };
+        const app = {
+            getWalletPublicKey: vi.fn().mockResolvedValue({
+                publicKey: '02' + 'a'.repeat(64),
+                bitcoinAddress: FROM,
+                chainCode: 'c'.repeat(64),
+            }),
+            splitTransaction: vi.fn().mockReturnValue({}),
+            createPaymentTransaction: signBehavior === 'approve'
+                ? vi.fn().mockResolvedValue(DEVICE_TX)
+                : vi.fn(),
+            signMessage: vi.fn(),
+        };
+        if (signBehavior === 'reject') {
+            app.createPaymentTransaction.mockRejectedValue(
+                Object.assign(new Error('Denied by user'), { statusCode: 0x6985 }),
+            );
+        } else if (typeof signBehavior === 'function') {
+            app.createPaymentTransaction.mockImplementation(signBehavior);
+        }
+        const getTransport = vi.fn().mockResolvedValue(transport);
+        const pair = makeLedgerFactory({
+            getTransport,
+            getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
+            sdkRegistry,
+        });
+        const result = await pair();
+        return { ...result, kind, transport, device: app, getTransport };
+    }
+
+    const connect = {
+        getFeatures: vi.fn().mockResolvedValue({
+            success: true,
+            payload: {
+                device_id: 'TREZOR_DEVICE',
+                internal_model: 'T2T1',
+                major_version: 2,
+                minor_version: 8,
+                patch_version: 1,
+                label: 'Test Trezor',
+            },
+        }),
+        getAddress: vi.fn().mockResolvedValue({ success: true, payload: { address: FROM } }),
+        getPublicKey: vi.fn().mockResolvedValue({
+            success: true,
+            payload: {
+                publicKey: '02' + 'a'.repeat(64),
+                chainCode: 'c'.repeat(64),
+                fingerprint: '12345678',
+            },
+        }),
+        signTransaction: signBehavior === 'approve'
+            ? vi.fn().mockResolvedValue({ success: true, payload: { serializedTx: DEVICE_TX } })
+            : vi.fn(),
+        signMessage: vi.fn(),
+    };
+    if (signBehavior === 'reject') {
+        connect.signTransaction.mockResolvedValue({
+            success: false,
+            payload: { code: 'Failure_ActionCancelled', error: 'Action cancelled' },
+        });
+    } else if (typeof signBehavior === 'function') {
+        connect.signTransaction.mockImplementation(signBehavior);
+    }
+    const getConnect = vi.fn().mockResolvedValue(connect);
+    const pair = makeTrezorFactory({ getConnect, sdkRegistry });
+    const result = await pair();
+    return { ...result, kind, transport: connect, device: connect, getConnect };
+}
+
+async function approveHardwareSend(messaging) {
+    await fillSendForm();
+    await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledOnce());
+    await screen.findByTestId('confirm-modal');
+    await waitFor(() => expect(document.querySelector('[data-status="available"]')).not.toBeNull());
+    const confirmation = screen.queryByRole('checkbox');
+    if (confirmation) fireEvent.click(confirmation);
+    const approve = screen.getByTestId('confirm-approve');
+    await waitFor(() => expect(approve).toBeEnabled());
+    fireEvent.click(approve);
 }
 
 async function fillSendForm(sendAmount = AMOUNT) {
@@ -985,5 +1146,89 @@ describe('Send flow with mocked messaging', () => {
         await Promise.resolve();
 
         expect(vibrate).not.toHaveBeenCalled();
+    });
+});
+
+describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
+    it('connects, verifies the receive address on-device, and signs a send', async () => {
+        const hardware = await pairMockHardware(kind);
+
+        expect(hardware.pairingInfo.vendor).toBe(kind);
+        if (kind === 'ledger') expect(hardware.getTransport).toHaveBeenCalledOnce();
+        else expect(hardware.getConnect).toHaveBeenCalledOnce();
+
+        await expect(hardware.signer.getAddresses({
+            chainId: CHAIN_ID,
+            accountIndex: 0,
+            change: 0,
+            startIndex: 0,
+            count: 1,
+            addressType: 'p2wpkh',
+            verify: true,
+        })).resolves.toEqual([expect.objectContaining({ address: FROM })]);
+        if (kind === 'ledger') {
+            expect(hardware.device.getWalletPublicKey).toHaveBeenLastCalledWith(
+                "m/84'/0'/0'/0/0",
+                { verify: true, format: 'bech32' },
+            );
+        } else {
+            expect(hardware.device.getAddress).toHaveBeenLastCalledWith(expect.objectContaining({
+                path: "m/84'/0'/0'/0/0",
+                showOnTrezor: true,
+            }));
+        }
+
+        const messaging = mount({ hardware });
+        await approveHardwareSend(messaging);
+
+        await waitFor(() => expect(messaging.sendAssetHw).toHaveBeenCalledOnce());
+        expect(messaging.sendAssetHw).toHaveBeenCalledWith(expect.objectContaining({
+            signerId: hardware.signer.id,
+            prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
+        }));
+        expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
+        expect(screen.getByText('a1b2c3…deeff0')).toBeInTheDocument();
+        if (kind === 'ledger') {
+            expect(hardware.device.createPaymentTransaction).toHaveBeenCalledOnce();
+        } else {
+            expect(hardware.device.signTransaction).toHaveBeenCalledOnce();
+        }
+    });
+
+    it('returns to the intact send form when the user rejects on the device', async () => {
+        const hardware = await pairMockHardware(kind, 'reject');
+        const messaging = mount({ hardware });
+
+        await approveHardwareSend(messaging);
+
+        await waitFor(() => expect(messaging.sendAssetHw).toHaveBeenCalledOnce());
+        expect(await screen.findByTestId('confirm-notice')).toHaveTextContent(
+            'Signing was canceled on your hardware wallet. Nothing was signed. Review the details and select Approve again when you are ready.',
+        );
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).toBeEnabled());
+        expect(screen.queryByText(/Couldn't send/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Broadcast pending' })).not.toBeInTheDocument();
+    });
+
+    it('reports a disconnect that happens while the device is signing', async () => {
+        let rejectDevice;
+        const signBehavior = vi.fn(() => new Promise((_resolve, reject) => {
+            rejectDevice = reject;
+        }));
+        const hardware = await pairMockHardware(kind, signBehavior);
+        const messaging = mount({ hardware });
+
+        await approveHardwareSend(messaging);
+        await waitFor(() => expect(signBehavior).toHaveBeenCalledOnce());
+        await act(async () => {
+            rejectDevice(new Error('device disconnected during signing'));
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Your hardware wallet disconnected before signing finished. Reconnect and unlock it, then select Approve again.',
+        );
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Broadcast pending' })).not.toBeInTheDocument();
     });
 });
