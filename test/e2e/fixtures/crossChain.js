@@ -25,7 +25,7 @@
  * THE CAMPAIGN'S OWN MAP SAYS WHY THERE ARE TWO OF THEM. Its widget table
  * records that forms pick a chain three different ways and that a grep for one
  * reports the others as "has no picker". `CrossChainSwapForm` uses two of the
- * three AT ONCE: `ChainPicker`s labelled `Give chain` / `Get chain`
+ * three AT ONCE: `ChainPicker`s labelled `Give network` / `Get network`
  * (:628, :678) and `TokenField`s labelled `Give token` / `Get token`
  * (:646, :697). The frontier row for this area recorded that ONE helper was
  * missing; measured at HEAD it is two, and the second is the widget class that
@@ -56,7 +56,7 @@ import { expect } from '@playwright/test';
  * option is matched on both halves and the trigger is asserted whole.
  *
  * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
- * @param {string} field       the picker's label, e.g. 'Get chain'
+ * @param {string} field       the picker's label, e.g. 'Get network'
  * @param {string} chainLabel  the chain's display name, e.g. 'Dogecoin'
  * @param {string} [networkKind]  the network suffix the picker renders, e.g. 'regtest'
  */
