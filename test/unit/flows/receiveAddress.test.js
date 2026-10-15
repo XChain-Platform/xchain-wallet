@@ -407,3 +407,33 @@ describe('receiveAddress index space by wallet format', () => {
         expect(rec.derivationPath.endsWith('/0')).toBe(true);
     });
 });
+
+describe('receiveAddress keeps a demo wallet off the explorer', () => {
+    // xchain-wallet#78: the demo lands on mainnet, so the "ever funded?"
+    // probe would hand a throwaway demo address to a public mainnet explorer.
+    function probingSdk() {
+        const getHistory = async () => [];
+        const calls = [];
+        return {
+            calls,
+            registry: { get: () => ({ explorer: { getHistory: async (...args) => { calls.push(args); return getHistory(); } } }) },
+        };
+    }
+
+    it('derives the next index for a demo wallet without asking the explorer', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        vault.wallets = memCollection([{ id: 'w1', format: 'bip39', origin: 'demo' }]);
+        const sdk = probingSdk();
+        const rec = await receiveAddress(base(vault, makeSigner('software'), { sdkRegistry: sdk.registry }));
+        expect(rec.derivationPath.endsWith('/0')).toBe(true);
+        expect(sdk.calls).toEqual([]);
+    });
+
+    it('still probes the explorer for a real wallet', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        vault.wallets = memCollection([{ id: 'w1', format: 'bip39', origin: 'created' }]);
+        const sdk = probingSdk();
+        await receiveAddress(base(vault, makeSigner('software'), { sdkRegistry: sdk.registry }));
+        expect(sdk.calls.length).toBeGreaterThan(0);
+    });
+});

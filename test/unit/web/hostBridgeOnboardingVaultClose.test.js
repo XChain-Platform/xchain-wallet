@@ -220,3 +220,27 @@ describe('web mnemonic import restores labels after returning', () => {
         })).resolves.toBeNull();
     });
 });
+
+describe('web mnemonic import lands on the network the caller asked for', () => {
+    // Demo mode asks for mainnet. Without `activeNetwork` the import flow
+    // infers the network from the first chain id, so the field must reach it.
+    it('forwards activeNetwork to the import flow', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Demo Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await importMnemonicLocal({
+            password: 'pw',
+            mnemonic: PHRASE,
+            origin: 'demo',
+            activeChainIds: ['bitcoin-mainnet', 'bitcoin-regtest'],
+            activeNetwork: 'mainnet',
+        });
+        expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ activeNetwork: 'mainnet' }));
+    });
+
+    it('leaves activeNetwork unset when the caller names none', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Imported Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await importMnemonicLocal({ password: 'pw', mnemonic: PHRASE });
+        expect(importMnemonic.mock.calls[0][0].activeNetwork).toBeUndefined();
+    });
+});

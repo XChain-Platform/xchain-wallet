@@ -273,20 +273,25 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             // when isDemoWallet returns true. If a future fetch path
             // forgets the demo guard it could leak the demo wallet's
             // addresses to real endpoints; keep the guards.
-            // `activeNetwork: 'regtest'` keeps the initial landing
-            // experience the same as before; the user toggles in
-            // Settings to see mainnet / testnet.
+            // The demo lands on MAINNET (xchain-wallet#78): App Review is
+            // sent to demo mode first, so the first address a reviewer
+            // sees on Receive must be a mainnet one, not a regtest
+            // `bcrt1`. The regtest and testnet chains stay registered so
+            // a Developer Mode switch still finds addresses there.
+            // Mainnet chains lead the list as well, because a shell that
+            // drops `activeNetwork` infers the network from the first
+            // chain id.
             const r = await messaging.importMnemonic({
                 password,
                 mnemonic,
                 name: 'Demo Wallet',
                 origin: 'demo',
                 activeChainIds: [
-                    'bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest',
                     'bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet',
                     'bitcoin-testnet', 'litecoin-testnet', 'dogecoin-testnet',
+                    'bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest',
                 ],
-                activeNetwork: 'regtest',
+                activeNetwork: 'mainnet',
             });
             let walletId = r?.wallet?.id || r?.walletId || r?.id;
             if (!walletId && typeof messaging.listWallets === 'function') {
