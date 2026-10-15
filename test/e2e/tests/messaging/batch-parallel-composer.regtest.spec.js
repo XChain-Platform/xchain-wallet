@@ -55,6 +55,10 @@ import {
     waitForValidAction,
 } from '../../fixtures/regtest.js';
 
+// The composers list source addresses as first6…last6 (a native select cannot
+// shorten text, and a full address ran under the chevron on phones).
+const shortAddress = (address) => `${address.slice(0, 6)}…${address.slice(-6)}`;
+
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
 const STAMP = Date.now().toString().slice(-6);
@@ -258,7 +262,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await picker(main, 'Chain').selectOption(REGTEST_CHAIN_ID);
             expect(await picker(main, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'the batch composer defaulted to a different address than the one this run funded')
-                .toBe(owner);
+                .toBe(shortAddress(owner));
 
             const firstStep = batchStep(main, 1);
             await picker(firstStep, 'Action').selectOption('BROADCAST');
@@ -332,7 +336,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await picker(firstRow, 'Chain').selectOption(REGTEST_CHAIN_ID);
             expect(await picker(firstRow, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 1 defaulted to a different address than the one this run funded')
-                .toBe(owner);
+                .toBe(shortAddress(owner));
             await picker(firstRow, 'Action').selectOption('BROADCAST');
             await paramsBox(firstRow)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgOne }));
@@ -343,7 +347,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await picker(secondRow, 'Chain').selectOption(REGTEST_CHAIN_ID);
             expect(await picker(secondRow, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 2 defaulted to a different address than the one this run funded')
-                .toBe(owner);
+                .toBe(shortAddress(owner));
             await picker(secondRow, 'Action').selectOption('BROADCAST');
             await paramsBox(secondRow)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgTwo }));

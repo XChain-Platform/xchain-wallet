@@ -18,6 +18,7 @@ import {
     Input,
     ChainBadge,
     Icon,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import {
@@ -898,9 +899,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 `approvalBlocked`; this says why, in the same words the
                 in-wallet PSBT confirm page uses. */}
             {psbtRefusal ? (
-                <p className={styles.refusal} role="alert" data-testid="approval-refusal">
+                <StatusMessage variant="error" role="alert" testId="approval-refusal">
                     {psbtRefusal}
-                </p>
+                </StatusMessage>
             ) : null}
 
             {kind === 'coSign' ? (
@@ -956,13 +957,13 @@ export function SignApproval({ id, kind, payload, onReject }) {
             />
 
                 {watchOnlyBlocked ? (
-                    <p className={styles.refusal} role="status">
+                    <StatusMessage variant="error" role="status">
                         {WATCH_ONLY_SIGNING_MESSAGE}
-                    </p>
+                    </StatusMessage>
                 ) : watcherMode ? (
-                    <p className={styles.refusal} role="status">
+                    <StatusMessage variant="error" role="status">
                         {watcherCopy}
-                    </p>
+                    </StatusMessage>
                 ) : walletMode === null ? (
                     <p role="status">{t('extension.sign.checkingWalletMode')}</p>
                 ) : null}
@@ -1177,11 +1178,13 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                         ) : null}
                     </div>
                     {decoded.warnings.length > 0 ? (
-                        <ul className={styles.warnings} role="alert">
-                            {decoded.warnings.map((w, i) => (
-                                <li key={i}>{w}</li>
-                            ))}
-                        </ul>
+                        <StatusMessage variant="warning" role="alert">
+                            <ul>
+                                {decoded.warnings.map((w, i) => (
+                                    <li key={i}>{w}</li>
+                                ))}
+                            </ul>
+                        </StatusMessage>
                     ) : null}
                 </>
             );
@@ -1301,12 +1304,14 @@ function CoSignIntentSummary({ loading, error, preview }) {
     if (error || !preview) {
         return (
             <>
-                <ul className={styles.warnings} role="alert">
-                    <li>
-                        {coSignErrorSentence(error)}
-                        {' '}{t('extension.sign.trustSource')}
-                    </li>
-                </ul>
+                <StatusMessage variant="warning" role="alert">
+                    <ul>
+                        <li>
+                            {coSignErrorSentence(error)}
+                            {' '}{t('extension.sign.trustSource')}
+                        </li>
+                    </ul>
+                </StatusMessage>
                 {error && isDeveloperMessage(error) ? (
                     <CoSignTechnicalDetails testId="cosign-error-details" text={error} />
                 ) : null}
@@ -1342,9 +1347,11 @@ function CoSignIntentSummary({ loading, error, preview }) {
                 </>
             ) : (
                 <>
-                    <ul className={styles.warnings} role="alert">
-                        <li>{coSignUndecodedSentence(preview.decodeReason)}</li>
-                    </ul>
+                    <StatusMessage variant="warning" role="alert">
+                        <ul>
+                            <li>{coSignUndecodedSentence(preview.decodeReason)}</li>
+                        </ul>
+                    </StatusMessage>
                     {preview.decodeReason ? (
                         <CoSignTechnicalDetails testId="cosign-decode-details" text={String(preview.decodeReason)} />
                     ) : null}
@@ -1353,12 +1360,14 @@ function CoSignIntentSummary({ loading, error, preview }) {
 
             {preview.decodeOk && !preview.policyOk ? (
                 <>
-                    <ul className={styles.warnings} role="alert">
-                        <li>
-                            {coSignPolicySentence(preview.policyReason)}
-                            {' '}{t('extension.sign.policyRefusal')}
-                        </li>
-                    </ul>
+                    <StatusMessage variant="warning" role="alert">
+                        <ul>
+                            <li>
+                                {coSignPolicySentence(preview.policyReason)}
+                                {' '}{t('extension.sign.policyRefusal')}
+                            </li>
+                        </ul>
+                    </StatusMessage>
                     {preview.policyReason ? (
                         <CoSignTechnicalDetails testId="cosign-policy-details" text={String(preview.policyReason)} />
                     ) : null}

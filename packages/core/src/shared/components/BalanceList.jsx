@@ -68,7 +68,7 @@ export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
  * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
- * @param {boolean} [props.showChain]: force each row's chain into the subtitle. Multi-chain row sets enable this automatically; callers can still force it for a single-chain context that needs an explicit label.
+ * @param {boolean} [props.showChain]: name each token row's chain in its accessible name (sighted users read it from the overlay badge). Multi-chain row sets enable this automatically; callers can still force it for a single-chain context.
  * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
  * @param {(row: BalanceRow) => number} [props.getRowTabIndex] assigns the single tab stop for a composite picker
  */
@@ -76,8 +76,8 @@ export const BalanceList = memo(function BalanceList({
     rows,
     multisig,
     multisigChainId,
-    emptyTitle = 'No balances yet',
-    emptyBody = 'XChain Platform coins and tokens appear here after this wallet receives funds on Bitcoin, Litecoin, or Dogecoin.',
+    emptyTitle = t('balances.noBalancesYet'),
+    emptyBody = t('balances.xchainPlatformCoinsAndTokens'),
     onReceive,
     emptyActionLabel,
     onEmptyAction,
@@ -105,7 +105,7 @@ export const BalanceList = memo(function BalanceList({
             <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
-                actionLabel={hasEmptyAction ? emptyActionLabel : (onReceive ? 'Receive' : undefined)}
+                actionLabel={hasEmptyAction ? emptyActionLabel : (onReceive ? t('home.receive') : undefined)}
                 onAction={hasEmptyAction ? onEmptyAction : onReceive}
                 actionIcon={!hasEmptyAction && onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
@@ -141,7 +141,7 @@ export const BalanceList = memo(function BalanceList({
     return (
         // Every row is a listitem wrapper around its details button and its
         // pin and hide controls, so the container stays a list in both modes.
-        <div className={styles.list} role="list" aria-label="Balances">
+        <div className={styles.list} role="list" aria-label={t('balances.balances')}>
             {sortedRows.map((r) => {
                 const key = `${r.chainId}:${r.tick}`;
                 const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
@@ -253,27 +253,19 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     // nothing. Distinct from the per-row `hidden` prop above, which
     // controls whether this row appears in the Hidden tokens section.
     const [balancesHidden] = useBalancesHidden();
-    // Network/env (mainnet/testnet/regtest) is already chosen globally
-    // in Settings, so repeating it on every row adds noise. Show just the
-    // tick symbol; chain family is conveyed by the chain icon.
+    // The subtitle is the ticker alone, on every list. The chain is shown by
+    // the asset mark: native rows use the chain icon itself and every token row
+    // carries the chain overlay badge (AssetMark draws a lettered badge when a
+    // chain has no icon), which is what tells the same ticker on two chains
+    // apart. The network is chosen once in Settings and never repeated here.
     //
-    // That last clause only holds for NATIVE rows. The chain icon is
-    // rendered under `isNative` below; a token with no published image falls
-    // through to a letter chip, which is derived from the tick and therefore
-    // identical for the same token on every chain. In a cross-chain list that
-    // makes the rows genuinely indistinguishable: session 20 hit three
-    // identical "XCHAIN / XCHAIN / 0.00000000" rows keyed bitcoin-regtest,
-    // litecoin-regtest and dogecoin-regtest, and picking one silently
-    // re-targets the calling form's network. So callers that show a
-    // cross-chain list opt into naming the chain.
-    //
-    // The active network is never repeated on a row: the wallet runs on one
-    // network at a time and Settings is where it is chosen. Nor is a chain
-    // name the row's title already says: a native coin row reads "Bitcoin"
-    // over "BTC", not "BTC · Bitcoin".
-    const subtitle = showChain && row.chainDisplayName && row.chainDisplayName !== row.displayName
-        ? `${row.tick} · ${row.chainDisplayName}`
-        : row.tick;
+    // The overlay is decorative to assistive tech, so a list that mixes chains
+    // (`showChain`) names the chain in the row's accessible name instead,
+    // unless the caller's action label already names it.
+    const subtitle = row.tick;
+    const chainSpeech = showChain && !isNative && row.chainDisplayName
+        ? t('balanceList.rowChainSpeech', { chain: row.chainDisplayName })
+        : '';
     const fiat = useMemo(
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
@@ -326,9 +318,16 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     const fiatSpeech = fiatSpeechValue
         ? `${row.unavailable === 'partial' ? 'At least ' : ''}${fiatSpeechValue}${!isNative && row.fiatRateSource === 'market' ? ', DEX price' : ''}`
         : '';
+    const chainPart = chainSpeech && !actionLabel.includes(row.chainDisplayName) ? chainSpeech : '';
     const rowAccessibleLabel = balancesHidden
-        ? `${actionLabel}, balance hidden`
-        : [actionLabel, quantitySpeech, pendingSpeech, fiatSpeech].filter(Boolean).join(', ');
+        ? [actionLabel, chainPart, 'balance hidden'].filter(Boolean).join(', ')
+        : [
+            actionLabel,
+            chainPart,
+            quantitySpeech,
+            pendingSpeech,
+            fiatSpeech,
+        ].filter(Boolean).join(', ');
     return (
         <div
             className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
@@ -366,9 +365,10 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     </span>
                 )}
                 subtitle={<span className={styles.subtitle} title={subtitle}>{subtitle}</span>}
+                contentClassName={styles.rowBody}
                 trailingClassName={styles.amountsSlot}
                 trailing={<span className={styles.amounts}>
-                    <span className={`${styles.qty} ${quantityLabel.length > LONG_QUANTITY_CHARS ? styles.qtyLong : ''}`.trim()} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
+                    <span className={`${styles.qty} ${quantityLabel.length > LONG_QUANTITY_CHARS ? styles.qtyLong : ''}`.trim()} aria-label={balancesHidden ? t('balances.balanceHidden') : quantitySpeech}>
                         {/* Q-1 residual: an unread balance is not a zero, and a
                             fiat figure derived from one is not a value. When
                             nothing answered, say so instead of printing 0; when
@@ -378,11 +378,11 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                         {balancesHidden
                             ? '•••••'
                             : row.unavailable === 'all'
-                                ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
+                                ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>{t('balances.unavailable')}</span>
                                 : (
                                     <FitAmount title={quantityLabel}>
                                         {quantityLabel}
-                                        {hasPending ? <span className={styles.subtitle}> confirmed</span> : null}
+                                        {hasPending ? <span className={styles.subtitle}> {t('pending.row.confirmed')}</span> : null}
                                     </FitAmount>
                                 )}
                     </span>
@@ -390,11 +390,11 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                         <span
                             className={styles.fiat}
                             data-testid="balance-pending"
-                            aria-label={balancesHidden ? 'Pending balance hidden' : pendingSpeech}
+                            aria-label={balancesHidden ? t('balances.pendingBalanceHidden') : pendingSpeech}
                         >
                             {balancesHidden
-                                ? '••• pending'
-                                : `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} pending`}
+                                ? t('balances.pending')
+                                : t('balances.pending2', { formatAmountValue: formatAmount(row.pendingQuantity, row.divisibility, numberFormat) })}
                         </span>
                     ) : null}
                     {row.escrowed ? (
@@ -405,15 +405,15 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     <span
                         className={styles.fiat}
                         aria-label={balancesHidden
-                            ? 'Fiat value hidden'
+                            ? t('balances.fiatValueHidden')
                             : row.unavailable === 'all'
-                                ? 'Fiat value unavailable'
+                                ? t('balances.fiatValueUnavailable')
                                 : (fiatSpeech || undefined)}
                     >
                         {balancesHidden
                             ? '•••'
                             : row.unavailable === 'all'
-                                ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
+                                ? <span title={row.unavailableReason || undefined}>{t('balances.balanceCouldnTBeLoaded')}</span>
                                 : row.unavailable === 'partial'
                                     ? <FitAmount title={`${fiatLabel}. ${row.unavailableReason || ''}`.trim()}>{fiatLabel}</FitAmount>
                                     : <FitAmount title={fiatLabel}>{fiatLabel}</FitAmount>}
@@ -427,8 +427,8 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     variant={pinned ? 'primary' : 'secondary'}
                     icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
-                    aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
-                    title={pinned ? 'Unpin' : 'Pin to top'}
+                    aria-label={pinned ? t('balances.unpin', { tick: row.tick }) : t('balances.pin', { tick: row.tick })}
+                    title={pinned ? t('balances.unpin2') : t('balances.pinToTop')}
                     onClick={handleTogglePin}
                 />
             ) : null}
@@ -439,8 +439,8 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     variant={hidden ? 'primary' : 'secondary'}
                     icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
                     aria-pressed={hidden}
-                    aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
-                    title={hidden ? 'Unhide' : 'Hide'}
+                    aria-label={hidden ? t('balances.unhide', { tick: row.tick }) : t('balances.hide', { tick: row.tick })}
+                    title={hidden ? t('settings.display.unhide2') : t('settings.developer.hide')}
                     onClick={handleToggleHide}
                 />
             ) : null}
@@ -471,7 +471,8 @@ function shallowEqualRow(previous, next) {
 }
 
 // A balance longer than this (for example 1,000,000.00000000) steps down one
-// type size so it still fits the row instead of ending in an ellipsis.
+// type size so it still fits beside the name; one that still does not fit
+// moves to its own line under the name. Neither ends in an ellipsis.
 const LONG_QUANTITY_CHARS = 16;
 
 function FitAmount({ children, title }) {

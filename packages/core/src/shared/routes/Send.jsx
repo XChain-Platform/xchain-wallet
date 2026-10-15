@@ -437,7 +437,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             showToast({
                 message: 'Could not cancel this send. It may still be broadcast.',
                 variant: 'error',
-                durationMs: 12_000,
             });
         };
         try {
@@ -584,8 +583,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [draftPending, setDraftPending] = useState(
         () => !hasMeaningfulSendDraft(draft.load()),
     );
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         const values = { chainId, toAddress, tick, amount, memo };
         if (hasMeaningfulSendDraft(values)) draft.save(values);
         else draft.clear();
@@ -618,6 +625,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The settings read rides the address load so the last-used chain is
@@ -1582,9 +1590,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         <div data-testid="send-dispenser-notice">
             <StatusMessage variant="status">{dispenserNotice.summary}</StatusMessage>
             {dispenserNotice.warnings.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
-                    {dispenserNotice.warnings.map((w) => <p key={w} className={styles.warning}>{w}</p>)}
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    {dispenserNotice.warnings.map((w) => <p key={w}>{w}</p>)}
+                </StatusMessage>
             ) : null}
         </div>
     ) : null;
@@ -2582,11 +2590,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         </div>
     ) : null;
     const unusualSendWarningBlock = unusualSendWarnings.length > 0 ? (
-        <div role="alert" className={styles.warnings} data-testid="send-unusual-warnings">
+        <StatusMessage variant="warning" role="alert" testId="send-unusual-warnings">
             {unusualSendWarnings.map((warning) => (
-                <p key={warning} className={styles.warning}>{warning}</p>
+                <p key={warning}>{warning}</p>
             ))}
-        </div>
+        </StatusMessage>
     ) : null;
 
     // §20: signer mode does not spend. The Wallet Mode screen
@@ -2870,7 +2878,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 <AddressText address={txid} className={styles.txid} size="sm" />
                                 <CopyButton
                                     value={txid}
-                                    label={t('send.success.copy')}
+                                    label={t('common.copy')}
                                     ariaLabel={t('common.copyTransactionId')}
                                 />
                             </div>
@@ -3059,11 +3067,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     </dl>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {unusualSendWarningBlock}
                 {testSendGateBanner}
@@ -3399,14 +3407,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </div>
             ) : null}
             {pasteWarning ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{pasteWarning}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{pasteWarning}</p>
+                </StatusMessage>
             ) : null}
             {lookalikeWarning ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{lookalikeWarning}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{lookalikeWarning}</p>
+                </StatusMessage>
             ) : null}
             {!onChangeAsset ? (
                 <Input
@@ -3537,27 +3545,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </div>
             ) : null}
             {sourceLacksTick ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{sourceLacksTick}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{sourceLacksTick}</p>
+                </StatusMessage>
             ) : null}
             {/* Say it while the amount field still has focus, not only on Send.
                 Suppressed once Send has already pushed the same sentence into formError,
                 so the user is not shown it twice. */}
             {dustBlock && formError !== dustBlock ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{dustBlock}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{dustBlock}</p>
+                </StatusMessage>
             ) : null}
             {nativeMultiSendBlock ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{nativeMultiSendBlock}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{nativeMultiSendBlock}</p>
+                </StatusMessage>
             ) : null}
             {gatedMultiSendBlock ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{gatedMultiSendBlock}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{gatedMultiSendBlock}</p>
+                </StatusMessage>
             ) : null}
             {/* Hidden for a native send (no multi-leg form exists) and at the
                 cap, where another row could not be composed anyway. */}
@@ -3581,8 +3589,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </StatusMessage>
             ) : null}
             {gatedInfo && gatedInfo.state === 'partial' ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {t('send.gated.partial', {
                             total: gatedInfo.groups.length,
                             available: gatedInfo.groups.filter((g) => g.haveKey).length,
@@ -3591,15 +3599,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 .map((g) => g.keyHash.slice(0, 12)).join(', '),
                         })}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {gatedInfo && gatedInfo.state === 'blocked' ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {t('send.gated.blocked')}
                     </p>
                     {(isWatcherMode || isHwSource) ? (
-                        <p className={styles.warning}>
+                        <p>
                             {t('send.gated.softwareSigner')}
                         </p>
                     ) : (
@@ -3616,7 +3624,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 autoComplete="current-password"
                             />
                             {gatedScanError ? (
-                                <p role="alert" className={styles.warning}>{gatedScanError}</p>
+                                <p>{gatedScanError}</p>
                             ) : null}
                             <Button
                                 type="button"
@@ -3629,7 +3637,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             </Button>
                         </div>
                     )}
-                </div>
+                </StatusMessage>
             ) : null}
             {feeTiers ? (
                 <FeeSelector

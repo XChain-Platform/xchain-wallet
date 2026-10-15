@@ -26,6 +26,7 @@ import {
     roundDecimalString,
 } from '../utils/amountFormat.js';
 import tableStyles from './DataTable.module.css';
+import { t } from '../../i18n/index.js';
 
 const MAX_ROWS = 30;
 
@@ -74,23 +75,24 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
 
     return (
         <section
-            aria-label="Recent trades"
+            aria-label={t('components.recentTradesPanel.recentTrades')}
             aria-busy={loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
             <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                <table className={tableStyles.table}>
-                    <caption className={tableStyles.caption}>Recent trades</caption>
+                <table className={`${tableStyles.table} ${tableStyles.keepColumns}`}>
+                    <caption className={tableStyles.caption}>{t('components.recentTradesPanel.recentTrades')}</caption>
                     <thead>
                         <tr>
-                            <th className={tableStyles.headerCell} scope="col">Time</th>
-                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
-                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
-                            <th className={tableStyles.headerCell} scope="col">Side</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.tradeHistoryPanel.time')}</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.placeOrderPanel.price')}</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.openOrdersPanel.size')}{tick1})</th>
+                            <th className={tableStyles.headerCell} scope="col">{t('components.placeOrderPanel.side')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -104,7 +106,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                                             <button
                                                 type="button"
                                                 onClick={() => onOpenTx(String(row.tx_hash))}
-                                                aria-label={`Open transaction ${row.tx_hash}`}
+                                                aria-label={t('components.recentTradesPanel.openTransaction', { tx_hash: row.tx_hash })}
                                                 className={tableStyles.cellButton}
                                             >
                                                 {summary.timeLabel}
@@ -122,7 +124,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                                         {summary.size}
                                     </td>
                                     <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
-                                        {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                        {summary.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
                                     </td>
                                 </tr>
                             );
@@ -131,14 +133,14 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                 </table>
             </div>
             {loading ? (
-                <StatusMessage variant="status">Loading recent trades…</StatusMessage>
+                <StatusMessage variant="status">{t('components.recentTradesPanel.loadingRecentTrades')}</StatusMessage>
             ) : null}
             {loadError ? (
                 <StatusMessage variant="error">{loadError}</StatusMessage>
             ) : null}
             {!loadError && !loading && summaries.length === 0 ? (
                 <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
-                    No trades yet.
+                    {t('components.recentTradesPanel.noTradesYet')}
                 </p>
             ) : null}
         </section>

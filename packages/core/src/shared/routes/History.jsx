@@ -86,6 +86,7 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useResponsivePlaceholder } from '../../ui/Input.jsx';
+import { AddressText, truncateAddress } from '../../ui/AddressText.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { shareOrCopy, ShareOutcome } from '../share.js';
@@ -97,10 +98,12 @@ import {
     formatHistoryAmount,
     formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
+import { activityRowAmount } from '../utils/activityAmount.js';
 import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useReachability } from '../hooks/useReachability.js';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -492,13 +495,43 @@ function historyAmountDirection(entry) {
     return source.toLowerCase() === address.toLowerCase() ? 'out' : 'in';
 }
 
+/**
+ * The amount a row prints in its amount column. A settled SEND prints its
+ * own figure. So does a blockless SEND that carries no pending metadata (a
+ * synthesized demo row or an older shell's row): it has no pending
+ * annotation to print instead, and without this its amount column said
+ * only "pending", beside a status chip that already says Pending, where
+ * Home's Activity tab prints the same row's amount.
+ */
 function settledAmountAnnotation(entry) {
-    if (!entry?.blockIndex || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry.blockIndex && entry.pending) return null;
     const raw = entry.raw || {};
     const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     const tick = raw.tick ?? raw.TICK ?? raw.token;
     if (amount == null || !tick) return null;
     return { amount: String(amount), tick: String(tick), direction: historyAmountDirection(entry) };
+}
+
+/**
+ * Splits the timeline into its day headings and the runs of rows between
+ * them, so each run renders as one flush card list.
+ *
+ * @param {Array<{ kind: string, key: string, label?: string }>} items
+ * @returns {Array<{ kind: 'day', key: string, label: string } | { kind: 'rows', key: string, items: Array<object> }>}
+ */
+export function timelineRuns(items) {
+    const runs = [];
+    for (const item of items) {
+        if (item.kind === 'day') {
+            runs.push(item);
+            continue;
+        }
+        const last = runs[runs.length - 1];
+        if (last && last.kind === 'rows') last.items.push(item);
+        else runs.push({ kind: 'rows', key: `rows:${item.key ?? item.entry?.key ?? runs.length}`, items: [item] });
+    }
+    return runs;
 }
 
 /**
@@ -549,6 +582,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { showToast } = useToast();
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const browserOnline = useOnlineStatus();
     const proofSettings = useSettings();
     const activeNetwork = proofSettings.loading
@@ -1689,6 +1723,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setRefreshTick((n) => n + 1);
     }, [messaging]);
 
+    // Every shell routes a row to the standalone detail page; only a host
+    // that wires no handler falls back to the inline expand.
+    const opensDetail = typeof onSelectEntry === 'function';
     const onRowClick = useCallback((entry) => {
         // When the parent shell wired the navigation callback, send the
         // selected entry up so it can route to the standalone ActionDetail
@@ -2179,6 +2216,17 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
                     />
+                ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
+                    // An empty read while balances could not be checked proves
+                    // nothing, so the page says that once instead of "No
+                    // activity yet" beside the stale-balances notice.
+                    <BalancesUncheckedState
+                        onRetry={() => {
+                            recheckBalances();
+                            setRefreshTick((n) => n + 1);
+                        }}
+                        onReceive={onReceive}
+                    />
                 ) : (
                     <EmptyState
                         title={crossChainOnly
@@ -2210,10 +2258,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 aria-label={t('history.title')}
                 onKeyDown={onTimelineKeyDown}
             >
-                {renderedTimelineItems.map((item) => {
-                    if (item.kind === 'day') {
-                        return <li key={item.key}><SectionHeader as="h2" title={item.label} /></li>;
-                    }
+                {timelineRuns(renderedTimelineItems).map((run) => (run.kind === 'day' ? (
+                    <li key={run.key}><SectionHeader as="h2" title={run.label} /></li>
+                ) : (
+                    // The rows under one heading are one flush card with dividers.
+                    <li key={run.key}>
+                        <ul className={styles.rowList}>
+                {run.items.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
                         const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
@@ -2233,6 +2284,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     key={entry.key}
                                                     entry={entry}
                                                     selected={selectedKey === entry.key}
+                                                    opensDetail={opensDetail}
                                                     showConnector={
                                                         item.subkind === 'link-pair'
                                                             ? false
@@ -2283,6 +2335,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             key={entry.key}
                             entry={entry}
                             selected={selectedKey === entry.key}
+                            opensDetail={opensDetail}
                             showConnector={connectorByKey.has(entry.key)}
                             onClick={onRowClick}
                             peerCache={selectedKey === entry.key ? peerCache : EMPTY_PEER_CACHE}
@@ -2299,6 +2352,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         />
                     );
                 })}
+                        </ul>
+                    </li>
+                )))}
             </ul>
             {visibleItemCount < groupedItems.length ? (
                 <div className={styles.pagination} aria-live="polite">
@@ -2430,6 +2486,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         nativeFiatValue,
         balancesHidden,
         fiatCurrency,
+        detailTransferDirection(entry, walletAddresses),
     );
     const explorerButtons = explorerLinksFor(entry, settings);
 
@@ -2626,6 +2683,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             {isPending ? (
                 <PendingDetailPanel
                     entry={entry}
+                    transferDirection={detailTransferDirection(entry, walletAddresses)}
                     balancesHidden={balancesHidden}
                     onDismissFailed={onDismissFailed}
                 />
@@ -2966,6 +3024,32 @@ function failedReasonOf(stored) {
     return { reason: h.message, details: raw };
 }
 
+const DESTINATION_SLOT = '\u0000';
+
+/**
+ * One decoded output, "+100 BTC to <address>". The address keeps both ends
+ * on one line with a copy button after it; printed whole, it wrapped across
+ * two lines on a phone with no way to copy it.
+ */
+function PendingOutputLine({ text, destination }) {
+    const [before, after = ''] = String(text).split(DESTINATION_SLOT);
+    if (!destination) return <>{before}{after}</>;
+    return (
+        <span className={styles.copyableValue}>
+            <span className={styles.copyableText}>
+                {before}
+                <AddressText address={destination} size="md" />
+                {after}
+            </span>
+            <HistoryCopyButton
+                value={destination}
+                label={t('history.copy.walletAddress')}
+                visibleLabel={t('common.copy')}
+            />
+        </span>
+    );
+}
+
 /**
  * M2.3 pending branch of the detail card. Everything a user can be told
  * honestly about a transaction that has been sent and not yet indexed:
@@ -2979,7 +3063,7 @@ function failedReasonOf(stored) {
  *
  * @param {{ entry: any, balancesHidden?: boolean }} props
  */
-function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) {
+function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed, transferDirection = null }) {
     const state = pendingStateOf(entry);
     const copy = state ? pendingCopyFor(state, entry) : null;
     const warning = state != null && PENDING_WARNING_STATES.has(state);
@@ -3077,11 +3161,14 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 <ul className={styles.pendingOutputs}>
                     {desc.outputs.map((o, i) => (
                         <li key={`${o.destination}:${i}`}>
-                            {t('pending.detail.sendOutput', {
-                                amount: amountOf(o.amount),
-                                tick: o.tick,
-                                destination: o.destination,
-                            })}
+                            <PendingOutputLine
+                                text={t('pending.detail.sendOutput', {
+                                    amount: amountOf(o.amount),
+                                    tick: o.tick,
+                                    destination: DESTINATION_SLOT,
+                                })}
+                                destination={o.destination}
+                            />
                             {o.memo ? (
                                 <span className={styles.pendingMemo}>
                                     {' '}{t('pending.detail.memo', { memo: o.memo })}
@@ -3095,7 +3182,11 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 for a settled transaction nothing more is coming, so the
                 outputs stand on their own. */}
             {desc.kind === 'local' && !settled ? (
-                <p className={styles.pendingHelp}>{t('pending.detail.localRecordNote')}</p>
+                <p className={styles.pendingHelp}>{transferDirection === 'in'
+                    ? t('pending.detail.localRecordNoteIn')
+                    : transferDirection === 'self'
+                        ? t('pending.detail.localRecordNoteSelf')
+                        : t('pending.detail.localRecordNote')}</p>
             ) : null}
             {desc.kind === 'segments' ? (
                 <>
@@ -3126,14 +3217,14 @@ function capitalize(s) {
  * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
  * are skipped so the table only shows what's actually populated.
  */
-function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency) {
+function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency, transferDirection = null) {
     if (!entry) return [];
     const rows = [];
 
     // Action: just the colored bubble. The action number now lives
     // on its own "Index" row below Block.
     rows.push(['Action', (
-        <span className={styles.actionTag}>{entry.action ? actionDisplayLabel(entry.action) : '-'}</span>
+        <span className={styles.actionTag}>{entry.action ? detailActionLabel(entry, transferDirection) : '-'}</span>
     )]);
 
     // Fiat-display toggle. Only rendered when the caller resolved a
@@ -3194,16 +3285,27 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
  * table for fields a user typically needs to paste somewhere else
  * (action_index, tx_hash, source / destination addresses).
  */
+/**
+ * A Details value with its copy button after it. A long identifier (an
+ * address, a transaction ID) keeps both ends on one line and copies in
+ * full; the button says "Copy" and names what it copies to assistive tech.
+ * The button used to sit first with its whole name as text, which wrapped
+ * to two lines on a phone and pushed every value out of line.
+ */
 function CopyableValue({ display, fullValue, ariaLabel }) {
+    const full = String(fullValue ?? '');
+    const identifier = typeof display === 'string' && display === full && full.length > 14 && !/\s/.test(full);
     return (
         <span className={styles.copyableValue}>
-            <HistoryCopyButton value={String(fullValue ?? '')} label={ariaLabel} />
-            <span className={styles.copyableText}>{display}</span>
+            <span className={styles.copyableText}>
+                {identifier ? <AddressText address={full} size="md" /> : display}
+            </span>
+            <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('common.copy')} />
         </span>
     );
 }
 
-function HistoryCopyButton({ value, label = t('history.copy.clipboard') }) {
+function HistoryCopyButton({ value, label = t('history.copy.clipboard'), visibleLabel = label }) {
     const [copied, setCopied] = useState(false);
     const onCopied = () => {
         setCopied(true);
@@ -3217,7 +3319,7 @@ function HistoryCopyButton({ value, label = t('history.copy.clipboard') }) {
         >
             <CopyButton
                 value={value}
-                label={label}
+                label={visibleLabel}
                 ariaLabel={label}
                 onCopied={onCopied}
             />
@@ -3233,8 +3335,8 @@ const DETAIL_FIELD_LABELS = Object.freeze({
     action_index: 'Action number',
     address: 'Address',
     block_index: 'Block',
-    chain: 'Chain',
-    chain_id: 'Chain',
+    chain: 'Network',
+    chain_id: 'Network',
     destination: 'To',
     source: 'From',
     time: 'Time',
@@ -3311,7 +3413,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
     const entrySource = firstPopulatedValue(entry, ['source']);
     const walletAddress = firstPopulatedValue(entry, ['address']);
 
-    if (entry.action) rows.push(['Action', actionDisplayLabel(entry.action)]);
+    if (entry.action) rows.push(['Action', detailActionLabel(entry, transfer.amountDirection)]);
     if (actionIndex) {
         rows.push(['Action number', (
             <CopyableValue
@@ -3321,12 +3423,13 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
             />
         )]);
     }
-    // Split chainId (e.g. 'bitcoin-regtest') into two rows so the
-    // chain family and network kind read separately.
+    // The chain family reads from the chainId (e.g. 'bitcoin-regtest').
+    // The network kind is not printed: the wallet never labels it (the
+    // network is a Settings choice), so a "Network: Regtest" row was the one
+    // place the detail page did.
     if (entry.chainId) {
-        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
-        if (coin) rows.push(['Chain', capitalize(coin)]);
-        rows.push(['Network', capitalize(network)]);
+        const [coin = ''] = String(entry.chainId).split('-');
+        if (coin) rows.push(['Network', capitalize(coin)]);
     }
     if (txHash) {
         rows.push(['Transaction ID', (
@@ -3519,6 +3622,39 @@ function detailTransfer(entry, walletAddresses) {
     return { label: '-', amountDirection: null, counterparty: safePeer };
 }
 
+/**
+ * Which way a SEND or RECEIVE row moved value, resolved the same way the
+ * detail table's Sent / Received row is: 'in', 'out', 'self', or null when
+ * the row is not a transfer or its direction is unknown. The detail page
+ * header names the transaction by this, so an incoming SEND reads Receive.
+ *
+ * @param {any} entry
+ * @param {Iterable<string> | null | undefined} walletAddresses
+ * @returns {'in' | 'out' | 'self' | null}
+ */
+export function detailTransferDirection(entry, walletAddresses) {
+    return detailTransfer(entry, walletAddresses).amountDirection;
+}
+
+/**
+ * The name the detail page gives the action: a plain transfer is named by
+ * the way value moved (the protocol calls both sides SEND, so an incoming
+ * one would read as money leaving), and every other action keeps its
+ * protocol name.
+ *
+ * @param {any} entry
+ * @param {'in' | 'out' | 'self' | null} direction  from detailTransferDirection
+ * @returns {string}
+ */
+export function detailActionLabel(entry, direction) {
+    const action = String(entry?.action || '').toUpperCase();
+    if (action === 'SEND' || action === 'RECEIVE') {
+        if (direction === 'in') return actionDisplayLabel('RECEIVE');
+        if (direction === 'out' || direction === 'self') return actionDisplayLabel('SEND');
+    }
+    return actionDisplayLabel(entry?.action);
+}
+
 function isEmptyDetailValue(value) {
     if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
     return typeof value === 'string' && /^(?:|undefined|null|nan|[+-]?infinity)$/i.test(value.trim());
@@ -3702,7 +3838,7 @@ function RecipientsBlock({ entry }) {
                         ? t('history.recipients.showHolders')
                         : t('history.recipients.showRecipients')}
                 </Button>
-                {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
+                <StatusMessage variant="error">{error}</StatusMessage>
             </div>
         );
     }
@@ -3718,9 +3854,9 @@ function RecipientsBlock({ entry }) {
     if (stage === 'saved') {
         return (
             <div style={blockStyle}>
-                <span style={headingStyle} role="status">
+                <StatusMessage variant="success">
                     {t('history.recipients.saved', { count: recipients.length, name: name.trim() })}
-                </span>
+                </StatusMessage>
             </div>
         );
     }
@@ -3736,9 +3872,6 @@ function RecipientsBlock({ entry }) {
             {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
             {recipients.length > 0 ? (
                 <div style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                    padding: 'var(--xc-space-1)',
                     fontFamily: 'monospace',
                     fontSize: 'var(--xc-text-xs)',
                     color: 'var(--xc-text)',
@@ -3787,9 +3920,7 @@ function RecipientsBlock({ entry }) {
                     </Button>
                 </div>
             ) : null}
-            {error ? (
-                <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
-            ) : null}
+            <StatusMessage variant="error">{error}</StatusMessage>
         </div>
     );
 }
@@ -3997,40 +4128,82 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
+/**
+ * True when `label` is the name the wallet generated for an address
+ * ("BTC Address #1", "LTC Change #2", "Imported Address") rather than one the
+ * user chose. A generated name only repeats the coin, which the row's asset
+ * mark already shows, so a row names the receiving address only when the
+ * user named it.
+ *
+ * @param {string} label
+ * @param {string | undefined} chainId
+ * @returns {boolean}
+ */
+export function isGeneratedAddressLabel(label, chainId) {
+    let text = String(label || '').trim();
+    if (!text || text === 'Imported Address') return true;
+    const ticker = tickerForCoin(coinOfChainId(chainId) || '');
+    if (ticker && text.startsWith(`${ticker} `)) text = text.slice(ticker.length + 1);
+    return /^(Address|Change|Dispenser)( #\d+)?$/.test(text);
+}
+
+/** Divisibility a record states for its own token; 8 when it states none. */
+function recordDivisibility(raw) {
+    const stated = Number(raw?.divisibility);
+    if (Number.isInteger(stated) && stated >= 0) return stated;
+    return raw?.divisible === false ? 0 : 8;
+}
+
+export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
+    const [balancesHidden] = useBalancesHidden();
     const settledAmount = settledAmountAnnotation(entry);
     const actionKind = classifyEntryAction(entry, walletAddresses);
     const receiveLabel = entry.receiveLabel
         && actionKind === 'receive'
+        && !isGeneratedAddressLabel(entry.receiveLabel, entry.chainId)
         ? entry.receiveLabel
         : '';
     const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });
     const rawTick = entry.raw?.tick ?? entry.raw?.TICK ?? entry.raw?.token;
     const tick = String(settledAmount?.tick || rawTick || nativeTick || '?');
+    // A settled sweep or issue prints the amount Home prints, from the same
+    // formatter; its record carries base units.
+    const baseUnitAmount = !settledAmount && entry.blockIndex
+        && (actionKind === 'sweep' || actionKind === 'issue')
+        ? activityRowAmount(entry, { divisibility: recordDivisibility(entry.raw) })
+        : '';
+    // Hidden balances mask the figure here as they do on Home and in the
+    // pending annotation; the ticker stays, since it is not an amount.
     const amount = settledAmount ? (
         <span
             data-history-amount={settledAmount.direction || 'unknown'}
-            aria-label={formatHistoryAmountForSpeech(
+            aria-label={balancesHidden ? undefined : formatHistoryAmountForSpeech(
                 settledAmount.amount,
                 settledAmount.tick,
                 settledAmount.direction,
             )}
         >
-            {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+            {balancesHidden ? '•••••' : formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
         </span>
-    ) : entry.blockIndex ? tick : (
+    ) : entry.blockIndex ? (baseUnitAmount ? (
+        <span data-history-amount="unknown">
+            {balancesHidden ? '•••••' : baseUnitAmount} {tick}
+        </span>
+    ) : tick) : (
         <>
             <PendingRowLabel entry={entry} />
             <PendingAmountLabel entry={entry} />
         </>
     );
-    const contextLabel = contractRowLabel(entry)
-        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '')
-        // A row names its counterparty, so a send shows where it went.
-        || peerAddressOfEntry(entry)
-        || entry.source
-        || '';
+    const namedContext = contractRowLabel(entry)
+        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '');
+    // A row names its counterparty, so a send shows where it went. The
+    // address keeps both identifying ends: an end-clipped one showed only its
+    // first characters on a phone.
+    const counterparty = namedContext ? '' : (peerAddressOfEntry(entry) || entry.source || '');
+    const contextLabel = namedContext || counterparty;
+    const contextText = namedContext || truncateAddress(counterparty);
     const linkedTo = entry.link
         ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
         : '';
@@ -4046,7 +4219,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 onClick={() => onClick(entry)}
                 data-history-row
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
-                aria-expanded={selected}
+                // A row that opens the detail page is a link to it, not a
+                // disclosure: no expand chevron and no expanded state.
+                aria-expanded={opensDetail ? undefined : selected}
                 chainId={entry.chainId}
                 tick={tick}
                 isNative={tick === nativeTick}
@@ -4057,7 +4232,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                         {verify ? (
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
                         ) : null}
-                        {contextLabel ? <span title={contextLabel}>{contextLabel}</span> : null}
+                        {contextLabel ? <span title={contextLabel}>{contextText}</span> : null}
                     </>
                 )}
                 amount={amount}
@@ -4071,7 +4246,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 selected={selected}
                 aria-description={rowDescription || undefined}
                 decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}
-                trailing={<DoubleChevron direction={selected ? 'up' : 'down'} />}
+                trailing={opensDetail ? null : <DoubleChevron direction={selected ? 'up' : 'down'} />}
             />
             {selected ? (
                 <DetailCard
@@ -4647,7 +4822,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     ) : (
                         <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
                     )}
-                    <span>{selectedDesc ? selectedDesc.displayName : t('history.filters.allChains')}</span>
+                    <span>{selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}</span>
                 </span>
                 <SingleChevron direction="down" />
             </button>
@@ -4668,7 +4843,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                             onClick={() => choose('all')}
                         >
                             <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>{t('history.filters.allChains')}</span>
+                            <span>{t('common.allNetworks')}</span>
                         </button>
                     </li>
                     {activeChainIds.map((cid) => {
@@ -4910,7 +5085,7 @@ function ExportModal({
                     </p>
 
                     {exporting ? (
-                        <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                        <StatusMessage variant="info">
                             {t('history.export.progress', {
                                 completed: progress.completed,
                                 total: progress.total,
@@ -4918,14 +5093,12 @@ function ExportModal({
                             {operationTime.showElapsed
                                 ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
                                 : ''}
-                        </p>
+                        </StatusMessage>
                     ) : null}
                     {operationTime.timedOut ? (
-                        <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>
-                            {t('history.export.slow')}
-                        </p>
+                        <StatusMessage variant="warning" role="alert">{t('history.export.slow')}</StatusMessage>
                     ) : null}
-                    {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>{error}</p> : null}
+                    <StatusMessage variant="error">{error}</StatusMessage>
                 </div>
 
                 <div style={MODAL_ACTIONS}>

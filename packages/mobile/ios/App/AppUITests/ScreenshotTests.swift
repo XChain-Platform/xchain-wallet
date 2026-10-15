@@ -307,6 +307,16 @@ final class ScreenshotTests: XCTestCase {
     /// listing image of the settings screen. Settings is one row INSIDE that
     /// sheet, so the sheet is a step on the way, never the destination.
     @discardableResult
+    private func openReceive() -> Bool {
+        if let direct = button(anyOf: ["Receive"]) { return tap(direct, "receive nav entry") }
+        guard let more = button(anyOf: ["More"]), tap(more, "More (sheet) for Receive") else {
+            missed.append("receive: no Receive and no More")
+            print("MISSED: receive - neither a Receive control nor a More sheet")
+            return false
+        }
+        return openFromNav(["Receive"], scene: "receive")
+    }
+
     private func openSettings(scene: String) -> Bool {
         if let direct = button(anyOf: ["Settings"]), tap(direct, "Settings") {
             return reach(app.staticTexts.firstMatch, "settings content", timeout: 20)
@@ -573,7 +583,9 @@ final class ScreenshotTests: XCTestCase {
 
         // 2. Receive, which shows an address and a QR: the clearest proof in a
         //    still image that this is a wallet and not a web page.
-        if openFromNav(["Receive"], scene: "receive") {
+        //    The phone bottom bar carries Home, History, Send and Scan, and Receive
+        //    sits in the More sheet, so a missing direct entry opens the sheet first.
+        if openReceive() {
             _ = reach(app.staticTexts.firstMatch, "receive content", timeout: 20)
             capture("02-receive")
         } else {

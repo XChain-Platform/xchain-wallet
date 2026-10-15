@@ -53,11 +53,8 @@
 /* The add-a-wallet lane, entered from inside the demo, explains
    why the demo has to be cleared before a real wallet can be made. */
 .demoGraduateNotice {
+    composes: card from '../../ui/Card.module.css';
     margin: 0 var(--xc-space-3) var(--xc-space-3);
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
 }
@@ -88,6 +85,7 @@
 }
 
 .licenseScroll {
+    composes: card from '../../ui/Card.module.css';
     /* The terms take every pixel the screen has left (FormPage fill), so
        Accept and continue sits at the bottom of the phone, and the panel
        keeps its own scroll: reaching its end unlocks the acknowledgement. */
@@ -95,10 +93,6 @@
     /* Retain enough initial license text to identify the scroll region. */
     min-height: 160px;
     overflow-y: auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     /* Padding and border sit inside the full width, so the terms never push
        the page sideways. */
     box-sizing: border-box;

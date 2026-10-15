@@ -8,11 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { ConfirmModal } from './ConfirmModal.jsx';
-import { NetworkFilter } from './NetworkFilter.jsx';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
@@ -25,6 +24,13 @@ import {
 import styles from './HeaderSettingsButton.module.css';
 import menuStyles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { t } from '../../i18n/index.js';
+
+// The chain filter renders only inside the open popover, so it loads with the
+// header menu rather than in the startup bundle. The component starts the
+// fetch when it mounts, so the chunk is ready before the popover opens.
+const loadNetworkFilter = () => import('./NetworkFilter.jsx');
+const NetworkFilter = lazy(() => loadNetworkFilter().then((module) => ({ default: module.NetworkFilter })));
 
 /**
  * Header gear-icon → settings popover. Four sections:
@@ -100,6 +106,21 @@ export function HeaderSettingsButton({
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
+    useEffect(() => { loadNetworkFilter().catch(() => {}); }, []);
+    const popoverRef = popoverPlacement.ref;
+    // The popover is portaled to the body, so Tab from its trigger walked the
+    // page behind it (and closed an owning menu) and its controls were out of
+    // keyboard reach. Opening moves focus to its first control; closing hands
+    // it back to the trigger.
+    useEffect(() => {
+        if (!open) return undefined;
+        const frame = requestAnimationFrame(() => {
+            popoverRef.current?.querySelector(
+                'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            )?.focus();
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [open, popoverRef]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -185,7 +206,7 @@ export function HeaderSettingsButton({
                                 <Icon.GearIcon />
                                 {anyNonDefault ? <span className={styles.dot} /> : null}
                             </span>
-                            <span className={menuStyles.rowLabel}>Settings</span>
+                            <span className={menuStyles.rowLabel}>{t('home.settings')}</span>
                             <span className={menuStyles.rowIcon} aria-hidden="true"><Icon.ForwardIcon /></span>
                         </button>
                     ) : (
@@ -200,8 +221,8 @@ export function HeaderSettingsButton({
                             onClick={() => setOpen((v) => !v)}
                             aria-haspopup="dialog"
                             aria-expanded={open ? 'true' : 'false'}
-                            aria-label="Settings"
-                            title="Settings"
+                            aria-label={t('home.settings')}
+                            title={t('home.settings')}
                             data-active={anyNonDefault ? 'true' : undefined}
                         />
                     )}
@@ -211,22 +232,22 @@ export function HeaderSettingsButton({
                         variant="popover"
                         surfaceRef={popoverPlacement.ref}
                         style={popoverPlacement.style}
-                        title="Wallet settings"
+                        title={t('shell.settingsButton.walletSettings')}
                         titleId="xc-wallet-settings-title"
                         aria-labelledby="xc-wallet-settings-title"
                         onMouseDown={(event) => event.stopPropagation()}
                     >
                     {/* Picker destinations stay native buttons to preserve full-row navigation semantics. */}
                     {onOpenWalletPicker ? (
-                        <Section title="Wallet">
+                        <Section title={t('settings.thisWallet.wallet')}>
                             <button
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => navigate(onOpenWalletPicker)}
-                                title={walletLabel || 'Choose wallet'}
+                                title={walletLabel || t('shell.settingsButton.chooseWallet')}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
-                                    {walletLabel || 'No wallet'}
+                                    {walletLabel || t('shell.settingsButton.noWallet')}
                                 </span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
@@ -234,15 +255,15 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {onOpenAccountPicker && activeWallet ? (
-                        <Section title="Account">
+                        <Section title={t('shell.settingsButton.account')}>
                             <button
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => navigate(onOpenAccountPicker)}
-                                title={accountLabel || 'Choose account'}
+                                title={accountLabel || t('shell.settingsButton.chooseAccount')}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
-                                    {accountLabel || 'Account 1'}
+                                    {accountLabel || t('shell.settingsButton.account1')}
                                 </span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
@@ -250,13 +271,13 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {showActiveNetwork ? (
-                        <Section title="Network">
+                        <Section title={t('settings.network.label')}>
                             <select
                                 className={styles.networkSelect}
                                 value={currentNetwork}
                                 disabled={switchingNetwork || Boolean(confirmDialog.request)}
                                 onChange={(event) => switchNetwork(event.target.value)}
-                                aria-label="Active network in header"
+                                aria-label={t('shell.settingsButton.activeNetworkInHeader')}
                             >
                                 {networkOptions.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -266,14 +287,16 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {showNetwork ? (
-                        <Section title="Chain filter">
-                            <NetworkFilter
-                                chainRegistry={chainRegistry}
-                                coinFamilies={coinFamilies}
-                                value={networkFilter || 'all'}
-                                onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
-                            />
-                        </Section>
+                        <Suspense fallback={null}>
+                            <Section title={t('shell.settingsButton.chainFilter')}>
+                                <NetworkFilter
+                                    chainRegistry={chainRegistry}
+                                    coinFamilies={coinFamilies}
+                                    value={networkFilter || 'all'}
+                                    onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
+                                />
+                            </Section>
+                        </Suspense>
                     ) : null}
 
                     {onOpenSettings ? (
@@ -282,9 +305,9 @@ export function HeaderSettingsButton({
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => navigate(onOpenSettings)}
-                                title="All settings"
+                                title={t('shell.settingsButton.allSettings')}
                             >
-                                <span className={styles.summaryName}>All settings</span>
+                                <span className={styles.summaryName}>{t('shell.settingsButton.allSettings')}</span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
                         </div>
@@ -293,12 +316,20 @@ export function HeaderSettingsButton({
                     document.body,
                 ) : null}
             </div>
-            {confirmDialog.request ? (
-                <ConfirmModal
-                    {...confirmDialog.request}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
+            {/* Rendered in place, the confirm sat inside the header's stacking
+                context and the body-level popover painted over it. Portaled
+                beside the popover it stacks on top; like the popover, its
+                presses stop at the portal so the open menu and popover
+                underneath do not read them as outside clicks and unmount it. */}
+            {confirmDialog.request && typeof document !== 'undefined' ? createPortal(
+                <div data-header-settings-confirm="" onMouseDown={(event) => event.stopPropagation()}>
+                    <ConfirmModal
+                        {...confirmDialog.request}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={confirmDialog.onCancel}
+                    />
+                </div>,
+                document.body,
             ) : null}
         </>
     );

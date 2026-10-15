@@ -241,8 +241,8 @@ describe('swap review editing', () => {
         const edit = await screen.findByRole('button', { name: 'Edit' });
         expect(screen.getByText('1 ALPHA = 1.5 BETA')).toBeInTheDocument();
         expect(screen.getByText(/The give side is escrowed until this offer is matched/)).toBeInTheDocument();
-        expect(screen.getByText('Give chain')).toBeInTheDocument();
-        expect(screen.getByText('Get chain')).toBeInTheDocument();
+        expect(screen.getByText('Give network')).toBeInTheDocument();
+        expect(screen.getByText('Get network')).toBeInTheDocument();
         expect(screen.getByText('Protocol fee')).toBeInTheDocument();
         fireEvent.click(edit);
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('2');
@@ -374,8 +374,8 @@ describe('swap review editing', () => {
 
         await screen.findByRole('button', { name: 'Edit' });
         expect(screen.getByText('1 ALPHA = 1.25 BETA')).toBeInTheDocument();
-        expect(screen.getByText('Give chain')).toBeInTheDocument();
-        expect(screen.getByText('Get chain')).toBeInTheDocument();
+        expect(screen.getByText('Give network')).toBeInTheDocument();
+        expect(screen.getByText('Get network')).toBeInTheDocument();
         expect(screen.getByText('Protocol fee')).toBeInTheDocument();
         expect(screen.getByLabelText(BTC_ADDRESS.address)).toBeInTheDocument();
         expect(screen.getByText('exact memo')).toBeInTheDocument();
@@ -485,7 +485,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
         setAmount('Give amount (ALPHA)', '1');
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        expect(await screen.findByText('Enter a receive address on the get chain.')).toBeInTheDocument();
+        expect(await screen.findByText('Enter a receive address on the get network.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -587,7 +587,7 @@ describe('swap review editing', () => {
         expect(screen.queryByText('1 ALPHA = 0 BETA')).toBeNull();
     });
 
-    it('clears chain-scoped tokens, amounts, and the receive address when either chain changes', async () => {
+    it('clears chain-scoped tokens, amounts, and the receive address when either network changes', async () => {
         let resolveLitecoinAddress;
         const litecoinAddress = new Promise((resolve) => { resolveLitecoinAddress = resolve; });
         const byChain = {
@@ -611,7 +611,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
         setAmount('Give amount (ALPHA)', '4');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Give chain: Dogecoin' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Give network: Dogecoin' }));
         fireEvent.click(screen.getByRole('option', { name: /Bitcoin/ }));
         expect(screen.getByLabelText('Give amount')).toHaveValue('');
         expect(screen.getByRole('button', { name: /Give token:/ })).toHaveTextContent('Select a token');
@@ -621,7 +621,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '5');
         expect(screen.getByLabelText('Receive at')).toHaveValue(BTC_ADDRESS.address);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Get chain: Bitcoin' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Get network: Bitcoin' }));
         fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
         expect(screen.getByLabelText('Get amount')).toHaveValue('');
         expect(screen.getByLabelText('Receive at')).toHaveValue('');
@@ -776,7 +776,7 @@ describe('swap review editing', () => {
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
-    it('validates cross-chain token precision on the chain for each leg', async () => {
+    it('validates cross-chain token precision on the network for each leg', async () => {
         const msg = messaging({ divisibility: {
             [`${DOGE}:ALPHA`]: 2,
             [`${BTC}:BETA`]: 0,

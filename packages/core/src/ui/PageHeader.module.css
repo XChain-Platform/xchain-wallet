@@ -9,9 +9,11 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
-    /* Holds the toolbar height when neither lane has a control (Back hidden
-       on a top-level destination, no trailing action). */
-    min-height: var(--xc-page-header-side);
+    /* Holds the row at the Back control's height (a small Button) when Back
+       is hidden on a top-level destination, so the header is the same height
+       whether Back shows or not. The side lane token is the larger trailing
+       control size and would make a Back-less header taller. */
+    min-height: var(--xc-control-h-sm);
 }
 
 .back {
@@ -95,20 +97,21 @@
     gap: var(--xc-space-2);
 }
 
-/* Both action lanes use the medium icon-button footprint. The grid aligns
-   their boxes to the content edges while each button centres its own icon. */
+/* Trailing actions take the Back control's size (a small Button) so a
+   screen with an action keeps the same header height as one without. The
+   lanes stay at the side token, so the title keeps its width and centre.
+   The grid aligns each box to the content edge while it centres its icon. */
 /* Excludes [role="menuitem"]: a trailing action may open a dropdown
    whose item buttons also live inside this slot (AddressList's + menu);
    those are full-width rows, not icon controls. */
 .trailing button:not([role="menuitem"]) {
     --xc-icon-size: var(--xc-icon-md);
     appearance: none;
-    width: var(--xc-page-header-side);
-    height: var(--xc-page-header-side);
-    min-width: var(--xc-page-header-side);
-    /* The header side token resolves to this global size; naming it here
-       keeps the stated tap floor readable outside the header scope. */
-    min-height: var(--xc-control-h-md);
+    position: relative;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
+    min-width: var(--xc-control-h-sm);
+    min-height: var(--xc-control-h-sm);
     border-radius: var(--xc-control-radius);
     border: 1px solid var(--xc-border-strong);
     padding: 0;
@@ -120,6 +123,19 @@
     color: var(--xc-text);
     cursor: pointer;
     flex: 0 0 auto;
+}
+
+/* The hit target stays at the touch floor: --xc-control-hit-min is 44px on
+   touch screens, larger than the box, and smaller than the box on pointer
+   screens, where the area is just the button. Offsetting by half the
+   shortfall centres it in both writing directions, as Button.sm does. */
+.trailing button:not([role="menuitem"])::before {
+    content: '';
+    position: absolute;
+    inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+    inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+    width: max(100%, var(--xc-control-hit-min, 24px));
+    height: max(100%, var(--xc-control-hit-min, 24px));
 }
 
 .trailing button:not([role="menuitem"]) svg[data-xc-icon] {

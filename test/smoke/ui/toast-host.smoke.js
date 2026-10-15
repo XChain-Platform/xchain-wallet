@@ -46,6 +46,19 @@ for (const field of ['showToast', 'dismissToast', 'clearToasts']) {
 assert.ok(/clearTimeout/.test(th), 'ToastHost clears its setTimeout timers');
 // Default 8s per §37.2.
 assert.ok(/8000/.test(th), 'ToastHost defaults durationMs to 8000 per §37.2');
+
+// One duration: the host owns it. A caller that passes its own durationMs
+// gives one toast a different lifetime from the rest.
+{
+    const { execFileSync } = await import('node:child_process');
+    const callers = execFileSync('git', ['-C', wsRoot, 'grep', '-l', 'showToast', '--', 'packages'], { encoding: 'utf8' })
+        .split('\n').filter((f) => f && !/ToastHost\.jsx$|\.test\./.test(f));
+    const offenders = callers.filter((f) => {
+        const src = readFileSync(join(wsRoot, f), 'utf8');
+        return /showToast\(\{[^)]*durationMs\s*:/s.test(src);
+    });
+    assert.deepEqual(offenders, [], 'no production toast sets its own duration');
+}
 assert.ok(/role="status"[\s\S]*aria-live="polite"/.test(th),
     'ToastHost exposes notifications through one polite status region');
 
@@ -64,8 +77,14 @@ assert.ok(/pointer-events:\s*none/.test(thCssSrc),
 // screen's bottom controls); only its buttons take them.
 assert.ok(/\.toast\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
     'a toast card passes taps through to the control beneath it');
-assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*auto/.test(thCssSrc),
-    'the toast Undo / Dismiss buttons still take taps');
+assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
+    'the toast controls box passes taps through, so it never becomes a tap-catching strip');
+for (const button of ['actionBtn', 'dismissBtn']) {
+    assert.ok(new RegExp(`\\.${button}\\s*\\{[^}]*pointer-events:\\s*auto`).test(thCssSrc),
+        `the toast ${button} still takes taps`);
+}
+assert.ok(!/@media[^{]*max-width[^{]*\{\s*\.toast\s*\{[^}]*flex-wrap:\s*wrap/.test(thCssSrc),
+    'the toast stays one row on narrow phones instead of wrapping its controls onto a strip of their own');
 
 // --- 3. ContactsList delete shows an Undo toast --------------------------
 
@@ -107,3 +126,11 @@ for (const appPath of [
 }
 
 console.log('toast-host smoke OK');
+
+// The style guide's toast example names the real prop (variant), so code
+// copied from it shows the intended tone.
+{
+    const guide = readFileSync(join(web, 'src', 'style-guide', 'sections', 'StatesSection.jsx'), 'utf8');
+    assert.ok(!/showToast\(\{\s*kind:/.test(guide), 'style guide toast example does not use a kind prop');
+    assert.ok(/showToast\(\{\s*variant:/.test(guide), 'style guide toast example uses the variant prop');
+}

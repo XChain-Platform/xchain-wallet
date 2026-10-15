@@ -59,7 +59,7 @@ describe('DisplaySection', () => {
     it('uses the shared medium control size across the watched-token row', async () => {
         setup();
 
-        const chain = await screen.findByRole('combobox', { name: 'Token chain' });
+        const chain = await screen.findByRole('combobox', { name: 'Token network' });
         const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
         const action = screen.getByRole('button', { name: 'Watch token' });
         expect(screen.getByRole('group', { name: 'Display settings' })).toHaveClass(formStyles.fullWidth);
@@ -76,14 +76,14 @@ describe('DisplaySection', () => {
 
         expect(tickerField.className).toMatch(/(?:^|\s)_?md_/);
         expect(watchForm).toHaveClass(layoutStyles.fieldRow);
-        expect(watchForm.style.background).toBe('var(--xc-surface-raised)');
-        expect(watchForm.style.border).toBe('1px solid var(--xc-border)');
+        expect(watchForm.style.background).toBe('var(--xc-card-bg)');
+        expect(watchForm.style.border).toBe('var(--xc-card-border)');
         expect(tickerField.parentElement).toHaveClass(layoutStyles.watchControls);
         expect(screen.getByRole('button', { name: 'Watch token' }).className).toMatch(/(?:^|\s)_?md_/);
         const thresholdRow = screen.getByRole('combobox', { name: 'Small-balance threshold' }).parentElement.parentElement.parentElement;
         expect(thresholdRow).toHaveClass(layoutStyles.fieldRow);
-        expect(thresholdRow.style.background).toBe('var(--xc-surface-raised)');
-        expect(thresholdRow.style.border).toBe('1px solid var(--xc-border)');
+        expect(thresholdRow.style.background).toBe('var(--xc-card-bg)');
+        expect(thresholdRow.style.border).toBe('var(--xc-card-border)');
         expect(screen.getByRole('combobox', { name: 'Balance number format' }).parentElement.parentElement.parentElement).toHaveClass(layoutStyles.fieldRow);
 
         const search = screen.getByRole('searchbox', { name: 'Search pinned and hidden tokens' });
@@ -242,7 +242,7 @@ describe('DisplaySection', () => {
         }));
     });
 
-    it('looks up a watched ticker on its selected chain, refuses missing and duplicate tokens, and removes it', async () => {
+    it('looks up a watched ticker on its selected network, refuses missing and duplicate tokens, and removes it', async () => {
         const getTokenInfo = vi.fn(({ tick }) => Promise.resolve({
             canonicalTick: tick === 'WOW' ? 'WOW' : null,
         }));
@@ -252,7 +252,7 @@ describe('DisplaySection', () => {
         expect(screen.getAllByRole('option').map((option) => option.textContent))
             .not.toContain('Dogecoin (testnet)');
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Token chain' }), { target: { value: 'dogecoin-testnet' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'Token network' }), { target: { value: 'dogecoin-testnet' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'MISSING' } });
         fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
 

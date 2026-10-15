@@ -118,7 +118,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             if (cancelled) return;
             setAddressesByChain(byChain || {});
             if (!(byChain?.[chainId] || []).length) {
-                setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -342,9 +342,9 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                         <dd className={styles.detailsValue}>{neutralizeControlText(detail.name)}</dd>
                     </>
                 ) : null}
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                 </dd>
                 <dt className={styles.detailsLabel}>Current members</dt>
                 <dd className={styles.detailsValue}>{eligibility.countKnown ? memberCount : 'Unavailable'}</dd>
@@ -355,17 +355,17 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             </dl>
 
             {ownershipReason ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{ownershipReason}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{ownershipReason}</p>
+                </StatusMessage>
             ) : null}
 
             {eligibility.reasons.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <StatusMessage variant="warning" role="alert">
                     {eligibility.reasons.map((reason) => (
-                        <p className={styles.warning} key={reason.code}>{reason.text}</p>
+                        <p key={reason.code}>{reason.text}</p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
 
             <Input
@@ -377,16 +377,16 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 disabled={formDisabled}
             />
 
-            <div className={styles.warnings}>
-                <p className={styles.warning}>Sharing is permanent. A shared list cannot be unshared.</p>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role={null}>
+                <p>Sharing is permanent. A shared list cannot be unshared.</p>
+                <p>
                     The hubs carry every later edit to this list to every chain.
                 </p>
-                <p className={styles.warning}>
+                <p>
                     Each later edit costs LIST_SHARED_EDIT_BASE plus LIST_SHARED_EDIT_PER_ITEM
                     {' '}for every item added or removed.
                 </p>
-            </div>
+            </StatusMessage>
 
             <NativeFeeToggle
                 {...nativeFee.toggleProps}

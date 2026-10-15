@@ -135,7 +135,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (!byChain || !(byChain[chainId] || []).length) {
-                    setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
             .catch((err) => {
@@ -329,7 +329,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     function handleReviewList(event) {
         event.preventDefault();
         if (!fromAddress) {
-            setFormError('No signing address available on this chain.');
+            setFormError('No signing address available on this network.');
             return;
         }
         if (!rosterChecked) {
@@ -628,7 +628,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                         </>
                     ) : null}
@@ -692,7 +692,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                         </>
                     ) : null}
@@ -712,13 +712,13 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             This wallet isn't signing from the project's owner
                             address ({issuerAddress}). The link will only be
                             honoured if it's signed by the current owner.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <SignCredentials
                     unlocked={signerReady}
@@ -801,13 +801,13 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 autoComplete="off"
             />
             {ownerMismatch ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         This wallet doesn't hold the project's owner address.
                         the final link step will only be honoured if signed
                         by the current owner.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {feeTiers ? (
                 <FeeSelector

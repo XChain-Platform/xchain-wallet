@@ -20,6 +20,7 @@ import {
     openSettings,
     unlockedShell,
 } from '../fixtures/wallet.js';
+import { launchGuardedElectron } from '../fixtures/electron.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -65,7 +66,7 @@ async function expectNoCredentialError(page, runtimeErrors) {
 test('desktop network round trip leaves Receive usable', async () => {
     test.setTimeout(10 * 60 * 1000);
     const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
-    const app = await electron.launch({
+    const app = await launchGuardedElectron(electron, {
         executablePath: requireFromDesktop('electron'),
         args: ['.', `--user-data-dir=${mkdtempSync(join(tmpdir(), 'xc-network-switch-'))}`],
         cwd: desktopDir,
@@ -86,7 +87,7 @@ test('desktop network round trip leaves Receive usable', async () => {
 
         await openSettings(page);
         await page.getByRole('button', { name: /^Developer mode/ }).click();
-        const developerMode = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+        const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
         if (!(await developerMode.isChecked())) {
             await developerMode.click();
             await expect(developerMode).toBeChecked();
@@ -105,7 +106,9 @@ test('desktop network round trip leaves Receive usable', async () => {
         await expectNoCredentialError(page, runtimeErrors);
 
         await gotoSection(page, 'Receive');
-        const address = page.getByLabel('Address', { exact: true });
+        // The read-only receive field is named by the address's own label
+        // ("BTC Address #1" in the demo wallet), not a fixed "Address".
+        const address = page.getByRole('textbox', { name: /address/i }).and(page.locator('input[readonly]'));
         const unlockPrompt = page.getByRole('button', { name: 'Unlock Wallet' });
         await expect(address.or(unlockPrompt).first()).toBeVisible({ timeout: 30_000 });
         if (await address.isVisible()) await expect(address).not.toHaveValue('');

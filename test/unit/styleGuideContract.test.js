@@ -12,8 +12,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { withEnglishCopy } from '../helpers/englishSource.js';
+
 const root = process.cwd();
-const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
+const read = (...parts) => withEnglishCopy(readFileSync(join(root, ...parts), 'utf8'));
 const guide = read('STYLE_GUIDE.md');
 
 describe('STYLE_GUIDE component contracts', () => {

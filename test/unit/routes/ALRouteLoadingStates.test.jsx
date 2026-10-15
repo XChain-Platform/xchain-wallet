@@ -118,7 +118,7 @@ describe('A-L route load failures', () => {
             { getAddressesByChain },
         );
 
-        expect(await screen.findByText('Could not load wallet chains. Try again.')).toBeInTheDocument();
+        expect(await screen.findByText('Could not load wallet networks. Try again.')).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 

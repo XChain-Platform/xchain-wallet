@@ -258,7 +258,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
         event.preventDefault();
         const trimmedMemo = memo.trim();
         if (sdkSupported !== true) { setFormError(SDK_REASON); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if (!pickState.canReview) {
             setFormError(pickState.overLimit
                 ? 'The estimated merged membership is over 10,000.'
@@ -372,7 +372,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             {fromAddress ? (
                 <AddressField label="From" value={fromAddress.address} readOnly onChange={() => {}} />
             ) : (
-                <StatusMessage variant="error">No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
             </FormSection>
 
@@ -381,7 +381,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                 {candidates.length === 0 ? (
                     <EmptyState
                         title="No usable lists"
-                        body="Local and shared lists available on this chain appear here."
+                        body="Local and shared lists available on this network appear here."
                         titleAs="p"
                     />
                 ) : null}
@@ -425,12 +425,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     </p>
                 </div>
             ) : null}
-            <div className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role={null}>
+                <p>
                     A union follows each member's edits, including a shared list's new versions.
                 </p>
-                <p className={styles.warning}>A union cannot itself be shared in this release.</p>
-            </div>
+                <p>A union cannot itself be shared in this release.</p>
+            </StatusMessage>
             </FormSection>
 
         </FormPage>,

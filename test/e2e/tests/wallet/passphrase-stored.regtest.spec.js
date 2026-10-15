@@ -152,7 +152,7 @@ const SEND_AMOUNT = '0.01';
  * the acceptance test, not decoration around it.
  */
 const CAPTURE_COPY =
-    /It will be stored on this device, protected by your wallet password, so you are not asked again/i;
+    /It will be stored on this device, protected by your wallet password, so you aren't asked again/i;
 
 /**
  * The capture step's passphrase field.

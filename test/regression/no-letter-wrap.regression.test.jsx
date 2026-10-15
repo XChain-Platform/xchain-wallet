@@ -104,10 +104,12 @@ describe('regression/no-letter-wrap', () => {
         expect(filter).not.toHaveTextContent('1 network');
         expect(filterWrap).toBeInTheDocument();
 
-        // Buttons keep flex-shrink 0 so a row never squeezes a short label, but
-        // both batches let a label wider than its whole column wrap (the send
-        // review footer carries amounts longer than a 320px line).
-        expect.soft(rule(buttonCss, '.btn')).toMatch(/flex-shrink:\s*0/);
+        // Buttons shrink in a full row but never below their longest word, so
+        // a short label is never split, and a label wider than its whole
+        // column still wraps (the send review footer carries amounts longer
+        // than a 320px line).
+        expect.soft(rule(buttonCss, '.btn')).toMatch(/flex-shrink:\s*1/);
+        expect.soft(rule(buttonCss, '.btn')).toMatch(/min-width:\s*auto/);
         expect.soft(rule(buttonCss, '.btn')).toMatch(/white-space:\s*normal/);
         for (const [css, selector] of [
             [chipCss, '.chip'],

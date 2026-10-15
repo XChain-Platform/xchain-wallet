@@ -46,7 +46,7 @@
 // order-fills / link-pair, because a row that renders inside two cards
 // renders twice. The batch envelope is the outer container, so it wins.
 
-import { getFormatLocale } from '../../i18n/index.js';
+import { getFormatLocale, t } from '../../i18n/index.js';
 import { entryTimeMs } from './pendingHistory.js';
 
 /**
@@ -327,8 +327,8 @@ export function groupHistoryItemsByLocalDay(items, nowMs = Date.now()) {
     const groups = [...dated.values()]
         .sort((a, b) => b.ordinal - a.ordinal)
         .map(({ ordinal: _ordinal, ...group }) => group);
-    if (pending.length > 0) groups.unshift({ key: 'pending', label: 'Pending activity', items: pending });
-    if (undated.length > 0) groups.push({ key: 'undated', label: 'Date unavailable', items: undated });
+    if (pending.length > 0) groups.unshift({ key: 'pending', label: t('history.group.pending'), items: pending });
+    if (undated.length > 0) groups.push({ key: 'undated', label: t('history.group.undated'), items: undated });
     return groups;
 }
 
@@ -350,8 +350,8 @@ function formatLocalDayLabel(timestampMs, nowMs) {
     const parts = localDayParts(timestampMs);
     const today = localDayParts(nowMs);
     const dayDifference = (today.ordinal - parts.ordinal) / 86_400_000;
-    if (dayDifference === 0) return 'Today';
-    if (dayDifference === 1) return 'Yesterday';
+    if (dayDifference === 0) return t('history.group.today');
+    if (dayDifference === 1) return t('history.group.yesterday');
     const date = new Date(timestampMs);
     try {
         return date.toLocaleDateString(getFormatLocale(), {
@@ -386,25 +386,22 @@ function summarizeGroup(subkind, leader, members) {
         const tick = pickField(leader.raw, ['tick', 'TICK', 'tick', 'ASSET']) || '';
         const supply = totalAmount(members);
         return supply == null
-            ? `Launched ${tick}`
-            : `Launched ${tick} (supply ${supply})`;
+            ? t('history.summary.launched', { tick })
+            : t('history.summary.launchedSupply', { tick, supply });
     }
     if (subkind === 'dispenser-dispense') {
         const src = pickField(leader.raw, ['source', 'SOURCE']) || leader.source || '';
         const short = src.length > 12 ? `${src.slice(0, 6)}…${src.slice(-4)}` : src;
-        const noun = members.length === 1 ? 'dispense' : 'dispenses';
-        return `Dispenser at ${short}: ${members.length} ${noun}`;
+        return t('history.summary.dispenser', { count: members.length, source: short });
     }
     if (subkind === 'order-fills') {
-        const noun = members.length === 1 ? 'fill' : 'fills';
-        return `Limit order: ${members.length} ${noun}`;
+        return t('history.summary.orderFills', { count: members.length });
     }
     if (subkind === 'batch') {
         // Count the sub-actions, not the envelope: "Batch: 3 actions"
         // is the number of things that happened, and the BATCH row
         // itself is only the wrapper they arrived in.
-        const noun = members.length === 1 ? 'action' : 'actions';
-        return `Batch: ${members.length} ${noun}`;
+        return t('history.summary.batch', { count: members.length });
     }
     if (subkind === 'link-pair') {
         // Leader is the older side; members[0] is the newer (peer that
@@ -414,8 +411,8 @@ function summarizeGroup(subkind, leader, members) {
         const peer = members[0];
         const peerAction = peer ? (upper(peer.action) || 'LINK') : '';
         return peerAction
-            ? `Cross-chain link: ${peerAction} ↔ ${leaderAction}`
-            : `Cross-chain link: ${leaderAction}`;
+            ? t('history.summary.link', { peer: peerAction, leader: leaderAction })
+            : t('history.summary.linkSolo', { leader: leaderAction });
     }
     return '';
 }

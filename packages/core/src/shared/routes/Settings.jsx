@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -55,8 +55,15 @@ import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { writeLastView } from '../utils/lastViewMemory.js';
 import actionStyles from './ActionsMenu.module.css';
 import settingsStyles from './Settings.module.css';
+import { getLocale, t } from '../../i18n/index.js';
+import cardStyles from '../../ui/Card.module.css';
 
 const row = (title, terms = '', target = title) => ({ title, terms, target });
+
+// Each time Settings opens it takes a fresh list scroll key, so the shell has
+// no saved offset for it and the list starts at its first row. Closing a
+// section keeps the key, so the list comes back where the user left it.
+let settingsVisits = 0;
 
 export const SETTINGS_SEARCH_ROWS = Object.freeze({
     'accounts-addresses': [row('Accounts & addresses', 'account address signer change pairing')],
@@ -77,7 +84,7 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Watched tokens', 'watch token ticker'),
         row('Pinned tokens', 'pin star favorite reorder'),
         row('Hidden tokens', 'hide unhide concealed'),
-        row('Saved chain filters', 'list preferences reset'),
+        row('Saved network filters', 'list preferences reset'),
         row('Reset display settings', 'defaults clear'),
     ],
     keyboard: [
@@ -118,16 +125,16 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Back up recovery phrase', 'seed mnemonic words reveal'),
         row('Test backup (dry-run restore)', 'verify seed recovery phrase'),
         row('Publish labels on-chain', 'backup metadata contacts blockchain'),
-        row('Check chain for backed-up contacts', 'restore labels address book'),
+        row('Check network for backed-up contacts', 'restore labels address book'),
     ],
     fees: [
         row('Fee strategy', 'fee fees network fee rate priority'),
         row('Custom fee rate', 'fee fees network fee sats per byte', 'Fee strategy'),
         row('Allow fee bump (Replace-by-Fee)', 'fee fees rbf speed up transaction'),
     ],
-    network: [row('Active network', 'mainnet testnet regtest switch chain')],
+    network: [row('Active network', 'mainnet testnet regtest switch network')],
     'network-endpoints': [
-        row('Chain registry refresh', 'networks update registry'),
+        row('Network registry refresh', 'networks update registry'),
         row('Explorer URL', 'endpoint block explorer'),
         row('Encoder URL', 'endpoint transaction encoder'),
         row('Hub URL', 'endpoint node api'),
@@ -153,7 +160,7 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Window (seconds)', 'sign throttle duration rate limit'),
         row('Blocked sites', 'dapp website origin denylist'),
         row('Site block history', 'blocked unblocked audit log'),
-        row('Chains', 'dapp permission networks'),
+        row('Networks', 'dapp permission networks'),
         row('Accounts', 'dapp permission addresses'),
         row('Sign messages', 'dapp permission signature'),
         row('Sign actions', 'dapp permission transaction'),
@@ -181,8 +188,8 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Regtest faucet', 'mint test coins miner'),
         row('Miner URL', 'faucet endpoint'),
         row('Amount', 'faucet mint test coins'),
-        row('Custom chains', 'add network descriptor'),
-        row('Custom chain descriptor JSON', 'add network paste'),
+        row('Custom networks', 'add network descriptor'),
+        row('Custom network descriptor JSON', 'add network paste'),
     ],
     updates: [row('Check for updates', 'new version upgrade latest release')],
     about: [
@@ -247,6 +254,7 @@ export function Settings({
     const [query, setQuery] = useState('');
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
     const [searchTarget, setSearchTarget] = useState(/** @type {string | null} */ (null));
+    const [listScrollKey] = useState(() => `list-${(settingsVisits += 1)}`);
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
     const [siteSearchTerms, setSiteSearchTerms] = useState('');
     const [walletManagementBusy, setWalletManagementBusy] = useState(false);
@@ -269,7 +277,8 @@ export function Settings({
         if (subpageId || !pendingFocusRestore.current) return;
         const openerId = pendingFocusRestore.current;
         pendingFocusRestore.current = null;
-        sectionOpenerRefs.current.get(openerId)?.focus();
+        // The Screen restores the list offset; focusing must not scroll it.
+        sectionOpenerRefs.current.get(openerId)?.focus({ preventScroll: true });
     }, [subpageId]);
 
     useEffect(() => {
@@ -317,15 +326,15 @@ export function Settings({
         }
     }, [messaging, reload]);
 
-    const walletLabel = activeWallet?.name || 'No wallet';
+    const walletLabel = activeWallet?.name || t('shell.settingsButton.noWallet');
     const accountLabel = activeAccount?.name
-        || (Number.isInteger(activeAccount?.index) ? `Account ${activeAccount.index + 1}` : 'Account 1');
+        || (Number.isInteger(activeAccount?.index) ? t('accountPicker.defaultName', { number: activeAccount.index + 1 }) : t('accountPicker.defaultName', { number: 1 }));
 
     const sections = useMemo(() => /** @type {SectionDef[]} */ ([
         {
             id: 'this-wallet',
-            title: 'This wallet',
-            description: 'Manage its name, extended public keys, switching, and removal.',
+            title: t('settings.page.thisWallet'),
+            description: t('settings.page.manageItsNameExtendedPublic'),
             keywords: 'wallet name xpub extended public key watch only export switch rename remove delete destroy migrate bip39 upgrade recovery phrase encrypted seed backup',
             kind: 'internal-drill',
             Component: ThisWalletSection,
@@ -338,8 +347,8 @@ export function Settings({
         },
         {
             id: 'accounts-addresses',
-            title: 'Accounts & addresses',
-            description: 'Choose the active account and manage change addresses and signer pairing.',
+            title: t('settings.page.accountsAddresses'),
+            description: t('settings.page.chooseTheActiveAccountAnd'),
             keywords: 'account address signer change addresses',
             kind: 'external-drill',
             visible: Boolean(onOpenAccountPicker && activeWallet),
@@ -348,26 +357,26 @@ export function Settings({
         },
         {
             id: 'appearance',
-            title: 'Appearance',
-            description: 'Choose the theme and motion preference.',
+            title: t('settings.page.appearance'),
+            description: t('settings.page.chooseTheThemeAndMotion'),
             keywords: 'appearance theme system default motion dark light reduced follow',
             kind: 'panel',
             Component: AppearanceSection,
         },
         {
             id: 'display',
-            title: 'Display',
-            description: 'Control balance thresholds, number formatting, and pinned or hidden tokens.',
+            title: t('settings.page.display'),
+            description: t('settings.page.controlBalanceThresholdsNumberFormatting'),
             keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star',
-            searchTerms: 'row affordances show pin hide button unpin list preferences saved chain filters reset',
+            searchTerms: 'row affordances show pin hide button unpin list preferences saved network filters reset',
             kind: 'internal-drill',
             Component: DisplaySection,
             summary: displaySummary(settings),
         },
         {
             id: 'keyboard',
-            title: 'Keyboard',
-            description: 'View and rebind shortcuts.',
+            title: t('settings.page.keyboard'),
+            description: t('settings.page.viewAndRebindShortcuts'),
             keywords: 'keyboard shortcuts rebind reset keys hotkeys bindings open command palette lock wallet settings new send go balances history receive dex contacts filter export pin hide focused token submit form',
             kind: 'internal-drill',
             Component: KeyboardSection,
@@ -376,16 +385,16 @@ export function Settings({
         },
         {
             id: 'language-region',
-            title: 'Language & region',
-            description: 'Choose the interface language and fiat currency.',
+            title: t('settings.page.languageRegion'),
+            description: t('settings.page.chooseTheInterfaceLanguageAnd'),
             keywords: 'language region currency fiat locale custom iso code',
             kind: 'panel',
             Component: LanguageRegionSection,
         },
         {
             id: 'privacy',
-            title: 'Privacy',
-            description: 'Control network privacy, sensitive-data visibility, metadata requests, and restore behavior.',
+            title: t('settings.page.privacy'),
+            description: t('settings.page.controlNetworkPrivacySensitiveData'),
             keywords: 'privacy tor routing change address rotation blur sensitive data labels survive restore haptic feedback native coin price data fetch token metadata hardware cross check confirm form draft retention',
             kind: 'internal-drill',
             Component: PrivacySection,
@@ -393,8 +402,8 @@ export function Settings({
         },
         {
             id: 'safety',
-            title: 'Safety',
-            description: 'Set auto-lock, send safeguards, panic mode, biometric access, and backup reminders.',
+            title: t('settings.page.safety'),
+            description: t('settings.page.setAutoLockSendSafeguards'),
             keywords: 'safety autolock auto lock timeout test send warning threshold cancel sends undo biometric unlock wallet password panic mode duress passphrase backup reminders',
             kind: 'internal-drill',
             Component: SafetySection,
@@ -402,8 +411,8 @@ export function Settings({
         },
         {
             id: 'wallet-mode',
-            title: 'Wallet mode',
-            description: 'Choose whether this device signs, broadcasts, or prepares transactions for air-gapped signing.',
+            title: t('settings.page.walletMode'),
+            description: t('settings.page.chooseWhetherThisDeviceSigns'),
             keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
             kind: 'internal-drill',
             Component: WalletModeSection,
@@ -411,18 +420,18 @@ export function Settings({
         },
         {
             id: 'backup',
-            title: 'Backup',
-            description: 'Export recovery data, verify a recovery phrase, and restore labels and contacts.',
+            title: t('settings.page.backup'),
+            description: t('settings.page.exportRecoveryDataVerifyA'),
             keywords: 'backup password wallet password export encrypted file reveal back up seed recovery phrase mnemonic test dry run restore publish labels on chain contacts',
             kind: 'internal-drill',
             Component: BackupSection,
             props: { activeWallet, reload },
-            summary: 'Encrypted file export',
+            summary: t('settings.page.encryptedFileExport'),
         },
         {
             id: 'fees',
-            title: 'Fees',
-            description: 'Choose the fee strategy and fee-bumping default for each chain.',
+            title: t('settings.page.fees'),
+            description: t('settings.page.chooseTheFeeStrategyAnd'),
             keywords: 'fees fee strategy rate rbf replace by fee chain custom allow bump defaults',
             kind: 'internal-drill',
             Component: FeesSection,
@@ -430,21 +439,21 @@ export function Settings({
         },
         {
             id: 'network',
-            title: 'Network',
+            title: t('settings.network.label'),
             // Optional-chained: settings is null until the async read lands,
             // and the section list renders during that window.
             description: settings?.developerMode === true
-                ? 'Choose Mainnet, Testnet, or Regtest to control which chains the wallet queries and displays; changing the network reloads the page.'
+                ? t('settings.page.networkChooseAll')
                 : settings?.developerMode === false
                     ? (normalizeActiveNetwork(settings.activeNetwork) === 'mainnet'
-                        ? 'Mainnet is active. Turn on Developer mode to choose a test network.'
-                        : `${activeNetworkLabel(settings.activeNetwork)} is active. Turn on Developer mode to switch networks.`)
-                    : 'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
+                        ? t('settings.page.networkMainnetActive')
+                        : t('settings.page.networkActiveLocked', { network: activeNetworkLabel(settings.activeNetwork) }))
+                    : t('settings.page.networkChooseTwo'),
             keywords: settings?.developerMode === true
-                ? 'network active mainnet testnet regtest filter chain switch mode dev'
+                ? 'network active mainnet testnet regtest filter network switch mode dev'
                 : settings?.developerMode === false
                     ? 'network active mainnet developer mode'
-                    : 'network active mainnet testnet filter chain switch mode',
+                    : 'network active mainnet testnet filter network switch mode',
             kind: 'panel',
             Component: NetworkSection,
             // The section needs the wallet so the switch can derive
@@ -461,8 +470,8 @@ export function Settings({
         },
         {
             id: 'network-endpoints',
-            title: 'Network & endpoints',
-            description: 'Set explorer, encoder, and hub URLs for each chain.',
+            title: t('settings.page.networkEndpoints'),
+            description: t('settings.page.setExplorerEncoderAndHub'),
             keywords: 'network endpoints explorer encoder hub url chain registry reset default save',
             kind: 'internal-drill',
             Component: NetworkEndpointsSection,
@@ -471,8 +480,8 @@ export function Settings({
         },
         {
             id: 'notifications',
-            title: 'Notifications',
-            description: 'Choose which wallet events trigger notifications, sounds, or price alerts.',
+            title: t('alerts.notificationsTitle'),
+            description: t('settings.page.chooseWhichWalletEventsTrigger'),
             keywords: 'notifications desktop permission transaction confirmations incoming receipts pending payments messages governance polls deadlines dispenser running low fills order price alerts sounds quiet hours do not disturb',
             kind: 'panel',
             Component: NotificationsSection,
@@ -480,8 +489,8 @@ export function Settings({
         },
         {
             id: 'connected-sites',
-            title: 'Connected sites',
-            description: 'Review dApp connections and control each site\'s permissions.',
+            title: t('settings.connectedSites.connectedSites'),
+            description: t('settings.page.reviewDappConnectionsAndControl'),
             keywords: 'connected sites website dapp connections permissions chains accounts sign messages actions origin disconnect block unblock blocked mutations throttle burst window',
             searchTerms: siteSearchTerms,
             kind: 'internal-drill',
@@ -490,16 +499,16 @@ export function Settings({
         },
         {
             id: 'contacts',
-            title: 'Contacts',
-            description: 'Export or import the address book.',
+            title: t('components.contactsPickerScreen.contacts'),
+            description: t('settings.page.exportOrImportTheAddress'),
             keywords: 'contacts address book export import json file drop private encrypted',
             kind: 'panel',
             Component: ContactsSection,
         },
         {
             id: 'ads',
-            title: 'Automatic donation system',
-            description: 'Turn automatic donations on or off, set per-chain amounts and thresholds, and view lifetime totals.',
+            title: t('settings.page.automaticDonationSystem'),
+            description: t('settings.page.turnAutomaticDonationsOnOr'),
             keywords: 'donation ads automatic on off per chain transaction amount trigger threshold address lifetime totals',
             kind: 'internal-drill',
             Component: AdsSection,
@@ -507,8 +516,8 @@ export function Settings({
         },
         {
             id: 'developer',
-            title: 'Developer mode',
-            description: 'Configure regtest networks, custom endpoints, local dApp controls, and diagnostics.',
+            title: t('settings.page.developerMode'),
+            description: t('settings.page.configureRegtestNetworksCustomEndpoints'),
             keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
@@ -517,22 +526,22 @@ export function Settings({
         },
         ...(desktopUpdaterBridge() ? [{
             id: 'updates',
-            title: 'Updates',
-            description: 'Check for a new version of the desktop wallet.',
+            title: t('settings.page.updates'),
+            description: t('settings.page.checkForANewVersion'),
             keywords: 'updates update check for updates new version upgrade latest release',
             kind: 'panel',
             Component: UpdateCheckPanel,
         }] : []),
         {
             id: 'about',
-            title: 'About',
-            description: 'View version, license, build verification, release signature, and diagnostic details.',
+            title: t('routes.addressList.about'),
+            description: t('settings.page.viewVersionLicenseBuildVerification'),
             keywords: 'about version update channel check new versions license notice repro reproducible build verify verification release signatures gpg fingerprint disclosure policy security diagnostics copy preview',
             kind: 'internal-drill',
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, handleWalletRemoved, reload, variant]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, handleWalletRemoved, reload, variant, getLocale()]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -569,7 +578,7 @@ export function Settings({
                     nested
                     onBack={closeSubpage}
                     backDisabled={section.id === 'this-wallet' && walletManagementBusy}
-                    backLabel="Back to settings"
+                    backLabel={t('shell.settings.back')}
                     title={section.title}
                     trailing={section.id === 'backup' && onOpenBackupInTab ? (
                         <Button
@@ -577,8 +586,8 @@ export function Settings({
                             size="sm"
                             icon={<Icon.ExternalLinkIcon />}
                             onClick={onOpenBackupInTab}
-                            aria-label="Open in tab"
-                            title="Open in tab"
+                            aria-label={t('importWallet.openInTab')}
+                            title={t('importWallet.openInTab')}
                         />
                     ) : null}
                 />
@@ -607,10 +616,13 @@ export function Settings({
 
     // ─── List view ────────────────────────────────────────────────
 
-    const header = <PageHeader onBack={onBack} title="Settings" />;
+    const header = <PageHeader onBack={onBack} title={t('home.settings')} />;
 
     return (
-        <Screen variant={variant} header={header} scrollKey="list">
+        // A route-wide key restored the last visit's offset and reopened
+        // Settings part way down (clamped to whatever height had rendered by
+        // then, so not even where the user left it). See settingsVisits.
+        <Screen variant={variant} header={header} scrollKey={listScrollKey}>
             <SettingsPageTemplate
                 view="list"
                 toolbar={(
@@ -623,14 +635,14 @@ export function Settings({
                             spellCheck={false}
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search settings…"
-                            aria-label="Search settings"
+                            placeholder={t('settings.page.searchSettings')}
+                            aria-label={t('settings.page.searchSettings2')}
                         />
                     </div>
                 )}
             >
                 {filtered.length === 0 ? (
-                    <EmptyState title="No matching settings" body={`No settings match "${query}".`} />
+                    <EmptyState title={t('settings.page.noMatchingSettings')} body={t('settings.page.noSettingsMatch', { query })} />
                 ) : null}
                 {filtered.map((section) => {
                     const matchedRow = findMatchingSearchRow(section.id, query);
@@ -860,6 +872,9 @@ function desktopUpdaterBridge() {
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+/** How each update-check result reads as an inline message. */
+const UPDATE_CHECK_VARIANT = { checking: 'status', current: 'success', available: 'info', error: 'error' };
+
 /**
  * Check for updates. Runs the same visible check as the app menu item (main's
  * 'check' action) and shows its outcome. Every sentence is a constant; the
@@ -920,13 +935,11 @@ function UpdateCheckPanel() {
     }[state];
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
             <Button variant="ghost" size="sm" onClick={check} disabled={state === 'checking'}>
-                Check for updates
+                {t('settings.page.checkForUpdates')}
             </Button>
-            <span role="status" aria-live="polite" style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                {message || ''}
-            </span>
+            <StatusMessage variant={UPDATE_CHECK_VARIANT[state] || 'status'}>{message}</StatusMessage>
         </div>
     );
 }
@@ -946,16 +959,12 @@ function PanelBlock({ title, description, children }) {
 
 function ComingSoon() {
     return (
-        <div style={{
-            padding: 'var(--xc-space-3) var(--xc-space-4)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px dashed var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
+        <div className={cardStyles.card} style={{
             color: 'var(--xc-text-muted)',
             fontSize: 'var(--xc-text-sm)',
             fontStyle: 'italic',
         }}>
-            Coming soon
+            {t('settings.page.comingSoon')}
         </div>
     );
 }
@@ -973,14 +982,14 @@ function privacySummary(settings) {
     if (shellCapabilities().socksProxy) offByDefault.unshift('torRouting');
     const onCount = offByDefault.filter((k) => p[k] === true).length
         + onByDefault.filter((k) => p[k] !== false).length;
-    return `${onCount} of ${offByDefault.length + onByDefault.length} on`;
+    return t('settings.page.privacyOn', { on: onCount, total: offByDefault.length + onByDefault.length });
 }
 
 function safetySummary(settings) {
     if (!settings) return '-';
     const mins = settings.autolockMinutes;
-    if (mins === 0) return 'Auto-lock off';
-    return `Auto-lock ${mins} min`;
+    if (mins === 0) return t('settings.page.autoLockOff');
+    return t('settings.page.autoLockMinutes', { minutes: mins });
 }
 
 function displaySummary(settings) {
@@ -988,31 +997,31 @@ function displaySummary(settings) {
     const pinned = Array.isArray(settings.pinnedTokens) ? settings.pinnedTokens.length : 0;
     const hidden = Array.isArray(settings.hiddenTokens) ? settings.hiddenTokens.length : 0;
     const parts = [];
-    if (pinned > 0) parts.push(`${pinned} pinned`);
-    if (hidden > 0) parts.push(`${hidden} hidden`);
+    if (pinned > 0) parts.push(t('settings.page.pinnedCount', { count: pinned }));
+    if (hidden > 0) parts.push(t('settings.page.hiddenCount', { count: hidden }));
     if (settings.privacy?.hideSmallBalances === true) {
         const threshold = settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT;
-        parts.push(threshold === 'dust' ? 'Dust hidden' : `<${threshold} hidden`);
+        parts.push(threshold === 'dust' ? t('settings.page.dustHidden') : t('settings.page.belowHidden', { threshold }));
     }
     if ((settings.numberFormat || NUMBER_FORMAT_DEFAULT) !== NUMBER_FORMAT_DEFAULT) {
-        parts.push(settings.numberFormat === 'trim' ? 'Trimmed numbers' : 'Plain numbers');
+        parts.push(settings.numberFormat === 'trim' ? t('settings.page.trimmedNumbers') : t('settings.page.plainNumbers'));
     }
-    if (parts.length === 0) return 'No customization';
+    if (parts.length === 0) return t('settings.page.noCustomization');
     return parts.join(' · ');
 }
 
 function keyboardSummary(settings) {
     if (!settings) return '-';
     const n = resolveBindings(settings.keyboard?.bindings).filter((shortcut) => shortcut.overridden).length;
-    return n === 0 ? 'Defaults' : `${n} custom`;
+    return n === 0 ? t('settings.display.defaults') : t('settings.page.customShortcuts', { count: n });
 }
 
 function walletModeSummary(settings) {
     if (!settings) return '-';
     const mode = settings.walletMode || WALLET_MODE_DEFAULT;
-    if (mode === 'full') return 'Normal';
-    if (mode === 'watcher') return 'Watcher (watch-only)';
-    if (mode === 'signer') return 'Signer (air-gapped)';
+    if (mode === 'full') return t('ui.feeSelector.normal');
+    if (mode === 'watcher') return t('settings.page.modeWatcher');
+    if (mode === 'signer') return t('settings.page.modeSigner');
     return mode;
 }
 
@@ -1020,37 +1029,37 @@ function feesSummary(settings) {
     if (!settings) return '-';
     const fees = settings.fees || {};
     const chainIds = Object.keys(fees);
-    if (chainIds.length === 0) return 'No chains';
+    if (chainIds.length === 0) return t('settings.page.noChains');
     const customCount = chainIds.filter((id) => fees[id]?.strategy === 'custom').length;
-    if (customCount === 0) return 'All defaults';
-    if (customCount === chainIds.length) return 'All custom';
-    return `${customCount} of ${chainIds.length} custom`;
+    if (customCount === 0) return t('settings.page.allDefaults');
+    if (customCount === chainIds.length) return t('settings.page.allCustom');
+    return t('settings.page.feesCustom', { custom: customCount, total: chainIds.length });
 }
 
 function endpointsSummary(settings) {
     if (!settings) return '-';
     const eps = settings.sdkEndpoints || {};
     const customCount = Object.values(eps).filter((e) => e?.custom).length;
-    if (customCount === 0) return 'All defaults';
-    return `${customCount} chain${customCount === 1 ? '' : 's'} custom`;
+    if (customCount === 0) return t('settings.page.allDefaults');
+    return t('settings.page.customChains', { count: customCount });
 }
 
 function adsSummary(settings) {
     if (!settings) return '-';
-    if (!settings.ads?.enabled) return 'Off';
+    if (!settings.ads?.enabled) return t('settings.privacy.off');
     const total = Object.values(settings.ads.perChain || {})
         .reduce((s, c) => s + (Number(c?.lifetimeDonatedSats) || 0), 0);
-    if (total === 0) return 'On · 0 donated';
-    return `On · ${total.toLocaleString()} sats donated`;
+    if (total === 0) return t('settings.page.donatedZero');
+    return t('settings.page.donatedOn', { sats: total });
 }
 
 function developerSummary(settings) {
-    if (!settings) return 'Off';
-    return settings.developerMode ? 'On' : 'Off';
+    if (!settings) return t('settings.privacy.off');
+    return settings.developerMode ? t('settings.page.on') : t('settings.privacy.off');
 }
 
 function connectedSitesSummary(siteCount) {
     if (siteCount === null) return '-';
-    if (siteCount === 0) return 'None';
-    return `${siteCount} site${siteCount === 1 ? '' : 's'}`;
+    if (siteCount === 0) return t('send.advanced.none');
+    return t('settings.page.siteCount', { count: siteCount });
 }

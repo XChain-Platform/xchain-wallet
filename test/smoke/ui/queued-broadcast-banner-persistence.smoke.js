@@ -46,7 +46,7 @@ const navJsx = readFileSync(
 assert.ok(/FullLayoutWithNav\(\{ nav, bottomBar, header, notices, children \}\)/.test(navJsx),
     'FullLayoutWithNav exposes header and notices slots');
 assert.ok(
-    /\{header \? <div className=\{styles\.header\}>\{header\}<\/div> : null\}/.test(navJsx),
+    /<div className=\{styles\.header\}>\{header\}<\/div>/.test(navJsx),
     'FullLayoutWithNav renders the header above the route body when supplied',
 );
 // Notices are page content, not toolbar content: the layout keeps them

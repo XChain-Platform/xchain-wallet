@@ -80,8 +80,8 @@ const DRILLDOWN_SECTIONS = [
     ['fees', 'Fees', () => screen.getByRole('combobox', { name: 'Bitcoin fee strategy' })],
     ['network-endpoints', 'Network & endpoints', () => screen.getAllByRole('textbox', { name: 'Explorer URL' })[0]],
     ['connected-sites', 'Connected sites', () => screen.findByRole('button', { name: 'Disconnect' })],
-    ['ads', 'Automatic donation system', () => screen.getByRole('switch', { name: 'Automatic Donation System' })],
-    ['developer', 'Developer mode', () => screen.getByRole('switch', { name: 'Developer Mode' })],
+    ['ads', 'Automatic donation system', () => screen.getByRole('switch', { name: 'Turn on Automatic Donation System' })],
+    ['developer', 'Developer mode', () => screen.getByRole('switch', { name: 'Turn on developer mode' })],
     ['about', 'About', () => screen.getByRole('button', { name: 'Copy diagnostics' })],
 ];
 
@@ -273,7 +273,7 @@ describe('Settings at a 320px viewport', () => {
         cleanup();
 
         renderSettings('developer');
-        expect(await screen.findByRole('button', { name: 'Remove custom chain fork-regtest' })).toBeVisible();
+        expect(await screen.findByRole('button', { name: 'Remove custom network fork-regtest' })).toBeVisible();
     });
 
     it('keeps equal contact actions together in a wrapping row at 360px', async () => {

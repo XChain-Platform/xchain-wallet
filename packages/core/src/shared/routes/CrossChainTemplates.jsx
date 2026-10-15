@@ -74,13 +74,13 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                     .map(([cid]) => cid);
                 setChainsWithAddresses(chains);
                 if (chains.length < 2) {
-                    setLoadError('Cross-chain templates need addresses on at least two chains. Use Receive on another chain first.');
+                    setLoadError('Cross-chain templates need addresses on at least two networks. Use Receive on another network first.');
                 }
                 setLoading(false);
             })
             .catch((err) => {
                 if (!cancelled) {
-                    setLoadError(userFacingMessage(err, 'Could not load wallet chains. Try again.'));
+                    setLoadError(userFacingMessage(err, 'Could not load wallet networks. Try again.'));
                     setLoading(false);
                 }
             });
@@ -157,8 +157,8 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
         if (chainsWithAddresses.length < 2 && loadError.startsWith('Cross-chain templates need')) {
             return wrap(
                 <EmptyState
-                    title="Two chains required"
-                    body="Use Receive to generate an address on another chain before launching a cross-chain template."
+                    title="Two networks required"
+                    body="Use Receive to generate an address on another network before launching a cross-chain template."
                 />,
             );
         }

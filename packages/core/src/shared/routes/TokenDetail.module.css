@@ -268,10 +268,7 @@
    structure as they scroll. */
 
 .infoCard {
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
 }
 
 .priceAlertCard {
@@ -289,20 +286,13 @@
 
 /* Pulls the market card up under the balance hero's box-shadow halo so
    the visible gap above the chart matches the gap to the quick-action
-   row below it. Mirrors the same offset PortfolioChart uses on Home.
-   Also tightens the card's padding + internal gap to mirror Home's
-   PortfolioChart.module.css `.wrap` exactly so the two chart cards
-   render at the same vertical size. */
+   row below it. Mirrors the same offset PortfolioChart uses on Home, and
+   keeps the shared card border and padding like that chart card does. */
 .marketCardOffset {
     margin-top: -6px;
-    padding: var(--xc-space-2) var(--xc-space-3);
     display: flex;
     flex-direction: column;
     gap: 2px;
-    /* Blue accent border to match the Home PortfolioChart and the
-       quick-action buttons immediately below - same accent cue tying
-       the chart card into the page's blue-highlighted controls. */
-    border-color: var(--xc-accent-primary);
 }
 
 .marketHistorySlot {
@@ -635,7 +625,7 @@
     justify-content: center;
     padding: var(--xc-space-4);
     box-sizing: border-box;
-    border: 1px dashed var(--xc-border-strong);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
@@ -864,19 +854,9 @@
     font-size: var(--xc-text-sm);
 }
 
-/* ───── "Official token" banner - shown when the token is on a project
-   registry's current roster (assetInfo.projects). Green = attested. ───── */
+/* Project names inside the "Official token" success message, shown when the
+   token is on a project registry's current roster (assetInfo.projects). */
 
-.officialBanner {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-success-bg);
-    border: 1px solid var(--xc-success);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-}
 .officialBannerProject {
     font-weight: 600;
 }

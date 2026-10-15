@@ -63,6 +63,22 @@
         gap: var(--xc-space-2);
     }
 
+    /* The tab row has the whole width here. The five labels take a little
+       under 12.25rem at any text size, so each tab's side padding gives
+       way, down to 1px, when the 12px default would push Activity behind a
+       sideways scroll: a 320px phone, or 130 and 150 percent text. Rows
+       with room keep the 12px padding unchanged. A WebView without
+       container queries keeps the 12px padding and the scrolling row. */
+    @supports (container-type: inline-size) and (width: 1cqw) {
+        .tabsRow {
+            container-type: inline-size;
+        }
+
+        .tabsRow [role='tab'] {
+            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 12.25rem) / 10), var(--xc-space-3));
+        }
+    }
+
     .tabsRow > [role='tablist'] {
         width: 100%;
     }
@@ -150,10 +166,8 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+/* Unboxed, like the plain EmptyState. */
 .placeholder {
-    background: var(--xc-surface);
-    border: 1px dashed var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
     padding: var(--xc-space-5) var(--xc-space-4);
     text-align: center;
 }
@@ -191,15 +205,18 @@
    matching the Tokens / Coins list layout so all five tabs share the
    same visual rhythm. */
 .demoList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
+}
+
+/* The Activity tab's rows carry no border of their own; a divider runs
+   between them, as in History. */
+.activityList > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
 /* Small action-type glyph rendered next to the action label on both

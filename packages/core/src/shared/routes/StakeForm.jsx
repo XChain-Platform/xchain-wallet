@@ -170,7 +170,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to stake from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -601,7 +601,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -772,11 +772,11 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             {qualifyReadout ? (
                 <div style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: '4px',
-                    padding: '0.5rem 0.75rem',
+                    border: 'var(--xc-card-border)',
+                    borderRadius: 'var(--xc-card-radius)',
+                    padding: 'var(--xc-card-pad)',
                     marginBottom: '0.75rem',
-                    background: 'var(--xc-bg-muted)',
+                    background: 'var(--xc-card-bg)',
                 }}>
                     <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
                         Capabilities this stake unlocks

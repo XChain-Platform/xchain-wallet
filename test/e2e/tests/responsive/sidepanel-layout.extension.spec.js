@@ -37,7 +37,8 @@ async function expectRoute(page, route) {
         await expect(unlockedShell(page)).toBeVisible();
         return;
     }
-    await expect(page.getByRole('main').getByRole('heading', { name: route, exact: true }).first())
+    // The title lives in the app header, not in the main region.
+    await expect(page.getByRole('heading', { name: route, exact: true }).first())
         .toBeVisible();
 }
 
@@ -116,6 +117,30 @@ async function expectInsideViewport(locator, label) {
     expect(box.bottom, `${label} extends past the bottom edge`).toBeLessThanOrEqual(box.height + 1);
 }
 
+// The scroller box, not the window: the app header and the bottom nav are
+// pinned over the window's top and bottom, so a control under either is
+// not on screen even though it sits inside the viewport.
+async function expectInsideScroller(locator, label) {
+    const box = await locator.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const main = document.getElementById('xc-main').getBoundingClientRect();
+        return {
+            left: rect.left - main.left,
+            top: rect.top - main.top,
+            right: rect.right - main.left,
+            bottom: rect.bottom - main.top,
+            width: main.width,
+            height: main.height,
+        };
+    });
+    expect(box.left, `${label} extends past the left edge`).toBeGreaterThanOrEqual(-1);
+    expect(box.top, `${label} extends past the top edge`).toBeGreaterThanOrEqual(-1);
+    expect(box.right, `${label} extends past the right edge`).toBeLessThanOrEqual(box.width + 1);
+    expect(box.bottom, `${label} extends past the bottom edge`).toBeLessThanOrEqual(box.height + 1);
+}
+
+// Receive opens with the QR, the address and the Copy row all on screen, with
+// no scrolling, at every extension size (the QR shrinks to the height left).
 async function expectReceiveContentFits(page, label) {
     const qr = page.locator('img[alt^="QR code for "]').first();
     await expect(qr).toBeVisible();
@@ -123,10 +148,14 @@ async function expectReceiveContentFits(page, label) {
     const address = page.getByRole('main').locator('input[readonly][title]').first();
     await expect(address).toBeVisible();
     await expect(address).toHaveValue(addressValue);
-    await address.scrollIntoViewIfNeeded();
+    const copy = page.getByRole('main').getByRole('button', { name: /^Copy (QR code|payment link)$/ });
+    await expect(copy).toBeVisible();
+    await page.getByRole('main').evaluate((main) => { main.scrollTop = 0; });
     await settle(page);
     await expectInsideViewport(qr, `${label} Receive QR`);
-    await expectInsideViewport(address, `${label} Receive address`);
+    await expectInsideScroller(qr, `${label} Receive QR`);
+    await expectInsideScroller(address, `${label} Receive address`);
+    await expectInsideScroller(copy, `${label} Receive Copy QR`);
 }
 
 test('side panel fits primary routes at narrow extension sizes', async () => {
@@ -151,6 +180,12 @@ test('side panel fits primary routes at narrow extension sizes', async () => {
         if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
         const origin = `chrome-extension://${new URL(worker.url()).host}`;
         const page = await context.newPage();
+        // The panel renders only when its active tab answers the content
+        // probe, and here that tab is the panel itself.
+        await page.addInitScript(() => {
+            const tabs = globalThis.chrome?.tabs;
+            if (tabs) tabs.sendMessage = (_id, _msg, cb) => { if (typeof cb === 'function') cb({ available: true }); };
+        });
         await page.goto(`${origin}/sidepanel.html`);
 
         const accept = page.getByRole('button', { name: 'Accept and continue' });

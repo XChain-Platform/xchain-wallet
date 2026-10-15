@@ -5,6 +5,7 @@
 
 /* Narrow: the fields sit bare on the page, inset only by Screen's gutter. */
 .form {
+    composes: formCard from './Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-form-gap);
@@ -97,6 +98,17 @@
     margin: 0;
 }
 
+/* A status message (StatusMessage or the error summary built on its row) sits
+   in a form stack on the stack's gap alone. Its row carries an 8px block
+   margin for use outside forms, and route modules pass their own margined
+   class; two-part selectors outrank both whatever order the bundle loads
+   them in. */
+.body > [data-variant],
+.sectionBody > [data-variant],
+.status > [data-variant] {
+    margin: 0;
+}
+
 /* The action row closes the form. Buttons share the row and wrap onto a
    new line rather than overflow; each grows so a lone button is full width. */
 .actions {
@@ -169,15 +181,17 @@
     min-width: 0;
 }
 
-/* Wide: one centred 560px card around the whole form. */
+/* Wide: one centred card around the whole form, drawn with the shared card
+   tokens (ui/Card.module.css) so it matches every other card. Cards inside
+   it flatten through the formCard class composed above. */
 @media (min-width: 600px) {
     .form {
-        max-width: 560px;
+        max-width: var(--xc-form-card-max-width);
         margin: 0 auto;
-        padding: var(--xc-space-6);
-        background: var(--xc-surface-raised);
-        border: 1px solid var(--xc-border);
-        border-radius: var(--xc-radius-lg);
+        padding: var(--xc-card-pad);
+        background: var(--xc-card-bg);
+        border: var(--xc-card-border);
+        border-radius: var(--xc-card-radius);
         box-shadow: var(--xc-shadow-md);
     }
 

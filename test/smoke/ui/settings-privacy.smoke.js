@@ -89,7 +89,7 @@ for (const name of ['ROW', 'STACK', 'ROW_HINT', 'ToggleRow', 'Status']) {
 }
 assert.match(
     primSrc,
-    /import \{ Switch \} from '@xchain-wallet\/core\/ui';/,
+    /import \{[^}]*\bSwitch\b[^}]*\} from '@xchain-wallet\/core\/ui';/,
     'ToggleRow imports the kit Switch',
 );
 assert.match(primSrc, /<Switch\b/, 'ToggleRow renders the kit Switch');

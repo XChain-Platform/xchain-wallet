@@ -11,8 +11,8 @@
 // Layout sweep: walk every screen the wallet can reach and measure it for the
 // faults a user sees but no functional test catches - content off the edge of
 // the screen, text cut off by a clipping parent, a page that scrolls sideways,
-// panels that scroll when they should fit, and content below the fold that
-// nothing lets you reach.
+// panels that scroll when they should fit, content below the fold that
+// nothing lets you reach, and controls drawn over each other.
 //
 // It runs the same walk in every venue (Chromium at Android sizes, WebKit at
 // iPhone and iPad sizes, the Electron desktop app at several window sizes),
@@ -73,6 +73,10 @@ export function measureInPage(opts = {}) {
         if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
         const r = el.getBoundingClientRect();
         if (r.width < 1 || r.height < 1) continue;
+        // A 1x1 box is the visually-hidden pattern (.sr-only, the skip link
+        // before it has focus): text for screen readers, never seen. WebKit
+        // reports it a hair over 1px under page zoom.
+        if (r.width < 1.5 && r.height < 1.5) continue;
         if (scrollable(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) {
             push('xScrollers', { el: desc(el), by: el.scrollWidth - el.clientWidth, w: Math.round(r.width) });
         }
@@ -108,8 +112,12 @@ export function measureInPage(opts = {}) {
                 push('clipped', { el: desc(el), by: desc(clipX), cut: Math.round(Math.max(r.right - R, L - r.left)) });
             }
         }
+        // Text painted transparent is not seen, so it cannot be seen cut: a
+        // read-only address input keeps its full value that way under the
+        // shortened overlay that shows it.
+        const transparentText = /^rgba\(.*,\s*0\)$|^transparent$/.test(cs.color);
         if ((cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.children.length === 0
-            && el.scrollWidth > el.clientWidth + 1 && cs.textOverflow !== 'ellipsis') {
+            && el.scrollWidth > el.clientWidth + 1 && cs.textOverflow !== 'ellipsis' && !transparentText) {
             push('clipped', { el: desc(el), by: 'itself', cut: el.scrollWidth - el.clientWidth });
         }
         if (!fixed && !inYScroller && res.pageScrollY === 0 && B > vh + 1) {
@@ -118,8 +126,59 @@ export function measureInPage(opts = {}) {
     }
     res.layout = measureLayout();
     res.narrow = measureNarrowLists();
+    res.overlaps = measureOverlaps();
     if (opts.contrast) measureContrast();
     return res;
+
+    // Controls drawn over each other: an in-field icon that a wider Paste
+    // button runs into at large text, say. Only controls a tap can reach at
+    // their own centre count, so a menu or dialog laid over the page (which
+    // covers the page's controls by design) is not an overlap; and only
+    // controls in the same scroller, so a row scrolling under the fixed
+    // navigation bar is not one either.
+    function measureOverlaps() {
+        const found = [];
+        const scrollerOf = (el) => {
+            for (let a = el.parentElement; a; a = a.parentElement) {
+                const acs = getComputedStyle(a);
+                if (scrollable(acs.overflowY) || scrollable(acs.overflowX)) return a;
+                if (acs.position === 'fixed') return a;
+            }
+            return null;
+        };
+        const controls = [...document.querySelectorAll(
+            'button, a[href], [role="button"], select, input[type="checkbox"], input[type="radio"]',
+        )].filter((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width < 1.5 || r.height < 1.5) return false;
+            const x = r.left + r.width / 2;
+            const y = r.top + r.height / 2;
+            if (x < 0 || y < 0 || x > vw || y > vh) return false;
+            const hit = document.elementFromPoint(x, y);
+            return Boolean(hit && (hit === el || el.contains(hit)));
+        });
+        for (let i = 0; i < controls.length && found.length < 15; i += 1) {
+            for (let j = i + 1; j < controls.length && found.length < 15; j += 1) {
+                const a = controls[i];
+                const b = controls[j];
+                if (a.contains(b) || b.contains(a)) continue;
+                if (scrollerOf(a) !== scrollerOf(b)) continue;
+                const ra = a.getBoundingClientRect();
+                const rb = b.getBoundingClientRect();
+                const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+                const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+                // A control laid wholly inside another (a row's trailing Info
+                // or Rename button) is that row's own action, drawn there on
+                // purpose; two controls that only partly cover each other are
+                // the collision this looks for.
+                const inside = (inner, outer) => inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5
+                    && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
+                if (inside(ra, rb) || inside(rb, ra)) continue;
+                if (w > 2 && h > 2) found.push({ el: desc(a), with: desc(b), w: Math.round(w), h: Math.round(h) });
+            }
+        }
+        return found;
+    }
 
     // The route contract is measured from the main scroller's inner border.
     // This keeps a left navigation rail out of page-gutter coordinates and
@@ -138,7 +197,9 @@ export function measureInPage(opts = {}) {
         const scrollbarLeft = mr.right - borderR - scrollbarWidth;
         const contentLeft = frameLeft + padL;
         const contentRight = frameLeft + main.clientWidth - padR;
-        const expectedGutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        // One 12px page gutter at every width (--xc-page-gutter); kept in
+        // step with PAGE_GUTTER_PX by hand, since this body runs in the page.
+        const expectedGutter = 12;
         const visible = (el) => {
             const cs = getComputedStyle(el);
             const r = el.getBoundingClientRect();
@@ -443,14 +504,30 @@ export function measureControlRows() {
         }
     }
 
+    // A row that spills: a control past its row container's edge or past the
+    // window. Rows that scroll sideways on purpose (tab strips, chip
+    // scrollers) are left alone, and so is a control parked wholly off screen
+    // until focused (a skip link).
+    const viewportWidth = document.documentElement.clientWidth;
+    const scrollsSideways = (el) => /(auto|scroll)/.test(getComputedStyle(el).overflowX);
+    const parkedOffScreen = (item) => item.rect.right <= 0 || item.rect.left >= viewportWidth;
+    const spills = (container, items) => {
+        if (scrollsSideways(container)) return false;
+        const box = container.getBoundingClientRect();
+        return items.some((item) => !parkedOffScreen(item)
+            && (item.rect.left < Math.max(box.left, 0) - 1
+                || item.rect.right > Math.min(box.right, viewportWidth) + 1));
+    };
+
     const findings = [];
     const signatures = new Set();
-    for (const rows of grouped.values()) {
+    for (const [container, rows] of grouped.entries()) {
         for (const row of rows) {
             const items = [...row].sort((a, b) => a.rect.left - b.rect.left);
             const heights = items.map((item) => item.height);
             const styled = items.filter((item) => !item.iconOnly);
             const problems = [];
+            if (spills(container, items)) problems.push('overflow');
             if (Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
             if (styled.length > 1 && new Set(styled.map((item) => item.radius)).size > 1) problems.push('border-radius');
             if (styled.length > 1 && new Set(styled.map((item) => item.fontSize)).size > 1) problems.push('font-size');
@@ -473,25 +550,71 @@ export function measureControlRows() {
     return findings;
 }
 
-/** Applies a venue's root font size before app code runs on every document. */
-export function installRootFontSize(page, rootFontSize) {
-    if (!rootFontSize) return Promise.resolve();
-    return page.addInitScript((size) => {
-        document.documentElement.style.fontSize = size;
-    }, rootFontSize);
+/** The root font size the app computes for a native font scale. */
+export const BASE_ROOT_FONT_PX = 16;
+export function expectedRootFontPx(fontScale) {
+    return fontScale ? BASE_ROOT_FONT_PX * fontScale : null;
 }
+
+/**
+ * Large text goes in through the app's own font-scale path, the one iOS and
+ * Android use, never by writing the root style from the harness: an init
+ * script runs before the document has a root element, so a root style set
+ * there never applied and the large-text venue measured at 100 percent.
+ *
+ * Cold start: every document starts with the native bootstrap global the app
+ * reads on load (what the iOS shell injects). Live: applyFontScale sends the
+ * native font-scale event once the app is listening.
+ */
+export function installFontScale(page, fontScale) {
+    if (!fontScale) return Promise.resolve();
+    return page.addInitScript((scale) => {
+        window.__xchainNativeFontScale = scale;
+    }, fontScale);
+}
+
+/** Sends the native font-scale event and waits until the root size follows it. */
+export async function applyFontScale(page, fontScale) {
+    if (!fontScale) return;
+    await page.evaluate((scale) => {
+        window.dispatchEvent(new CustomEvent('xchain:native-font-scale', { detail: { fontScale: scale } }));
+    }, fontScale);
+    await page.waitForFunction(
+        (px) => Math.abs(parseFloat(getComputedStyle(document.documentElement).fontSize) - px) <= 0.5,
+        expectedRootFontPx(fontScale),
+        { timeout: 10_000 },
+    );
+}
+
+/** The root font size failure for one measured screen, or null. */
+export function rootFontFailure({ label, rootFontPx, expectedRootFontPx: expected }) {
+    if (expected == null) return null;
+    if (typeof rootFontPx === 'number' && Math.abs(rootFontPx - expected) <= 0.5) return null;
+    const actual = typeof rootFontPx === 'number' ? `${rootFontPx}px` : 'unread';
+    return `${label}: root font size ${actual}, expected ${expected}px`;
+}
+
+/**
+ * The gutter every route keeps between its content and the window edge: one
+ * 12px gutter at every width, the --xc-page-gutter token.
+ */
+export const PAGE_GUTTER_PX = 12;
 
 /** Returns the route labels and layout-contract failures from a completed sweep. */
 export function layoutSweepFailures(screens) {
     const failures = [];
     const topGaps = { form: new Set(), list: new Set() };
     const close = (actual, expected) => Math.abs(actual - expected) <= 1;
+    for (const screen of screens) {
+        const rootFailure = rootFontFailure(screen);
+        if (rootFailure) failures.push(rootFailure);
+    }
     for (const { label, layout, vw } of screens) {
         if (!layout) {
             failures.push(`${label}: missing #xc-main layout measurement`);
             continue;
         }
-        const gutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        const gutter = PAGE_GUTTER_PX;
         const { first } = layout;
         if (!close(layout.contentLeft, gutter)) {
             failures.push(`${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
@@ -507,8 +630,10 @@ export function layoutSweepFailures(screens) {
             continue;
         }
         // Wide forms intentionally centre their card inside the guttered
-        // content lane. Every other first block starts on the lane edge.
-        if ((first.kind !== 'form' || vw < 600) && !close(first.left, gutter)) {
+        // content lane, as wide onboarding steps centre their column. Every
+        // other first block starts on the lane edge.
+        const centred = vw >= 600 && first.left > gutter * 2 && close(first.left, first.rightGap);
+        if ((first.kind !== 'form' || vw < 600) && !centred && !close(first.left, gutter)) {
             failures.push(`${label}: first content left ${first.left}px, expected ${gutter}px`);
         }
         if (first.rightGap + 1 < gutter) {
@@ -528,13 +653,23 @@ export function layoutSweepFailures(screens) {
 
 /** A sweep bound to one page, one venue and one output directory. */
 export function createSweep(page, {
-    venue, outDir, restart = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, rootFontSize,
+    venue, outDir, restart: restartPage = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, fontScale,
 }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
     writeFileSync(linesPath, '');
-    const pageReady = installRootFontSize(page, rootFontSize);
+    const pageReady = installFontScale(page, fontScale);
+    const expectedRootPx = expectedRootFontPx(fontScale);
     let n = 0;
+
+    /** Reload the app and, once it is listening, send the font scale again. */
+    async function restart() {
+        await restartPage();
+        if (!fontScale) return;
+        await page.getByRole('button', { name: 'Skip' }).or(page.getByRole('button', { name: 'Create new wallet' }))
+            .or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: 60_000 });
+        await applyFontScale(page, fontScale);
+    }
 
     async function measure(label) {
         await page.waitForTimeout(450);
@@ -546,6 +681,12 @@ export function createSweep(page, {
         } catch (err) {
             result = { error: String(err?.message || err) };
         }
+        // Every screen records the root size it was measured at, so a venue
+        // that lost its text size fails by name instead of measuring 100%.
+        try {
+            result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+        } catch { /* reported as a root font failure below */ }
+        if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
         // Extra per-screen audits (the axe sweep) hook in here; a failure in one
         // is reported on the screen's line, never thrown into the walk.
         if (onScreen) {
@@ -583,24 +724,30 @@ export function createSweep(page, {
 
     /**
      * Open each row of a list screen in turn, measure it, and come back.
-     * Rows are addressed by position and re-found after every return, so a
-     * row whose accessible name differs from its text is still visited.
-     * `reopen` brings the list screen back.
+     * Rows are re-found by their first text line after every return (the
+     * same line's nth occurrence, for repeated labels), so a row whose
+     * accessible name differs from its text is still visited, and a notice
+     * that comes or goes above the list does not shift every row after it.
+     * `reopen` brings the list screen back; `rows` finds its rows.
      */
-    async function crawlRows(prefix, reopen) {
-        await reopen();
-        const labels = await rowButtons().evaluateAll((els) => els.map((e) => (
+    async function crawlRows(prefix, reopen, rows = rowButtons, skip = null) {
+        const firstLines = () => rows().evaluateAll((els) => els.map((e) => (
             (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()
         )));
+        await reopen();
+        const labels = await firstLines();
         let visited = 0;
         for (let i = 0; i < labels.length; i += 1) {
             const label = labels[i];
-            if (!label || /^Back/.test(label) || DESTRUCTIVE.test(label)) continue;
+            if (!label || /^Back/.test(label) || DESTRUCTIVE.test(label) || skip?.test(label)) continue;
             try {
                 await reopen();
-                const row = rowButtons().nth(i);
-                const now = (await row.innerText({ timeout: 3_000 })).trim().split('\n')[0].trim();
-                if (now !== label) continue; // the list changed under us
+                const occurrence = labels.slice(0, i).filter((other) => other === label).length;
+                const now = await firstLines();
+                const index = now.findIndex((other, j) => other === label
+                    && now.slice(0, j).filter((prev) => prev === label).length === occurrence);
+                if (index < 0) continue; // the row is gone from the list
+                const row = rows().nth(index);
                 await row.click({ timeout: 5_000 });
                 await measure(`${prefix}: ${label}`);
                 visited += 1;
@@ -654,6 +801,7 @@ export function createSweep(page, {
             await dismissIntroCarousel(page);
             await page.getByRole('button', { name: 'Try in demo mode' }).click();
             await unlockedShell(page).waitFor({ state: 'visible', timeout: 120_000 });
+            await applyFontScale(page, fontScale);
             return;
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
@@ -664,6 +812,7 @@ export function createSweep(page, {
             await page.getByRole('button', { name: 'Continue', exact: true }).click();
         }
         await unlockedShell(page).waitFor({ state: 'visible', timeout: 240_000 });
+        await applyFontScale(page, fontScale);
     }
 
     async function unlocked() {
@@ -720,18 +869,22 @@ export function createSweep(page, {
             await home();
         }
 
-        // The hamburger menu screen and each of its rows.
+        // The header menu and each of its rows. Its links open the platform
+        // sites in a new window and Open in new window opens another wallet
+        // window; neither is a wallet screen, so neither is walked.
         const menu = page.getByRole('button', { name: 'Open menu' }).first();
         if (await menu.count() > 0 && await menu.isVisible()) {
+            const menuPanel = page.getByRole('menu', { name: 'Header actions' });
             await home();
             await menu.click();
             await measure('menu: list');
+            // Reopened fresh for every row: the Settings row opens a flyout
+            // over the menu that would take the next row's click.
             await crawlRows('menu', async () => {
-                if (await page.getByText('Menu', { exact: true }).first().isVisible().catch(() => false)) return;
                 await home();
                 await menu.click();
-                await page.waitForTimeout(300);
-            });
+                await menuPanel.waitFor({ state: 'visible', timeout: 5_000 });
+            }, () => menuPanel.locator('button[role="menuitem"]:visible:not([disabled])'), /new window/i);
         }
 
         // Settings and every section in it.

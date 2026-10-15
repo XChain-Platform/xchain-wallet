@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
@@ -9,7 +10,7 @@ import { MessagingContext } from '../../../packages/core/src/shared/MessagingCon
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 
 function source(path) {
-    return readFileSync(path, 'utf8');
+    return withEnglishCopy(readFileSync(path, 'utf8'));
 }
 
 function rule(css, selector) {

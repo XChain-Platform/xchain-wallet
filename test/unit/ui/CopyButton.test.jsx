@@ -37,6 +37,13 @@ describe('<CopyButton>', () => {
         delete globalThis.Capacitor;
     });
 
+    it('stays filled by default and takes the outlined look only when asked', () => {
+        const { rerender } = render(<CopyButton value="abc" label="Copy" />);
+        expect(screen.getByRole('button', { name: 'Copy' }).className).not.toMatch(/outlined/);
+        rerender(<CopyButton value="abc" label="Copy" appearance="outlined" />);
+        expect(screen.getByRole('button', { name: 'Copy' }).className).toMatch(/outlined/);
+    });
+
     it('renders its label and calls clipboard.writeText on click', async () => {
         render(<CopyButton value="abc123" label="Copy address" />);
         const btn = screen.getByRole('button', { name: 'Copy address' });

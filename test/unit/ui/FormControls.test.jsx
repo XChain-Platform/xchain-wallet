@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Select } from '../../../packages/core/src/ui/Select.jsx';
@@ -50,6 +51,52 @@ describe('<Textarea>', () => {
     it('supports unlabelled and disabled states', () => {
         render(<Textarea aria-label="Private note" disabled />);
         expect(screen.getByRole('textbox', { name: 'Private note' })).toBeDisabled();
+    });
+
+    it('keeps the plain textarea a direct child of its field when it has no actions', () => {
+        const { container } = render(<Textarea label="Notes" hint="Keep it short" />);
+        const control = screen.getByRole('textbox', { name: 'Notes' });
+        expect(control.parentElement).toBe(container.firstElementChild);
+    });
+
+    it('draws actions inside the box, after the text and above the hint, and grows instead of scrolling', () => {
+        const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 132 });
+        try {
+            render(
+                <Textarea
+                    label="Notes"
+                    hint="Keep it short"
+                    rows={2}
+                    value="one two three"
+                    onChange={() => {}}
+                    actions={<button type="button">Paste</button>}
+                />,
+            );
+            const control = screen.getByRole('textbox', { name: 'Notes' });
+            const wrapper = control.parentElement;
+            const paste = screen.getByRole('button', { name: 'Paste' });
+
+            expect(wrapper.firstElementChild).toBe(control);
+            expect(wrapper.contains(paste)).toBe(true);
+            expect(control.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            // The hint stays outside the box, below it.
+            const hint = screen.getByText('Keep it short');
+            expect(wrapper.contains(hint)).toBe(false);
+            expect(wrapper.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            // The resize grip would sit under the actions; the box fits its text.
+            expect(control).toHaveStyle({ resize: 'none' });
+            expect(control.style.height).toBe('132px');
+        } finally {
+            if (scrollHeight) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollHeight);
+            else delete HTMLElement.prototype.scrollHeight;
+        }
+    });
+
+    it('reserves a strip under the text one small control tall for the actions', () => {
+        const css = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        expect(css).toMatch(/\.textareaWithActions\s*\{[^}]*padding-block-end:\s*calc\(var\(--xc-control-h-sm\)/);
+        expect(css).toMatch(/\.textareaActions\s*\{[^}]*position:\s*absolute;[^}]*inset-block-end:[^}]*inset-inline-end:/);
     });
 });
 

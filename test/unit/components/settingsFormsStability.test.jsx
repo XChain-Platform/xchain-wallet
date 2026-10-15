@@ -103,7 +103,7 @@ describe('settings form validation', () => {
         render(<LanguageRegionSection />);
 
         expect(screen.getByRole('status')).toHaveTextContent(
-            'XYZ is not supported. Values are shown in USD.',
+            'XYZ isn\'t supported. Values are shown in USD.',
         );
         expect(screen.getByLabelText('Fiat currency').value).toContain('USD');
     });

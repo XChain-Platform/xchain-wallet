@@ -34,6 +34,8 @@ import { BottomTabBar } from '../../../packages/core/src/shared/components/Botto
 import { ShellRouteOutlet } from '../../../packages/core/src/shared/components/ShellRouteOutlet.jsx';
 
 const pageHeaderCss = readFileSync('packages/core/src/ui/PageHeader.module.css', 'utf8');
+const pageHeaderSource = readFileSync('packages/core/src/ui/PageHeader.jsx', 'utf8');
+const buttonCss = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 const BACK = { name: 'Back to previous screen' };
 
 function renderAt(surface, routeId, props = {}) {
@@ -115,7 +117,33 @@ describe('PageHeader Back by layout', () => {
         expect(header.children).toHaveLength(3);
         expect(header.children[0].tagName).toBe('SPAN');
         expect(within(header).getByRole('heading', { level: 1 }).textContent).toBe('Settings');
-        expect(pageHeaderCss).toMatch(/\.header\s*\{[^}]*min-height:\s*var\(--xc-page-header-side\)/);
+    });
+
+    // jsdom has no layout, so the equal-height guarantee is pinned as the
+    // shared token: the row holds exactly the Back control's height, the
+    // small Button size, and no more. Holding the larger side-lane size made
+    // a Back-less header 8px taller than one showing Back.
+    it('holds the row at the Back control height, so hiding Back keeps the header height', () => {
+        expect(pageHeaderCss).toMatch(/\.header\s*\{[^}]*min-height:\s*var\(--xc-control-h-sm\)/);
+        expect(pageHeaderCss).not.toMatch(/\.header\s*\{[^}]*min-height:\s*var\(--xc-page-header-side\)/);
+        expect(buttonCss).toMatch(/\.sm\s*\{[^}]*min-height:\s*var\(--xc-control-h-sm,\s*28px\)/);
+        expect(pageHeaderSource).toMatch(/<Button\s+size="sm"[^>]*icon=\{<BackIcon \/>\}/);
+    });
+
+    // A trailing action takes the same small control height, so a screen with
+    // one (History refresh, Contacts add) is no taller than one without, and
+    // keeps the touch floor through a hit area centred on the box.
+    it('sizes trailing actions to the Back control height with a touch-floor hit area', () => {
+        const trailing = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\]\) \{([^}]*)\}/)?.[1] || '';
+        const hit = pageHeaderCss.match(/\n\.trailing button:not\(\[role="menuitem"\]\)::before \{([^}]*)\}/)?.[1] || '';
+        for (const prop of ['width', 'height', 'min-width', 'min-height']) {
+            expect(trailing).toMatch(new RegExp(`(?:^|\\s)${prop}:\\s*var\\(--xc-control-h-sm\\);`));
+        }
+        expect(trailing).not.toMatch(/--xc-control-h-md/);
+        expect(trailing).toMatch(/position:\s*relative/);
+        expect(hit).toMatch(/position:\s*absolute/);
+        expect(hit).toMatch(/width:\s*max\(100%,\s*var\(--xc-control-hit-min/);
+        expect(hit).toMatch(/height:\s*max\(100%,\s*var\(--xc-control-hit-min/);
     });
 
     it('still runs onBack from the system Back gesture when the control is hidden', () => {

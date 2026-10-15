@@ -627,8 +627,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         />
     );
 
+    // The list keeps its own offset: a contact or the edit form swaps into
+    // this same Screen, and with one key the short detail view clamped the
+    // list offset to its own height, so Back returned to the top. Those
+    // views open at the top.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            scrollKey={mode === 'list' ? 'list' : mode}
+            restoreScroll={mode === 'list'}
+        >
             {children}
             {confirmDialog.request ? (
                 <ConfirmModal
@@ -930,7 +939,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
                             <div className={picker.modalActions}>
-                                <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
+                                <Button type="button" variant="secondary" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
                             </div>
                         </div>

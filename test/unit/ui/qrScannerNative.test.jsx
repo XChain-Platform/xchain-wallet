@@ -130,7 +130,7 @@ describe('QrScanner picks its camera path', () => {
     it('shows the paste advice when neither is available', () => {
         window.Capacitor = { isNativePlatform: () => true };
         render(<QrScanner onFrame={() => {}} />);
-        expect(screen.getByTestId('qr-scanner-unsupported').textContent).toMatch(/not available on this device/);
+        expect(screen.getByTestId('qr-scanner-unsupported').textContent).toMatch(/isn\x27t available on this device/);
         expect(screen.queryByRole('button', { name: /Scan with camera/ })).toBeNull();
     });
 });

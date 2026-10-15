@@ -131,6 +131,13 @@ export function findBindingConflict(id, binding, overrides) {
     return null;
 }
 
+// Input types that take no typed text. Focus lands on a radio or a checkbox
+// after a click, and treating those as typing left Cmd/Ctrl+K dead until the
+// user clicked somewhere else (the Wallet mode radios, 2026-10-14).
+const NON_TEXT_INPUT_TYPES = new Set([
+    'button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit',
+]);
+
 /**
  * True when the element should swallow global shortcuts because the user is
  * typing. Every binding family stays inactive here.
@@ -142,7 +149,11 @@ export function isEditableTarget(el) {
     if (!el || typeof el !== 'object') return false;
     const node = /** @type {HTMLElement} */ (el);
     const tag = node.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (tag === 'INPUT') {
+        const type = String(/** @type {HTMLInputElement} */ (node).type || 'text').toLowerCase();
+        return !NON_TEXT_INPUT_TYPES.has(type);
+    }
+    if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
     return node.isContentEditable === true;
 }
 

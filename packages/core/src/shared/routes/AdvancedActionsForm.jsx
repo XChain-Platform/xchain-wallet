@@ -201,7 +201,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 setActiveByChain(active || {});
                 if (Object.keys(byChain || {}).length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before authoring an action.',
+                        'No addresses on any network yet. Use Receive to generate one before authoring an action.',
                     );
                     return;
                 }
@@ -677,16 +677,16 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                    </StatusMessage>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -814,8 +814,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             </Select>
 
             {action === 'SEND' || action === 'BATCH' ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         Token-gated content rule: a SEND of a tick with active gated files is
                         REJECTED by the network unless it rides in a BATCH with a MESSAGE v2
                         handing the unlock key to the same destination. This raw form composes
@@ -823,13 +823,13 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         for gated tokens unless you are building the BATCH yourself.
                     </p>
                     {gatedRawNotice.gated ? (
-                        <p className={styles.warning}>
+                        <p>
                             {String(values.TICK || '').trim().toUpperCase()} HAS active gated
                             content ({gatedRawNotice.packCount} pack{gatedRawNotice.packCount === 1 ? '' : 's'}):
                             a bare SEND of it will be rejected.
                         </p>
                     ) : null}
-                </div>
+                </StatusMessage>
             ) : null}
 
             {action && formats && Object.keys(formats).length > 1 ? (
@@ -889,13 +889,13 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             })}
 
             {validation && !validation.valid && validation.errors.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <StatusMessage variant="warning" role="alert">
                     {validation.errors.map((err, i) => (
-                        <p key={i} className={styles.warning}>
+                        <p key={i}>
                             {formatValidationError(err)}
                         </p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
 
             {feeTiers ? (

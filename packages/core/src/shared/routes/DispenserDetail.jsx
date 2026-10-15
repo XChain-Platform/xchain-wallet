@@ -1102,9 +1102,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         payer: buyerAddress?.address,
         amount: totalPayAmount || '',
     }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
+    // The confirm screen already titles itself; its summary needs no third
+    // "Review ..." heading of its own.
     const buyConfirmNotes = (
         <>
-            <p className={styles.successLabel}>Review purchase</p>
             <dl className={styles.detailsList} data-testid="buy-review-summary">
                 <dt className={styles.detailsLabel}>Price per fill</dt>
                 <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
@@ -1119,11 +1120,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <div data-testid="buy-dispenser-notice">
                     <StatusMessage variant="status">{buyDestinationNotice.summary}</StatusMessage>
                     {buyDestinationNotice.warnings.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
+                        <StatusMessage variant="warning" role="alert">
                             {buyDestinationNotice.warnings.map((warning) => (
-                                <p key={warning} className={styles.warning}>{warning}</p>
+                                <p key={warning}>{warning}</p>
                             ))}
-                        </div>
+                        </StatusMessage>
                     ) : null}
                 </div>
             ) : null}
@@ -1751,9 +1752,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     dispenser's own address too, so a list without it refuses
                     every buyer. Same check and copy as the create form. */}
                 {editAllowSelfWarning ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{editAllowSelfWarning}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{editAllowSelfWarning}</p>
+                    </StatusMessage>
                 ) : null}
                 {editListConflictText && editListConflictText !== editError ? (
                     <StatusMessage variant="error" className={styles.error}>{editListConflictText}</StatusMessage>
@@ -1828,7 +1829,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -1841,11 +1842,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     ))}
                 </dl>
                 {decodedCancel && decodedCancel.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decodedCancel.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {closeEscrowNote}
                 {feeSelector}
@@ -1917,7 +1918,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * 5,005,460 sats for a refused fill, unrecoverable.
               */}
             {currentAllowList || currentBlockList || tokenPolicyDescriptions.length > 0 ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     <strong>This dispenser is restricted.</strong>{' '}
                     {currentAllowList
                         ? `Only addresses on list #${currentAllowList} can trigger a fill.`
@@ -1932,7 +1933,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {' '}A payment from an address it refuses is <strong>not returned</strong>:
                     the {payTick || getCoin} is spent, the dispense is recorded invalid, and nothing
                     comes back.
-                </p>
+                </StatusMessage>
             ) : null}
             {/*
               * Show the specific eligibility verdict the wallet can resolve
@@ -1947,7 +1948,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * since the generic restriction warning still stands on its own.
               */}
             {buyerListNotice ? (
-                <p role="alert" className={styles.warning}>{buyerListNotice}</p>
+                <StatusMessage variant="warning" role="alert">{buyerListNotice}</StatusMessage>
             ) : null}
         </>
     );
@@ -1955,7 +1956,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     return wrap(
         <>
             {isClosing ? (
-                <p className={local.closeWindowNote} role="status" data-testid="close-window-banner">
+                <StatusMessage variant="warning" role="status" testId="close-window-banner">
                     {closeWindowNotice({
                         eta: closeEta,
                         escrowRemaining,
@@ -1963,12 +1964,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         cancelledBy: dispenser?.cancelled_by ?? dispenser?.state?.cancelled_by ?? null,
                         heldAddresses,
                     })}
-                </p>
+                </StatusMessage>
             ) : null}
             {isTerminal ? (
-                <p className={local.closeWindowNote} role="status">
+                <StatusMessage variant="warning" role="status">
                     {terminalDispenserNotice(liveStatus, { canReopen: canOpenAgain })}
-                </p>
+                </StatusMessage>
             ) : null}
             {isTerminal && ownsOnlyDispenserAddress ? (
                 <p className={styles.hint} data-testid="reopen-origin-note">
@@ -1976,15 +1977,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </p>
             ) : null}
             {priceStale ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     <strong>{DISPENSER_PRICE_STALE_MESSAGE}</strong>
                     <span>. A payment made now would be refused and kept.</span>
-                </p>
+                </StatusMessage>
             ) : null}
             {!ownerAddress && isOpen && !hasCompleteFill ? (
-                <p role="status" className={local.closeWindowNote}>
+                <StatusMessage variant="warning" role="status">
                     This dispenser has no complete fills left to buy.
-                </p>
+                </StatusMessage>
             ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
@@ -2218,11 +2219,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {tab === 'lifecycle' ? (
                 !lifecycleLoaded ? (
                     <StatusMessage variant="status">Loading lifecycle…</StatusMessage>
+                ) : lifecycleTimeline.length === 0 ? (
+                    // An empty list shows the bare empty state, never a box around it.
+                    <EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" />
                 ) : (
                     <ul className={local.dispenseList} aria-label="Dispenser lifecycle">
-                        {lifecycleTimeline.length === 0 ? (
-                            <li><EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" /></li>
-                        ) : lifecycleTimeline.slice(0, 40).map((e) => {
+                        {lifecycleTimeline.slice(0, 40).map((e) => {
                             const refused = e.kind === 'dispense' && !e.row.valid;
                             return (
                                 <li key={`${e.kind}-${e.row.action_index}`}>
@@ -2248,11 +2250,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )
             ) : !dispensesLoaded ? (
                 <StatusMessage variant="status">Loading dispenses…</StatusMessage>
+            ) : matchingDispenses.length === 0 ? (
+                // An empty list shows the bare empty state, never a box around it.
+                <EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" />
             ) : (
                 <ul className={local.dispenseList} aria-label="Dispenses">
-                    {matchingDispenses.length === 0 ? (
-                        <li><EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" /></li>
-                    ) : matchingDispenses.slice(0, 25).map((d) => {
+                    {matchingDispenses.slice(0, 25).map((d) => {
                         const paidAmount = d.get_amount ?? getAmount;
                         const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
                         return (
@@ -2279,7 +2282,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {canBuyWithSend ? (
                 <div data-testid="dispenser-buy-form">
                     <FormSection title="Buy from this dispenser" className={local.buySection}>
-                        <p className={styles.hint}>
+                        <p className={styles.hintLeft}>
                             {isTokenPaid
                                 ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
                                 : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
@@ -2303,25 +2306,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 Paying from <AddressText address={buyerAddress.address} />
                             </p>
                         ) : null}
-                        <div className={local.buyFillsRow}>
-                            <Input
-                                label="Fills"
-                                hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
-                                inputMode="numeric"
-                                value={fills}
-                                onChange={(e) => setFills(e.target.value)}
-                                autoComplete="off"
-                            />
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={onMaxFills}
-                                disabled={maxBuyFills == null || maxBuyFills <= 0n}
-                            >
-                                Max
-                            </Button>
-                        </div>
+                        {/* Max and Paste sit inside the field, as on every other
+                            amount; a separate full-width Max button under it
+                            read as a second action on a phone. */}
+                        <AmountField
+                            label="Fills"
+                            hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
+                            amount={fills}
+                            onAmountFieldChange={(rawValue) => setFills(String(rawValue).replace(/,/g, ''))}
+                            onMax={onMaxFills}
+                            maxDisabled={maxBuyFills == null || maxBuyFills <= 0n}
+                        />
                         {totalPayAmount && totalReceive ? (
                             <dl className={styles.detailsList} data-testid="buy-totals">
                                 <dt className={styles.detailsLabel}>Price per fill</dt>
@@ -2335,18 +2330,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             </dl>
                         ) : null}
                         {fillsError ? (
-                            <p role="alert" className={styles.warning}>{fillsError}</p>
+                            <StatusMessage variant="warning" role="alert">{fillsError}</StatusMessage>
                         ) : null}
                         {inventoryError ? (
-                            <p role="alert" className={styles.warning}>{inventoryError}</p>
+                            <StatusMessage variant="warning" role="alert">{inventoryError}</StatusMessage>
                         ) : null}
                         {minFillsNotice ? (
-                            <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
+                            <p className={styles.hintLeft} data-testid="min-fills-notice">{minFillsNotice}</p>
                         ) : null}
                         {buyDustBlock ? (
-                            <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
+                            <StatusMessage variant="warning" role="alert" testId="buy-dust-block">{buyDustBlock}</StatusMessage>
                         ) : null}
-                        <p className={styles.hint} data-testid="buy-balance">
+                        <p className={styles.hintLeft} data-testid="buy-balance">
                             {buyBalance == null
                                 ? `Checking your ${String(payTick).toUpperCase()} balance…`
                                 : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
@@ -2362,7 +2357,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
                         ) : null}
                         {ownerLane.isWatcherMode ? (
-                            <p className={styles.hint}>
+                            <p className={styles.hintLeft}>
                                 Watcher mode: this wallet will build an unsigned transaction. Sign it on your
                                 Signer-mode wallet, then broadcast from a Full-mode wallet.
                             </p>
@@ -2390,7 +2385,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {showPayHere ? (
                 <FormSection title="Pay to buy" className={local.buySection}>
                     {canBuyWithSend ? null : listWarnings}
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         This dispenser accepts bare {getCoin} payments.
                         {currentAllowList || currentBlockList
                             ? ''
@@ -2457,12 +2452,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dt className={styles.detailsLabel}>You receive per fill</dt>
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         {canBuyWithSend
                             ? `Paying from another ${getCoin} wallet works too: send the amount above to this address.`
                             : isFiatPriced
                                 ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
-                                : `No spendable ${getCoin} address in this wallet on this chain; use any ${getCoin} wallet to trigger the dispense.`}
+                                : `No spendable ${getCoin} address in this wallet on this network; use any ${getCoin} wallet to trigger the dispense.`}
                     </p>
                 </FormSection>
             ) : null}
@@ -2542,10 +2537,10 @@ function closeWindowNotice({ eta, escrowRemaining, giveTick, cancelledBy, heldAd
     // time reading can say the next block is that block; the device clock
     // alone cannot, since the chain's time can trail it.
     if (eta.pastDue && eta.basis === 'chain') {
-        return `Closing at the next block: the chain has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+        return `Closing at the next block: the network has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
     }
     if (eta.pastDue) {
-        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the chain's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the network's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
     }
     return `Closing in ${eta.countdown} (around ${formatLocalClock(eta.closeAtMs)}). This dispenser is in its 1-hour close window; ${escrow} returns to ${destination} with the first block after it ends. ${honored}`;
 }
@@ -2594,7 +2589,6 @@ function OwnerConfirmNotes({
     if (kind === 'refill') {
         return (
             <>
-                <p className={styles.successLabel}>Review refill</p>
                 <dl className={styles.detailsList} data-testid="refill-review-summary">
                     <dt className={styles.detailsLabel}>Dispenser</dt>
                     <dd className={styles.detailsValue}>#{actionIndex}</dd>
@@ -2617,7 +2611,6 @@ function OwnerConfirmNotes({
     }
     return (
         <>
-            <p className={styles.successLabel}>Review edit</p>
             <dl className={styles.detailsList} data-testid="edit-review-summary">
                 <dt className={styles.detailsLabel}>Dispenser</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
@@ -2644,9 +2637,9 @@ function OwnerConfirmNotes({
                 ) : null}
             </dl>
             {allowListWarning ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{allowListWarning}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{allowListWarning}</p>
+                </StatusMessage>
             ) : null}
             {listsChanged ? (
                 <p className={styles.hint}>

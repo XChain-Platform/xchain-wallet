@@ -11,14 +11,11 @@
 }
 
 .list {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     display: flex;
     flex-direction: column;
     margin: 0 0 var(--xc-space-3);
-    padding: 0;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 

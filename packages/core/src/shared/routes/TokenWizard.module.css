@@ -1,7 +1,8 @@
+/* Help text reads from the start edge, like every form's field hints. */
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-align: center;
+    text-align: start;
     margin: 0;
 }
 
@@ -36,13 +37,10 @@
 }
 
 .fromLine {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     margin-bottom: var(--xc-space-3);
 }
 
@@ -88,15 +86,12 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
     gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-1);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {
@@ -132,30 +127,18 @@
     unicode-bidi: isolate;
 }
 
-.warnings {
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
-    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
-}
-
-.warning {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-.warning + .warning {
-    margin-top: var(--xc-space-1);
-}
-
 .actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+/* Inside a form stack the form gap spaces the row; the margin above is for
+   result screens, where the row follows plain content. */
+:global([data-form-stack]) > .actions {
+    margin-top: 0;
 }
 
 @media not all and (min-width: 400px) {
@@ -200,8 +183,7 @@
 
 /* PC-06: the Custom template's advanced disclosure (locks, callback,
    access lists). Collapsed by default; the body is a dense settings
-   block, so its copy reads left-aligned rather than centred like the
-   wizard's one-line stage hints. */
+   block. */
 .advanced {
     margin: var(--xc-space-4) 0 var(--xc-space-3);
     padding-top: var(--xc-space-3);
@@ -210,10 +192,6 @@
 
 .advancedBody {
     margin-top: var(--xc-space-3);
-}
-
-.advancedBody .hint {
-    text-align: start;
 }
 
 .lockFlagRow {

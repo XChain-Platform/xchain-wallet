@@ -67,6 +67,7 @@ import {
     Status,
     ToggleRow,
 } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 import styles from './DeveloperModeSection.module.css';
 
 const PROTOCOL_COIN_TICKER = {
@@ -80,17 +81,21 @@ const chainRegistry = registryLib.defaultRegistry();
 // Cluster Q FOLLOWUP 3: labels for the localhost auto-sign timeout options.
 // Values come from the schema so the UI can never offer a timeout the
 // validator would reject.
-const AUTO_SIGN_LABELS = {
-    [schemas.settings.AUTO_SIGN_LOCALHOST_OFF]: 'Off (always prompt)',
-    [schemas.settings.AUTO_SIGN_LOCALHOST_5M]: '5 minutes',
-    [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: '1 hour',
-};
+// Technical JSON sample shown in the paste box; code, not translatable copy.
+const CHAIN_DESCRIPTOR_SAMPLE = '{\n  "id": "my-fork-regtest",\n  "coin": "myfork",\n  "networkKind": "regtest",\n  ...\n}';
+
+// Built per call so a locale switch applies.
+const autoSignLabels = () => ({
+    [schemas.settings.AUTO_SIGN_LOCALHOST_OFF]: t('settings.developer.offAlwaysPrompt'),
+    [schemas.settings.AUTO_SIGN_LOCALHOST_5M]: t('settings.developer.5Minutes'),
+    [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: t('settings.developer.1Hour'),
+});
 
 export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateToMint, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings();
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const onToggle = async (field, next) => {
         try {
@@ -119,24 +124,28 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
     const developerMode = Boolean(settings.developerMode);
 
     return (
-        <FormPage as="div" sectioned fullWidth label="Developer mode settings">
-            <FormSection title="Developer options">
+        <FormPage as="div" sectioned fullWidth label={t('settings.developer.developerModeSettings')}>
+            <FormSection title={t('settings.developer.developerOptions')}>
+                {/* The page title already names the subject, so the switch reads as
+                    an action; screen readers, which may reach it out of context,
+                    hear the subject too. */}
                 <ToggleRow
-                    label="Developer Mode"
-                    hint="Unlocks test networks, endpoint overrides, custom chains, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet."
+                    label={t('settings.toggle.turnOn')}
+                    accessibleLabel={t('settings.developerMode.switchAccessibleLabel')}
+                    hint={t('settings.developer.unlocksTestNetworksEndpointOverrides')}
                     checked={developerMode}
                     onChange={onDeveloperModeToggle}
                 />
                 <ToggleRow
-                    label="Learn Mode"
-                    hint="Adds plain-language explanations to confirmation screens."
+                    label={t('settings.developer.learnMode')}
+                    hint={t('settings.developer.addsPlainLanguageExplanationsTo')}
                     checked={Boolean(settings.learnMode)}
                     onChange={(v) => onToggle('learnMode', v)}
                 />
                 {developerMode ? (
                     <ToggleRow
-                        label="Show variant popover"
-                        hint="In the web app, display a floating switcher for previewing each wallet layout when Developer Mode is enabled."
+                        label={t('settings.developer.showVariantPopover')}
+                        hint={t('settings.developer.inTheWebAppDisplay')}
                         checked={Boolean(settings.showVariantBadge)}
                         onChange={(v) => onToggle('showVariantBadge', v)}
                     />
@@ -157,10 +166,10 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                         onNavigateToMint={onNavigateToMint}
                     />
                     <CustomChainsRow developerMode />
-                    <FormSection title="Local dApp controls">
+                    <FormSection title={t('settings.developer.localDappControls')}>
                         <ToggleRow
-                            label="Auto-approve localhost dApps"
-                            hint="Let local development apps connect without asking while continuing to require the signing setting below."
+                            label={t('settings.developer.autoApproveLocalhostDapps')}
+                            hint={t('settings.developer.letLocalDevelopmentAppsConnect')}
                             checked={Boolean(settings.autoApproveLocalhost)}
                             disabled={!settings.developerMode}
                             onChange={(v) => onToggle('autoApproveLocalhost', v)}
@@ -189,8 +198,8 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
         : schemas.settings.AUTO_SIGN_LOCALHOST_OFF;
     return (
         <SettingsFieldRow
-            label="Cache password for localhost auto-sign"
-            hint="In Developer Mode, keep an approved localhost dApp password in memory for the selected time so later sign requests do not prompt again, then clear it when the browser closes."
+            label={t('settings.developer.cachePasswordForLocalhostAuto')}
+            hint={t('settings.developer.inDeveloperModeKeepAn')}
         >
             <Select
                 value={current}
@@ -200,7 +209,7 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
             >
                 {/* Native option elements provide the choices exposed by the style guide Select. */}
                 {schemas.settings.AUTO_SIGN_LOCALHOST_OPTIONS.map((ms) => (
-                    <option key={ms} value={ms}>{AUTO_SIGN_LABELS[ms]}</option>
+                    <option key={ms} value={ms}>{autoSignLabels()[ms]}</option>
                 ))}
             </Select>
         </SettingsFieldRow>
@@ -211,11 +220,11 @@ function LogConsoleRow({ developerMode }) {
     const [open, setOpen] = useState(false);
     return (
         <FormSection
-            title="Logs and diagnostics console"
+            title={t('settings.developer.logsAndDiagnosticsConsole')}
             description={(
                 <>
-                    Process-wide ring buffer of console.* output. Useful when DevTools isn't available (popup, packaged desktop). Captures from now on; already-emitted entries are not replayed.
-                    {!developerMode ? ' Turn Developer Mode on to view.' : ''}
+                    {t('settings.developer.processWideRingBufferOf')}
+                    {!developerMode ? t('settings.developer.turnDeveloperModeOnTo') : ''}
                 </>
             )}
         >
@@ -230,7 +239,7 @@ function LogConsoleRow({ developerMode }) {
                     aria-expanded={open && developerMode}
                     aria-controls="settings-log-console"
                 >
-                    {open ? 'Hide' : 'Show'}
+                    {open ? t('settings.developer.hide') : t('settings.developer.show')}
                 </Button>
             </div>
             {open && developerMode ? <div id="settings-log-console"><LogConsole /></div> : null}
@@ -245,11 +254,11 @@ function RegtestNetworksRow({ developerMode, fees, activeWallet }) {
     if (regtests.length === 0) return null;
     return (
         <FormSection
-            title="Regtest networks"
+            title={t('settings.developer.regtestNetworks')}
             description={(
                 <>
-                    Activate a bundled regtest descriptor on this wallet. Seeds the per-chain fee and donation records and derives the first address on the new chain across every existing account.
-                    {!developerMode ? ' Turn Developer Mode on to enable activation.' : ''}
+                    {t('settings.developer.activateABundledRegtestDescriptor')}
+                    {!developerMode ? t('settings.developer.turnDeveloperModeOnTo2') : ''}
                 </>
             )}
         >
@@ -330,7 +339,7 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
             setSkippedAccounts(skipped);
             setStatusText(
                 created > 0
-                    ? `Activated. Derived ${created} address${created === 1 ? '' : 'es'}.`
+                    ? t('settings.developer.activatedDerived', { count: created })
                     : 'Already activated. No new addresses needed.',
             );
             setActivated(true);
@@ -356,9 +365,9 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
             <SectionHeader
                 as="h3"
                 title={descriptor.displayName}
-                description={`${descriptor.id} · explorer ${descriptor.explorer?.defaultUrl}:${descriptor.explorer?.defaultPort}`}
+                description={t('settings.developer.explorer', { id: descriptor.id, value: descriptor.explorer?.defaultUrl, value2: descriptor.explorer?.defaultPort })}
                 trailing={activated ? (
-                    <span className={styles.active}>Active</span>
+                    <span className={styles.active}>{t('settings.developer.active')}</span>
                 ) : (
                     <Button
                         type="button"
@@ -368,7 +377,7 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
                         onClick={() => setOpen(true)}
                         disabled={disabled || open}
                     >
-                        Activate…
+                        {t('settings.developer.activate')}
                     </Button>
                 )}
             />
@@ -390,7 +399,7 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
                             role="note"
                             style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}
                         >
-                            Deriving the first {descriptor.displayName} address round-trips to your hardware device. Connect it and check your device to confirm the new address when prompted; no wallet password is needed.
+                            {t('settings.developer.derivingTheFirst')} {descriptor.displayName} {t('settings.developer.addressRoundTripsToYour')}
                         </div>
                     ) : (
                         <Input
@@ -398,25 +407,25 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
                             enterKeyHint="go"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Wallet password"
+                            placeholder={t('send.gated.passwordLabel')}
                             autoComplete="current-password"
                             disabled={busy}
-                            aria-label={`${descriptor.displayName} activation password`}
+                            aria-label={t('settings.developer.activationPassword', { displayName: descriptor.displayName })}
                         />
                     )}
                     <div className={styles.actions}>
                         <Button type="submit" size="sm" icon={null} disabled={busy || (!isHardware && password.length === 0)}>
-                            {busy ? (isHardware ? 'Check your device…' : 'Activating…') : 'Activate'}
+                            {busy ? (isHardware ? t('settings.developer.checkYourDevice') : t('settings.developer.activating')) : t('settings.developer.activate2')}
                         </Button>
                         <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
-                            Cancel
+                            {t('common.cancel')}
                         </Button>
                     </div>
                 </form>
             ) : null}
             {statusText ? <Status text={statusText} /> : null}
             <DiagnosticDetails
-                summary={`Accounts not changed (${skippedAccounts.length})`}
+                summary={t('settings.developer.accountsNotChanged', { length: skippedAccounts.length })}
                 items={skippedAccounts}
             />
             {errorText ? <Status text={errorText} tone="error" /> : null}
@@ -501,36 +510,33 @@ function RegtestFaucetForm({
 
     return (
         <FormSection
-            title="Regtest faucet"
+            title={t('settings.developer.regtestFaucet')}
             description={(
                 <>
-                    Local testing only. "Get test {coinTicker}" asks the xchain-regtest-miner to send coins
-                    to your {descriptor.displayName} address directly (no signing). XCHAIN can't be funded
-                    that way - it's a protocol asset, not a native coin - so "Mint test XCHAIN" opens the
-                    real Mint form instead (requires some {coinTicker} already, to pay the fee).
-                    {!developerMode ? ' Turn Developer Mode on to use these.' : ''}
+                    {t('settings.developer.localTestingOnlyGetTest')} {coinTicker}{t('settings.developer.asksTheXchainRegtestMiner')} {descriptor.displayName} {t('settings.developer.addressDirectlyNoSigningXchain')} {coinTicker} {t('settings.developer.alreadyToPayTheFee')}
+                    {!developerMode ? t('settings.developer.turnDeveloperModeOnTo3') : ''}
                 </>
             )}
         >
             <form onSubmit={onGetFunds} className={styles.form}>
                 <Input
                     type="text"
-                    label="Miner URL"
+                    label={t('settings.developer.minerUrl')}
                     enterKeyHint="next"
                     autoCapitalize="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    aria-label="Miner URL"
+                    aria-label={t('settings.developer.minerUrl')}
                     value={minerUrl}
                     onChange={(e) => setMinerUrl(e.target.value)}
                     disabled={!developerMode || busy}
                 />
                 <Input
                     type="text"
-                    label={`Amount (${coinTicker})`}
+                    label={t('settings.developer.amount', { coinTicker })}
                     inputMode="decimal"
                     enterKeyHint="go"
-                    aria-label={`Amount (${coinTicker})`}
+                    aria-label={t('settings.developer.amount', { coinTicker })}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     disabled={!developerMode || busy}
@@ -542,7 +548,7 @@ function RegtestFaucetForm({
                         icon={null}
                         disabled={!developerMode || busy}
                     >
-                        {busy ? 'Sending…' : `Get test ${coinTicker}`}
+                        {busy ? t('settings.developer.sending') : t('settings.developer.getTest', { coinTicker })}
                     </Button>
                     {typeof onNavigateToMint === 'function' && descriptor.coin === 'bitcoin' ? (
                         <Button
@@ -553,7 +559,7 @@ function RegtestFaucetForm({
                             onClick={() => onNavigateToMint({ chainId: descriptor.id, tick: 'XCHAIN' })}
                             disabled={!developerMode || busy}
                         >
-                            Mint test XCHAIN
+                            {t('settings.developer.mintTestXchain')}
                         </Button>
                     ) : null}
                 </div>
@@ -598,7 +604,7 @@ function CustomChainsRow({ developerMode }) {
             setChains(Array.isArray(r?.descriptors) ? r.descriptors : []);
             setLoadError(null);
         } catch (err) {
-            setLoadError(err?.message || 'Failed to load custom chains.');
+            setLoadError(err?.message || 'Failed to load custom networks.');
         } finally {
             setLoading(false);
         }
@@ -619,7 +625,7 @@ function CustomChainsRow({ developerMode }) {
             })
             .catch((err) => {
                 if (cancelled) return;
-                setLoadError(err?.message || 'Failed to load custom chains.');
+                setLoadError(err?.message || 'Failed to load custom networks.');
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
@@ -661,9 +667,9 @@ function CustomChainsRow({ developerMode }) {
             } catch { /* host already accepted the chain; the next read re-hydrates */ }
             // Say which descriptor the vault now holds, since a same-id add may keep the saved one.
             if (r?.restored) {
-                setStatusText(`Restored saved chain "${id}". To change its descriptor, remove it and add it again.`);
+                setStatusText(`Restored saved network "${id}". To change its descriptor, remove it and add it again.`);
             } else if (r?.replaced) {
-                setStatusText(`Replaced saved chain "${id}" (the saved copy is no longer valid).`);
+                setStatusText(`Replaced saved network "${id}" (the saved copy is no longer valid).`);
             } else {
                 setStatusText(`Added "${id}".`);
             }
@@ -671,7 +677,7 @@ function CustomChainsRow({ developerMode }) {
             setOpen(false);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to add custom chain.');
+            setErrorText(err?.message || 'Failed to add custom network.');
         } finally {
             setBusy(false);
         }
@@ -696,7 +702,7 @@ function CustomChainsRow({ developerMode }) {
             setStatusText(`Removed "${chainId}".`);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to remove custom chain.');
+            setErrorText(err?.message || 'Failed to remove custom network.');
         } finally {
             setBusy(false);
         }
@@ -704,17 +710,17 @@ function CustomChainsRow({ developerMode }) {
 
     return (
         <FormSection
-            title="Custom chains"
+            title={t('settings.developer.customChains')}
             description={(
                 <>
-                    Plug in a non-bundled ChainDescriptor (e.g. a fork's regtest, an alt explorer). Persists across restarts. Removed chains are also un-registered immediately.
-                    {!developerMode ? ' Turn Developer Mode on to manage custom chains.' : ''}
+                    {t('settings.developer.plugInANonBundled')}
+                    {!developerMode ? t('settings.developer.turnDeveloperModeOnTo4') : ''}
                 </>
             )}
         >
             {loadError ? <Status text={loadError} tone="error" /> : null}
             {!loading && chains.length === 0 && !loadError ? (
-                <EmptyState title="No custom chains yet" titleAs="h3" body="Chains you add here appear in this list." />
+                <EmptyState title={t('settings.developer.noCustomChainsYet')} titleAs="h3" body={t('settings.developer.chainsYouAddHereAppear')} />
             ) : null}
             {chains.length > 0 ? (
                 <>
@@ -733,9 +739,9 @@ function CustomChainsRow({ developerMode }) {
                                             icon={null}
                                             onClick={() => onRemove(d?.id)}
                                             disabled={!developerMode || busy}
-                                            aria-label={`Remove custom chain ${d?.id}`}
+                                            aria-label={t('settings.developer.removeCustomChain', { value: d?.id })}
                                         >
-                                            Remove
+                                            {t('send.recipient.remove')}
                                         </Button>
                                     )}
                                 />
@@ -748,11 +754,11 @@ function CustomChainsRow({ developerMode }) {
                 <form onSubmit={onAdd} className={styles.form}>
                     <Textarea
                         id="custom-chain-descriptor"
-                        label="Custom chain descriptor JSON"
-                        hint="Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress)."
+                        label={t('settings.developer.customChainDescriptorJson')}
+                        hint={t('settings.developer.pasteAFullChaindescriptorJson')}
                         value={pasted}
                         onChange={(e) => setPasted(e.target.value)}
-                        placeholder={'{\n  "id": "my-fork-regtest",\n  "coin": "myfork",\n  "networkKind": "regtest",\n  ...\n}'}
+                        placeholder={CHAIN_DESCRIPTOR_SAMPLE}
                         rows={8}
                         spellCheck={false}
                         disabled={busy}
@@ -761,11 +767,11 @@ function CustomChainsRow({ developerMode }) {
                     <ClipboardPasteButton
                         onPaste={setPasted}
                         disabled={busy}
-                        label="Paste custom chain descriptor"
+                        label={t('settings.developer.pasteCustomChainDescriptor')}
                     />
                     <div className={styles.actions}>
                         <Button type="submit" size="sm" icon={null} disabled={busy || pasted.length === 0}>
-                            {busy ? 'Adding…' : 'Add chain'}
+                            {busy ? t('settings.developer.adding') : t('settings.developer.addChain')}
                         </Button>
                         <Button
                             type="button"
@@ -775,7 +781,7 @@ function CustomChainsRow({ developerMode }) {
                             onClick={() => { setOpen(false); setPasted(''); setErrorText(null); }}
                             disabled={busy}
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </Button>
                     </div>
                 </form>
@@ -789,7 +795,7 @@ function CustomChainsRow({ developerMode }) {
                     disabled={!developerMode || busy}
                     className={styles.startAction}
                 >
-                    Add custom chain…
+                    {t('settings.developer.addCustomChain')}
                 </Button>
             )}
             {statusText ? <Status text={statusText} /> : null}

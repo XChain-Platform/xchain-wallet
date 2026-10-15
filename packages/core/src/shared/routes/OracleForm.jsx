@@ -144,7 +144,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         initialChainId,
         initialFromAddress,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one first.',
+            'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -543,7 +543,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                         </>
                     ) : null}
@@ -561,9 +561,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 {publishNotes}
 
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => <p key={i} className={styles.warning}>{w}</p>)}
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        {decoded.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                    </StatusMessage>
                 ) : null}
 
                 <p className={styles.hint}>
@@ -645,7 +645,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     iconLabel="Choose publishing address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             {feeds == null ? (
@@ -689,10 +689,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
             <FormSection title="Publish a price">
             <Select
-                label="Token's chain"
+                label="Token's network"
                 hint={crossChain
                     ? `Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`
-                    : 'The chain the priced token lives on. It can differ from the publishing chain.'}
+                    : 'The network the priced token lives on. It can differ from the publishing network.'}
                 value={priceCoin}
                 onChange={(e) => setCoinPick(e.target.value === coinTicker ? '' : e.target.value)}
             >
@@ -799,8 +799,8 @@ function OraclePublishNotes({
                 </dl>
             ) : null}
 
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="alert">
+                <p>
                     <strong>
                         {isFirstPublish
                             ? 'This is the first price for this pair, and it will not price anything for 24 hours.'
@@ -814,26 +814,26 @@ function OraclePublishNotes({
                                 ? 'The previous effective price is stale, so nothing sells on this pair until a pending price matures. The only way to correct a mistake is another publish, which also takes 24 hours.'
                             : 'Nothing sells on this pair yet: your earlier price is still pending and takes effect first, then this one replaces it. The only way to correct a mistake is another publish, which also takes 24 hours.'}
                 </p>
-            </div>
+            </StatusMessage>
 
             {needsTypedConfirm ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>That is a {fmtPct(deviationPct)} move</strong> from your last published
                         price of {priorQuote?.value} {fiat}. Check the decimal point before signing.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
 
             {consumers && !consumers.supported ? (
                 <p className={styles.hint}>
                     Could not check which dispensers use this oracle, so this list may be
                     incomplete. Treat the publish as if buyers are watching.
-                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this chain.` : ''}
+                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this network.` : ''}
                 </p>
             ) : pairConsumers.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {pairConsumers.length} open dispenser{pairConsumers.length === 1 ? '' : 's'} price
                         {pairConsumers.length === 1 ? 's' : ''} {tick} from this oracle and will sell at the
                         new price once it takes effect:
@@ -848,7 +848,7 @@ function OraclePublishNotes({
                             ))}
                         </ul>
                     </details>
-                </div>
+                </StatusMessage>
             ) : (
                 <p className={styles.hint}>No open dispensers price {tick} from this oracle right now.</p>
             )}

@@ -276,9 +276,9 @@ export function mainButton(page, name) {
 }
 
 /**
- * The nav rail's "Lock" button. The header also carries a "Lock wallet"
- * button, so a substring match on "Lock" resolves to two elements and
- * trips strict mode. Anchor on the exact accessible name.
+ * The nav rail's "Lock" button. Only the phone layout's header carries a
+ * "Lock wallet" button (never beside the rail), but a substring match on
+ * "Lock" would still hit it, so anchor on the exact accessible name.
  */
 export function lockButton(page) {
     return page.getByRole('button', { name: 'Lock', exact: true });
@@ -526,7 +526,7 @@ export async function turnOffDonations(page) {
     await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
     await openSettings(page);
     await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Automatic Donation System', exact: true });
+    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
     await expect(toggle).toBeVisible();
     if (await toggle.isChecked()) {
         // Click, not check(): the input is controlled by PERSISTED settings,

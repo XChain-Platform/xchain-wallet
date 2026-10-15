@@ -16,7 +16,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
-import { ROW, SettingsActionRow, SettingsFieldRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import { ROW_LAYOUT, SettingsActionRow, SettingsFieldRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import cardStyles from '../../../packages/core/src/ui/Card.module.css';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
 const SETTINGS_DIR = join(process.cwd(), 'packages/core/src/shared');
@@ -70,8 +71,10 @@ describe('Settings action rows', () => {
             </SettingsActionRow>,
         );
         const row = container.firstElementChild;
-        expect(row.style.border).toBe(ROW.border);
-        expect(row.style.padding).toBe(ROW.padding);
+        // The row is the shared card; its inline style carries only layout.
+        expect(row).toHaveClass(cardStyles.card);
+        expect(row.style.display).toBe(ROW_LAYOUT.display);
+        expect(row.style.border).toBe('');
         expect(getByRole('heading', { name: 'Back up recovery phrase' })).toBeTruthy();
         // The label never names the button, so its accessible name stays its own text.
         expect(getByRole('button', { name: 'Show…' })).toBeTruthy();
@@ -88,11 +91,17 @@ describe('Settings action rows', () => {
         }
     });
 
-    it('frames an opened Backup row like a row', () => {
-        const css = readFileSync(join(SETTINGS_DIR, 'components/settings/BackupSection.module.css'), 'utf8');
-        const section = css.match(/\.formSection\s*\{([^}]*)\}/)[1];
-        expect(section).toMatch(/border:\s*1px solid var\(--xc-border\)/);
-        expect(section).toMatch(/padding:\s*var\(--xc-space-3\)/);
+    it('frames an opened Backup or This wallet row with the shared card, like a row', () => {
+        for (const name of ['BackupSection', 'ThisWalletSection']) {
+            const src = readFileSync(join(SETTINGS_DIR, `components/settings/${name}.jsx`), 'utf8');
+            const css = readFileSync(join(SETTINGS_DIR, `components/settings/${name}.module.css`), 'utf8');
+            // A row and an opened section are both the shared card, with no
+            // card styling of the section's own.
+            expect(src, name).toMatch(/className=\{cardStyles\.card\}/);
+            expect(src, name).not.toMatch(/styles\.(formSection|panel|keyPanel)\b/);
+            expect(css, name).not.toMatch(/composes:\s*(card|flush) from/);
+            expect(css, name).not.toMatch(/dangerPanel/);
+        }
     });
 });
 

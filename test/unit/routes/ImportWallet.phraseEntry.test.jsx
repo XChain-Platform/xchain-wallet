@@ -64,6 +64,16 @@ function submitPhrase(phrase, importMnemonic = vi.fn().mockResolvedValue({})) {
 }
 
 describe('ImportWallet recovery phrase entry', () => {
+    it('keeps the secret phrase field out of autofill, spellcheck, autocapitalize and autocorrect', () => {
+        renderImport();
+        const phrase = screen.getByLabelText('Recovery phrase');
+        expect(phrase.tagName).toBe('TEXTAREA');
+        expect(phrase).toHaveAttribute('autocomplete', 'off');
+        expect(phrase).toHaveAttribute('spellcheck', 'false');
+        expect(phrase).toHaveAttribute('autocapitalize', 'off');
+        expect(phrase).toHaveAttribute('autocorrect', 'off');
+    });
+
     it('names the next missing field beside the disabled import action', () => {
         renderImport();
         const action = screen.getByRole('button', { name: 'Import' });
@@ -213,6 +223,49 @@ describe('ImportWallet recovery phrase entry', () => {
         fireEvent.change(textarea, { target: { value: BIP39_24_WORD_PHRASE } });
         expect(screen.getByText('24 words entered')).toBeTruthy();
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
+    });
+
+    it.each([['import', renderImport], ['FreeWallet import', renderFreeWallet]])(
+        'puts Paste and Scan QR inside the %s phrase box, with the live count below the hint',
+        (_name, renderScreen) => {
+            renderScreen();
+            const textarea = screen.getByLabelText('Recovery phrase');
+            const box = textarea.parentElement;
+            const paste = screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' });
+            const scan = screen.getByRole('button', { name: 'Scan QR', exact: true });
+
+            expect(box.contains(paste)).toBe(true);
+            expect(box.contains(scan)).toBe(true);
+            // Both follow the text in the box, Paste before Scan QR.
+            expect(textarea.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(paste.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            // Nothing sits beside the label any more.
+            expect(document.querySelector('label[for="xc-mnemonic"]').parentElement.querySelector('button')).toBeNull();
+
+            const status = document.getElementById('xc-mnemonic-status');
+            const hint = document.getElementById(`${textarea.id}-hint`);
+            expect(box.contains(status)).toBe(false);
+            expect(hint.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(status).toHaveTextContent(/0 (\/ 12 )?words/);
+
+            fireEvent.click(scan);
+            expect(screen.getByRole('button', { name: 'Cancel scan', exact: true })).toHaveAttribute('aria-pressed', 'true');
+        },
+    );
+
+    it('shows a refused clipboard read as the form error, not inside the phrase box', async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { readText: vi.fn().mockRejectedValue(new Error('denied')) },
+        });
+        renderImport();
+        const box = screen.getByLabelText('Recovery phrase').parentElement;
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Clipboard access was denied. Paste manually instead.');
+        expect(box.contains(alert)).toBe(false);
     });
 
     it('explains FreeWallet format detection and shows its 12-word target', () => {

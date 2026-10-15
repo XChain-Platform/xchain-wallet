@@ -64,7 +64,7 @@ assert.match(sectionSrc, /value="counterwallet-legacy"/, 'Counterwallet option')
 // Counterwallet branch hides BIP39 passphrase input.
 assert.match(
     sectionSrc,
-    /format === 'bip39' \?[\s\S]{0,100}BIP39 passphrase/,
+    /format === 'bip39' \?[\s\S]{0,200}BIP39 passphrase/,
     'passphrase input is gated behind format === bip39',
 );
 

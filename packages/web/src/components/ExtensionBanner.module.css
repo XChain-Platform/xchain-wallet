@@ -14,8 +14,20 @@
     line-height: 1.4;
 }
 
-.error {
-    color: var(--xc-danger-fg, #c0392b);
+/* The connect failure takes a whole row under the text and buttons. */
+.banner.withMessage {
+    flex-wrap: wrap;
+}
+
+/* A zero basis keeps the text and buttons on their first line, shrinking the
+   text as they do without a message, so only the message row wraps. */
+.withMessage .label {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.message {
+    flex: 1 0 100%;
 }
 
 .actions {

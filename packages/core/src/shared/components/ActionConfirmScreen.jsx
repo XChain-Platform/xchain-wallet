@@ -28,6 +28,7 @@ import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinT
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -307,14 +308,14 @@ export function ActionConfirmScreen({
                         // a self-armed freeze.
                         <SigningReadyNote>
                             <p className={hintClassName}>
-                                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                                <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                             </p>
                         </SigningReadyNote>
                     ) : (
                         <Input
                             type="password"
-                            label="Password"
-                            hint="Required to sign."
+                            label={t('common.password')}
+                            hint={t('components.messageConfirmScreen.requiredToSign')}
                             value={password}
                             onChange={(e) => onPasswordChange(e.target.value)}
                             autoComplete="current-password"
