@@ -103,6 +103,7 @@ import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useReachability } from '../hooks/useReachability.js';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -560,6 +561,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { showToast } = useToast();
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const browserOnline = useOnlineStatus();
     const proofSettings = useSettings();
     const activeNetwork = proofSettings.loading
@@ -2192,6 +2194,17 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         body={t('history.empty.noMatchesBody')}
                         actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
+                    />
+                ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
+                    // An empty read while balances could not be checked proves
+                    // nothing, so the page says that once instead of "No
+                    // activity yet" beside the stale-balances notice.
+                    <BalancesUncheckedState
+                        onRetry={() => {
+                            recheckBalances();
+                            setRefreshTick((n) => n + 1);
+                        }}
+                        onReceive={onReceive}
                     />
                 ) : (
                     <EmptyState
