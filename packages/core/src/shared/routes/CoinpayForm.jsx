@@ -138,6 +138,9 @@ function ScopedCoinpayForm({
 
     useEffect(() => {
         if (!addressesByChain) return undefined;
+        // A demo wallet owes nothing and cannot pay: a demo wallet's addresses
+        // never go to an explorer (issue #82).
+        if (demoGuard.blocked) return undefined;
         let cancelled = false;
         setScanning(true);
         setScanError(null);
@@ -188,7 +191,7 @@ function ScopedCoinpayForm({
             }
         })();
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, initialActionIndex, initialChainId, initialAddress]);
+    }, [addressesByChain, messaging, initialActionIndex, initialChainId, initialAddress, demoGuard.blocked]);
 
     const descriptor = selected ? chainRegistry.get(selected.chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';

@@ -207,7 +207,9 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     // post-top-up total.
     useEffect(() => {
         const pk = signingPubkey.trim().toLowerCase();
-        if (!/^[0-9a-f]{64}$/.test(pk) || !fromAddress || !chainId) {
+        // A demo wallet cannot stake, and a demo wallet's addresses never go to
+        // an explorer (issue #82).
+        if (!/^[0-9a-f]{64}$/.test(pk) || !fromAddress || !chainId || demoGuard.blocked) {
             setDetectStatus('idle');
             setExistingStake('0');
             return;
@@ -247,7 +249,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 setDetectStatus('error');
             });
         return () => { cancelled = true; };
-    }, [signingPubkey, fromAddress, chainId, messaging]);
+    }, [signingPubkey, fromAddress, chainId, messaging, demoGuard.blocked]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');

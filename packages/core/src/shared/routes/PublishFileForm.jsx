@@ -156,6 +156,12 @@ export function PublishFileForm({ walletId, onBack }) {
     // switch to Encrypted mode (same aggregation MyTokens uses).
     useEffect(() => {
         if (mode !== 'gated' || ownedTokens !== null || !addressesByChain) return undefined;
+        // A demo wallet cannot publish, and a demo wallet's addresses never go
+        // to an explorer (issue #82).
+        if (demoGuard.blocked) {
+            setOwnedTokens([]);
+            return undefined;
+        }
         if (typeof messaging.getOwnedTokens !== 'function') {
             setOwnedTokens([]);
             setOwnedTokensError('This wallet cannot look up tokens for gated publishing.');
@@ -202,7 +208,7 @@ export function PublishFileForm({ walletId, onBack }) {
             }
         });
         return () => { cancelled = true; };
-    }, [mode, ownedTokens, addressesByChain, messaging]);
+    }, [mode, ownedTokens, addressesByChain, messaging, demoGuard.blocked]);
 
     // Signing address on the picked chain: the same default as Send and
     // every other spend-from-balance form (any funded address can publish
