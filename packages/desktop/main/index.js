@@ -44,7 +44,7 @@
 // any other module evaluates (see networkGuardBoot.js). Off unless a test
 // harness sets XCHAIN_TEST_NETWORK_GUARD or --xchain-test-network-guard.
 import { networkGuard, runNetworkGuardProbeAndExit } from './networkGuardBoot.js';
-import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification, Tray } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -156,6 +156,7 @@ let rememberedWindowBounds = /** @type {{ x?: number, y?: number, width: number,
 let windowBoundsSaveTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 let isQuitting = false;
 let canCreateWindows = false;
+let tray = /** @type {Tray | null} */ (null);
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
@@ -374,7 +375,7 @@ function hasVisibleWindow() {
 export function applyWindowCloseConvention(win, event, options = {}) {
     const platform = options.platform ?? process.platform;
     const quitting = options.quitting ?? isQuitting;
-    if (platform !== 'darwin' || quitting) return false;
+    if (!['darwin', 'win32', 'linux'].includes(platform) || quitting) return false;
     event.preventDefault();
     win.hide();
     return true;
@@ -410,7 +411,26 @@ function forwardDeepLink(event) {
     const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
     // Only detached windows are open: a fresh window claims the link on mount
     if (!target) {
-        if (canCreateWindows) void runMainTask(openWindowAfterIdleCheck, 'deep-link window open');
+        if (canCreateWindows) {
+            // A dock or tray restore already in flight owns the next window;
+            // hand the link to it instead of racing a second window open.
+            const pendingRestore = reopenInFlight;
+            if (!pendingRestore) {
+                void runMainTask(openWindowAfterIdleCheck, 'deep-link window open');
+            } else {
+                void runMainTask(() => pendingRestore.then(() => {
+                    const current = pickDeepLinkTarget(
+                        liveWindows(),
+                        BrowserWindow.getFocusedWindow(),
+                        (w) => detachedWindows.has(w),
+                    );
+                    if (!current) return openWindowAfterIdleCheck();
+                    current.webContents.send('xchain:uri', event);
+                    revealWindow(current);
+                    return undefined;
+                }), 'deep-link window open');
+            }
+        }
         return;
     }
     deepLinkRecipient = target.webContents;
@@ -675,6 +695,7 @@ let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
 let activeWalletOperations = 0;
+let activeUpdateDownloads = 0;
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
@@ -780,6 +801,29 @@ function restoreWindowAfterIdleCheck() {
         if (target) revealWindow(target);
         else createWindow();
     }, 'restoring');
+}
+
+/**
+ * Keep a Windows or Linux app reachable after its last window is hidden.
+ * macOS uses the dock's activate event for the same transition.
+ *
+ * @param {{ platform?: string }} [options]
+ * @returns {Tray | null}
+ */
+export function installTray({ platform = process.platform } = {}) {
+    if (platform === 'darwin' || tray) return tray;
+    tray = new Tray(join(here, '..', 'build', 'icon.png'));
+    tray.setToolTip(DESKTOP_PRODUCT_NAME);
+    tray.setContextMenu(Menu.buildFromTemplate([
+        {
+            label: `Show ${DESKTOP_PRODUCT_NAME}`,
+            click: () => { void restoreWindowAfterIdleCheck(); },
+        },
+        { type: 'separator' },
+        { role: 'quit' },
+    ]));
+    tray.on('click', () => { void restoreWindowAfterIdleCheck(); });
+    return tray;
 }
 
 /**
@@ -1076,7 +1120,14 @@ void runMainTask(async () => {
                 return { ok: true };
             }
             if (action === 'restart') return await restartAndInstall();
-            return await downloadAndInstall();
+            // Counted so a quit during the fetch or signature check waits
+            // for the verdict instead of cutting it off.
+            activeUpdateDownloads += 1;
+            try {
+                return await downloadAndInstall();
+            } finally {
+                activeUpdateDownloads -= 1;
+            }
         } catch (error) {
             reportMainFailure('updater IPC action', error);
             return { ok: false, reason: 'desktop: update action failed' };
@@ -1235,6 +1286,7 @@ void runMainTask(async () => {
     // moment the renderer focuses.
     buildApplicationMenu();
     canCreateWindows = true;
+    installTray();
     createWindow();
 
     app.on('activate', () => {
@@ -1255,13 +1307,21 @@ void runMainTask(async () => {
 
 app.on('window-all-closed', () => {
     runMainCallback(() => {
-        if (process.platform !== 'darwin') { app.quit(); return; }
-        // macOS keeps the app, and with it the open vault, alive with no window.
+        // Keep the vault alive for dock, tray, or second-instance reopening.
         startWindowlessIdleLock();
     }, 'all windows closed');
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+    // A send can be between signing and persistence, and an update download
+    // can be between its network fetch and signature verdict. Keep the app
+    // reachable until the in-flight operation settles, then let the user
+    // retry quit explicitly.
+    if (activeWalletOperations > 0 || activeUpdateDownloads > 0) {
+        event?.preventDefault();
+        void restoreWindowAfterIdleCheck();
+        return;
+    }
     // Zero the master key + close the encrypted doc. The OS already
     // treats process-exit memory as freed, but explicit zeroing catches
     // cases where a GC'd buffer might otherwise linger until
@@ -1271,6 +1331,8 @@ app.on('before-quit', () => {
         isQuitting = true;
         stopWindowlessIdleLock();
         flushWindowBoundsSync();
+        tray?.destroy();
+        tray = null;
         if (runtime) tearDownHost(runtime);
     }, 'desktop shutdown');
 });

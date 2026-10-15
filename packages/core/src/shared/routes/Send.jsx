@@ -233,6 +233,11 @@ import {
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
+import { normalizeHistoryRow } from '../utils/historyRow.js';
+import { pendingTxToEntry } from '../utils/pendingHistory.js';
+import { classifyEntryStatus } from '../utils/historyFilter.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
+import { BALANCE_POLL_INTERVAL_MS } from '../../flows/balances.js';
 import {
     externalIndexOf,
     hasAnyAddress,
@@ -566,6 +571,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // Recognized recovery cause for affordances that must not match display copy.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    // The done screen follows the sent transaction from broadcast to
+    // confirmation (or failure) instead of freezing on "pending".
+    const [sentStatus, setSentStatus] = useState({
+        status: 'pending',
+        confirmations: null,
+        blockIndex: null,
+    });
+    const sentStatusPollRef = useRef(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const reviewPageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const reviewHeadingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
@@ -597,10 +610,28 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }, [draft]);
     useEffect(() => {
         if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
-        const values = { chainId, toAddress, tick, amount, memo };
+        // A mobile resume can remount the form, so every field the user set
+        // rides in the draft, not just the first recipient.
+        const values = {
+            chainId,
+            fromAddressId,
+            pickedSourceChain,
+            toAddress,
+            tick,
+            amount,
+            memo,
+            amountInputMode,
+            fiatAmount,
+            extraLegs,
+            perRecipientToken,
+        };
         if (hasMeaningfulSendDraft(values)) draft.save(values);
         else draft.clear();
-    }, [stage, draftPending, draft, chainId, toAddress, tick, amount, memo]);
+    }, [
+        stage, draftPending, draft, chainId, fromAddressId, pickedSourceChain,
+        toAddress, tick, amount, memo, amountInputMode, fiatAmount, extraLegs,
+        perRecipientToken,
+    ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(false); return; }
@@ -610,6 +641,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (typeof v.tick === 'string') setTick(v.tick);
         if (typeof v.amount === 'string') setAmount(v.amount);
         if (typeof v.memo === 'string') setMemo(v.memo);
+        if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
+        if (typeof v.pickedSourceChain === 'string') setPickedSourceChain(v.pickedSourceChain);
+        if (v.amountInputMode === 'coin' || v.amountInputMode === 'fiat') {
+            setAmountInputMode(v.amountInputMode);
+        }
+        if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
+        if (Array.isArray(v.extraLegs)) {
+            setExtraLegs(v.extraLegs.slice(0, MAX_SEND_LEGS - 1).flatMap((leg) => (
+                leg && typeof leg.id === 'string'
+                    ? [{
+                        id: leg.id,
+                        to: typeof leg.to === 'string' ? leg.to : '',
+                        amount: typeof leg.amount === 'string' ? leg.amount : '',
+                        tick: typeof leg.tick === 'string' ? leg.tick : '',
+                    }]
+                    : []
+            )));
+        }
+        if (typeof v.perRecipientToken === 'boolean') setPerRecipientToken(v.perRecipientToken);
         setDraftPending(true);
     }, [draft, cancelMax]);
     const dismissDraft = useCallback(() => {
@@ -683,19 +733,54 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // signer list across re-mounts.
 
     // §29.4 / §21.6 autocomplete source data. Contacts cover the whole
-    // vault and load once; history is per-chain × per-address and
-    // refetches when the chain changes.
+    // vault; history is per-chain × per-address and refetches when the chain
+    // changes.
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    const contactsRequestRef = useRef(0);
+    const refreshContacts = useCallback(async ({ warn = false } = {}) => {
+        const requestId = contactsRequestRef.current + 1;
+        contactsRequestRef.current = requestId;
+        try {
+            const rows = await messaging.listContacts();
+            if (contactsRequestRef.current !== requestId) return false;
+            setContacts(Array.isArray(rows) ? rows : []);
+            return true;
+        } catch {
+            if (contactsRequestRef.current !== requestId) return false;
+            if (warn) {
+                showToast({ message: t('send.contacts.refreshFailed'), variant: 'error' });
+            }
+            return false;
+        }
+    }, [messaging, showToast]);
     useEffect(() => {
-        let cancelled = false;
-        messaging.listContacts()
-            .then((rows) => { if (!cancelled) setContacts(Array.isArray(rows) ? rows : []); })
-            .catch(() => { /* silent; autocomplete just shows fewer hits */ });
-        return () => { cancelled = true; };
-    }, [messaging]);
+        refreshContacts();
+        return () => { contactsRequestRef.current += 1; };
+    }, [refreshContacts]);
+
+    // Refresh when a web or desktop window regains focus, or when a mobile
+    // shell returns to the foreground, so contacts edited elsewhere show up.
+    useEffect(() => {
+        const onVisible = () => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+            refreshContacts();
+        };
+        globalThis.addEventListener?.('focus', onVisible);
+        globalThis.document?.addEventListener?.('visibilitychange', onVisible);
+        return () => {
+            globalThis.removeEventListener?.('focus', onVisible);
+            globalThis.document?.removeEventListener?.('visibilitychange', onVisible);
+        };
+    }, [refreshContacts]);
 
     // Contacts UX state: picker open/close and the post-send save form.
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const openContactsPicker = useCallback(async () => {
+        // Read immediately before showing rows so edits made in another shell
+        // cannot leave the picker on its mount-time snapshot.
+        await refreshContacts({ warn: true });
+        setContactsPickerOpen(true);
+    }, [refreshContacts]);
     const [contactSaveStage, setContactSaveStage] = useState(
         /** @type {'idle' | 'editing' | 'saving' | 'saved'} */ ('idle'),
     );
@@ -778,8 +863,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const handlePickRecipient = useCallback((entry) => {
         const address = String(entry?.address || '');
         const selectedDescriptor = chainId ? chainRegistry.get(chainId) : null;
+        const error = destinationAddressError(address, selectedDescriptor);
+        // Keep the current recipient when the picked address cannot be paid on
+        // this chain; the inline message explains which network it belongs to.
+        if (error) {
+            setToError(error);
+            return;
+        }
         setToAddress(address);
-        setToError(destinationAddressError(address, selectedDescriptor));
+        setToError(null);
     }, [chainId]);
 
     const handlePickContact = useCallback((entry) => {
@@ -1343,6 +1435,85 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+
+    // Follow the sent transaction on the done screen: confirmed history wins,
+    // then the pending record, so the card moves from pending to confirmed or
+    // failed without the user opening History.
+    useEffect(() => {
+        const txid = result?.txid || result?.broadcast?.txid;
+        const source = fromAddress?.address;
+        if (stage !== 'done' || !txid || !chainId || !source || result?.queued) return undefined;
+        let cancelled = false;
+        sentStatusPollRef.current += 1;
+        setSentStatus({ status: 'pending', confirmations: null, blockIndex: null });
+
+        const rowsFrom = (response) => {
+            if (Array.isArray(response)) return response;
+            if (Array.isArray(response?.data)) return response.data;
+            if (Array.isArray(response?.rows)) return response.rows;
+            return [];
+        };
+        const poll = async () => {
+            const requestId = ++sentStatusPollRef.current;
+            const [historyRows, pendingRows, watermarkResult] = await Promise.all([
+                messaging.getAddressHistory({ chainId, address: source })
+                    .then(rowsFrom)
+                    .catch(() => []),
+                typeof messaging.getPendingTxsForAddress === 'function'
+                    ? messaging.getPendingTxsForAddress({ chainId, address: source })
+                        .then(rowsFrom)
+                        .catch(() => [])
+                    : Promise.resolve([]),
+                typeof messaging.getIndexerWatermark === 'function'
+                    ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                    : Promise.resolve(null),
+            ]);
+            if (cancelled || requestId !== sentStatusPollRef.current) return;
+
+            const wanted = String(txid).toLowerCase();
+            let entry = null;
+            const historyRow = historyRows.find((row) => (
+                String(row?.tx_hash ?? row?.txHash ?? '').toLowerCase() === wanted
+            ));
+            if (historyRow) {
+                entry = normalizeHistoryRow(historyRow, { chainId, address: source });
+            } else {
+                const pendingRecord = pendingRows.find((record) => (
+                    String(record?.txid || '').toLowerCase() === wanted
+                ));
+                if (pendingRecord) {
+                    entry = pendingTxToEntry({
+                        chainId,
+                        address: source,
+                        pendingTx: pendingRecord,
+                        ownAddresses: new Set([source.toLowerCase()]),
+                        observedAtMs: Date.now(),
+                    });
+                }
+            }
+            if (!entry) return;
+
+            const status = classifyEntryStatus(entry);
+            const blockIndex = Number(entry.blockIndex || entry.pending?.confirmedBlockIndex || 0);
+            const watermark = Number(watermarkResult?.watermark || 0);
+            const chainTip = Math.max(blockIndex, Number.isFinite(watermark) ? watermark : 0);
+            setSentStatus({
+                status,
+                confirmations: status === 'confirmed' && blockIndex > 0
+                    ? chainTip - blockIndex + 1
+                    : null,
+                blockIndex: blockIndex || null,
+            });
+        };
+
+        void poll();
+        const stop = startVisibleInterval(() => { void poll(); }, BALANCE_POLL_INTERVAL_MS);
+        return () => {
+            cancelled = true;
+            sentStatusPollRef.current += 1;
+            stop();
+        };
+    }, [chainId, fromAddress?.address, messaging, result, stage]);
 
     const [coinControlEnabled, setCoinControlEnabled] = useState(false);
     const [availableUtxos, setAvailableUtxos] = useState(/** @type {any[]} */ ([]));
@@ -2868,12 +3039,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
         return wrap(
             <>
-                <div className={styles.successCard}>
-                    <div className={styles.successIcon} aria-hidden="true">✓</div>
+                <div className={styles.successCard} data-transaction-status={sentStatus.status}>
+                    <div className={styles.successIcon} aria-hidden="true">
+                        {sentStatus.status === 'failed' ? '!' : '✓'}
+                    </div>
                     <div role="status" aria-live="polite" aria-atomic="true">
-                        <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
+                        <h2 className={styles.successTitle}>
+                            {sentStatus.status === 'confirmed'
+                                ? t('history.status.confirmed')
+                                : sentStatus.status === 'failed'
+                                    ? t('history.status.failed')
+                                    : t('send.success.broadcastPending')}
+                        </h2>
                         <p className={styles.successHint}>
-                            {t('send.success.broadcastPendingBody')}
+                            {sentStatus.status === 'confirmed'
+                                ? (sentStatus.confirmations == null
+                                    ? t('send.success.confirmedBody')
+                                    : t('transactionStatus.confirmations', { count: sentStatus.confirmations }))
+                                : sentStatus.status === 'failed'
+                                    ? t('send.success.failedBody')
+                                    : t('send.success.broadcastPendingBody')}
                         </p>
                     </div>
                     {sentAmount || recipient ? (
@@ -3422,7 +3607,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 suggestions={suggestions}
                 onSuggestionSelect={handlePickRecipient}
                 hint={pasteHint || undefined}
-                onIconClick={() => setContactsPickerOpen(true)}
+                onIconClick={openContactsPicker}
                 placeholder={t('send.destination.placeholder')}
                 error={toError || undefined}
             />

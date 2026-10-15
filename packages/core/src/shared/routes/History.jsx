@@ -118,6 +118,9 @@ import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+// Session-scoped so the filters survive opening a transaction and coming
+// back, but a new session starts from the default view.
+const HISTORY_VIEW_STATE_STORAGE_KEY = 'xc:historyViewState';
 const HISTORY_PAGE_SIZE = 100;
 const EMPTY_PEER_CACHE = Object.freeze({});
 const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
@@ -169,6 +172,34 @@ function historyChainFilterKey(walletId) {
 
 function groupingModeStorageKey(walletId) {
     return `${GROUPING_MODE_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function historyViewStateStorageKey(walletId, accountId) {
+    return `${HISTORY_VIEW_STATE_STORAGE_KEY}:${walletId || 'none'}:${accountId || 'all'}`;
+}
+
+function readHistoryViewState(walletId, accountId, initialSearchQuery) {
+    try {
+        const raw = globalThis.sessionStorage?.getItem(
+            historyViewStateStorageKey(walletId, accountId),
+        );
+        const parsed = raw ? JSON.parse(raw) : null;
+        // A History opened with its own search (TokenDetail's scoped link)
+        // starts from that search, not from an unrelated remembered view.
+        if (!parsed || parsed.initialSearchQuery !== initialSearchQuery) return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function writeHistoryViewState(walletId, accountId, state) {
+    try {
+        globalThis.sessionStorage?.setItem(
+            historyViewStateStorageKey(walletId, accountId),
+            JSON.stringify(state),
+        );
+    } catch { /* best-effort */ }
 }
 
 function formatFilterDate(value) {
@@ -584,6 +615,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const networkOffline = reachabilityOverall === 'offline';
     const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const browserOnline = useOnlineStatus();
+    const rememberedViewRef = useRef(undefined);
+    if (rememberedViewRef.current === undefined) {
+        rememberedViewRef.current = readHistoryViewState(walletId, accountId, initialSearchQuery);
+    }
+    const rememberedView = rememberedViewRef.current;
     const proofSettings = useSettings();
     const activeNetwork = proofSettings.loading
         ? null
@@ -617,8 +653,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         /** @type {Record<string, number>} */ ({}),
     );
     const [enabledChains, setEnabledChains] = useState(/** @type {Set<string>} */ (new Set()));
-    const [crossChainOnly, setCrossChainOnly] = useState(false);
-    const [multisigOnly, setMultisigOnly] = useState(false);
+    const [crossChainOnly, setCrossChainOnly] = useState(Boolean(rememberedView?.crossChainOnly));
+    const [multisigOnly, setMultisigOnly] = useState(Boolean(rememberedView?.multisigOnly));
     const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
     const [groupingMode, setGroupingModeState] = useState(
         /** @type {'grouped' | 'flat'} */ (() => readPersistedGroupingMode(walletId)),
@@ -629,16 +665,38 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         writePersistedGroupingMode(walletId, mode);
     };
     const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
-    const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
+    const [searchQuery, setSearchQuery] = useState(
+        rememberedView?.searchQuery ?? initialSearchQuery ?? '',
+    );
     const [searchContacts, setSearchContacts] = useState(/** @type {any[]} */ ([]));
-    const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
-    const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
+    const [actionTypeFilter, setActionTypeFilter] = useState(
+        /** @type {Set<string>} */ (new Set(rememberedView?.actionTypes || [])),
+    );
+    const [statusFilter, setStatusFilter] = useState(
+        /** @type {Set<string>} */ (new Set(rememberedView?.statuses || [])),
+    );
     // The inclusive endpoints cover exactly 30 local calendar days.
-    const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(29));
-    const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
+    const [dateFrom, setDateFrom] = useState(() => rememberedView?.dateFrom ?? isoDateDaysAgo(29));
+    const [dateTo, setDateTo] = useState(() => rememberedView?.dateTo ?? isoDateDaysAgo(0));
     const [dateError, setDateError] = useState('');
     const [phoneFiltersOpen, setPhoneFiltersOpen] = useState(false);
-    const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+    const [moreFiltersOpen, setMoreFiltersOpen] = useState(Boolean(rememberedView?.moreFiltersOpen));
+    useEffect(() => {
+        writeHistoryViewState(walletId, accountId, {
+            initialSearchQuery,
+            searchQuery,
+            actionTypes: Array.from(actionTypeFilter),
+            statuses: Array.from(statusFilter),
+            dateFrom,
+            dateTo,
+            crossChainOnly,
+            multisigOnly,
+            moreFiltersOpen,
+        });
+    }, [
+        walletId, accountId, initialSearchQuery, searchQuery, actionTypeFilter,
+        statusFilter, dateFrom, dateTo, crossChainOnly, multisigOnly, moreFiltersOpen,
+    ]);
     // The export modal controls only the file representation. Row selection
     // remains owned by the History filters so the file matches the list.
     const [exportModalOpen, setExportModalOpen] = useState(false);

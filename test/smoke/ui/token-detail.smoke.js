@@ -115,8 +115,8 @@ assert.ok(/onSelectToken=\{onSelectToken\}/.test(homeSrc),
 const histSrc = readFileSync(join(routes, 'History.jsx'), 'utf8');
 assert.ok(/initialSearchQuery\b/.test(histSrc),
     'History accepts initialSearchQuery');
-assert.ok(/useState\(initialSearchQuery/.test(histSrc),
-    'History seeds searchQuery state from initialSearchQuery');
+assert.ok(/rememberedView\?\.searchQuery\s*\?\?\s*initialSearchQuery/.test(histSrc),
+    'History seeds searchQuery from the incoming query while allowing back-navigation restore');
 
 // --- 5. Web + extension App.jsx wire the route ---------------------------
 

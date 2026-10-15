@@ -29,7 +29,7 @@ const requireFromVite = createRequire(
 );
 const postcss = requireFromVite('postcss');
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'release', 'test-dapp', 'android', 'ios', 'coverage', 'www']);
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'release', 'test-dapp', 'android', 'ios', 'www', 'coverage']);
 const KIT = 'packages/core/src/ui/';
 const TONE = /var\(--xc-(warning|danger|error)(-bg|-fg|-text|-border)?\b/;
 const FILL = new Set(['background', 'background-color']);

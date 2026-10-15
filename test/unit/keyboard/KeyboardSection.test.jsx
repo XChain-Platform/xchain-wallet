@@ -15,6 +15,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, cleanup, screen, waitFor, act, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
+import { updateSettings } from '../../../packages/core/src/flows/settings.js';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 afterEach(() => cleanup());
 
@@ -128,5 +130,54 @@ describe('KeyboardSection', () => {
             keyboard: { bindings: {} },
         }));
         expect(await screen.findByText('All shortcuts reset to defaults.')).toBeTruthy();
+    });
+});
+
+describe('Settings reset boundaries', () => {
+    function settingsVault(initial) {
+        let stored = initial;
+        return {
+            read: () => stored,
+            settings: {
+                get: vi.fn(async () => stored),
+                put: vi.fn(async (next) => { stored = next; }),
+            },
+            wallets: { get: vi.fn(), put: vi.fn(), delete: vi.fn() },
+            contacts: { get: vi.fn(), put: vi.fn(), delete: vi.fn() },
+        };
+    }
+
+    it('replaces reset maps while leaving wallets, contacts, and other settings untouched', async () => {
+        const vault = settingsVault({
+            ...createDefaultSettings(),
+            theme: 'dark',
+            keyboard: { bindings: { lock: 'mod+j', settings: 'mod+.' } },
+            pinnedTokensByWallet: {
+                'wallet-a': ['bitcoin-mainnet:BTC'],
+                'wallet-b': ['litecoin-mainnet:LTC'],
+            },
+        });
+
+        await updateSettings(vault, { keyboard: { bindings: { settings: 'mod+.' } } });
+        await updateSettings(vault, { pinnedTokensByWallet: {} });
+
+        const stored = vault.read();
+        expect(stored.keyboard.bindings).toEqual({ settings: 'mod+.' });
+        expect(stored.pinnedTokensByWallet).toEqual({});
+        expect(stored.theme).toBe('dark');
+        expect(vault.wallets.get).not.toHaveBeenCalled();
+        expect(vault.wallets.put).not.toHaveBeenCalled();
+        expect(vault.wallets.delete).not.toHaveBeenCalled();
+        expect(vault.contacts.get).not.toHaveBeenCalled();
+        expect(vault.contacts.put).not.toHaveBeenCalled();
+        expect(vault.contacts.delete).not.toHaveBeenCalled();
+    });
+
+    it('keeps every setting when the whole patch is empty', async () => {
+        const vault = settingsVault({ ...createDefaultSettings(), theme: 'dark' });
+
+        await updateSettings(vault, {});
+
+        expect(vault.read().theme).toBe('dark');
     });
 });
