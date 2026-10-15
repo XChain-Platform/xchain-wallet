@@ -232,7 +232,7 @@ describe('<FormPage>', () => {
         expect(within(form).getByRole('button', { name: 'Verify' })).toBeInTheDocument();
     });
 
-    it('puts the action row last, after the fields and the status line', () => {
+    it('puts the notice first, the fields next and the action row last', () => {
         const { container } = render(
             <FormPage status={<p>Problem</p>} actions={<button type="submit">Go</button>}>
                 <input aria-label="Amount" />
@@ -241,8 +241,8 @@ describe('<FormPage>', () => {
         const form = container.querySelector('form');
         const kids = [...form.children];
         expect(kids.at(-1)).toContainElement(screen.getByRole('button', { name: 'Go' }));
-        expect(kids.at(-2)).toHaveTextContent('Problem');
-        expect(kids.at(-3)).toContainElement(screen.getByLabelText('Amount'));
+        expect(kids.at(-2)).toContainElement(screen.getByLabelText('Amount'));
+        expect(kids.at(-3)).toHaveTextContent('Problem');
     });
 
     it('calls onSubmit when the form is submitted, and skips browser validation by default', () => {
