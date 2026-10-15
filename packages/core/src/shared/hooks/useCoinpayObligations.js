@@ -25,6 +25,7 @@ import {
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const DEFAULT_POLL_MS = 60_000;
 // Exported under its own name so the release profiler
@@ -158,6 +159,7 @@ function sortKey(expiration) {
  */
 export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
+    const identity = `${walletId || ''}::${accountId || ''}`;
     const { messaging } = useMessaging();
     const [obligations, setObligations] = useState(/** @type {PendingObligation[]} */ ([]));
     const [scanning, setScanning] = useState(false);
@@ -172,7 +174,6 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const refresh = useCallback(() => { runRef.current?.(true); }, []);
 
     useEffect(() => {
-        const identity = `${walletId || ''}::${accountId || ''}`;
         if (identityRef.current !== identity) {
             identityRef.current = identity;
             setObligations([]);
@@ -205,7 +206,12 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 .catch((scanError) => {
                     // Keep the previous rows on a failed sweep; a transient
                     // outage should not flicker the badge to zero.
-                    if (!cancelled) setError(scanError?.message || "Failed to scan for payments due.");
+                    if (!cancelled) {
+                        setError(submitFailureMessage(scanError, {
+                            verb: 'load payments due',
+                            fallback: "Couldn't load payments due. Check your connection and try again.",
+                        }));
+                    }
                 })
                 .finally(() => {
                     if (!cancelled) setScanning(false);
@@ -234,13 +240,21 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 document.removeEventListener('visibilitychange', onVisible);
             }
         };
-    }, [walletId, accountId, messaging, pollMs]);
+    }, [walletId, accountId, identity, messaging, pollMs]);
 
-    const payableCount = obligations.filter(
+    const visibleObligations = identityRef.current === identity ? obligations : [];
+    const visibleError = identityRef.current === identity ? error : null;
+    const payableCount = visibleObligations.filter(
         (o) => classifyObligation(o.expiration).state !== 'expired',
     ).length;
 
-    return { obligations, scanning, error, refresh, payableCount };
+    return {
+        obligations: visibleObligations,
+        scanning,
+        error: visibleError,
+        refresh,
+        payableCount,
+    };
 }
 
 // One state owner per tree.
