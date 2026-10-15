@@ -437,6 +437,7 @@ export const en = {
     'governance.empty.title': 'No polls yet',
     'governance.empty.body': 'Polls created on this chain appear here.',
     'governance.closesAtBlock': 'Closes at block {block}',
+    'betCreate.costUnavailable': 'The cost estimate isn\'t available right now.',
 
     // --- wallet import -------------------------------------------
     'importWallet.lane': 'Wallet import options',
