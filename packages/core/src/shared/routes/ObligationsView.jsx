@@ -120,7 +120,8 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
             onBack={onBack}
             title="Payments due"
             // Icon only: the header's trailing slot draws every button as a
-            // 38px circle, and the word "Refresh" ran off the screen edge.
+            // small square icon control, and the word "Refresh" ran off the
+            // screen edge.
             trailing={(
                 <Button
                     variant="secondary"

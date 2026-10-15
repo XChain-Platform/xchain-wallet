@@ -177,9 +177,10 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
             title="My lists"
-            // Only the round + belongs in the header: PageHeader styles every
-            // trailing button as a 38px circle, and the two text actions
-            // squeezed into circles spilled across the title at phone width.
+            // Only the + belongs in the header: PageHeader styles every
+            // trailing button as a small square icon control, and the two text
+            // actions squeezed into those boxes spilled across the title at
+            // phone width.
             // They live in the body's action row instead.
             trailing={onCreateList ? (
                 <>

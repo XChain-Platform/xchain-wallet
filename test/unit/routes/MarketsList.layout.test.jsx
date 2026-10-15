@@ -140,6 +140,8 @@ describe('MarketsList narrow layout', () => {
         const css = readFileSync('packages/core/src/shared/routes/MarketsList.module.css', 'utf8');
         expect(css).toMatch(/\.pairChip\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
         expect(css).toMatch(/\.pairTick\s*\{[^}]*text-overflow:\s*ellipsis/s);
+        // The depth pill stays on one line however long the pair name is.
+        expect(screen.getByText('depth 3')).toHaveStyle({ whiteSpace: 'nowrap' });
     });
 
     it('matches market-row height and marks the results region busy on first load', () => {
