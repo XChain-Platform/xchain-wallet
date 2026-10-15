@@ -433,6 +433,7 @@ select.picker {
     border: 0;
     background: transparent;
     cursor: pointer;
+    justify-content: flex-start;
 }
 
 .validationLink:focus-visible {
@@ -458,7 +459,10 @@ select.picker {
 
 .validationMeta {
     margin-top: calc(var(--xc-space-1) / 2);
-    color: var(--xc-text-muted);
+    /* The diagnostics sit inside a toned message box, so the line and column inherit its readable text colour. */
+    color: inherit;
+    opacity: 0.85;
+    margin-inline-start: var(--xc-space-2);
     font-size: var(--xc-text-xs);
 }
 

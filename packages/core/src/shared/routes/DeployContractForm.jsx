@@ -551,40 +551,48 @@ export function DeployContractForm({ walletId, onBack }) {
         );
     }
 
+    // The list of diagnostics alone, so the failing summary and its errors can
+    // share one error box instead of stacking two.
+    function renderDiagnosticList(entries, kind) {
+        return (
+            <ul aria-label={`Validation ${kind}s`}>
+                {entries.map((entry, index) => {
+                    const meta = [
+                        entry.line ? `Line ${entry.line}` : null,
+                        entry.column !== null ? `Column ${entry.column}` : null,
+                        entry.identifier ? `${entry.identifierLabel} ${entry.identifier}` : null,
+                    ].filter(Boolean).join(', ');
+                    const content = (
+                        <>
+                            <span className={styles.validationMessage}>{entry.message}</span>
+                            {meta ? <span className={styles.validationMeta}>{meta}</span> : null}
+                        </>
+                    );
+                    return (
+                        <li key={`${entry.message}-${index}`} className={styles.validationItem}>
+                            {entry.line ? (
+                                <Button
+                                    type="button"
+                                    className={styles.validationLink}
+                                    onClick={() => moveToCodeLine(entry.line)}
+                                >
+                                    {content}
+                                </Button>
+                            ) : (
+                                <div className={styles.validationText}>{content}</div>
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
+        );
+    }
+
     function renderDiagnostics(entries, kind) {
         if (entries.length === 0) return null;
         return (
             <StatusMessage variant={kind === 'error' ? 'error' : 'warning'} role={null}>
-                <ul aria-label={`Validation ${kind}s`}>
-                    {entries.map((entry, index) => {
-                        const meta = [
-                            entry.line ? `Line ${entry.line}` : null,
-                            entry.column !== null ? `Column ${entry.column}` : null,
-                            entry.identifier ? `${entry.identifierLabel} ${entry.identifier}` : null,
-                        ].filter(Boolean).join(', ');
-                        const content = (
-                            <>
-                                <span className={styles.validationMessage}>{entry.message}</span>
-                                {meta ? <span className={styles.validationMeta}>{meta}</span> : null}
-                            </>
-                        );
-                        return (
-                            <li key={`${entry.message}-${index}`} className={styles.validationItem}>
-                                {entry.line ? (
-                                    <Button
-                                        type="button"
-                                        className={styles.validationLink}
-                                        onClick={() => moveToCodeLine(entry.line)}
-                                    >
-                                        {content}
-                                    </Button>
-                                ) : (
-                                    <div className={styles.validationText}>{content}</div>
-                                )}
-                            </li>
-                        );
-                    })}
-                </ul>
+                {renderDiagnosticList(entries, kind)}
             </StatusMessage>
         );
     }
@@ -1445,9 +1453,12 @@ export function DeployContractForm({ walletId, onBack }) {
                     {validation.ok ? (
                         <p className={styles.summary}>{renderValidationSummary(validation)}</p>
                     ) : (
-                        <StatusMessage variant="error" role={null}>{renderValidationSummary(validation)}</StatusMessage>
+                        <StatusMessage variant="error" role={null}>
+                            <p>{renderValidationSummary(validation)}</p>
+                            {validation.errors.length > 0 ? renderDiagnosticList(validation.errors, 'error') : null}
+                        </StatusMessage>
                     )}
-                    {renderDiagnostics(validation.errors, 'error')}
+                    {validation.ok ? renderDiagnostics(validation.errors, 'error') : null}
                     {renderDiagnostics(validation.warnings, 'warning')}
                 </div>
             ) : null}
