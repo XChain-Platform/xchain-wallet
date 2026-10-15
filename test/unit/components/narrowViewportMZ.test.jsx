@@ -157,8 +157,11 @@ describe('shared M to Z components at a 320px viewport', () => {
 
         const source = css('ToastHost');
         expect(source).toMatch(/\.toast\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
-        expect(source).toMatch(/@media \(max-width:\s*360px\)[\s\S]*\.toast\s*\{[^}]*flex-wrap:\s*wrap/s);
-        expect(source).toMatch(/@media \(max-width:\s*360px\)[\s\S]*\.controls\s*\{[^}]*flex:\s*1 1 100%/s);
+        // One row at every width: the message column shrinks and wraps its
+        // own text, and the controls never become a full-width strip that
+        // sits over (and once swallowed taps on) the controls beneath.
+        expect(source).not.toMatch(/@media \(max-width:\s*360px\)/);
+        expect(source).toMatch(/\.message\s*\{[^}]*min-width:\s*0[^}]*word-break:\s*break-word/s);
         expect(source).toMatch(/\.actionBtn\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     });
 

@@ -43,7 +43,6 @@
         "packages/core/src/shared/components/TokenField.module.css | .control": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/TotalBalanceHero.module.css | .actionMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/TotalBalanceHero.module.css | .hero": "The accent-filled balance hero banner at the top of the screen, not a card.",
-        "packages/core/src/shared/components/UndoSendToast.module.css | .toast": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/keyboard/ShortcutHelp.module.css | .kbd": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/keyboard/ShortcutHelp.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/AddressList.module.css | .addBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
@@ -203,10 +202,6 @@
         "packages/core/src/ui/AnimatedQrFrames.jsx": {
             "count": 1,
             "reason": "Frame stepper buttons."
-        },
-        "packages/core/src/ui/FormErrorSummary.jsx": {
-            "count": 1,
-            "reason": "The error summary notice."
         },
         "packages/desktop/renderer/DesktopUpdateBanner.jsx": {
             "count": 1,
