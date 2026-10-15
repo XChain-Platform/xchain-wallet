@@ -17,6 +17,7 @@
 // reads on every shell, so a privacy control here always governs something.
 
 import { useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
 import {
@@ -25,6 +26,7 @@ import {
     FORM_DRAFT_TTL_24H,
     FORM_DRAFT_TTL_7D,
     FORM_DRAFT_TTL_DEFAULT,
+    FORM_DRAFT_TTL_OPTIONS,
     CLIPBOARD_AUTO_CLEAR_DEFAULT,
     CLIPBOARD_AUTO_CLEAR_MAX,
     CLIPBOARD_AUTO_CLEAR_MIN,
@@ -42,6 +44,19 @@ import {
 } from './_settingsPrimitives.jsx';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
+const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
+    torRouting: false,
+    changeAddressRotation: false,
+    blurOnBlur: false,
+    labelsSurviveRestore: false,
+    hapticsEnabled: true,
+    priceDataEnabled: true,
+    metadataFetchEnabled: true,
+    alwaysRequireHwExplicitConfirm: false,
+    clipboardAutoClearSeconds: CLIPBOARD_AUTO_CLEAR_DEFAULT,
+    formDraftTtlMs: FORM_DRAFT_TTL_DEFAULT,
+});
+
 export function PrivacySection() {
     const { settings, loading, error, update } = useSettings();
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
@@ -58,6 +73,17 @@ export function PrivacySection() {
             setSaveError(field);
             // eslint-disable-next-line no-console
             console.error(`privacy.${field} update failed:`, err);
+        }
+    };
+
+    const resetPrivacy = async () => {
+        setSaveError(null);
+        try {
+            await update({ privacy: PRIVACY_CONTROL_DEFAULTS });
+        } catch (err) {
+            setSaveError('reset');
+            // eslint-disable-next-line no-console
+            console.error('privacy settings reset failed:', err);
         }
     };
 
@@ -138,6 +164,16 @@ export function PrivacySection() {
             <PrivacySaveError visible={saveError === 'alwaysRequireHwExplicitConfirm'} />
             <ClipboardAutoClearRow settings={settings} update={update} />
             <FormDraftTtlRow settings={settings} update={update} />
+            <div style={ROW}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={ROW_VALUE}>Reset privacy settings</span>
+                    <span style={ROW_HINT}>Restore the privacy controls above to their defaults.</span>
+                    <PrivacySaveError visible={saveError === 'reset'} />
+                </div>
+                <Button size="sm" variant="secondary" icon={null} onClick={resetPrivacy}>
+                    Reset to defaults
+                </Button>
+            </div>
         </div>
     );
 }
@@ -152,13 +188,20 @@ function PrivacySaveError({ visible }) {
 
 function ClipboardAutoClearRow({ settings, update }) {
     const [saveError, setSaveError] = useState(false);
+    const [inputError, setInputError] = useState(/** @type {string | null} */ (null));
     const stored = settings?.privacy?.clipboardAutoClearSeconds;
     const current = Number.isInteger(stored) ? stored : CLIPBOARD_AUTO_CLEAR_DEFAULT;
     const onChange = async (event) => {
-        const next = Number(event.target.value);
-        if (!Number.isInteger(next)
+        const raw = event.target.value.trim();
+        const next = Number(raw);
+        if (raw === ''
+            || !Number.isInteger(next)
             || next < CLIPBOARD_AUTO_CLEAR_MIN
-            || next > CLIPBOARD_AUTO_CLEAR_MAX) return;
+            || next > CLIPBOARD_AUTO_CLEAR_MAX) {
+            setInputError(`Enter a whole number from ${CLIPBOARD_AUTO_CLEAR_MIN} to ${CLIPBOARD_AUTO_CLEAR_MAX}.`);
+            return;
+        }
+        setInputError(null);
         setSaveError(null);
         try {
             await update({ privacy: { clipboardAutoClearSeconds: next } });
@@ -192,6 +235,11 @@ function ClipboardAutoClearRow({ settings, update }) {
                 aria-label="Clipboard auto-clear seconds"
                 style={{ ...INPUT, width: '6rem' }}
             />
+            {inputError ? (
+                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
+                    {inputError}
+                </span>
+            ) : null}
             <PrivacySaveError visible={saveError} />
         </div>
     );
@@ -204,7 +252,9 @@ function FormDraftTtlRow({ settings, update }) {
         ? Number(settings.privacy.formDraftTtlMs)
         : FORM_DRAFT_TTL_DEFAULT;
     const onChange = async (e) => {
-        const next = Number(e.target.value);
+        const raw = e.target.value.trim();
+        const next = Number(raw);
+        if (raw === '' || !FORM_DRAFT_TTL_OPTIONS.includes(next)) return;
         setSaveError(null);
         try {
             await update({ privacy: { formDraftTtlMs: next } });
