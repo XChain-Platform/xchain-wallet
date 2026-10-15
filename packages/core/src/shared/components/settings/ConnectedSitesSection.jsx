@@ -27,7 +27,6 @@ import {
     Button,
     EmptyState,
     FormErrorSummary,
-    FormPage,
     FormSection,
     Input,
 } from '@xchain-wallet/core/ui';
@@ -36,7 +35,8 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import cardStyles from '../../../ui/Card.module.css';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
     SIGN_THROTTLE_BURST_MIN,
@@ -51,6 +51,11 @@ import {
 import local from './ConnectedSitesSection.module.css';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { t } from '../../../i18n/index.js';
+
+// Each part of the page is one shared card, like the rows on every other Settings page.
+function SettingsCard({ children }) {
+    return <div className={cardStyles.card}>{children}</div>;
+}
 
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
@@ -192,7 +197,8 @@ export function ConnectedSitesSection() {
     if (error) return <Status text={t('settings.connectedSites.connectedSitesUnavailable', { error })} tone="error" />;
 
     return (
-        <FormPage as="div" sectioned fullWidth label={t('settings.connectedSites.connectedSitesAndDappPermissions')}>
+        <div role="group" aria-label={t('settings.connectedSites.connectedSitesAndDappPermissions')} style={STACK}>
+            <SettingsCard>
             <FormSection
                 title={t('settings.connectedSites.allowedSites')}
                 description={t('settings.page.reviewDappConnectionsAndControl')}
@@ -265,6 +271,7 @@ export function ConnectedSitesSection() {
                     })
                 )}
             </FormSection>
+            </SettingsCard>
             {blocklistWired ? (
                 <BlockedOriginsPanel
                     blocked={blocked}
@@ -287,7 +294,7 @@ export function ConnectedSitesSection() {
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
-        </FormPage>
+        </div>
     );
 }
 
@@ -341,6 +348,7 @@ function BlocklistAuditPanel({ confirm }) {
 
     if (entries === null) return null;
     return (
+        <SettingsCard>
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.siteBlockHistory')}
@@ -408,6 +416,7 @@ function BlocklistAuditPanel({ confirm }) {
             )}
             {error ? <Status text={error} tone="error" /> : null}
         </FormSection>
+        </SettingsCard>
     );
 }
 
@@ -493,6 +502,7 @@ function SignThrottlePanel() {
             : undefined;
     const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
+        <SettingsCard>
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.signRequestThrottle')}
@@ -560,11 +570,13 @@ function SignThrottlePanel() {
             </form>
             <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
         </FormSection>
+        </SettingsCard>
     );
 }
 
 function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock, pendingAction }) {
     return (
+        <SettingsCard>
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.blockedSites')}
@@ -631,6 +643,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     </Button>
                 </form>
         </FormSection>
+        </SettingsCard>
     );
 }
 
