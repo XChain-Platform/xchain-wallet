@@ -201,4 +201,44 @@ describe('Home honours the host active wallet', () => {
                 .toEqual(balance('litecoin-mainnet', 'ltc1qfresh', 'LTC', '300000000'));
         });
     });
+
+    it.each([
+        ['bitcoin-mainnet', true],
+        ['bitcoin-testnet', false],
+    ])('offers an unfinished %s confirm on mainnet Home: %s', async (chainId, offered) => {
+        const address = 'bc1qresumeresumeresumeresumeresumeresume0';
+        const session = {
+            id: `resume-${chainId}`,
+            createdAt: Date.now() - 1000,
+            request: { walletId: WALLET_A.id, chainId },
+            composed: { chainId, psbt: 'cHNidP8=', actionString: 'SEND|BTC|1' },
+            dispatch: {
+                software: 'sendToken',
+                label: 'Send BTC',
+                base: { walletId: WALLET_A.id, chainId, from: { address } },
+            },
+        };
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET_A]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+            listConfirmSessions: vi.fn().mockResolvedValue({ sessions: [session] }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Home activeWalletId={WALLET_A.id} onResumeConfirm={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(messaging.listConfirmSessions).toHaveBeenCalled());
+        if (offered) {
+            expect(await screen.findByRole('group', { name: 'Unfinished transactions' })).toBeTruthy();
+        } else {
+            await act(async () => {});
+            expect(screen.queryByRole('group', { name: 'Unfinished transactions' })).toBeNull();
+        }
+    });
 });

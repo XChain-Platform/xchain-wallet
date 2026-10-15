@@ -10,6 +10,7 @@
 
 import {
     createContext,
+    Fragment,
     useCallback,
     useContext,
     useLayoutEffect,
@@ -42,6 +43,25 @@ export function ScrollRestoration({ routeKey, children }) {
         <ScrollRestorationContext.Provider value={value}>
             {children}
         </ScrollRestorationContext.Provider>
+    );
+}
+
+/**
+ * Isolates route state and saved scroll offsets to the active wallet, so a
+ * wallet switch never restores another wallet's offsets or keeps its route
+ * state mounted.
+ *
+ * @param {object} props
+ * @param {string | null | undefined} props.walletId
+ * @param {string} props.routeKey
+ * @param {import('react').ReactNode} props.children
+ */
+export function WalletRouteScope({ walletId, routeKey, children }) {
+    const walletKey = walletId || 'none';
+    return (
+        <ScrollRestoration routeKey={`${walletKey}:${routeKey}`}>
+            <Fragment key={walletKey}>{children}</Fragment>
+        </ScrollRestoration>
     );
 }
 

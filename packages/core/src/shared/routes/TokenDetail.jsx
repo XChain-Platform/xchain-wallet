@@ -88,6 +88,8 @@ function callAsync(callback) {
  * @param {number} [props.divisibility]
  * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
  * @param {string | null} [props.fiatRateSource]     rate source, including `market` for DEX-derived prices
+ * @param {boolean} [props.fiatRateStale]           true when the rate is a kept observation after a failed refresh
+ * @param {string | null} [props.fiatRateFetchedAt]  ISO time the rate was observed
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
@@ -114,6 +116,8 @@ function TokenDetailContent({
     divisibility = null,
     fiatRate = null,
     fiatRateSource = null,
+    fiatRateStale = false,
+    fiatRateFetchedAt = null,
     quantity: suppliedQuantity,
     imageUrl: rowImageUrl = null,
     onBack,
@@ -124,10 +128,10 @@ function TokenDetailContent({
     onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
-    const { settings, error: settingsError } = useSettings();
+    const { settings, loading: settingsLoading, error: settingsError } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const walletModeReady = settings !== null;
-    const isWatcherMode = settings?.walletMode === 'watcher';
+    // A failed settings read still opens the screen in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
     const isDemo = isDemoWallet(walletId);
     const browserOnline = useOnlineStatus();
     const { overall: reachabilityOverall } = useReachability({ chainIds: isDemo ? [] : undefined });
@@ -166,6 +170,11 @@ function TokenDetailContent({
     // A fiat value itself needs a mainnet holding, whatever the settings say.
     const fiatAllowed = isDemo || descriptor?.networkKind === 'mainnet';
     const displayFiatRate = fiatSupported && fiatAllowed ? fiatRate : null;
+    // A kept rate from before a failed refresh says how old it is, so it
+    // never reads as a current price.
+    const staleFiatRateAsOf = fiatRateStale === true && displayFiatRate != null
+        ? Date.parse(fiatRateFetchedAt || '')
+        : NaN;
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
@@ -573,6 +582,12 @@ function TokenDetailContent({
                                         {hasDexPrice ? ' · DEX price' : ''}
                                     </AutoShrinkText>
                                 </span>
+                                {Number.isFinite(staleFiatRateAsOf) ? (
+                                    <StalenessLabel
+                                        lastSyncedAt={staleFiatRateAsOf}
+                                        className={styles.balanceHeroStaleness}
+                                    />
+                                ) : null}
                             </div>
                         ) : null}
                     </div>
@@ -674,7 +689,7 @@ function TokenDetailContent({
                     disappear, while temporary blocks stay visible with the
                     reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
+                    {typeof onSend === 'function' && walletModeReady ? (
                         <ListRow
                             onClick={onSend}
                             disabled={Boolean(sendDisabledReason)}

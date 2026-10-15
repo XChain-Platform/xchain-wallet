@@ -23,7 +23,7 @@
 //     `action.send.psbt`.
 //   - All three messaging shims expose `buildSendPsbtRequest` calling
 //     `action.send.psbt`.
-//   - Send.jsx reads walletMode via the shared useWalletMode hook,
+//   - Send.jsx waits for settings and reads walletMode from that snapshot,
 //     branches the submit handler to `messaging.buildSendPsbtRequest`,
 //     swaps the password / HW block for an explanatory hint at review,
 //     and renders the shared `<WatcherResultPanel>` in the done stage
@@ -126,25 +126,24 @@ for (const [name, src] of [
 
 // ─── 5. Send.jsx watcher branch ---------------------------------
 
-// §20 Cluster X Step 2: walletMode derivation lifted to a shared hook
-// (`useWalletMode`). §20 Cluster X Step 3: WatcherResultPanel extracted
-// to `shared/components/WatcherResultPanel.jsx`.
-assert.match(
-    sendSrc,
-    /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/,
-    'Send.jsx imports useWalletMode hook',
-);
+// Send reads readiness and mode from one settings snapshot so the signing
+// form cannot render while a watcher setting is still loading. §20 Cluster X
+// Step 3: WatcherResultPanel extracted to
+// `shared/components/WatcherResultPanel.jsx`.
 assert.match(
     sendSrc,
     /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/,
     'Send.jsx imports the shared WatcherResultPanel',
 );
-// a later change added `isSignerMode` to the same destructure (signer mode refuses
-// the route outright), so this pins the binding rather than the whole line.
 assert.match(
     sendSrc,
-    /const \{ isWatcherMode[^}]*\} = useWalletMode\(\);/,
-    'derives isWatcherMode via the shared hook',
+    /const walletModeReady = settings !== null \|\| !settingsLoading;\s*const isWatcherMode = settings\?\.walletMode === 'watcher';/,
+    'waits for and derives watcher mode from the same settings snapshot',
+);
+assert.match(
+    sendSrc,
+    /if \(!walletModeReady\) \{\s*return wrap\(<p className=\{styles\.hint\}>\{t\('common\.loading'\)\}<\/p>\);\s*\}/,
+    'does not render a signing-capable route before wallet mode is known',
 );
 assert.match(
     sendSrc,
