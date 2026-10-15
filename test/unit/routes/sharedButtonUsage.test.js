@@ -347,6 +347,40 @@ describe('trade form style guide primitives', () => {
         }
     });
 
+    it('draws Swap\'s ownership and expiration choices with the kit controls Create order uses', () => {
+        const source = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/SwapForm.jsx'), 'utf8');
+
+        expect(source.match(/<input\b[^>]*>/g) || []).toEqual([]);
+        expect(source).toMatch(/<RadioGroup\s+legend="Expiration"/);
+        expect((source.match(/<Checkbox\b/g) || []).length).toBe(2);
+    });
+
+    it.each([
+        'packages/core/src/shared/routes/CreateOrderForm.jsx',
+        'packages/core/src/shared/routes/DispenserForm.jsx',
+        'packages/core/src/shared/routes/SwapForm.jsx',
+    ])('%s draws its advanced-options toggle as the one left-aligned link with a chevron', (file) => {
+        const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+        const toggle = source.match(/<Button\b(?:(?!<\/Button>)[\s\S])*?Advanced options[\s\S]*?<\/Button>/)?.[0] || '';
+
+        expect(toggle).toMatch(/variant="link"/);
+        expect(toggle).toMatch(/className=\{styles\.advancedToggle\}/);
+        expect(toggle).toMatch(/aria-expanded=\{showAdvanced\}/);
+        expect(toggle).toMatch(/Icon\.ChevronDownIcon/);
+        expect(toggle).not.toMatch(/[▸▾]/);
+    });
+
+    it.each([
+        'packages/core/src/shared/routes/CreateOrderForm.jsx',
+        'packages/core/src/shared/routes/DispenserForm.jsx',
+        'packages/core/src/shared/routes/SwapForm.jsx',
+    ])('%s groups its allow-list and block-list buttons under one field-style label', (file) => {
+        const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+
+        expect(source).toMatch(/<p className=\{styles\.choiceGroupLabel\}>Restrict who can (?:buy|match) \(optional\)<\/p>\s*<div className=\{styles\.choiceButtons\}>/);
+        expect(source).not.toMatch(/Restrict who can (?:buy|match) \(optional\)<\/p>\s*<div className=\{styles\.actions\}>/);
+    });
+
     it('uses kit choice controls throughout the shared order panels', () => {
         const componentControls = {
             DerivationPathCrossCheck: ['Checkbox'],

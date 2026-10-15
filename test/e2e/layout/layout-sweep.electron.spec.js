@@ -25,6 +25,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, _electron as electron } from '@playwright/test';
 import { createSweep } from './sweep.js';
+import { launchGuardedElectron } from '../fixtures/electron.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -50,7 +51,7 @@ for (const [width, height] of SIZES) {
         const venue = `macos-desktop-${width}x${height}`;
         const userDataDir = mkdtempSync(join(tmpdir(), 'xc-layout-sweep-'));
         const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
-        const app = await electron.launch({
+        const app = await launchGuardedElectron(electron, {
             executablePath: requireFromDesktop('electron'),
             args: ['.', `--user-data-dir=${userDataDir}`],
             cwd: desktopDir,
