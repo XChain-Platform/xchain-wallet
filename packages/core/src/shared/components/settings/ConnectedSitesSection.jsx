@@ -356,6 +356,7 @@ function BlocklistAuditPanel({ confirm }) {
             {entries.length === 0 ? (
                 <EmptyState
                     title={t('settings.connectedSites.noSiteBlockHistory')}
+                    body={t('settings.connectedSites.sitesYouBlockOrUnblock')}
                     titleAs="p"
                 />
             ) : (
@@ -575,6 +576,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                 {blocked.length === 0 ? (
                     <EmptyState
                         title={t('settings.connectedSites.noBlockedSites')}
+                        body={t('settings.connectedSites.sitesYouBlockAppearHere')}
                         titleAs="p"
                     />
                 ) : (

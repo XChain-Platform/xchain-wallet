@@ -583,7 +583,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                     {t('settings.notifications.couldNotLoadPriceAlerts')}
                 </StatusMessage>
             ) : alerts.length === 0 ? (
-                <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" />
+                <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>

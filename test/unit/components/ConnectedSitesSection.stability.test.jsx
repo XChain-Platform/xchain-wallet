@@ -109,7 +109,6 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getByRole('heading', { name: 'Blocked sites' }).closest('section')).toHaveTextContent(
             'Use *.example.com with example.com.',
         );
-        expect(screen.queryByText('Sites you block appear here.')).toBeNull();
         expect(screen.queryByText(/Blocked sites cannot connect/)).toBeNull();
     });
 
