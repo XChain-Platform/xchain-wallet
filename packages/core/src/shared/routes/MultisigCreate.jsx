@@ -141,6 +141,10 @@ export function MultisigCreate({ walletId, onBack }) {
 
     const [scheme, setScheme] = useState(/** @type {'p2sh-multisig' | 'p2wsh-multisig' | 'taproot-musig2'} */ ('p2wsh-multisig'));
     const [threshold, setThreshold] = useState('2');
+    // A fresh form is incomplete by definition; the live validation message
+    // only shows once the user has changed something, so the screen does not
+    // open on a red error.
+    const [edited, setEdited] = useState(false);
     const [rows, setRows] = useState(/** @type {CosignerRow[]} */ ([
         { id: newRowId(), origin: 'local', name: 'My signer', pubkey: '', fingerprint: '', derivationPath: '', xpub: '', localSignerId: null, addressId: null },
         { id: newRowId(), origin: 'external-xpub', name: 'Cosigner B', pubkey: '', fingerprint: '', derivationPath: '', xpub: '', localSignerId: null, addressId: null },
@@ -178,14 +182,17 @@ export function MultisigCreate({ walletId, onBack }) {
     }, [walletId, btcChainIds, messaging]);
 
     const updateRow = (rowId, patch) => {
+        setEdited(true);
         setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, ...patch } : r)));
     };
 
     const removeRow = (rowId) => {
+        setEdited(true);
         setRows((rs) => rs.filter((r) => r.id !== rowId));
     };
 
     const addRow = () => {
+        setEdited(true);
         setRows((rs) => [...rs, {
             id: newRowId(),
             origin: 'external-xpub',
@@ -458,9 +465,9 @@ export function MultisigCreate({ walletId, onBack }) {
             label="Create multisig"
             onSubmit={handleReview}
             sectioned
-            status={composeError || submitError ? (
+            status={(edited && composeError) || submitError ? (
                 <>
-                    {composeError ? (
+                    {edited && composeError ? (
                         <StatusMessage variant="error">{composeError}</StatusMessage>
                     ) : null}
                     {submitError ? (
@@ -492,7 +499,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <ChainPicker
                     label="Network"
                     value={chainId}
-                    onChange={setChainId}
+                    onChange={(value) => { setEdited(true); setChainId(value); }}
                     chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                     chainRegistry={chainRegistry}
                     hideNetworkKind
@@ -533,7 +540,7 @@ export function MultisigCreate({ walletId, onBack }) {
                     legend={<span className="sr-only">Scheme</span>}
                     name="scheme"
                     value={scheme}
-                    onChange={setScheme}
+                    onChange={(value) => { setEdited(true); setScheme(value); }}
                     options={SCHEMES.map((option) => ({
                         ...option,
                         label: <strong>{option.label}</strong>,
@@ -545,7 +552,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <Input
                     label={`Threshold (1..${rows.length})`}
                     value={threshold}
-                    onChange={(e) => setThreshold(e.target.value)}
+                    onChange={(e) => { setEdited(true); setThreshold(e.target.value); }}
                     inputMode="numeric"
                 />
 
