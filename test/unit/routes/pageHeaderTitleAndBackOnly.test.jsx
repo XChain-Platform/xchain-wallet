@@ -164,6 +164,23 @@ describe('My dispensers', () => {
 });
 
 describe('Messaging', () => {
+    it('keeps New conversation reachable above the unlock form', async () => {
+        const onCompose = vi.fn();
+        mount(MessagingInbox, {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd', role: 'receive' }],
+            }),
+            listContacts: vi.fn().mockResolvedValue([]),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        }, { activeAccountId: 'account-1', onCompose });
+        await screen.findByRole('button', { name: 'Unlock inbox' });
+        const compose = screen.getByRole('button', { name: 'New conversation' });
+        expect(actionsRow()).toContainElement(compose);
+        expect(headerActions('Messaging')).toEqual([]);
+        fireEvent.click(compose);
+        expect(onCompose).toHaveBeenCalledOnce();
+    });
+
     it('offers New message from the empty inbox and no New conversation beside it', async () => {
         mount(MessagingInbox, {
             getAddressesByChain: vi.fn().mockResolvedValue({

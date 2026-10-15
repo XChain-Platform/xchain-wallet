@@ -653,41 +653,46 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     }
 
     if (stage === 'password') {
+        // A message can be composed without unlocking the inbox (a wallet
+        // with no ready signer is told why on the compose form), so New
+        // conversation stays reachable above the unlock form.
         return wrap(
-            <FormPage
-                label="Unlock messaging inbox"
-                onSubmit={handleUnlock}
-                status={unlockError ? (
-                    <StatusMessage id="messaging-unlock-error" variant="error" className={styles.error}>
-                        {unlockError}
-                    </StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={password.length === 0}
-                    >
-                        Unlock inbox
-                    </Button>
-                )}
-            >
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Decrypts this account's messages."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (unlockError) setUnlockError(null);
-                    }}
-                    autoComplete="current-password"
-                    aria-invalid={unlockError ? true : undefined}
-                    aria-describedby={unlockError ? 'messaging-unlock-error' : undefined}
-                />
-            </FormPage>,
+            <ListPage actions={actionsFor()}>
+                <FormPage
+                    label="Unlock messaging inbox"
+                    onSubmit={handleUnlock}
+                    status={unlockError ? (
+                        <StatusMessage id="messaging-unlock-error" variant="error" className={styles.error}>
+                            {unlockError}
+                        </StatusMessage>
+                    ) : null}
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={password.length === 0}
+                        >
+                            Unlock inbox
+                        </Button>
+                    )}
+                >
+                    <Input
+                        ref={passwordRef}
+                        type="password"
+                        label="Password"
+                        hint="Decrypts this account's messages."
+                        value={password}
+                        onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (unlockError) setUnlockError(null);
+                        }}
+                        autoComplete="current-password"
+                        aria-invalid={unlockError ? true : undefined}
+                        aria-describedby={unlockError ? 'messaging-unlock-error' : undefined}
+                    />
+                </FormPage>
+            </ListPage>,
         );
     }
 
