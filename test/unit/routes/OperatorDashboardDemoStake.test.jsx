@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { OperatorDashboard } from '../../../packages/core/src/shared/routes/OperatorDashboard.jsx';
@@ -63,5 +63,52 @@ describe('OperatorDashboard demo wallet staking', () => {
         const { methods } = mount('wallet-1');
         await waitFor(() => expect(screen.getByText(/No active stake/)).toBeTruthy());
         expect(methods.getStakesForAddress).toHaveBeenCalled();
+    });
+
+    it('hides the previous wallet and network data as soon as the route identity changes', async () => {
+        const { messaging, methods } = makeMessaging();
+        methods.getStakesForAddress
+            .mockResolvedValueOnce([{ amount: '99', status: 'valid' }])
+            .mockImplementationOnce(() => new Promise(() => {}));
+        const renderDashboard = (walletId, chainId, address) => React.createElement(
+            MessagingProvider,
+            { shell: 'web', messaging },
+            React.createElement(OperatorDashboard, { walletId, chainId, address, onBack() {} }),
+        );
+        const view = render(renderDashboard('wallet-1', CHAIN, 'bcrt1qfirst'));
+        expect(await screen.findByText('Total amount staked: 99 XCP')).toBeTruthy();
+
+        view.rerender(renderDashboard('wallet-2', 'bitcoin-testnet', 'tb1qsecond'));
+
+        expect(screen.queryByText('Total amount staked: 99 XCP')).toBeNull();
+        expect(screen.getByText('Loading operator metrics…')).toBeTruthy();
+        await waitFor(() => expect(methods.getStakesForAddress).toHaveBeenLastCalledWith({
+            chainId: 'bitcoin-testnet', address: 'tb1qsecond',
+        }));
+    });
+
+    it('shows plain feed lookup errors instead of claiming the feed is empty', async () => {
+        const { messaging, methods } = makeMessaging();
+        methods.getAddressesByChain = vi.fn().mockResolvedValue({
+            [CHAIN]: [{ id: 'address-1', address: 'bcrt1qfeed', source: 'hd' }],
+        });
+        methods.getBroadcastsForAddress.mockImplementation(({ opts }) => (
+            opts
+                ? Promise.reject(new TypeError('Cannot read properties of undefined'))
+                : Promise.resolve({ data: [] })
+        ));
+        render(React.createElement(
+            MessagingProvider,
+            { shell: 'web', messaging },
+            React.createElement(OperatorDashboard, {
+                walletId: 'wallet-1', chainId: CHAIN, address: 'bcrt1qfeed', onBack() {},
+            }),
+        ));
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter publisher mode' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't load the latest feed. Try again.",
+        );
+        expect(screen.queryByText(/Cannot read properties/)).toBeNull();
     });
 });

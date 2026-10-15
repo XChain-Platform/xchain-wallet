@@ -26,10 +26,12 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import dashStyles from '../routes/ActionsMenu.module.css';
 import formStyles from '../routes/IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 const SECTION_STYLE = {
     margin: '0.75rem 0',
     paddingTop: '0.5rem',
@@ -46,19 +48,28 @@ const SECTION_STYLE = {
  *
  * @param {object} props
  */
-export function OperatorPublisherMode({ walletId, chainId, address, feed, messaging, variant }) {
+export function OperatorPublisherMode(props) {
+    const scopeKey = JSON.stringify([props.walletId, props.chainId, props.address]);
+    return <OperatorPublisherModeView key={scopeKey} {...props} />;
+}
+
+function OperatorPublisherModeView({
+    walletId, chainId, address, feed, feedLoading = false, feedError = null, messaging, variant,
+}) {
     const [open, setOpen] = useState(false);
     const [feedActionIndex, setFeedActionIndex] = useState('');
+    const feedActionIndexEdited = useRef(false);
     const feedActionIndexSeed = feed?.action_index ?? feed?.ACTION_INDEX ?? '';
     const feedSeedKey = JSON.stringify([walletId, chainId, address, feedActionIndexSeed]);
     const seededFeedRef = useRef(null);
     useEffect(() => {
         if (feedSeedKey === seededFeedRef.current) return;
         seededFeedRef.current = feedSeedKey;
-        setFeedActionIndex(String(feedActionIndexSeed));
+        if (!feedActionIndexEdited.current) setFeedActionIndex(String(feedActionIndexSeed));
     }, [feedActionIndexSeed, feedSeedKey]);
 
-    const fromAddress = usePublisherAddress({ messaging, walletId, chainId, address });
+    const source = usePublisherAddress({ messaging, walletId, chainId, address });
+    const fromAddress = source.address;
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor
         ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor.coin] || '')
@@ -66,7 +77,8 @@ export function OperatorPublisherMode({ walletId, chainId, address, feed, messag
     const signerReady = useSignerReady(walletId);
     const fee = usePublisherFee(chainId);
     const submission = usePublisherSubmission({
-        messaging, walletId, chainId, coinTicker, fromAddress, feedActionIndex, feePerKb: fee.feePerKb,
+        messaging, walletId, chainId, coinTicker, fromAddress, sourceError: source.error,
+        feedActionIndex, feePerKb: fee.feePerKb, feeValidationError: fee.validationError,
     });
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -97,9 +109,15 @@ export function OperatorPublisherMode({ walletId, chainId, address, feed, messag
             open={open}
             onToggle={() => setOpen((shown) => !shown)}
             feed={feed}
+            feedLoading={feedLoading}
+            feedError={feedError}
             feedActionIndex={feedActionIndex}
-            onFeedActionIndex={setFeedActionIndex}
-            fromAddress={fromAddress}
+            onFeedActionIndex={(value) => {
+                feedActionIndexEdited.current = true;
+                setFeedActionIndex(value);
+            }}
+            sourceLoading={source.loading}
+            sourceError={source.error}
             coinTicker={coinTicker}
             fee={fee}
             submission={submission}
@@ -108,17 +126,32 @@ export function OperatorPublisherMode({ walletId, chainId, address, feed, messag
 }
 
 function usePublisherAddress({ messaging, walletId, chainId, address }) {
-    const [fromAddress, setFromAddress] = useState(null);
+    const [state, setState] = useState({ loading: true, address: null, error: null });
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId).then((byChain) => {
+        setState({ loading: true, address: null, error: null });
+        Promise.resolve().then(() => messaging.getAddressesByChain(walletId)).then((byChain) => {
             if (cancelled) return;
             const match = (byChain?.[chainId] || []).find((item) => item.address === address);
-            if (match) setFromAddress(match);
-        }).catch(() => { /* the dashboard already showed the chain; ignore */ });
+            setState(match
+                ? { loading: false, address: match, error: null }
+                : {
+                    loading: false,
+                    address: null,
+                    error: 'This wallet does not contain the source address on this network.',
+                });
+        }).catch((err) => {
+            if (!cancelled) {
+                setState({
+                    loading: false,
+                    address: null,
+                    error: userFacingMessage(err, "Couldn't load the source address. Try again."),
+                });
+            }
+        });
         return () => { cancelled = true; };
     }, [walletId, chainId, address, messaging]);
-    return fromAddress;
+    return state;
 }
 
 function usePublisherFee(chainId) {
@@ -141,10 +174,18 @@ function usePublisherFee(chainId) {
     const feePerKb = (estimate?.unit && Number.isFinite(estimate.rateValue) && estimate.rateValue > 0)
         ? displayRateToSettingsCustom(estimate.unit, estimate.rateValue)
         : null;
-    return { pick, setPick, tiers, customEstimate, feePerKb };
+    const validationError = pick.mode !== 'custom' || feePerKb !== null
+        ? null
+        : Number(pick.customRate) > 0
+            ? 'Custom fee rate can have at most 8 decimal places.'
+            : 'Custom fee rate must be greater than zero.';
+    return { pick, setPick, tiers, customEstimate, feePerKb, validationError };
 }
 
-function usePublisherSubmission({ messaging, walletId, chainId, coinTicker, fromAddress, feedActionIndex, feePerKb }) {
+function usePublisherSubmission({
+    messaging, walletId, chainId, coinTicker, fromAddress, sourceError, feedActionIndex,
+    feePerKb, feeValidationError,
+}) {
     const [value, setValue] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -158,13 +199,20 @@ function usePublisherSubmission({ messaging, walletId, chainId, coinTicker, from
     async function submit(event) {
         event.preventDefault();
         if (submitting || ownerLane.composing) return;
-        if (!fromAddress) { setError('Source address not loaded yet.'); return; }
-        if (!feedActionIndex.trim()) { setError('Feed reference number is required.'); return; }
-        if (!value.trim()) { setError('Value is required.'); return; }
+        if (!fromAddress) { setError(sourceError || 'Source address is still loading.'); return; }
+        const cleanFeedActionIndex = feedActionIndex.trim();
+        const cleanValue = value.trim();
+        if (!cleanFeedActionIndex) { setError('Feed reference number is required.'); return; }
+        if (!/^[1-9][0-9]*$/.test(cleanFeedActionIndex)) {
+            setError('Feed reference number must be a positive whole number.'); return;
+        }
+        if (!cleanValue) { setError('Value is required.'); return; }
+        if (!DECIMAL_NUMBER.test(cleanValue)) { setError('Value must be a number.'); return; }
+        if (feeValidationError) { setError(feeValidationError); return; }
         setSubmitting(true);
         setError(null);
         const params = {
-            VERSION: '3', BROADCAST_ACTION_INDEX: feedActionIndex.trim(), VALUE: value.trim(),
+            VERSION: '3', BROADCAST_ACTION_INDEX: cleanFeedActionIndex, VALUE: cleanValue,
         };
         try {
             const next = await ownerLane.run({
@@ -206,7 +254,10 @@ function publisherResultPanel(result, clearResult) {
     return null;
 }
 
-function PublisherForm({ open, onToggle, feed, feedActionIndex, onFeedActionIndex, fromAddress, coinTicker, fee, submission }) {
+function PublisherForm({
+    open, onToggle, feed, feedLoading, feedError, feedActionIndex, onFeedActionIndex,
+    sourceLoading, sourceError, coinTicker, fee, submission,
+}) {
     const lastTxid = submission.result?.txid
         || submission.result?.broadcast?.txid
         || submission.result?.tx_hash
@@ -233,9 +284,12 @@ function PublisherForm({ open, onToggle, feed, feedActionIndex, onFeedActionInde
                 <form onSubmit={submission.submit} noValidate>
                     <PublisherFields
                         feed={feed}
+                        feedLoading={feedLoading}
+                        feedError={feedError}
                         feedActionIndex={feedActionIndex}
                         onFeedActionIndex={onFeedActionIndex}
-                        fromAddress={fromAddress}
+                        sourceLoading={sourceLoading}
+                        sourceError={sourceError}
                         value={submission.value}
                         onValue={submission.setValue}
                     />
@@ -246,14 +300,19 @@ function PublisherForm({ open, onToggle, feed, feedActionIndex, onFeedActionInde
     );
 }
 
-function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress, value, onValue }) {
+function PublisherFields({
+    feed, feedLoading, feedError, feedActionIndex, onFeedActionIndex,
+    sourceLoading, sourceError, value, onValue,
+}) {
     return (
         <>
             <Input
                 label="Feed reference number"
-                hint={feed
-                    ? 'Pre-filled from the most recent feed you created. Override it to publish to a different feed.'
-                    : 'No feed found for this address. Enter its reference number, or create a feed first.'}
+                hint={feedLoading
+                    ? 'Loading the most recent feed for this address.'
+                    : feed
+                        ? 'Pre-filled from the most recent feed you created. Override it to publish to a different feed.'
+                        : 'No feed found for this address. Enter its reference number, or create a feed first.'}
                 value={feedActionIndex}
                 onChange={(event) => onFeedActionIndex(event.target.value)}
                 inputMode="numeric"
@@ -269,7 +328,13 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
                 inputMode="decimal"
                 autoComplete="off"
             />
-            {!fromAddress ? <p className={dashStyles.entryDescription}>Loading source address…</p> : null}
+            {feedError ? (
+                <StatusMessage variant="error" className={formStyles.error}>{feedError}</StatusMessage>
+            ) : null}
+            {sourceLoading ? <p className={dashStyles.entryDescription}>Loading source address…</p> : null}
+            {!sourceLoading && sourceError ? (
+                <StatusMessage variant="error" className={formStyles.error}>{sourceError}</StatusMessage>
+            ) : null}
         </>
     );
 }
