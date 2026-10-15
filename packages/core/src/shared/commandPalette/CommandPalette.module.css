@@ -101,7 +101,7 @@
 }
 
 /* The search box is a form field like any other, so it carries the shared
-   field border, radius and height. */
+   field border, radius, height and focus ring. */
 .input {
     flex: 1 1 auto;
     box-sizing: border-box;
@@ -122,7 +122,9 @@
 }
 
 .input:focus {
+    outline: none;
     border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
 .input::placeholder { color: var(--xc-text-muted); }
