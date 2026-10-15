@@ -25,10 +25,10 @@
 }
 
 /* A read-only address is a field like the others: the shared Input draws its
-   border and height, this only picks the mono face and the muted notice look. */
+   border, height and type size, this only picks the mono face and the muted
+   notice look. */
 .address {
     font-family: var(--xc-font-mono, monospace);
-    font-size: var(--xc-text-xs);
 }
 
 .unavailable {
