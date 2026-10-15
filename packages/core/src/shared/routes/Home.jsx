@@ -238,6 +238,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const activeNetwork = settings.loading
         ? null
         : (settings.settings?.activeNetwork || 'mainnet');
+    // Signing prompts wait for the wallet mode, so a watch-only wallet never
+    // flashes a card it cannot act on.
+    const walletModeReady = !settings.loading && settings.settings !== null;
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';
@@ -1381,7 +1384,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     of the pancake menu instead so the main view stays
                     focused on balances + work, not status banners. */}
 
-                {onResumeConfirm ? (
+                {walletModeReady && onResumeConfirm && !isWatcherMode ? (
                     <ResumeConfirmCard
                         sessions={confirmSessions}
                         className={styles.pendingAirdropCard}
@@ -1393,7 +1396,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     />
                 ) : null}
 
-                {pendingAirdrops.length > 0 && onResumeAirdrop ? (
+                {walletModeReady && !isWatcherMode && pendingAirdrops.length > 0 && onResumeAirdrop ? (
                     <div role="group" aria-label={t('home.pendingAirdrops')}>
                         {pendingAirdrops.map((rec) => (
                             <Button
@@ -1422,7 +1425,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     </div>
                 ) : null}
 
-                {pendingCoinpays.length > 0 && onResumeCoinpay ? (
+                {walletModeReady && pendingCoinpays.length > 0 && onResumeCoinpay ? (
                     <div role="group" aria-label={t('home.pendingPayments')}>
                         {pendingCoinpays.map((rec) => {
                             // rec.coinAmount is the explorer's own decimal coin
@@ -1451,7 +1454,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                             })}{ticker ? ` (${ticker})` : ''}
                                         </span>
                                         <span className={styles.pendingAirdropHint}>
-                                            {t('home.paymentDue.hint')}
+                                            {isWatcherMode
+                                                ? t('home.paymentDue.watcherHint')
+                                                : t('home.paymentDue.hint')}
                                         </span>
                                     </span>
                                 </Button>
@@ -1466,7 +1471,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                   * they tap Send. A duress-armed freeze renders nothing (the
                   * component owns that policy) so an observer sees no cue.
                   */}
-                <PanicFreezeNotice surface="home" />
+                {walletModeReady && !isWatcherMode ? <PanicFreezeNotice surface="home" /> : null}
                 {balances ? (
                     <HomeTabs
                         chainRegistry={chainRegistry}

@@ -677,7 +677,7 @@ function TokenDetailContent({
                     disappear, while temporary blocks stay visible with the
                     reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
+                    {typeof onSend === 'function' && walletModeReady ? (
                         <ListRow
                             onClick={onSend}
                             disabled={Boolean(sendDisabledReason)}

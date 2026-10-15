@@ -2386,6 +2386,10 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
     const { settings } = useSettings();
+    // Speed up and Cancel sign a replacement, which a watch-only wallet
+    // cannot do, so they wait for the wallet mode.
+    const walletModeReady = settings !== null;
+    const isWatcherMode = settings?.walletMode === 'watcher';
     const [balancesHidden] = useBalancesHidden();
     const rbfConfirm = useConfirmModal();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
@@ -2593,7 +2597,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     // an allowlisted action), so the offer has to be withdrawn here.
     // Replacing a replacement bumps the fee on a transaction the network
     // has already dropped, spends a fee, and moves nothing.
-    if (isReplaceCallAvailable(messaging) && replaceable.ok && !entry.pending?.replaced) {
+    if (walletModeReady && !isWatcherMode && isReplaceCallAvailable(messaging) && replaceable.ok && !entry.pending?.replaced) {
         moreOptions.push({
             id: 'rbf-speedup',
             label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
