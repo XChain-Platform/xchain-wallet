@@ -100,18 +100,29 @@
     flex: 0 0 auto;
 }
 
+/* The search box is a form field like any other, so it carries the shared
+   field border, radius and height. */
 .input {
     flex: 1 1 auto;
-    border: none;
+    box-sizing: border-box;
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius, 8px);
     outline: none;
-    background: transparent;
+    background: var(--xc-surface);
     color: var(--xc-text);
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
+    padding-inline: var(--xc-control-pad-x-md, 12px);
     /* The palette's only text entry meets the pointer-target floor because
        it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);
+    height: var(--xc-control-h-md);
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+.input:focus {
+    border-color: var(--xc-accent-primary);
 }
 
 .input::placeholder { color: var(--xc-text-muted); }
