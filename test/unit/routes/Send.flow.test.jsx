@@ -616,7 +616,7 @@ describe('Send flow with mocked messaging', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open address book' }));
 
         expect(await screen.findByText(
-            'Couldn't refresh contacts. Saved addresses may be out of date.',
+            "Couldn't refresh contacts. Saved addresses may be out of date.",
         )).toBeInTheDocument();
         expect(await screen.findByText('No contacts yet')).toBeInTheDocument();
     });
