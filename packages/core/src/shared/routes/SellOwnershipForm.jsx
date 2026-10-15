@@ -151,7 +151,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 if (!cancelled) {
                     setAddressLoad({
                         ...pendingLoad,
-                        error: 'Could not load wallet addresses. Check your connection and try again.',
+                        error: 'Could not load your addresses. Check your connection and try again.',
                     });
                 }
             });
@@ -495,7 +495,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain) {
-        return wrap(<ListPage><p className={styles.hint}>Loading wallet addresses.</p></ListPage>);
+        return wrap(<ListPage><p className={styles.hint}>Loading your addresses.</p></ListPage>);
     }
 
     if (stage === 'done') {

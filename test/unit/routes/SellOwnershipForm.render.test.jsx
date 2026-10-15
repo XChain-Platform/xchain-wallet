@@ -162,7 +162,7 @@ describe('SellOwnershipForm rendering', () => {
     it('shows plain loading, empty, and load-error copy', async () => {
         const pending = new Promise(() => {});
         const { unmount } = mount(messagingWith({ getAddressesByChain: vi.fn(() => pending) }));
-        expect(screen.getByText('Loading wallet addresses.')).toBeInTheDocument();
+        expect(screen.getByText('Loading your addresses.')).toBeInTheDocument();
         unmount();
 
         mount(messagingWith({ getAddressesByChain: vi.fn().mockResolvedValue({}) }));
@@ -172,7 +172,7 @@ describe('SellOwnershipForm rendering', () => {
         mount(messagingWith({
             getAddressesByChain: vi.fn().mockRejectedValue(new Error('vault_rpc shard=7 exploded')),
         }));
-        const message = await screen.findByText('Could not load wallet addresses. Check your connection and try again.');
+        const message = await screen.findByText('Could not load your addresses. Check your connection and try again.');
         expect(message).not.toHaveTextContent(/vault_rpc|shard/);
     });
 
@@ -197,7 +197,7 @@ describe('SellOwnershipForm rendering', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByText('Loading wallet addresses.')).toBeInTheDocument();
+        expect(screen.getByText('Loading your addresses.')).toBeInTheDocument();
         expect(screen.queryByLabelText(ADDRESS.address)).not.toBeInTheDocument();
     });
 
@@ -216,7 +216,7 @@ describe('SellOwnershipForm rendering', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
         fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
 
-        expect(screen.getByText('Loading wallet addresses.')).toBeInTheDocument();
+        expect(screen.getByText('Loading your addresses.')).toBeInTheDocument();
         expect(screen.queryByLabelText(ADDRESS.address)).not.toBeInTheDocument();
     });
 
