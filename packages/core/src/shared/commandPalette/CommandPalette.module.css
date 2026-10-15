@@ -127,6 +127,15 @@
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
+/* Box-shadow focus rings are not painted in forced-colors mode, so give this
+   control a real outline there. */
+@media (forced-colors: active) {
+    .input:focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+}
+
 .input::placeholder { color: var(--xc-text-muted); }
 
 .escHint {

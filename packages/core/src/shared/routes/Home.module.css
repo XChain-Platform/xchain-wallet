@@ -153,8 +153,14 @@
    every label has enough room. The room is the width of the content beside
    the sidebar, not the window, so the wrapper is the query container. */
 .actionsFullWrap {
-    container-type: inline-size;
     margin-top: var(--xc-space-4);
+}
+
+/* A WebView without container queries keeps the four-column grid. */
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .actionsFullWrap {
+        container-type: inline-size;
+    }
 }
 
 .actionsFull {
@@ -189,18 +195,20 @@
 /* When the content is wide enough for every label beside its icon, all tiles
    share one row at equal width. Narrower content keeps the equal-tile grid
    above, so a second row never stretches. */
-@container (min-width: 1180px) {
-    .actionsFull {
-        grid-template-columns: none;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(0, 1fr);
-    }
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @container (min-width: 1180px) {
+        .actionsFull {
+            grid-template-columns: none;
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(0, 1fr);
+        }
 
-    .actionsFull > button {
-        flex-direction: row;
-        justify-content: center;
-        gap: var(--xc-space-2);
-        padding-inline: var(--xc-space-2);
+        .actionsFull > button {
+            flex-direction: row;
+            justify-content: center;
+            gap: var(--xc-space-2);
+            padding-inline: var(--xc-space-2);
+        }
     }
 }
 
