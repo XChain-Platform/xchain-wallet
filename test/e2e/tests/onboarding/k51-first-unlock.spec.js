@@ -67,7 +67,7 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
 
         await page.getByLabel('Wallet name').fill(WALLET_NAME);
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-        await page.getByLabel('Confirm password').fill(PASSWORD);
+        await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
         await expect(page.getByLabel('Wallet name')).toHaveValue(WALLET_NAME);
         await expect(page.getByRole('radio', { name: /^12 words/ })).toBeChecked();
         const next = page.getByRole('button', { name: 'Next' });
@@ -111,7 +111,7 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         await lock.click();
 
         await expect(page.getByRole('heading', { name: WALLET_NAME })).toBeVisible();
-        await page.getByLabel('Password').fill(PASSWORD);
+        await page.getByRole('textbox', { name: 'Password' }).fill(PASSWORD);
         const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
         await expectActionReachable(page, 'first unlock', unlock);
         await unlock.click();

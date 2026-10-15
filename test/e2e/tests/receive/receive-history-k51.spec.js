@@ -74,6 +74,20 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             if (message.type() === 'error') consoleErrors.push(message.text());
         });
         page.on('pageerror', (error) => consoleErrors.push(String(error)));
+        // No share sheet in the emulator: Share falls back to copying the
+        // payment link, and the copy lands where the spec can read it back.
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+            Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true });
+            window.__copiedText = null;
+            Object.defineProperty(navigator, 'clipboard', {
+                configurable: true,
+                value: {
+                    writeText: async (text) => { window.__copiedText = String(text); },
+                    readText: async () => window.__copiedText || '',
+                },
+            });
+        });
 
         await page.goto('/');
         const device = await page.evaluate(() => ({
@@ -92,7 +106,7 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             await gotoSection(page, 'Receive');
             await expect(page.getByRole('heading', { name: 'Receive', exact: true })).toBeVisible();
 
-            const addressField = page.getByLabel('Copy payment link for receive address');
+            const addressField = page.getByRole('textbox', { name: /address/i }).and(page.locator('input[readonly]'));
             await expect(addressField).toBeVisible();
             const address = await addressField.inputValue();
             expect(address).toMatch(/^bcrt1/);
@@ -105,7 +119,7 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
 
         let receiveAddress;
         await test.step('an amount request is reflected in the QR and copied payment link', async () => {
-            const addressField = page.getByLabel('Copy payment link for receive address');
+            const addressField = page.getByRole('textbox', { name: /address/i }).and(page.locator('input[readonly]'));
             receiveAddress = await addressField.inputValue();
             const qr = page.getByRole('img', { name: `QR code for ${receiveAddress}` });
             const qrBefore = await qr.getAttribute('src');
@@ -116,10 +130,13 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             const copyAction = page.getByRole('button', { name: /^Copy (QR code|payment link)$/ });
             await expect(copyAction).toBeVisible();
             await expectReachableWithoutSidewaysScroll(copyAction, 'QR copy action');
-            await addressField.click();
-            await expect(page.getByText('Payment link copied to clipboard.')).toBeVisible();
+            const shareAction = page.getByRole('button', { name: 'Share QR payment link' });
+            await expectReachableWithoutSidewaysScroll(shareAction, 'QR share action');
+            await shareAction.click();
+            await expect(page.getByText('Sharing is unavailable, so the payment link was copied to the clipboard.'))
+                .toBeVisible();
 
-            const copied = await page.evaluate(() => navigator.clipboard.readText());
+            const copied = await page.evaluate(() => window.__copiedText || '');
             const match = /^bitcoin:([^?]+)\?(.*)$/.exec(copied);
             expect(match, `copied request is not a Bitcoin payment URI: ${copied}`).not.toBeNull();
             expect(match[1]).toBe(receiveAddress);
@@ -133,18 +150,26 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             await gotoSection(page, 'History');
             await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
 
-            await page.getByRole('searchbox', { name: 'Search history' }).fill(HISTORY_TX_ID);
+            // A phone folds the History filters behind one Filters button.
+            const search = page.getByRole('searchbox', { name: 'Search history' });
+            if (!(await search.isVisible())) {
+                await page.getByRole('button', { name: /^Filters/ }).click();
+            }
+            await search.fill(HISTORY_TX_ID);
             const rows = page.locator('[data-history-key]');
             await expect(rows).toHaveCount(1);
             await expectNoHorizontalOverflow(page, 'filtered History');
             await rows.getByRole('button').click();
 
-            await expect(page.getByRole('heading', { name: 'Send #100,012' })).toBeVisible();
+            // An incoming transfer is titled from this wallet's side.
+            await expect(page.getByRole('heading', { name: 'Receive #100,012' })).toBeVisible();
             await page.getByRole('tab', { name: 'Details' }).click();
             await expect(detailRow(page, 'Action number')).toContainText('100,012');
-            await expect(detailRow(page, 'Transaction ID')).toContainText(HISTORY_TX_ID);
-            await expect(detailRow(page, 'From')).toContainText(HISTORY_SOURCE);
-            await expect(detailRow(page, 'To')).toContainText(receiveAddress);
+            // Long values render shortened at this width; the row's
+            // accessible name still carries the full value.
+            await expect(detailRow(page, 'Transaction ID')).toHaveAccessibleName(new RegExp(HISTORY_TX_ID));
+            await expect(detailRow(page, 'From')).toHaveAccessibleName(new RegExp(HISTORY_SOURCE));
+            await expect(detailRow(page, 'To')).toHaveAccessibleName(new RegExp(receiveAddress));
             await expect(detailRow(page, 'Amount')).toContainText('+1');
             await expect(detailRow(page, 'Tick')).toContainText('RAREPEPE');
             await expectNoHorizontalOverflow(page, 'transaction detail');
