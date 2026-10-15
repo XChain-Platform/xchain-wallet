@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 // Layout sweep in the Electron desktop app. Not part of the default suite.
+// The network guard spec runs here too; every launch goes through
+// fixtures/electron.js, which keeps the app off every non-local host.
 //
 //     pnpm --filter @xchain-wallet/desktop build:renderer
 //     pnpm --dir test/e2e exec playwright test --config playwright.layout-desktop.config.js
@@ -17,7 +19,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
     testDir: './layout',
-    testMatch: /layout-sweep\.electron\.spec\.js$/,
+    testMatch: /(?:layout-sweep|network-guard)\.electron\.spec\.js$/,
     outputDir: './test-results-layout-desktop',
     fullyParallel: false,
     workers: 1,
