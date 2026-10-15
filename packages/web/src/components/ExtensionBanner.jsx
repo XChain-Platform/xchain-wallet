@@ -81,12 +81,15 @@ export function ExtensionBanner() {
     }
 
     return (
-        <div role="status" className={styles.banner} data-state="offer">
-            <div className={styles.label}>
+        <div
+            role="status"
+            className={error ? `${styles.banner} ${styles.withMessage}` : styles.banner}
+            data-state="offer"
+        >
+            <span className={styles.label}>
                 <strong>{t('extensionBanner.detectedTitle')}</strong>
                 {' '}{t('extensionBanner.detectedBody')}
-                <StatusMessage variant="error">{error}</StatusMessage>
-            </div>
+            </span>
             <span className={styles.actions}>
                 <button
                     type="button"
@@ -107,6 +110,13 @@ export function ExtensionBanner() {
                     {t('extensionBanner.notNow')}
                 </button>
             </span>
+            {/* Its own full-width row, so the failure is not squeezed into the
+                text column beside the buttons on a phone. */}
+            {error ? (
+                <div className={styles.message}>
+                    <StatusMessage variant="error">{error}</StatusMessage>
+                </div>
+            ) : null}
         </div>
     );
 }
