@@ -43,7 +43,7 @@ describe('QrScanner without BarcodeDetector', () => {
         window.Capacitor = { isNativePlatform: () => true };
         render(<QrScanner onFrame={() => {}} />);
         const note = screen.getByTestId('qr-scanner-unsupported');
-        expect(note.textContent).toMatch(/not available on this device/);
+        expect(note.textContent).toMatch(/isn't available on this device/);
         expect(note.textContent).not.toMatch(/Chrome|Chromium|BarcodeDetector/);
     });
 

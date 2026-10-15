@@ -21,6 +21,7 @@ import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import PLATFORM_LINKS from '../platform-links.json';
+import { t } from '../../i18n/index.js';
 
 /**
  * §24.3 / G054: mobile bottom-sheet navigation.
@@ -65,15 +66,15 @@ import PLATFORM_LINKS from '../platform-links.json';
 const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map(navItem);
 
 const SHEET_PRIMARY = [
-    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
-    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
-    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
-    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
-    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
+    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
+    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
+    { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; a pending count also dots the More tab.
-    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
+    { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
 function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
@@ -197,7 +198,7 @@ export function BottomTabBar({
 
     return (
         <>
-            <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
+            <nav className={styles.bar} aria-label={t('components.bottomTabBar.bottomNavigation')} onKeyDown={onBarKeyDown}>
                 {/* Navigation tabs stay native buttons to preserve roving focus and full-row semantics. */}
                 {primaryTabs.map((tab) => {
                     const active = tab.id === activeTab;
@@ -240,7 +241,7 @@ export function BottomTabBar({
                             <span className={styles.tabDot} aria-hidden="true" />
                         ) : null}
                     </span>
-                    <span className={styles.tabLabel}>More</span>
+                    <span className={styles.tabLabel}>{t('history.detail.more')}</span>
                 </button>
             </nav>
 
@@ -249,7 +250,7 @@ export function BottomTabBar({
                     variant="sheet"
                     surfaceRef={sheetRef}
                     id="xc-bottom-sheet"
-                    title={<h2 className={styles.sheetTitle}>More</h2>}
+                    title={<h2 className={styles.sheetTitle}>{t('history.detail.more')}</h2>}
                     titleId="xc-bottom-sheet-dialog-title"
                     aria-labelledby="xc-bottom-sheet-dialog-title"
                     closeLabel="Close more navigation"
@@ -279,7 +280,7 @@ export function BottomTabBar({
                                                 </span>
                                                 <span className={styles.sheetLabel}>{row.label}</span>
                                                 {badges[row.id] > 0 ? (
-                                                    <span className={styles.sheetBadge} aria-label={`${badges[row.id]} unread`}>
+                                                    <span className={styles.sheetBadge} aria-label={t('components.leftNav.unread', { value: badges[row.id] })}>
                                                         {formatBadgeCount(badges[row.id])}
                                                     </span>
                                                 ) : null}
@@ -305,7 +306,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.SearchIcon />
                                             </span>
-                                            <span>Search</span>
+                                            <span>{t('routes.addressList.search')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -323,7 +324,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.MoreIcon />
                                             </span>
-                                            <span>Switch wallet</span>
+                                            <span>{t('components.bottomTabBar.switchWallet')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -344,7 +345,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.GearIcon />
                                             </span>
-                                            <span>Settings</span>
+                                            <span>{t('home.settings')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -363,7 +364,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.LockIcon />
                                             </span>
-                                            <span>Lock wallet</span>
+                                            <span>{t('home.lockWallet')}</span>
                                         </button>
                                     </li>
                                 ) : null}

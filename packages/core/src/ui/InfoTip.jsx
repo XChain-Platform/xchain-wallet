@@ -28,6 +28,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import styles from './InfoTip.module.css';
+import { t } from '../i18n/index.js';
 
 const VIEWPORT_MARGIN = 8;
 const BUBBLE_GAP = 6;
@@ -39,7 +40,7 @@ const BUBBLE_GAP = 6;
  * @param {'top' | 'bottom'} [props.placement]     bubble side; default 'top'
  * @param {string} [props.className]               extra classes appended to the wrapper
  */
-export function InfoTip({ label, aria = 'More info', placement = 'top', className }) {
+export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 'top', className }) {
     const [open, setOpen] = useState(false);
     const [side, setSide] = useState(placement);
     const [maxHeight, setMaxHeight] = useState(/** @type {number | null} */ (null));

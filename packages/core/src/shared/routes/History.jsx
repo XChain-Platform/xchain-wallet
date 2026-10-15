@@ -98,10 +98,12 @@ import {
     formatHistoryAmount,
     formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
+import { activityRowAmount } from '../utils/activityAmount.js';
 import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useReachability } from '../hooks/useReachability.js';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -580,6 +582,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { showToast } = useToast();
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const browserOnline = useOnlineStatus();
     const proofSettings = useSettings();
     const activeNetwork = proofSettings.loading
@@ -2212,6 +2215,17 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         body={t('history.empty.noMatchesBody')}
                         actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
+                    />
+                ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
+                    // An empty read while balances could not be checked proves
+                    // nothing, so the page says that once instead of "No
+                    // activity yet" beside the stale-balances notice.
+                    <BalancesUncheckedState
+                        onRetry={() => {
+                            recheckBalances();
+                            setRefreshTick((n) => n + 1);
+                        }}
+                        onReceive={onReceive}
                     />
                 ) : (
                     <EmptyState
@@ -4135,6 +4149,13 @@ export function isGeneratedAddressLabel(label, chainId) {
     return /^(Address|Change|Dispenser)( #\d+)?$/.test(text);
 }
 
+/** Divisibility a record states for its own token; 8 when it states none. */
+function recordDivisibility(raw) {
+    const stated = Number(raw?.divisibility);
+    if (Number.isInteger(stated) && stated >= 0) return stated;
+    return raw?.divisible === false ? 0 : 8;
+}
+
 export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const [balancesHidden] = useBalancesHidden();
@@ -4148,6 +4169,12 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
     const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });
     const rawTick = entry.raw?.tick ?? entry.raw?.TICK ?? entry.raw?.token;
     const tick = String(settledAmount?.tick || rawTick || nativeTick || '?');
+    // A settled sweep or issue prints the amount Home prints, from the same
+    // formatter; its record carries base units.
+    const baseUnitAmount = !settledAmount && entry.blockIndex
+        && (actionKind === 'sweep' || actionKind === 'issue')
+        ? activityRowAmount(entry, { divisibility: recordDivisibility(entry.raw) })
+        : '';
     // Hidden balances mask the figure here as they do on Home and in the
     // pending annotation; the ticker stays, since it is not an amount.
     const amount = settledAmount ? (
@@ -4161,7 +4188,11 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
         >
             {balancesHidden ? '•••••' : formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
         </span>
-    ) : entry.blockIndex ? tick : (
+    ) : entry.blockIndex ? (baseUnitAmount ? (
+        <span data-history-amount="unknown">
+            {balancesHidden ? '•••••' : baseUnitAmount} {tick}
+        </span>
+    ) : tick) : (
         <>
             <PendingRowLabel entry={entry} />
             <PendingAmountLabel entry={entry} />

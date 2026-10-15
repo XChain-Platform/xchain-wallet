@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { withEnglishCopy } from '../../helpers/englishSource.js';
+
 const css = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/Receive.module.css'),
     'utf8',
@@ -15,10 +17,10 @@ const qrCss = readFileSync(
     join(process.cwd(), 'packages/core/src/ui/QrDisplay.module.css'),
     'utf8',
 );
-const receive = readFileSync(
+const receive = withEnglishCopy(readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/Receive.jsx'),
     'utf8',
-);
+));
 
 describe('Receive action layout', () => {
     it.each([360, 1280])('shares one left-aligned content width at %ipx', (viewportWidth) => {

@@ -74,7 +74,7 @@ describe('background settings save failures', () => {
         fireEvent.click(control);
 
         const alert = await screen.findByRole('alert');
-        expect(alert).toHaveTextContent('Could not save this privacy setting. Try again.');
+        expect(alert).toHaveTextContent('Couldn\'t save this privacy setting. Try again.');
         // The kit Switch nests its input inside a label, so the row is the label's parent.
         expect(control.closest('label').parentElement.nextElementSibling).toBe(alert);
         expect(control.checked).toBe(previous);

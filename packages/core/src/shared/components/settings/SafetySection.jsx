@@ -36,6 +36,7 @@ import { BiometricRow } from './BiometricRow.jsx';
 import { PanicModeRow } from './PanicModeRow.jsx';
 import { UndoSendRow } from './UndoSendRow.jsx';
 import { DuressPassphraseRow } from './DuressPassphraseRow.jsx';
+import { t } from '../../../i18n/index.js';
 
 const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 1, label: '1 minute' },
@@ -51,9 +52,9 @@ export function SafetySection() {
     const { settings, loading, error, update } = useSettings();
     const [thresholdError, setThresholdError] = useState(/** @type {string | null} */ (null));
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const onAutolockChange = async (next) => {
         try { await update({ autolockMinutes: Number(next) }); } catch (err) {
@@ -69,11 +70,11 @@ export function SafetySection() {
     return (
         <div style={STACK}>
             <div style={ROW}>
-                <span style={ROW_TITLE}>Auto-lock timeout</span>
+                <span style={ROW_TITLE}>{t('settings.safety.autoLockTimeout')}</span>
                 <select
                     value={String(autolockValue)}
                     onChange={(e) => onAutolockChange(e.target.value)}
-                    aria-label="Auto-lock timeout"
+                    aria-label={t('settings.safety.autoLockTimeout')}
                     style={SELECT}
                 >
                     {AUTOLOCK_OPTIONS.map((o) => (
@@ -81,17 +82,16 @@ export function SafetySection() {
                     ))}
                     {!AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes) ? (
                         <option value={String(settings.autolockMinutes)}>
-                            {`${settings.autolockMinutes} minutes (custom)`}
+                            {t('settings.safety.minutesCustom', { autolockMinutes: settings.autolockMinutes })}
                         </option>
                     ) : null}
                 </select>
             </div>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_TITLE}>New-recipient test-send warning (sats)</span>
+                    <span style={ROW_TITLE}>{t('settings.safety.newRecipientTestSendWarning')}</span>
                     <span id="test-send-threshold-hint" style={ROW_HINT}>
-                        For native-coin sends above this amount to a recipient outside your contacts
-                        and send history. Enter 0 to turn this warning off.
+                        {t('settings.safety.forNativeCoinSendsAbove')}
                     </span>
                 </div>
                 <input
@@ -116,8 +116,8 @@ export function SafetySection() {
                         });
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    placeholder="0 = no warning"
-                    aria-label="Test-send warning threshold (sats)"
+                    placeholder={t('settings.safety.0NoWarning')}
+                    aria-label={t('settings.safety.testSendWarningThresholdSats')}
                     aria-invalid={thresholdError ? 'true' : undefined}
                     aria-describedby={thresholdError
                         ? 'test-send-threshold-hint test-send-threshold-error'
@@ -130,13 +130,12 @@ export function SafetySection() {
             ) : null}
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_TITLE}>Lookalike address warnings</span>
+                    <span style={ROW_TITLE}>{t('settings.safety.lookalikeAddressWarnings')}</span>
                     <span style={ROW_HINT}>
-                        The send form warns when an address closely resembles a contact or a previous
-                        recipient.
+                        {t('settings.safety.theSendFormWarnsWhen')}
                     </span>
                 </div>
-                <span style={ROW_LABEL}>Always on</span>
+                <span style={ROW_LABEL}>{t('settings.safety.alwaysOn')}</span>
             </div>
             <UndoSendRow />
             <BiometricRow />
@@ -144,13 +143,12 @@ export function SafetySection() {
             <DuressPassphraseRow />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_TITLE}>Backup reminders</span>
+                    <span style={ROW_TITLE}>{t('settings.safety.backupReminders')}</span>
                     <span style={ROW_HINT}>
-                        Shown automatically for wallets without a verified recovery phrase or
-                        encrypted backup.
+                        {t('settings.safety.shownAutomaticallyForWalletsWithout')}
                     </span>
                 </div>
-                <span style={ROW_LABEL}>Automatic</span>
+                <span style={ROW_LABEL}>{t('settings.safety.automatic')}</span>
             </div>
         </div>
     );

@@ -145,7 +145,7 @@ describe('Automatic Donation System settings', () => {
         render(<AdsSection />);
 
         expect(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }).checked).toBe(false);
-        expect(screen.getByText('Off. New outgoing transactions do not add to the pending donation total.')).toBeTruthy();
+        expect(screen.getByText('Off. New outgoing transactions don\'t add to the pending donation total.')).toBeTruthy();
         expect(screen.getByLabelText('Bitcoin per-transaction amount').disabled).toBe(true);
         expect(screen.getByLabelText('Bitcoin trigger threshold').disabled).toBe(true);
 

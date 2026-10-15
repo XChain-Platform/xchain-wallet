@@ -54,7 +54,7 @@ describe('RouteErrorBoundary', () => {
     it('replaces a throwing route and returns Home without unmounting the session', async () => {
         render(<TestRouter />);
 
-        expect(screen.getByRole('heading', { name: 'This screen could not be shown' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'This screen couldn\'t be shown' })).toBeTruthy();
         expect(screen.getByText('Something went wrong while showing this screen. Try again or go to Home.')).toBeTruthy();
         expect(screen.getByTestId('session-provider')).toBeTruthy();
 
@@ -130,9 +130,9 @@ describe('RouteErrorBoundary', () => {
             </RouteErrorBoundary>,
         );
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Go to Home' })).toBeNull();
-        expect(screen.queryByRole('heading', { name: 'This screen could not be shown' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'This screen couldn\'t be shown' })).toBeNull();
     });
 });

@@ -13,6 +13,7 @@ import { Button } from '../../ui/Button.jsx';
 import styles from './ToastHost.module.css';
 import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 import { clearToastRoom, placeToastStack } from './toastPlacement.js';
+import { t } from '../../i18n/index.js';
 
 const VISIBLE_LIMIT = 3;
 // One duration for every toast, set here rather than per call: 8 s to read a
@@ -176,7 +177,7 @@ export function ToastHost({ children }) {
                     ref={viewportRef}
                     className={styles.viewport}
                     role="status"
-                    aria-label="Notifications"
+                    aria-label={t('alerts.notificationsTitle')}
                     aria-live="polite"
                     aria-atomic="false"
                     aria-relevant="additions text"
@@ -186,7 +187,7 @@ export function ToastHost({ children }) {
                     </span>
                     {hiddenCount > 0 ? (
                         <div className={styles.overflowBadge} aria-hidden="true">
-                            {`+${hiddenCount} more`}
+                            {t('components.toastHost.more', { hiddenCount })}
                         </div>
                     ) : null}
                     {visibleToasts.map((t) => (
@@ -245,7 +246,7 @@ function ToastItem({ toast, onAction, onDismiss }) {
                     className={styles.dismissBtn}
                     icon={<span aria-hidden="true">×</span>}
                     onClick={onDismiss}
-                    aria-label="Dismiss notification"
+                    aria-label={t('components.toastHost.dismissNotification')}
                 />
             </div>
         </div>

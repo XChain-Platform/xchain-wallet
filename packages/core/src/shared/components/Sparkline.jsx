@@ -10,6 +10,7 @@
 
 import { useMemo } from 'react';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * Pure-SVG sparkline. Renders finite samples as a polyline inside a
@@ -28,7 +29,7 @@ export function Sparkline({
     series,
     height = 80,
     strokeWidth = 1.5,
-    label = 'Price trend',
+    label = t('components.sparkline.priceTrend'),
     rangeLabel,
     formatValue,
 }) {
@@ -89,7 +90,7 @@ export function Sparkline({
  */
 export function describeChartSeries(series, options = {}) {
     const {
-        label = 'Price trend',
+        label = t('components.sparkline.priceTrend'),
         rangeLabel,
         formatValue = formatChartValue,
     } = options;
