@@ -258,10 +258,10 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('main').getByText('Link cross-chain actions', { exact: true })
                 .first().click();
 
-            const panelA = page.locator('fieldset').filter({ hasText: 'Chain A' });
-            const panelB = page.locator('fieldset').filter({ hasText: 'Chain B' });
-            await selectVenueChain(panelA, 'Chain');
-            await selectVenueChain(panelB, 'Chain');
+            const panelA = page.locator('fieldset').filter({ hasText: 'Network A' });
+            const panelB = page.locator('fieldset').filter({ hasText: 'Network B' });
+            await selectVenueChain(panelA, 'Network');
+            await selectVenueChain(panelB, 'Network');
             await panelA.getByLabel('Action to reference').fill(issueActionIndex);
             await panelB.getByLabel('Action to reference').fill(fileActionIndex);
 
@@ -285,10 +285,10 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(linked, `the LinkForm broadcast is not on the explorer's links list for ${source}`)
                 .toBeTruthy();
             expect(String(linked.coin1_action_index),
-                'LinkForm did not encode Chain A\'s action number as COIN1_ACTION_INDEX')
+                'LinkForm did not encode Network A\'s action number as COIN1_ACTION_INDEX')
                 .toBe(issueActionIndex);
             expect(String(linked.coin2_action_index),
-                'LinkForm did not encode Chain B\'s action number as COIN2_ACTION_INDEX')
+                'LinkForm did not encode Network B\'s action number as COIN2_ACTION_INDEX')
                 .toBe(fileActionIndex);
         });
 
