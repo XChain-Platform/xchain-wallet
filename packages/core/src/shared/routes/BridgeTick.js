@@ -105,7 +105,7 @@ export function bridgeLegFor({ tick, sourceCoin }) {
     const t = String(tick || '').trim();
     const coin = normalizeCoinTicker(sourceCoin);
     if (!t) return refuse('Pick a token to move first.');
-    if (!coin) return refuse('Pick the chain this token is on first.');
+    if (!coin) return refuse('Pick the network this token is on first.');
 
     if (t.toUpperCase() === GAS_TICK) {
         return coin === 'BTC'
@@ -189,7 +189,7 @@ export function bridgeDestinationError({ tick, sourceCoin, destCoin, bridgeChain
     if (!leg.version) return leg.reason;
 
     if (dest === source) {
-        return `${displayTick(tick, source)} is already on ${coinDisplay(source)}. Pick a different chain to move it to.`;
+        return `${displayTick(tick, source)} is already on ${coinDisplay(source)}. Pick a different network to move it to.`;
     }
     if (leg.fixedDestination && dest !== leg.fixedDestination) {
         // A burn releases the original where it is held. There is no second

@@ -82,7 +82,7 @@ function mount(opts = {}) {
     return messaging;
 }
 
-const FORECLOSURE_TEXT = /can never be bridged to another chain/i;
+const FORECLOSURE_TEXT = /can never be bridged to another network/i;
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 

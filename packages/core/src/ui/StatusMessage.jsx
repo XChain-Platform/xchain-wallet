@@ -39,7 +39,7 @@ import { t } from '../i18n/index.js';
  * @param {import('react').ReactNode} props.children
  * @param {string} [props.className]                          appended after the variant class so callers can space-suffix layout adjustments
  * @param {string} [props.details]                            technical text shown only in a collapsed disclosure
- * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string }} [props.recovery]   one-click fix shown inline with the message
+ * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string, disabled?: boolean }} [props.recovery]   one-click fix shown inline with the message
  * @param {'alert' | 'status' | 'note' | null} [props.role]   overrides the variant's role where the tone and the
  *   announcement differ: a caution the user must hear at once (warning tone, alert role), or
  *   a verification verdict that is a result rather than a failure (error tone, status role).
@@ -86,6 +86,7 @@ export function StatusMessage({ variant = 'status', id, children, className, det
                     type="button"
                     className={styles.recovery}
                     aria-label={recovery.ariaLabel || recovery.label}
+                    disabled={recovery.disabled}
                     onClick={() => {
                         Promise.resolve(recovery.onAction()).catch(() => {
                             /* swallow; caller surfaces its own follow-up */

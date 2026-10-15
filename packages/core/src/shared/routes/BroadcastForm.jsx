@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
 import {
@@ -1031,7 +1032,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 />
             ) : (
                 <StatusMessage variant="error">
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 

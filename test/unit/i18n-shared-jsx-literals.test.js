@@ -120,12 +120,25 @@ const localizedRoutes = [
 // checked against the dictionary; their remaining literals stay outside the
 // literal guard until the screen migrates.
 const PARTIAL_COPY_FILES = [
+    '/routes/AdvancedActionsForm.jsx',
+    '/routes/AirdropForm.jsx',
+    '/routes/BroadcastForm.jsx',
+    '/routes/CallbackForm.jsx',
+    '/routes/ContractStakeForm.jsx',
     '/routes/CreateBetFeedForm.jsx',
     '/routes/CreateOrderForm.jsx',
+    '/routes/CrossChainOrderForm.jsx',
     '/routes/CrossChainSwapForm.jsx',
+    '/routes/DeployContractForm.jsx',
+    '/routes/DestroyForm.jsx',
     '/routes/DispenserExplorer.jsx',
     '/routes/DispenserForm.jsx',
+    '/routes/DividendForm.jsx',
+    '/routes/MintForm.jsx',
     '/routes/ParallelComposer.jsx',
+    '/routes/SweepForm.jsx',
+    '/routes/TokenAdminForm.jsx',
+    '/routes/TokenWizard.jsx',
 ];
 
 describe('shipping JSX localization', () => {

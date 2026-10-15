@@ -18,6 +18,7 @@ import { WALLET_MODES, WALLET_MODE_DEFAULT } from '../../../schemas/settings.js'
 import { SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useBackHandler } from '../../../ui/backStack.js';
+import cardStyles from '../../../ui/Card.module.css';
 import { t } from '../../../i18n/index.js';
 
 const MODE_OPTIONS = /** @type {const} */ ([
@@ -83,6 +84,7 @@ export function WalletModeSection() {
 
     return (
         <>
+            <div className={cardStyles.card}>
             <RadioGroup
                 legend="Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing."
                 name="walletMode"
@@ -95,6 +97,7 @@ export function WalletModeSection() {
                     description: opt.hint,
                 }))}
             />
+            </div>
             {pendingOption ? (
                 <ConfirmModal
                     title={t('settings.walletMode.switchToMode', { label: pendingOption.label })}

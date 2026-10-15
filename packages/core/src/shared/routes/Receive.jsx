@@ -1218,6 +1218,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         wrapReadOnlyAddress
                         onIconClick={() => setAddressPickerOpen(true)}
                         iconLabel={t('receive.chooseReceiveAddress')}
+                        data-testid="receive-address"
                     />
                     {qrActionsContent}
                 </div>
@@ -1338,13 +1339,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     key={multisig.multisigConfigId}
                     role="group"
                     aria-label={t('receive.multisigReceiveAddress')}
-                    style={{
-                        marginTop: 'var(--xc-space-3)',
-                        padding: 'var(--xc-card-pad)',
-                        border: 'var(--xc-card-border)',
-                        borderRadius: 'var(--xc-card-radius)',
-                        background: 'var(--xc-card-bg)',
-                    }}
+                    className={styles.multisigCard}
                 >
                     <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
                         <MultisigBadge

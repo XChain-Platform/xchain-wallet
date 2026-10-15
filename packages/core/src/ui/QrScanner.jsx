@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
+import styles from './QrScanner.module.css';
 import { t } from '../i18n/index.js';
 
 export const MAX_SCANNED_QR_CHARS = 8 * 1024;
@@ -559,20 +560,9 @@ export function QrScanner({
                 role="region"
                 aria-label={alt}
                 data-testid="qr-scanner-camera-rationale"
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-2)',
-                    padding: 'var(--xc-space-3)',
-                    fontSize: 'var(--xc-text-sm)',
-                    color: 'var(--xc-text)',
-                    lineHeight: 1.4,
-                    background: 'var(--xc-bg-muted)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                }}
+                className={styles.rationale}
             >
-                <p style={{ margin: 0 }}>
+                <p>
                     {t('ui.qrScanner.xchainWalletUsesTheCamera')}
                 </p>
                 <Button

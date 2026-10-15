@@ -15,6 +15,7 @@
 // and when they were last checked, without service names or network kinds.
 
 import { useContext, useEffect, useId, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useReachability } from '../hooks/useReachability.js';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { defaultRegistry } from '../../registry/index.js';
@@ -55,24 +56,25 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
 
     const hasDetails = coins.length > 0 || Boolean(staleness);
 
-    // The Details panel is a row in the notice's own flow, so it pushes route
-    // content down instead of floating over it or scrolling inside the notice.
+    // The notice is a StatusMessage so it looks like every other notice. The
+    // Details panel sits in the message's own flow, so it pushes route content
+    // down instead of floating over it or scrolling inside the notice.
     return (
-        <div className={`${styles.notice} ${overall === 'offline' ? styles.offline : styles.degraded}`}>
-            <div className={styles.banner}>
+        <StatusMessage
+            variant={overall === 'offline' ? 'error' : 'warning'}
+            role={null}
+            recovery={{
+                label: loading ? 'Checking…' : 'Try again',
+                onAction: refresh,
+                disabled: loading,
+            }}
+        >
+            <div className={styles.line}>
                 {/* Only the state is announced, so a poll that refreshes the
                     last-checked age does not repeat the notice. */}
-                <span className={styles.message} role="status" aria-live="polite" aria-atomic="true">
+                <span role="status" aria-live="polite" aria-atomic="true">
                     Some balances may be out of date
                 </span>
-                <button
-                    type="button"
-                    className={styles.retry}
-                    onClick={refresh}
-                    disabled={loading}
-                >
-                    {loading ? 'Checking…' : 'Try again'}
-                </button>
                 {hasDetails ? (
                     <button
                         type="button"
@@ -104,7 +106,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
                     {staleness ? <p className={styles.staleness}>{staleness}</p> : null}
                 </div>
             ) : null}
-        </div>
+        </StatusMessage>
     );
 }
 

@@ -93,7 +93,7 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Select[\s\S]*label="Action"/);
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Textarea[\s\S]*list values/);
         expect(routes['MultisigSigningSession.jsx']).toMatch(/<Textarea[\s\S]*aria-label="Cosigner reply chunks"/);
-        expect(routes['MyLists.jsx']).toMatch(/<Input[\s\S]*aria-label="Search lists"/);
+        expect(routes['MyLists.jsx']).toMatch(/<ListToolbar[\s\S]*searchLabel="Search lists"/);
         expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*>\s*Create list\s*<\/Button>/);
         expect(routes['PsbtSignForm.jsx']).toMatch(/<Select[\s\S]*label="Signing address"/);
         expect(routes['PsbtSignForm.jsx']).toMatch(/<Textarea[\s\S]*label="Unsigned transaction/);
