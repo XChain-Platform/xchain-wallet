@@ -588,7 +588,11 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                     {t('settings.notifications.couldNotLoadPriceAlerts')}
                 </StatusMessage>
             ) : alerts.length === 0 ? (
-                <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
+                // The hint above already says why nothing fires while alerts are off, so
+                // "No price alerts yet" would be a second message for the same state.
+                enabled && !priceDataOff
+                    ? <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
+                    : null
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>
