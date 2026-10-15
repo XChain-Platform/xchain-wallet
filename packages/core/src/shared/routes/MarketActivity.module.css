@@ -14,7 +14,9 @@
     cursor: pointer;
 }
 
-.marketSelector:hover {
+/* Doubled class: the Button kit's own hover fill (an accent block) has the
+   same specificity as a single class and would otherwise win. */
+.marketSelector.marketSelector:hover:not(:disabled) {
     background: var(--xc-bg-muted);
     border-color: var(--xc-accent-primary);
 }

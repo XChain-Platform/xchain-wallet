@@ -373,6 +373,11 @@
     box-shadow: inset 3px 0 0 var(--xc-control-selected);
 }
 
+/* The inset is physical, so the rail moves to the right edge in RTL. */
+:global([dir='rtl']) .rowSelected {
+    box-shadow: inset -3px 0 0 var(--xc-control-selected);
+}
+
 .rowMeta {
     display: flex;
     flex-wrap: wrap;

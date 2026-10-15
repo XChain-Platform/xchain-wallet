@@ -188,7 +188,7 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                 autoComplete="off"
                 style={{
                     // Room for Paste, and for the icon action beside it.
-                    paddingInlineEnd: IconComponent
+                    '--address-end-room': IconComponent
                         ? 'calc(var(--address-paste-width) + var(--address-control-height))'
                         : 'var(--address-paste-width)',
                     ...style,
