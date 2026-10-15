@@ -72,6 +72,7 @@ const NetworkFilter = lazy(() => loadNetworkFilter().then((module) => ({ default
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {boolean} [props.menuRow] renders the trigger as a labelled overflow-menu row
  * @param {() => void} [props.onNavigate] closes an owning menu before destination navigation
+ * @param {(open: boolean) => void} [props.onOpenChange] reports the popover opening or closing, so an owning menu can step out of its way
  */
 export function HeaderSettingsButton({
     activeWallet,
@@ -90,6 +91,7 @@ export function HeaderSettingsButton({
     onActiveNetworkChange,
     menuRow = false,
     onNavigate,
+    onOpenChange,
 }) {
     const [open, setOpen] = useState(false);
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
@@ -103,6 +105,10 @@ export function HeaderSettingsButton({
         triggerRef.current?.querySelector('button')?.focus();
     }, []);
     useBackHandler(open ? closePopover : undefined);
+    useEffect(() => {
+        onOpenChange?.(open);
+        return () => onOpenChange?.(false);
+    }, [onOpenChange, open]);
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);

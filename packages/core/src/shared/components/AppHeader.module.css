@@ -101,6 +101,13 @@
     cursor: pointer;
 }
 
+.actionMenu[data-overlay-open='true'] {
+    /* Not visibility or display: the Settings row inside stays the popover
+       anchor and keeps focus for its return. */
+    opacity: 0;
+    pointer-events: none;
+}
+
 .settingsWrap,
 .settingsWrap > span {
     width: 100%;

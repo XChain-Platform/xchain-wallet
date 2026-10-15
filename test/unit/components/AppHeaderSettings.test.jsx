@@ -129,6 +129,18 @@ describe('AppHeader settings gear', () => {
         expect(settingsTrigger).toHaveFocus();
     });
 
+    it('hides the action menu panel while the settings popover is open', () => {
+        render(<AppHeader activeWallet={{ id: 'w1', name: 'Savings' }} onOpenWalletPicker={() => {}} />);
+        openAppSettings();
+        const menu = screen.getByRole('menu', { name: 'Header actions' });
+        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
+        expect(menu).toHaveAttribute('data-overlay-open', 'true');
+        expect(appHeaderCss).toMatch(/\.actionMenu\[data-overlay-open='true'\]\s*\{[^}]*opacity: 0;[^}]*pointer-events: none;/);
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(menu).not.toHaveAttribute('data-overlay-open');
+    });
+
     it('keeps the watch-only badge in the persistent header', () => {
         render(<AppHeader isWatcherMode />);
         expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
