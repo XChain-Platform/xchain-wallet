@@ -9,22 +9,9 @@ import { describe, expect, it } from 'vitest';
 
 // A class read off a CSS module that the module never defines is `undefined`,
 // so the element renders unstyled and nothing fails. The My dispensers toolbar
-// stacked its search and network fields with no gap for that reason. The
-// references below predate this guard; the list may only shrink.
-const KNOWN_UNDEFINED = [
-    'packages/core/src/shared/routes/BetFeedsList.jsx local.marketItem',
-    'packages/core/src/shared/routes/DispenserDetail.jsx styles.entryDescription',
-    'packages/core/src/shared/routes/Home.jsx styles.bodyFull',
-    'packages/core/src/shared/routes/MultisigSigningSession.jsx styles.list',
-    'packages/core/src/shared/routes/MultisigSigningSession.jsx styles.row',
-    'packages/core/src/shared/routes/MultisigSigningSession.jsx styles.rowMeta',
-    'packages/core/src/shared/routes/MultisigSigningSession.jsx styles.rowSubtle',
-    'packages/core/src/shared/routes/MultisigSigningSession.jsx styles.rowTitle',
-    'packages/core/src/shared/routes/ParallelComposer.jsx parallelStyles.rowEditor',
-    'packages/core/src/shared/routes/Send.jsx styles.balanceHint',
-    'packages/core/src/ui/ChainBadge.jsx styles.name',
-    'packages/core/src/ui/FormSection.jsx styles.sectionHeader',
-];
+// stacked its search and network fields with no gap for that reason. Every
+// reference is defined now, so the known list is empty and stays that way.
+const KNOWN_UNDEFINED = [];
 
 const root = process.cwd();
 

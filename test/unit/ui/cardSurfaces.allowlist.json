@@ -92,6 +92,7 @@
         "packages/core/src/ui/FeeSelector.module.css | .customInput": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/ui/IconSelect.module.css | .popover": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/ui/IconSelect.module.css | .trigger": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/commandPalette/CommandPalette.module.css | .input": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/ui/InfoTip.module.css | .bubble": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/ui/Input.module.css | .input": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/ui/PageHeader.module.css | .trailing button:not([role=\"menuitem\"])": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
