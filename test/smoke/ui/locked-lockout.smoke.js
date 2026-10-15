@@ -111,7 +111,13 @@ assert.doesNotMatch(
 // The shared warning notice carries role="status" and aria-live="polite".
 assert.match(lockedSrc, /<StatusMessage variant="warning" className=\{styles\.lockoutBanner\}>/, 'banner is the shared warning notice');
 assert.match(lockedSrc, /className=\{styles\.lockoutCountdown\} aria-live="off"/, 'the countdown ticks without re-announcing the notice');
-assert.match(lockedSrc, /Too many incorrect passwords/, 'banner copy present');
+// The copy lives in the English locale; the screen names its key.
+const localeSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'),
+    'utf8',
+);
+assert.match(lockedSrc, /t\('locked\.tooManyIncorrectPasswordsOn'\)/, 'banner copy present');
+assert.match(localeSrc, /'locked\.tooManyIncorrectPasswordsOn':\s*'Too many incorrect passwords/, 'banner copy present');
 
 assert.match(
     lockedSrc,
