@@ -103,6 +103,9 @@ export default defineConfig({
         // steady-state cost and the blast radius. See `maxForks` above for why
         // the ceiling is now computed rather than fixed at 8.
         pool: 'forks',
+        // Vitest blanks every .css module, `?raw` imports included. The style
+        // guide reads tokens.css as text, so that one file keeps its contents.
+        css: { include: [/ui\/tokens\.css/] },
         maxWorkers: maxForks,
         // Carries the instrumentation flag into the test processes, where
         // test/helpers/testEnvSpeed.js turns it into a multiplier for the
