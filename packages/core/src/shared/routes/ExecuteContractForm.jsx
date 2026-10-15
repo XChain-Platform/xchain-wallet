@@ -201,7 +201,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 // operating address.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain can call the contract. Use Receive to generate one first.');
+                    setLoadError('No address on this network can call the contract. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);

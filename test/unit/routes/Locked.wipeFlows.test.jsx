@@ -121,7 +121,7 @@ describe('Locked forgot-password wipe', () => {
         const dialog = openForgotDialog();
         expect(dialog).toHaveAttribute('aria-modal', 'false');
         expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
-        expect(dialog).toHaveTextContent(/password cannot be recovered or reset/i);
+        expect(dialog).toHaveTextContent(/password can't be recovered or reset/i);
         expect(dialog).toHaveTextContent(/choose a new password/i);
         expect(screen.getByRole('button', { name: 'Use recovery phrase' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Use backup file' })).toBeEnabled();
@@ -151,7 +151,7 @@ describe('Locked forgot-password wipe', () => {
         expect(wipeWalletStorage).not.toHaveBeenCalled();
         expect(screen.queryByRole('alertdialog', { name: 'Restore wallet access' })).not.toBeInTheDocument();
         const dialog = openForgotDialog();
-        expect(dialog).toHaveTextContent(/password cannot be recovered or reset/i);
+        expect(dialog).toHaveTextContent(/password can't be recovered or reset/i);
         expect(screen.queryByLabelText('Type WIPE to confirm')).not.toBeInTheDocument();
     });
 

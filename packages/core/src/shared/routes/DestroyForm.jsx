@@ -107,7 +107,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before destroying.',
+            'No addresses on any network yet. Use Receive to generate one before destroying.',
     });
 
 
@@ -497,7 +497,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}

@@ -15,7 +15,7 @@ function pending() {
     return new Promise(() => {});
 }
 
-function mount(overrides = {}) {
+function mount(overrides = {}, props = {}) {
     const onOpenContract = vi.fn();
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
@@ -31,6 +31,7 @@ function mount(overrides = {}) {
                 walletId="wallet-1"
                 onBack={() => {}}
                 onOpenContract={onOpenContract}
+                {...props}
             />
         </MessagingProvider>,
     );
@@ -40,6 +41,14 @@ function mount(overrides = {}) {
 afterEach(() => cleanup());
 
 describe('ContractsList states', () => {
+    it('offers Publish contract once, in the toolbar, with a button-free empty state', async () => {
+        mount({}, { onDeploy: vi.fn() });
+
+        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: /Publish contract/ })).toHaveLength(1);
+        expect(screen.getByRole('button', { name: '+ Publish contract' })).toBeInTheDocument();
+    });
+
     it('shows loading while wallet addresses resolve', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 

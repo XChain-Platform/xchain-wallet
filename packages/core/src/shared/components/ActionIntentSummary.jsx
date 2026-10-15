@@ -21,6 +21,7 @@
 import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
+import { t } from '../../i18n/index.js';
 
 function reviewDetailValue(detail) {
     if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return detail?.value;
@@ -96,8 +97,8 @@ export function ActionIntentSummary({ decoded, simulation }) {
                         if (d.isFee && d.feeUnknown && d.before === '') {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta} data-fee-unknown="true">
-                                    <span className={styles.deltaTick}>{d.feeLabel || 'Network fee'}</span>
-                                    <span className={styles.deltaValues}>unknown</span>
+                                    <span className={styles.deltaTick}>{d.feeLabel || t('send.networkFee')}</span>
+                                    <span className={styles.deltaValues}>{t('components.balanceChanges.unknown')}</span>
                                 </div>
                             );
                         }
@@ -106,7 +107,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta} data-before-unknown="true">
                                     <span className={styles.deltaTick}>{d.tick}</span>
-                                    <span className={styles.deltaValues}>balance unknown</span>
+                                    <span className={styles.deltaValues}>{t('components.actionIntentSummary.balanceUnknown')}</span>
                                 </div>
                             );
                         }
@@ -114,7 +115,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             if (!d.isProtocolFee) return null;
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta}>
-                                    <span className={styles.deltaTick}>{d.feeLabel || 'Protocol fee'}</span>
+                                    <span className={styles.deltaTick}>{d.feeLabel || t('execute.protocolFee')}</span>
                                     <span className={styles.deltaValues}>
                                         {formatDisplayAmount(d.feeAmount)} {d.tick}
                                     </span>
@@ -128,7 +129,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta} data-after-unknown="true">
                                     <span className={styles.deltaTick}>{d.tick}</span>
-                                    <span className={styles.deltaValues}>{d.before} → unknown</span>
+                                    <span className={styles.deltaValues}>{d.before} {t('components.actionIntentSummary.unknown')}</span>
                                 </div>
                             );
                         }

@@ -214,7 +214,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (!(byChain?.[chainId] || []).length) {
-                    setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
             .catch(() => { if (!cancelled) setLoadError('Failed to load addresses.'); });
@@ -538,7 +538,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         event.preventDefault();
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
         if (ownershipReason) { setFormError(ownershipReason); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if (feePick.mode === 'custom' && feePerKb === null) {
             const rate = Number(feePick.customRate);
             setFormError(rate > 0
@@ -789,7 +789,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                             membership until someone repoints it at the new fork. Repoint from each consumer&apos;s
                             own edit screen:
                         </p>
-                        <ul className={styles.detailsList} style={{ display: 'block' }}>
+                        <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                             {REPOINT_TARGETS.map((t) => {
                                 const open = t.built ? repointHandlers[t.id] : undefined;
                                 return (
@@ -805,7 +805,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                             <p>
                                 {resolution === false
                                     ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
-                                    : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                                    : `Unless list-edit resolution is active on this network, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
                             </p>
                         </StatusMessage>
                     </>
@@ -869,8 +869,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             >
                 <p className={styles.summary}>{secondDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
@@ -971,8 +971,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             >
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
@@ -1089,7 +1089,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             {currentItems.length > 0 ? (
                 <>
                     <span className={styles.fromLabel}>Current members (uncheck to remove)</span>
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                         {currentItems.map((item, index) => (
                             <li key={item} style={{ padding: '2px 0' }}>
                                 <Checkbox

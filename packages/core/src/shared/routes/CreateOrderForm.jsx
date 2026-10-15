@@ -130,7 +130,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         submitMethods: { hw: 'orderActionHw', software: 'orderAction' },
         initialChainId,
         initialFromAddress,
-        noAddressMessage: 'No addresses on any chain yet. Use Receive to generate one first.',
+        noAddressMessage: 'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
@@ -640,7 +640,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -745,7 +745,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         iconLabel="Choose source address"
                     />
                 ) : (
-                    <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                    <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
                 )}
 
                 <SideEditor

@@ -12,6 +12,7 @@ import { Component } from 'react';
 import { Button, FormPage, StatusMessage } from '@xchain-wallet/core/ui';
 import { logConsole } from '../utils/logConsole.js';
 import styles from './RouteErrorBoundary.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * Keeps a failed route from replacing the application with a blank screen.
@@ -66,8 +67,8 @@ export class RouteErrorBoundary extends Component {
 
         if (this.props.variant === 'compact') {
             return (
-                <StatusMessage variant="error" recovery={{ label: 'Retry', onAction: this.retry }}>
-                    Could not load this section.
+                <StatusMessage variant="error" recovery={{ label: t('home.retryBalances'), onAction: this.retry }}>
+                    {t('components.routeErrorBoundary.couldNotLoadThisSection')}
                 </StatusMessage>
             );
         }
@@ -75,20 +76,20 @@ export class RouteErrorBoundary extends Component {
         const actions = (
             <>
                 <Button type="button" variant="secondary" onClick={this.goHome}>
-                    Go to Home
+                    {t('components.routeErrorBoundary.goToHome')}
                 </Button>
                 <Button type="button" variant="primary" onClick={this.retry}>
-                    Try again
+                    {t('common.tryAgain')}
                 </Button>
             </>
         );
 
         return (
             <div role="alert" className={styles.recovery}>
-                <FormPage label="This screen could not be shown" actions={actions}>
-                    <h1 className={styles.title}>This screen could not be shown</h1>
+                <FormPage label={t('components.routeErrorBoundary.thisScreenCouldNotBe')} actions={actions}>
+                    <h1 className={styles.title}>{t('components.routeErrorBoundary.thisScreenCouldNotBe')}</h1>
                     <p className={styles.body}>
-                        Something went wrong while showing this screen. Try again or go to Home.
+                        {t('components.routeErrorBoundary.somethingWentWrongWhileShowing')}
                     </p>
                 </FormPage>
             </div>

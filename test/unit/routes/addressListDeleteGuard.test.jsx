@@ -153,13 +153,13 @@ describe('Addresses delete confirm names what the address holds', () => {
         expect(text).not.toMatch(/re-derives/);
     });
 
-    it('the only address on a chain says the chain leaves the wallet', async () => {
+    it('the only address on a network says the network leaves the wallet', async () => {
         const messaging = messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [hd('addr-plain', PLAIN, 2)] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: 'addr-plain', address: PLAIN } }),
         });
         const dialog = await openDeleteDialog(PLAIN, messaging);
-        expect(dialog.textContent).toMatch(/only address on this chain/);
+        expect(dialog.textContent).toMatch(/only address on this network/);
         expect(dialog.textContent).toMatch(/active address/);
         expect(dialog.textContent).not.toMatch(/Bitcoin|regtest|testnet|not mainnet/i);
     });

@@ -258,7 +258,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before issuing a token.',
+                        'No addresses on any network yet. Use Receive to generate one before issuing a token.',
                     );
                     return;
                 }
@@ -526,11 +526,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             }
         }
         if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
-            setFormError('Transfer ownership address is not valid for the active chain.');
+            setFormError('Transfer ownership address is not valid for the active network.');
             return;
         }
         if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
-            setFormError('Initial mint destination is not valid for the active chain.');
+            setFormError('Initial mint destination is not valid for the active network.');
             return;
         }
         // A supply destination with no initial mint would be silently dropped
@@ -810,7 +810,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (

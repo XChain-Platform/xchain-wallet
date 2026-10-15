@@ -133,7 +133,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             setAddressesByChain(byChain || {});
             setActiveByChain(active || {});
             if (!(byChain?.[chainId] || []).length) {
-                setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -226,7 +226,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
         if (nameError || descriptionError) {
             setFormError('Fix the list name and description first.');
             return false;
@@ -363,9 +363,9 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 <dd className={styles.detailsValue}>
                     {detail.description ? neutralizeControlText(detail.description) : 'Not set'}
                 </dd>
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>

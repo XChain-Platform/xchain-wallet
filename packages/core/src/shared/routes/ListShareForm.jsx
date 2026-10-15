@@ -118,7 +118,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             if (cancelled) return;
             setAddressesByChain(byChain || {});
             if (!(byChain?.[chainId] || []).length) {
-                setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -342,9 +342,9 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                         <dd className={styles.detailsValue}>{neutralizeControlText(detail.name)}</dd>
                     </>
                 ) : null}
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                 </dd>
                 <dt className={styles.detailsLabel}>Current members</dt>
                 <dd className={styles.detailsValue}>{eligibility.countKnown ? memberCount : 'Unavailable'}</dd>

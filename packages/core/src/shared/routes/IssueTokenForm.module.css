@@ -79,6 +79,19 @@
     margin-bottom: var(--xc-space-3);
 }
 
+/* A labelled set of checkboxes inside a form: the label keeps the label gap
+   to its options, and the options keep the label gap to each other. */
+.checkGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-gap);
+    min-width: 0;
+}
+
+.checkGroup > .pickerLabel {
+    margin-bottom: 0;
+}
+
 .picker {
     display: block;
     width: 100%;
@@ -190,10 +203,11 @@ select.picker {
     border-bottom: none;
 }
 
+/* Help text reads from the start edge, like every form's field hints. */
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-align: center;
+    text-align: start;
     margin: 0;
 }
 
@@ -217,6 +231,13 @@ select.picker {
     margin-top: var(--xc-space-4);
 }
 
+/* Inside a form stack the form gap spaces the row; the margin above is for
+   result screens, where the row follows plain content. */
+:global([data-form-stack]) > .actions,
+.advancedOptions > .actions {
+    margin-top: 0;
+}
+
 .advancedToggle {
     align-self: flex-start;
 }
@@ -234,6 +255,12 @@ select.picker {
     flex-direction: column;
     gap: var(--xc-form-gap);
     min-width: 0;
+}
+
+/* The advanced column is spaced by its gap alone, like a form stack, so a
+   StatusMessage in it drops the row's own block margin. */
+.advancedOptions > [data-variant] {
+    margin: 0;
 }
 
 .betActions {

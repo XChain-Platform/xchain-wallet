@@ -144,7 +144,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         initialChainId,
         initialFromAddress,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one first.',
+            'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -543,7 +543,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                         </>
                     ) : null}
@@ -645,7 +645,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     iconLabel="Choose publishing address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             {feeds == null ? (
@@ -689,10 +689,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
             <FormSection title="Publish a price">
             <Select
-                label="Token's chain"
+                label="Token's network"
                 hint={crossChain
                     ? `Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`
-                    : 'The chain the priced token lives on. It can differ from the publishing chain.'}
+                    : 'The network the priced token lives on. It can differ from the publishing network.'}
                 value={priceCoin}
                 onChange={(e) => setCoinPick(e.target.value === coinTicker ? '' : e.target.value)}
             >
@@ -829,7 +829,7 @@ function OraclePublishNotes({
                 <p className={styles.hint}>
                     Could not check which dispensers use this oracle, so this list may be
                     incomplete. Treat the publish as if buyers are watching.
-                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this chain.` : ''}
+                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this network.` : ''}
                 </p>
             ) : pairConsumers.length > 0 ? (
                 <StatusMessage variant="warning" role="alert">

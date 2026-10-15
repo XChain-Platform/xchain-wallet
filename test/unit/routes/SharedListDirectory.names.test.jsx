@@ -53,13 +53,13 @@ function mount({ entries, mode = 'browse', filterType, onSelect = vi.fn() }) {
 afterEach(cleanup);
 
 describe('SharedListDirectory names', () => {
-    it('shows a Name row directly before Home chain for a named entry', async () => {
+    it('shows a Name row directly before Home network for a named entry', async () => {
         mount({ entries: [entry({ name: 'Treasury assets' })] });
 
         const row = await screen.findByRole('listitem', { name: 'Token list 12' });
         const terms = within(row).getAllByRole('term');
         expect(terms[0].textContent).toBe('Name');
-        expect(terms[1].textContent).toBe('Home chain');
+        expect(terms[1].textContent).toBe('Home network');
         expect(within(row).getByText('Treasury assets')).toBeTruthy();
     });
 

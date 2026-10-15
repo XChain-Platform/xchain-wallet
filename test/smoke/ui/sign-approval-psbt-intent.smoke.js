@@ -82,7 +82,7 @@ assert.match(panelSrc, /Change \(back to you\)/, 'labels change returning to own
 
 // A parse failure must warn (role="alert"), never silently fall back to hex.
 assert.match(panelSrc, /role="alert"/, 'undecodable PSBT renders an alert');
-assert.match(panelSrc, /could not be decoded/, 'alert explains the transaction could not be decoded');
+assert.match(panelSrc, /couldn't be decoded/, 'alert explains the transaction could not be decoded');
 
 // --- 6. Approval is held until the decode settles (F1) -------------------
 // Approving before the intent renders would be approving un-verified

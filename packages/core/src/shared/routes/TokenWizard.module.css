@@ -1,7 +1,8 @@
+/* Help text reads from the start edge, like every form's field hints. */
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-align: center;
+    text-align: start;
     margin: 0;
 }
 
@@ -134,6 +135,12 @@
     margin-top: var(--xc-space-4);
 }
 
+/* Inside a form stack the form gap spaces the row; the margin above is for
+   result screens, where the row follows plain content. */
+:global([data-form-stack]) > .actions {
+    margin-top: 0;
+}
+
 @media not all and (min-width: 400px) {
     .detailsList {
         grid-template-columns: minmax(0, 1fr);
@@ -176,8 +183,7 @@
 
 /* PC-06: the Custom template's advanced disclosure (locks, callback,
    access lists). Collapsed by default; the body is a dense settings
-   block, so its copy reads left-aligned rather than centred like the
-   wizard's one-line stage hints. */
+   block. */
 .advanced {
     margin: var(--xc-space-4) 0 var(--xc-space-3);
     padding-top: var(--xc-space-3);
@@ -186,10 +192,6 @@
 
 .advancedBody {
     margin-top: var(--xc-space-3);
-}
-
-.advancedBody .hint {
-    text-align: start;
 }
 
 .lockFlagRow {

@@ -106,7 +106,12 @@
        transform centers the label on it. First/last clamp to the edges
        so they don't overflow the track. */
     transform: translateX(-50%);
-    white-space: nowrap;
+    /* A longer translation wraps inside its own stop of the track instead of
+       running into the neighbouring stop; English never reaches the cap. */
+    width: max-content;
+    max-width: 28%;
+    white-space: normal;
+    overflow-wrap: anywhere;
     background: transparent;
     border: none;
     padding: 0 var(--xc-space-1);

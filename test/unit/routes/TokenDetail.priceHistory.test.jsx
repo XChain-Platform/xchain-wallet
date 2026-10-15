@@ -391,7 +391,7 @@ describe('TokenDetail price history', () => {
         widgetFailure.current = 'market';
         renderDetail('demo-wallet');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('group', { name: 'Quick actions' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 

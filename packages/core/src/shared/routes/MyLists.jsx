@@ -250,7 +250,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return wrap(
             <EmptyState
                 title="No supported address"
-                body="Publishing a list requires an address on a supported chain."
+                body="Publishing a list requires an address on a supported network."
                 titleAs="p"
             />,
         );
@@ -370,6 +370,7 @@ function MyListRow({ row, onSelect }) {
             subtitle={isFork
                 ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
                 : 'Created list'}
+            trailingClassName={local.statusSlot}
             trailing={(
                 <span className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}>
                     {valid ? 'Valid' : status}

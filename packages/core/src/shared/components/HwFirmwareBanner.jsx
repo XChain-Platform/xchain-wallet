@@ -33,6 +33,7 @@ import { signers as signersLib } from '@xchain-wallet/core';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import styles from './HwFirmwareBanner.module.css';
+import { t } from '../../i18n/index.js';
 
 const { checkFirmware } = signersLib;
 
@@ -90,7 +91,7 @@ export function HwFirmwareBanner({ signerInfo }) {
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    Open vendor update tool <span aria-hidden="true">↗</span>
+                    {t('components.hwFirmwareBanner.openVendorUpdateTool')} <span aria-hidden="true">↗</span>
                 </a>
             ) : null}
         </StatusMessage>

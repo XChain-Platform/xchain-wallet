@@ -26,6 +26,7 @@ import {
     ShellNoticesContext,
 } from './noticesRoute.js';
 import styles from './LeftNav.module.css';
+import { t } from '../../i18n/index.js';
 import screenStyles from '../../ui/Screen.module.css';
 
 /**
@@ -59,20 +60,20 @@ export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 // routeRegistry.js, which PageHeader also reads to decide where Back is
 // redundant.
 const LEFT_NAV_ITEMS = [
-    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
-    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
-    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
-    { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon, requiresDex: true },
-    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
-    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
-    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+    { id: 'home', get label() { return t('home.title'); }, Icon: Icon.HomeIcon },
+    { id: 'history', get label() { return t('history.title'); }, Icon: Icon.HistoryIcon },
+    { id: 'send', get label() { return t('send.title'); }, Icon: Icon.SendIcon, spendable: true },
+    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'scan', get label() { return t('scan.title'); }, Icon: Icon.ScanIcon },
+    { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'market-activity', get label() { return t('nav.marketplace'); }, Icon: Icon.LineChartIcon, requiresDex: true },
+    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
+    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
+    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
+    { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; badge = payable pending count.
-    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
+    { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon },
 ];
 
 /** The label and icon row for a nav destination id. */
@@ -165,10 +166,10 @@ export function LeftNav({
     return (
         <nav
             className={styles.nav}
-            aria-label="Primary navigation"
+            aria-label={t('components.leftNav.primaryNavigation')}
             onKeyDown={handleKeyDown}
         >
-            <div className={styles.brand}>XChain Wallet</div>
+            <div className={styles.brand}>{t('components.leftNav.xchainWallet')}</div>
             {onCommandPalette ? (
                 <div className={styles.search}>
                     <Button
@@ -176,11 +177,11 @@ export function LeftNav({
                         block
                         icon={<Icon.SearchIcon />}
                         onClick={onCommandPalette}
-                        aria-label="Open command palette"
+                        aria-label={t('components.leftNav.openCommandPalette')}
                         aria-keyshortcuts="Meta+K Control+K"
-                        title="Search (Cmd/Ctrl+K)"
+                        title={t('components.leftNav.searchCmdCtrlK')}
                     >
-                        <span className={styles.label}>Search</span>
+                        <span className={styles.label}>{t('routes.addressList.search')}</span>
                     </Button>
                 </div>
             ) : null}
@@ -203,7 +204,7 @@ export function LeftNav({
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
                                 {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={`${badges[item.id]} unread`}>
+                                    <span className={styles.badge} aria-label={t('components.leftNav.unread', { value: badges[item.id] })}>
                                         {formatBadgeCount(badges[item.id])}
                                     </span>
                                 ) : null}
@@ -231,7 +232,7 @@ export function LeftNav({
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
                                 {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={`${badges[item.id]} pending`}>
+                                    <span className={styles.badge} aria-label={t('components.leftNav.pending', { value: badges[item.id] })}>
                                         {formatBadgeCount(badges[item.id])}
                                     </span>
                                 ) : null}
@@ -247,13 +248,13 @@ export function LeftNav({
                         type="button"
                         className={`${styles.item} ${activeItem === 'settings' ? styles.itemActive : ''}`}
                         aria-current={activeItem === 'settings' ? 'page' : undefined}
-                        title="Settings"
+                        title={t('home.settings')}
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">
                             <Icon.GearIcon />
                         </span>
-                        <span className={styles.label}>Settings</span>
+                        <span className={styles.label}>{t('home.settings')}</span>
                     </button>
                 ) : null}
                 {onLock ? (
@@ -262,10 +263,10 @@ export function LeftNav({
                             variant="secondary"
                             block
                             icon={<Icon.LockIcon />}
-                            title="Lock"
+                            title={t('components.leftNav.lock')}
                             onClick={onLock}
                         >
-                            <span className={styles.label}>Lock</span>
+                            <span className={styles.label}>{t('components.leftNav.lock')}</span>
                         </Button>
                     </div>
                 ) : null}
@@ -397,7 +398,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             data-xc-rail={sidebar ? 'shown' : undefined}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
-            <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
+            <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>{t('components.leftNav.skipToMainContent')}</a>
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}

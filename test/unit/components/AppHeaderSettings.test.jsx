@@ -515,7 +515,7 @@ describe('HeaderSettingsButton section gating', () => {
         );
         fireEvent.click(gear());
         // The chain filter is a lazy chunk inside the popover.
-        expect(await screen.findByText('Chain filter')).toBeTruthy();
+        expect(await screen.findByText('Network filter')).toBeTruthy();
         const networkTrigger = screen.getByRole('button', { expanded: false, name: /All networks/ });
         expect(networkTrigger).toHaveAttribute('title', 'All networks');
         fireEvent.click(networkTrigger);

@@ -8,6 +8,7 @@ import {
     formatActivityTime,
     formatLocalDateTime,
 } from '../utils/dateTime.js';
+import { t } from '../../i18n/index.js';
 
 const TICK_MS = 30_000;
 const LONG_PRESS_MS = 500;
@@ -68,7 +69,7 @@ export function RelativeTime({ timestamp, className, children }) {
             className={className}
             dateTime={Number.isNaN(ms) ? undefined : new Date(ms).toISOString()}
             title={exact}
-            aria-label={`${label}. Exact time: ${exact}`}
+            aria-label={t('components.relativeTime.exactTime', { label, exact })}
             onPointerDown={onPointerDown}
             onPointerUp={cancelPress}
             onPointerCancel={cancelPress}

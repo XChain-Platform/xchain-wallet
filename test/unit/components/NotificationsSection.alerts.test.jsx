@@ -218,7 +218,7 @@ describe('price alert manager', () => {
         priceAlerts.error = 'storage failed';
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load price alerts.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load price alerts.');
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(priceAlerts.reload).toHaveBeenCalledTimes(1);
         expect(screen.queryByText(/No price alerts yet/)).toBeNull();
