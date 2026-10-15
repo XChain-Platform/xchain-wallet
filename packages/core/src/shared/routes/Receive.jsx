@@ -418,12 +418,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             addressUsageRef.current = next;
             setAddressUsageByKey(next);
             if (!addressManuallySelectedRef.current) {
-                setAddress(preferredAddressOfType(
+                // Only swap to a better pick; a list with no address of the
+                // shown type keeps the address the newest-address load chose.
+                const preferred = preferredAddressOfType(
                     candidates,
                     addressTypeRef.current,
                     activeChainId,
                     next,
-                ));
+                );
+                if (preferred) setAddress(preferred);
             }
         });
         return () => { cancelled = true; };
