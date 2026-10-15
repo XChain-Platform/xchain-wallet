@@ -234,15 +234,15 @@ describe('price alert manager', () => {
         expect(screen.queryByText(/No price alerts yet/)).toBeNull();
     });
 
-    it('says only why alerts are off while the toggle is off', () => {
+    it('says one thing, not two, while price alerts are switched off', () => {
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getByText(/Turn on Price alerts above/)).toBeTruthy();
-        expect(screen.queryByText(/No price alerts yet/)).toBeNull();
+        expect(screen.getByText('Turn on Price alerts above to start receiving these.')).toBeTruthy();
+        expect(screen.queryByText('No price alerts yet')).toBeNull();
     });
 
     it('creates a price alert from the empty state', async () => {
-        settings = { ...settings, notifications: { ...settings.notifications, priceAlerts: true } };
+        settings.notifications.priceAlerts = true;
         render(<NotificationsSection walletId="wallet-1" />);
         expect(screen.getAllByRole('status').some(
             (region) => region.textContent === 'No price alerts yetAdd one below.',
