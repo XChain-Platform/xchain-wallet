@@ -153,10 +153,6 @@
             "count": 1,
             "reason": "A small origin badge."
         },
-        "packages/core/src/shared/routes/ComposeMessage.jsx": {
-            "count": 1,
-            "reason": "A warning notice."
-        },
         "packages/core/src/shared/routes/History.jsx": {
             "count": 2,
             "reason": "The fee-bump dialog and the fieldset inside it."
