@@ -113,7 +113,8 @@ describe('popup App defensive branches', () => {
 
         render(<App />);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent("The wallet couldn't start.");
+        expect(await screen.findByRole('alert')).toHaveTextContent('Something stopped the wallet from opening.');
+        expect(screen.getByRole('heading', { name: /wallet couldn't start/i })).toBeInTheDocument();
         expect(screen.queryByText('storage permission refused')).not.toBeInTheDocument();
     });
 
