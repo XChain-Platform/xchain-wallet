@@ -78,7 +78,7 @@ describe('send asset switch', () => {
         expect(token.assetSwitchNotice).toMatch(/^Token changed/);
         const chain = applySendAssetPick(during, { chainId: 'litecoin-regtest', tick: 'LTC' });
         expect(chain).toMatchObject({ address: undefined, amount: undefined, feeSelection: undefined });
-        expect(chain.assetSwitchNotice).toMatch(/^Chain changed/);
+        expect(chain.assetSwitchNotice).toMatch(/^Network changed/);
     });
 
     it.each(SHELLS)('%s backs out of send-picker to Send and leaves Send\'s back target alone', (path) => {

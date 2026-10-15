@@ -165,7 +165,7 @@ describe('NetworkEndpointsSection', () => {
         });
 
         expect(within(block).getByText(/host isn't contacted/)).toHaveTextContent(
-            /If it's unreachable, this chain's balances, history and transactions may be unavailable\./,
+            /If it's unreachable, this network's balances, history and transactions may be unavailable\./,
         );
     });
 

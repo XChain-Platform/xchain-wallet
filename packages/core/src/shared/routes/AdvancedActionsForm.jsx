@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
@@ -792,7 +793,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 />
             ) : (
                 <StatusMessage variant="error">
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 

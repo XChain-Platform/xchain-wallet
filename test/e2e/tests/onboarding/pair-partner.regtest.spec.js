@@ -443,7 +443,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 expect(/same recovery phrase/i.test(res.message),
                     'the success screen does not confirm the two halves share a phrase')
                     .toBe(true);
-                await expect(watcher.page.getByText(/^Matching chains:/),
+                await expect(watcher.page.getByText(/^Matching networks:/),
                     'the paired screen names no matching chains, so nothing says WHAT was compared')
                     .toBeVisible({ timeout: 30_000 });
             });

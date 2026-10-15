@@ -534,7 +534,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 {listType === '1' && missingTicks.length > 0 ? (
                     <p className={styles.hint}>
                         {missingTicks.length} of these ({missingTicks.join(', ')}) {missingTicks.length === 1 ? 'was' : 'were'} not
-                        found on the selected chain; the network leaves an unknown token out of the list.
+                        found on the selected network; unknown tokens are left out of the list.
                         Check the members in My Lists once it's indexed.
                     </p>
                 ) : null}
@@ -833,7 +833,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
-                                This list is published on the selected chain.
+                                This list is published on the selected network.
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
@@ -868,7 +868,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         block, in the same voice IssueTokenForm already uses. */}
                     <p className={styles.hint}>
                         If you later point a token&apos;s allow-list or block-list at this
-                        list, that token can never be bridged to another chain, and the
+                        list, that token can never be bridged to another network, and the
                         binding itself can never be cleared once set.
                     </p>
                 </>

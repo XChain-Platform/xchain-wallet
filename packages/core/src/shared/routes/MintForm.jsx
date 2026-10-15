@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
@@ -761,7 +762,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 />
             ) : (
                 <StatusMessage variant="error">
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 

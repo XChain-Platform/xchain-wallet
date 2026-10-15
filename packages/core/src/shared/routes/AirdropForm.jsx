@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainPicker, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
@@ -1821,7 +1822,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 />
             ) : (
                 <StatusMessage variant="error">
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 
