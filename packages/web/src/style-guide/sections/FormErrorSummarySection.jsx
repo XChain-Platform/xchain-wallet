@@ -48,10 +48,10 @@ export function FormErrorSummarySection() {
                 <Input id="sg-summary-amount" label="Amount" error="Amount must be a positive number." onChange={() => {}} />
             </LiveExample>
             <Guidance
-                what={<>FormNotice: a plain-string notice written in the middle of a form body that FormPage shows at the top of the form with its other notices. Props: <code>variant</code> (default warning), <code>role</code>, and the text as children.</>}
+                what={<>FormNotice: a plain-string notice written in the middle of a form body that FormPage shows with its other notices as the first item of the page content. Props: <code>variant</code> (default warning), <code>role</code>, and the text as children.</>}
                 when={<>A fact about the whole form that a field or control knows only once it renders, such as the fee selector's fallback-rate note.</>}
                 whenNot={<>A field problem (the field's own <code>error</code>) · text that is not a plain string, which renders in place.</>}
-                sizing={<>The StatusMessage row, at full content width, first in the form, with the form gap between stacked notices.</>}
+                sizing={<>The StatusMessage row, at full content width, first in the page content (above the card when wide), with the form gap between stacked notices.</>}
                 doRule={<>✓ Write it next to the control that raises it · keep the text a plain string</>}
                 dontRule={<>✗ Render a StatusMessage between fields</>}
             />
