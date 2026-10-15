@@ -98,11 +98,7 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
                     ))}
                 </select>
             </div>
-            {switchError ? (
-                <div role="alert" style={{ color: 'var(--xc-danger-fg, #c33)', fontSize: 'var(--xc-text-xs)' }}>
-                    {switchError}
-                </div>
-            ) : null}
+            {switchError ? <Status text={switchError} tone="error" /> : null}
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}
