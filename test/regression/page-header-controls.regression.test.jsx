@@ -5,8 +5,10 @@
 
 // Regression suite: page header controls.
 //
-//   [P1] 2026-10-13: Page header controls share one medium footprint so
-//        their boxes and centred icons stay aligned on both edges.
+//   [P1] 2026-10-13: Page header controls share one footprint so their
+//        boxes and centred icons stay aligned on both edges.
+//   [P1] 2026-10-14: That footprint is the Back control's small size, so a
+//        screen with a trailing action is no taller than one without.
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -49,20 +51,21 @@ function renderHistory() {
 afterEach(() => cleanup());
 
 describe('regression/page-header-controls', () => {
-    it('[REGRESSION P1] aligns the History back and refresh controls on one medium footprint', () => {
+    it('[REGRESSION P1] aligns the History back and refresh controls on the Back control footprint', () => {
         renderHistory();
 
         const back = screen.getByRole('button', { name: 'Back to home' });
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
 
         // 21b makes the back control the kit small secondary Button; the
-        // trailing slot keeps the medium header side footprint.
+        // trailing slot sizes its action to the same small control height
+        // while its lane keeps the header side width.
         expect(back).toHaveClass(buttonStyles.btn, buttonStyles.sm, buttonStyles.iconOnly);
         expect(refresh.closest(`.${pageHeaderStyles.trailing}`)).not.toBeNull();
         expect(refresh).toHaveClass(buttonStyles.btn, buttonStyles.md, buttonStyles.iconOnly);
         for (const body of [ruleBody('.trailing button:not([role="menuitem"])')]) {
-            expect(body).toMatch(/width:\s*var\(--xc-page-header-side\)/);
-            expect(body).toMatch(/height:\s*var\(--xc-page-header-side\)/);
+            expect(body).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
+            expect(body).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
             expect(body).toMatch(/justify-content:\s*center/);
         }
         expect(pageHeaderCss).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
