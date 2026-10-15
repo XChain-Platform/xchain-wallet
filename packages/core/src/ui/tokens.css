@@ -939,7 +939,7 @@ fieldset {
     line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background-color: var(--xc-surface);
-    border: 1px solid var(--xc-control-border);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-control-radius, 8px);
     max-width: 100%;
     cursor: pointer;

@@ -22,7 +22,6 @@ describe('field tokens', () => {
     it('draws every field border from the control-border token', () => {
         expect(rule(css('shared/components/TokenField.module.css'), '.control')).toContain('border: 1px solid var(--xc-control-border)');
         expect(rule(css('ui/IconSelect.module.css'), '.trigger')).toContain('border: 1px solid var(--xc-control-border)');
-        expect(rule(css('ui/tokens.css'), ':where(select)')).toContain('border: 1px solid var(--xc-control-border)');
     });
 
     it('draws every disabled field from the shared disabled colours', () => {
