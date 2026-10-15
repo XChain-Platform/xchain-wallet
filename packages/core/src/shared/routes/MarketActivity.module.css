@@ -56,14 +56,6 @@
     transform: scaleX(-1);
 }
 
-.section {
-    margin-top: var(--xc-space-4);
-}
-
-.section + .section {
-    margin-top: var(--xc-space-6);
-}
-
 .count {
     color: var(--xc-text);
     font-weight: 700;

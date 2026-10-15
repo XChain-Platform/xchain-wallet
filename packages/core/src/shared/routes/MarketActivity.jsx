@@ -310,7 +310,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : null}
 
                 {offers !== null ? (
-                    <section className={styles.section} aria-label="Open dispensers">
+                    <section aria-label="Open dispensers">
                         <SectionHeader
                             as="h2"
                             title={(
@@ -362,7 +362,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 ) : null}
 
                 {dexOrders !== null ? (
-                    <section className={styles.section} aria-label="Open DEX orders">
+                    <section aria-label="Open DEX orders">
                         <SectionHeader
                             as="h2"
                             title={(
@@ -410,7 +410,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 ) : null}
 
                 {sales !== null ? (
-                    <section className={styles.section} aria-label="Recent dispenses">
+                    <section aria-label="Recent dispenses">
                         <SectionHeader
                             as="h2"
                             title={(
@@ -460,7 +460,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 ) : null}
 
                 {dexSwaps !== null ? (
-                    <section className={styles.section} aria-label="Recent DEX swaps">
+                    <section aria-label="Recent DEX swaps">
                         <SectionHeader
                             as="h2"
                             title={(

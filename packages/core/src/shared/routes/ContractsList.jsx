@@ -445,7 +445,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
 function Section({ title, children }) {
     return (
-        <section style={{ marginBottom: '1rem' }}>
+        <section>
             <SectionHeader title={title} />
             {children}
         </section>

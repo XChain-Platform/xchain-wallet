@@ -30,6 +30,13 @@
     margin-block-start: calc(var(--xc-section-header-gap) - var(--xc-section-gap));
 }
 
+/* A screen that wraps each group in its own section keeps the same rhythm:
+   the sections stack at the section gap of this column, and each heading
+   sits the header gap above its content. */
+.page section > [data-xc-section-header] + * {
+    margin-block-start: var(--xc-section-header-gap);
+}
+
 .intro {
     margin: 0;
     max-width: var(--xc-prose-max-width);
