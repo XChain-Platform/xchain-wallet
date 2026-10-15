@@ -23,9 +23,9 @@ const VIEWPORTS = [
 ];
 
 const SIGNED_AMOUNTS = [
-    { chainId: 'bitcoin-regtest', incomingTick: 'EXAMPLE', outgoingTick: 'BTC' },
-    { chainId: 'litecoin-regtest', incomingTick: 'LITECRED', outgoingTick: 'LTC' },
-    { chainId: 'dogecoin-regtest', incomingTick: 'DOGI', outgoingTick: 'DOGE' },
+    { chainId: 'bitcoin-mainnet', incomingTick: 'EXAMPLE', outgoingTick: 'BTC' },
+    { chainId: 'litecoin-mainnet', incomingTick: 'LITECRED', outgoingTick: 'LTC' },
+    { chainId: 'dogecoin-mainnet', incomingTick: 'DOGI', outgoingTick: 'DOGE' },
 ];
 
 async function settleLayout(page) {
@@ -109,7 +109,7 @@ for (const viewport of VIEWPORTS) {
         // The active range reads in the viewer's local date format.
         await expect(page.getByText(/^Date range: .+ to .+$/)).toBeVisible();
         await expect(page.locator('[data-history-key*=":100003:"]')).toHaveCount(0);
-        await expect(historyRow(page, 'bitcoin-regtest', 100001)).toBeVisible();
+        await expect(historyRow(page, 'bitcoin-mainnet', 100001)).toBeVisible();
         await expectNoHorizontalOverflow(page, `${viewport.name} custom date range`);
 
         await datePresets.getByRole('button', { name: 'All dates', exact: true }).click();
@@ -147,7 +147,7 @@ for (const viewport of VIEWPORTS) {
         await expectNoHorizontalOverflow(page, `${viewport.name} export dialog`);
         await exportDialog.getByRole('button', { name: 'Cancel' }).click();
 
-        const outgoing = historyRow(page, 'bitcoin-regtest', 100002);
+        const outgoing = historyRow(page, 'bitcoin-mainnet', 100002);
         await outgoing.locator('button').first().click();
         await expect(page.getByRole('heading', { name: 'Send #100,002' })).toBeVisible();
         // The detail opens on its Status tab; the amount lives under Details.
