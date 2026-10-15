@@ -167,6 +167,14 @@ export class PriceAlertWatcher {
                 this._fired.delete(id);
                 this._firedDirty = true;
             }
+            // A delivered alert whose stored status has left 'armed' no longer
+            // needs the in-memory guard. Dropping it here, and only once the
+            // store says so, lets a re-armed alert with the same id fire again
+            // before the app restarts while a store that has not caught up cannot
+            // deliver it twice.
+            for (const id of this._fired) {
+                if (!armedIds.has(id) && !this._pendingTriggered.has(id)) this._fired.delete(id);
+            }
             armed = armed.filter((a) => isOnActiveNetwork(a.chainId, settings?.activeNetwork));
             for (const alert of armed) {
                 if (!this._pendingTriggered.has(alert.id)) continue;
