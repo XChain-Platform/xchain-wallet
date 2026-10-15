@@ -153,11 +153,15 @@ test.describe('real wallet', () => {
         const toggle = message.locator('xpath=..').getByRole('button', { name: 'Details' });
         await toggle.click();
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await gotoSection(page, 'History');
+        // Settings, not History: an empty History in a wallet whose balances
+        // could not be checked says so itself and the shell notice steps
+        // aside there (one message per state), so it is not a route the
+        // notice shows on.
+        await gotoSection(page, 'Settings');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         // On a route with a page header the notice opens the scrolling
         // content below that header, never between the two toolbars.
-        // History loads lazily; until its Screen mounts, the notice waits in
+        // Settings loads lazily; until its Screen mounts, the notice waits in
         // the route area's fallback slot, so poll for the settled placement.
         const placement = () => message.evaluate((node) => {
             const main = node.closest('main');
