@@ -743,6 +743,27 @@ describe('desktop main entry point', () => {
         await sending;
     });
 
+    it.each(['balances.wallet', 'history.address', 'settings.get', 'action.composeForConfirm'])(
+        'never defers quit for a pending %s read',
+        async (type) => {
+            runtime.handleIpcMessage.mockImplementationOnce(() => new Promise(() => {}));
+            electron.app.whenReady.mockResolvedValueOnce();
+            await import('../../../packages/desktop/main/index.js');
+            await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain-wallet:message')).toBe(true));
+            const win = electron.BrowserWindow.instances[0];
+
+            void electron.ipcHandlers.get('xchain-wallet:message')({
+                senderFrame: { url: appIndex },
+                sender: win.webContents,
+            }, { type, request: {} });
+            const quitEvent = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(quitEvent);
+
+            expect(quitEvent.preventDefault).not.toHaveBeenCalled();
+            expect(runtime.tearDownHost).toHaveBeenCalledOnce();
+        },
+    );
+
     it('hardens every Electron webContents and opens external links outside the wallet', async () => {
         await import('../../../packages/desktop/main/index.js');
         const handlers = new Map();

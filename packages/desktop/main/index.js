@@ -88,6 +88,7 @@ import {
     runMainTask,
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
+import { isQuitDeferringMessage } from './quitGuard.js';
 import {
     FileWindowBoundsStore,
     MIN_WINDOW_BOUNDS,
@@ -694,7 +695,8 @@ let reopenInFlight = /** @type {Promise<void> | null} */ (null);
 let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
-let activeWalletOperations = 0;
+// Sends that sign and then broadcast or persist; reads are never counted.
+let activeSendOperations = 0;
 let activeUpdateDownloads = 0;
 
 function requestUpdateCheck({ visible = false } = {}) {
@@ -1078,7 +1080,7 @@ void runMainTask(async () => {
                 lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
-            canRestart: () => activeWalletOperations === 0,
+            canRestart: () => activeSendOperations === 0,
         });
         downloadAndInstall = downloadUpdate;
         restartAndInstall = restart;
@@ -1155,7 +1157,8 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: runtime not initialized' },
             };
         }
-        activeWalletOperations += 1;
+        const holdsQuit = isQuitDeferringMessage(message);
+        if (holdsQuit) activeSendOperations += 1;
         try {
             const response = await handleIpcMessage(runtime, message);
             const change = stateChangeForMessage(message, response);
@@ -1168,7 +1171,7 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: message handling failed' },
             };
         } finally {
-            activeWalletOperations -= 1;
+            if (holdsQuit) activeSendOperations -= 1;
         }
     });
 
@@ -1317,7 +1320,7 @@ app.on('before-quit', (event) => {
     // can be between its network fetch and signature verdict. Keep the app
     // reachable until the in-flight operation settles, then let the user
     // retry quit explicitly.
-    if (activeWalletOperations > 0 || activeUpdateDownloads > 0) {
+    if (activeSendOperations > 0 || activeUpdateDownloads > 0) {
         event?.preventDefault();
         void restoreWindowAfterIdleCheck();
         return;
