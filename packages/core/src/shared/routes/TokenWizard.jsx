@@ -24,6 +24,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import {
     LOCK_FLAGS,
@@ -131,6 +132,19 @@ export function TokenWizard({ walletId, onBack }) {
     // deliberate choice straight back to the default address.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [sourceChosenFor, setSourceChosenFor] = useState(/** @type {string | null} */ (null));
+    // The address book behind the two recipient fields, as on Issue token:
+    // one picker, and which field it is filling.
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contactsTarget, setContactsTarget] = useState(/** @type {'owner' | 'supply'} */ ('owner'));
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(rows || []); })
+            .catch(() => { if (!cancelled) setContacts([]); });
+        return () => { cancelled = true; };
+    }, [messaging]);
 
     // Details form state (some fields are only visible for certain
     // templates (see renderDetailsStage). Keeping all state here so
@@ -623,6 +637,21 @@ export function TokenWizard({ walletId, onBack }) {
     // signed by anyone else, and no field on this screen could change who
     // signed. Same picker, so the coin filtering and the address list are the
     // wallet's own rather than this form's.
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => {
+                    if (contactsTarget === 'supply') setTransferSupplyTo(entry.address);
+                    else setTransferTo(entry.address);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -713,6 +742,7 @@ export function TokenWizard({ walletId, onBack }) {
             lockOnCreate, setLockOnCreate,
             transferTo, setTransferTo,
             transferSupplyTo, setTransferSupplyTo,
+            onPickContact: (target) => { setContactsTarget(target); setContactsPickerOpen(true); },
             imageUrl, setImageUrl,
             parentToken, setParentToken,
             perAddressMax, setPerAddressMax,
@@ -1267,6 +1297,7 @@ function renderDetailsStage({
     lockOnCreate, setLockOnCreate,
     transferTo, setTransferTo,
     transferSupplyTo, setTransferSupplyTo,
+    onPickContact,
     imageUrl, setImageUrl,
     parentToken, setParentToken,
     perAddressMax, setPerAddressMax,
@@ -1423,9 +1454,11 @@ function renderDetailsStage({
             {show.transferTo ? (
                 <AddressField
                     label="Transfer ownership to (optional)"
+                    icon="contacts"
                     hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
+                    onIconClick={() => onPickContact('owner')}
                     autoComplete="off"
                     autoCapitalize="off"
                     autoCorrect="off"
@@ -1434,9 +1467,11 @@ function renderDetailsStage({
             {show.transferSupplyTo ? (
                 <AddressField
                     label="Send the initial mint to (optional)"
+                    icon="contacts"
                     hint="Leave blank to keep the minted tokens at the issuing address."
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
+                    onIconClick={() => onPickContact('supply')}
                     autoComplete="off"
                     autoCapitalize="off"
                     autoCorrect="off"
