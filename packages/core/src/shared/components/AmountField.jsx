@@ -28,6 +28,39 @@ import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
 import { t } from '../../i18n/index.js';
 
+// The space kept between typed digits and the first action: the same 4px
+// (--xc-space-1) the actions keep from the field border.
+const ACTIONS_TEXT_GAP_PX = 4;
+
+/**
+ * Writes `--amount-actions-room` on the field: how far in from the input's
+ * end edge its in-field actions (Paste, and Max when shown) really reach,
+ * plus a small gap. The input's end padding is at least this, so typed
+ * digits stop before the actions. The stylesheet lanes assume default-size
+ * labels; Paste and Max grow with the text size, and at 130 percent text the
+ * digits already ran under Paste.
+ *
+ * @param {HTMLElement | null} wrap     the field wrapper, which owns the property
+ * @param {HTMLElement | null} input    the amount input
+ * @param {Array<HTMLElement | null>} actions  the in-field action buttons
+ * @returns {number | null} the room written, or null when nothing was measured
+ */
+export function syncAmountActionsRoom(wrap, input, actions) {
+    if (!wrap || !input) return null;
+    const box = input.getBoundingClientRect();
+    const rects = actions.filter(Boolean)
+        .map((action) => action.getBoundingClientRect())
+        .filter((rect) => rect.width > 0);
+    if (box.width <= 0 || rects.length === 0) return null;
+    const rtl = getComputedStyle(wrap).direction === 'rtl';
+    const reach = rtl
+        ? Math.max(...rects.map((rect) => rect.right)) - box.left
+        : box.right - Math.min(...rects.map((rect) => rect.left));
+    const room = Math.ceil(reach + ACTIONS_TEXT_GAP_PX);
+    wrap.style.setProperty('--amount-actions-room', `${room}px`);
+    return room;
+}
+
 /**
  * @param {object} props
  * @param {string} [props.label]                             field label; defaults to "Amount". The active unit is appended either way.
@@ -74,6 +107,23 @@ export function AmountField({
     balanceText,
 }) {
     const [inputError, setInputError] = useState('');
+    const wrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const pasteSlotRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
+    const maxRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+    const hasMax = Boolean(onMax);
+
+    useLayoutEffect(() => {
+        const wrap = wrapRef.current;
+        const input = wrap?.querySelector('input') ?? null;
+        const actions = () => [pasteSlotRef.current?.querySelector('button') ?? null, maxRef.current];
+        const sync = () => syncAmountActionsRoom(wrap, input, actions());
+        sync();
+        if (!input || typeof ResizeObserver !== 'function') return undefined;
+        const observer = new ResizeObserver(sync);
+        observer.observe(input);
+        actions().filter(Boolean).forEach((action) => observer.observe(action));
+        return () => observer.disconnect();
+    }, [hasMax]);
     const tickUpper = (typeof tick === 'string' ? tick : '').trim().toUpperCase();
     const fiatCcy = String(fiatRate?.fiatCurrency || fiatCurrency || 'USD').toUpperCase();
     const isFiat = Boolean(amountInputMode === 'fiat' && fiatRate);
@@ -123,7 +173,6 @@ export function AmountField({
     // English labels. A longer translation widens a button past its lane and the
     // two overlap, so each lane grows to the measured button. English measures
     // narrower than the default lane, so its layout is unchanged.
-    const wrapRef = useRef(null);
     const [measured, setMeasured] = useState({ max: 0, paste: 0 });
     useLayoutEffect(() => {
         const root = wrapRef.current;
@@ -178,14 +227,18 @@ export function AmountField({
                     autoComplete="off"
                     placeholder="0.00"
                     // Paste sits one action lane in from Max, so two lanes
-                    // already clear both; a 320px field keeps 120px for digits.
+                    // clear both at default text; a 320px field keeps 120px for
+                    // digits. Larger text widens the actions, and the measured
+                    // room (syncAmountActionsRoom) then holds the digits clear.
                     style={{
                         paddingInlineEnd: onMax
-                            ? `calc(var(--amount-action-width) + ${pasteLane || 'var(--amount-action-width)'})`
-                            : 'calc(var(--amount-action-width) + var(--xc-space-2))',
+                            ? (pasteLane
+                                ? `max(calc(var(--amount-action-width) + ${pasteLane}), var(--amount-actions-room, 0px))`
+                                : 'max(calc(var(--amount-action-width) * 2), var(--amount-actions-room, 0px))')
+                            : 'max(calc(var(--amount-action-width) + var(--xc-space-2)), var(--amount-actions-room, 0px))',
                     }}
                 />
-                <span className={styles.pasteAction}>
+                <span className={styles.pasteAction} ref={pasteSlotRef}>
                     <ClipboardPasteButton
                         onPaste={(text) => {
                             const inspected = inspectFieldPaste(text);
@@ -206,6 +259,7 @@ export function AmountField({
                     <Button
                         variant="primary"
                         size={size}
+                        ref={maxRef}
                         className={styles.maxAction}
                         icon={null}
                         onClick={() => {

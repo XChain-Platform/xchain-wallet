@@ -35,8 +35,10 @@ import { t } from '../i18n/index.js';
  * @param {number} [props.feedbackMs]
  * @param {boolean} [props.sensitive]     seed words, private keys: never to a synced or unmarked clipboard (SSC-4)
  * @param {() => void} [props.onCopied]   fires after a successful copy
+ * @param {'filled' | 'outlined'} [props.appearance]  outlined for a per-row action
+ *   repeated down a list (each message in a thread); filled everywhere else
  */
-export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
+export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLabel, feedbackMs = 1500, sensitive = false, onCopied, appearance = 'filled' }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
     const [copiedText, setCopiedText] = useState('');
@@ -99,7 +101,7 @@ export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLa
             <Button
                 ref={buttonRef}
                 size="sm"
-                className={styles.btn}
+                className={appearance === 'outlined' ? `${styles.btn} ${styles.outlined}` : styles.btn}
                 onClick={handleCopy}
                 icon={icon}
                 aria-label={state === 'copied' ? text : ariaLabel || label}

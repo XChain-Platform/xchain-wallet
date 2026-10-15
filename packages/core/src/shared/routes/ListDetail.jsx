@@ -294,7 +294,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                         title={`Left out by the network (${rejected.length})`}
                         description="These items were sent but are not on the list: the network checks each item on its own."
                     />
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                         {rejected.map((e, i) => (
                             <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>{` (${e.status})`}
@@ -307,7 +307,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
             {isFork && edits.length > 0 ? (
                 <>
                     <SectionHeader title="This fork's edit" />
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                         {edits.map((e, i) => (
                             <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>
@@ -378,7 +378,7 @@ function MemberList({ items, isTick, messaging, chainId }) {
     const visibleItems = items.slice(0, visibleLimit);
     return (
         <>
-            <ul className={styles.detailsList} style={{ display: 'block' }}>
+            <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                 {visibleItems.map((item) => (
                     <li key={String(item)} style={{ padding: '2px 0' }}>
                         {isTick
