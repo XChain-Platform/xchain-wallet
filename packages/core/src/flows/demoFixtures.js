@@ -698,46 +698,50 @@ export function synthesizeDemoDefiPositions(opts = {}) {
 // surfaces (StakingList rows + the validator StakeDetail). The live
 // path fans out messaging.getStakes / getDelegations / getRewards per
 // address and merges them into one { stakes, delegations, rewards }
-// aggregate; the demo path drops this in instead. Only bitcoin-regtest
-// is populated: staking is BTC-only and the demo wallet holds BTC
-// addresses on regtest. The narrative matches the DeFi-tab
+// aggregate; the demo path drops this in instead. Only the Bitcoin
+// networks are populated: staking is BTC-only. The narrative matches the DeFi-tab
 // "XCHAIN stake delegated to demo-validator-7" position above.
 // Contract-flavored positions live in DEMO_CONTRACT_STAKES_BY_CHAIN
 // below; keeping them out of this lane avoids duplicate rows in the
 // unified staking list.
+const DEMO_VALIDATOR_POSITIONS = {
+    stakes: [
+        // The validator position: XCHAIN staked toward the cross-chain
+        // operator capability. This is stakes[0], so it drives the
+        // "Staked" headline and the Unstake/Delegate/Operator actions.
+        {
+            stake_id: 'demo-stake-validator',
+            asset: 'XCHAIN',
+            amount: DEMO_VALIDATOR_STAKE.amount,
+            capability: 'cross_chain',
+            capability_label: 'Validator · cross-chain operator',
+            status: 'active',
+            block_index: 12_410,
+        },
+    ],
+    delegations: [
+        {
+            delegation_id: 'demo-delegation-validator-7',
+            signing_pubkey: '02a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f901',
+            status: 'active',
+            block_index: 12_412,
+        },
+    ],
+    // Accrual ledger only: without separate demo claim rows,
+    // unclaimedRewards() reports all 80.25 as unclaimed. reward_claims,
+    // not these legacy display statuses, supply the subtraction.
+    rewards: [
+        { action_index: 'demo-reward-3', amount: 12.5, status: 'pending', block_index: 12_470 },
+        { action_index: 'demo-reward-2', amount: 40, status: 'claimed', block_index: 12_300 },
+        { action_index: 'demo-reward-1', amount: 27.75, status: 'claimed', block_index: 12_120 },
+    ],
+};
+
+// Mainnet and regtest show the same position, so the Staking screen and the
+// DeFi tab agree on every network the demo wallet can sit on.
 const DEMO_STAKING_BY_CHAIN = {
-    'bitcoin-regtest': {
-        stakes: [
-            // The validator position: XCHAIN staked toward the cross-chain
-            // operator capability. This is stakes[0], so it drives the
-            // "Staked" headline and the Unstake/Delegate/Operator actions.
-            {
-                stake_id: 'demo-stake-validator',
-                asset: 'XCHAIN',
-                amount: DEMO_VALIDATOR_STAKE.amount,
-                capability: 'cross_chain',
-                capability_label: 'Validator · cross-chain operator',
-                status: 'active',
-                block_index: 12_410,
-            },
-        ],
-        delegations: [
-            {
-                delegation_id: 'demo-delegation-validator-7',
-                signing_pubkey: '02a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f901',
-                status: 'active',
-                block_index: 12_412,
-            },
-        ],
-        // Accrual ledger only: without separate demo claim rows,
-        // unclaimedRewards() reports all 80.25 as unclaimed. reward_claims,
-        // not these legacy display statuses, supply the subtraction.
-        rewards: [
-            { action_index: 'demo-reward-3', amount: 12.5, status: 'pending', block_index: 12_470 },
-            { action_index: 'demo-reward-2', amount: 40, status: 'claimed', block_index: 12_300 },
-            { action_index: 'demo-reward-1', amount: 27.75, status: 'claimed', block_index: 12_120 },
-        ],
-    },
+    'bitcoin-mainnet': DEMO_VALIDATOR_POSITIONS,
+    'bitcoin-regtest': DEMO_VALIDATOR_POSITIONS,
 };
 
 /**

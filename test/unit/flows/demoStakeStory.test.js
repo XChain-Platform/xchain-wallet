@@ -27,3 +27,10 @@ describe('the demo validator stake tells one story', () => {
         for (const row of stakes) expect(row.secondary).toContain('demo-validator-7');
     });
 });
+
+test('mainnet and regtest hold the same validator stake', () => {
+    const mainnet = synthesizeDemoStaking('bitcoin-mainnet');
+    const regtest = synthesizeDemoStaking('bitcoin-regtest');
+    expect(mainnet.stakes).toEqual(regtest.stakes);
+    expect(mainnet.stakes[0].amount).toBe('50000');
+});
