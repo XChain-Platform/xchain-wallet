@@ -842,6 +842,12 @@ body {
     transform: scaleX(-1);
 }
 
+/* The active-navigation rail is drawn with a physical inset, so it sits on
+   the leading edge only when the token flips with the reading direction. */
+:root[dir='rtl'] {
+    --xc-shadow-nav-indicator: inset -3px 0 0 var(--xc-accent-primary, var(--xc-text));
+}
+
 :where(
     input[type='number'],
     input[inputmode='numeric'],

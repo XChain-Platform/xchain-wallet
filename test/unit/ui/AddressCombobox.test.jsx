@@ -206,7 +206,7 @@ describe('in-field Paste width', () => {
             expect(wrap.style.getPropertyValue('--address-paste-width')).toMatch(/^\d+px$/);
             expect(Number.parseFloat(wrap.style.getPropertyValue('--address-paste-width'))).toBeGreaterThanOrEqual(89);
             const input = screen.getByRole('combobox', { name: 'To' });
-            expect(input.style.paddingInlineEnd)
+            expect(input.style.getPropertyValue('--address-end-room'))
                 .toBe('calc(var(--address-paste-width) + var(--address-control-height))');
         } finally {
             rect.mockRestore();
