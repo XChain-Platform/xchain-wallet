@@ -197,10 +197,7 @@ async function displayedQuantity(page, key) {
 async function receiveAddressFor(page, chain) {
     await gotoSection(page, 'Receive');
 
-    const field = page.getByRole('textbox', {
-        name: 'Copy payment link for receive address',
-        exact: true,
-    });
+    const field = page.getByTestId('receive-address');
     await expect(field, 'Receive rendered no Address field').toBeVisible({ timeout: 30_000 });
     await expect(field).toHaveValue(/^[a-zA-Z0-9]{20,}$/, { timeout: 30_000 });
 

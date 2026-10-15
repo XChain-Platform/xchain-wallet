@@ -144,7 +144,7 @@ async function configurePolicy(page) {
 
     const perAction = page.getByRole('group', { name: 'Per-action amount limits' });
     await perAction.getByRole('button', { name: '+ Add limit' }).click();
-    await perAction.getByLabel('Action').selectOption('SEND');
+    await perAction.getByLabel('Action', { exact: true }).selectOption('SEND');
     await perAction.getByLabel('Token').fill('BTC');
     await perAction.getByLabel('Max amount').fill('0.25');
 

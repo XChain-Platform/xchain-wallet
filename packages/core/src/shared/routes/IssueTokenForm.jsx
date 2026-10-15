@@ -70,6 +70,10 @@ import { t } from '../../i18n/index.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+// How long the ticker availability lookup may run before the form stops
+// waiting on it and lets composition judge the name.
+export const TICKER_LOOKUP_TIMEOUT_MS = 8000;
+
 function isPositiveDecimal(value) {
     const text = String(value || '').trim();
     return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
@@ -329,8 +333,15 @@ export function IssueTokenForm({ walletId, onBack }) {
         }
         let cancelled = false;
         const timer = setTimeout(() => {
-            Promise.resolve()
-                .then(() => messaging.getTokenInfo({ chainId, tick: checkedTicker }))
+            // A lookup that never settles is an outage too: past the bound it
+            // reads as 'unknown', which submit accepts, instead of holding the
+            // form on 'checking' forever.
+            const lookup = Promise.resolve()
+                .then(() => messaging.getTokenInfo({ chainId, tick: checkedTicker }));
+            const bound = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('ticker lookup timed out')), TICKER_LOOKUP_TIMEOUT_MS);
+            });
+            Promise.race([lookup, bound])
                 .then((info) => {
                     if (cancelled) return;
                     // The host answers an unknown tick with an all-empty
@@ -348,6 +359,16 @@ export function IssueTokenForm({ walletId, onBack }) {
         }, 350);
         return () => { cancelled = true; clearTimeout(timer); };
     }, [chainId, ticker, messaging, tickerLookupSupported]);
+
+    // Editing the ticker or network drops a held submit: the user is no
+    // longer asking to review the name they submitted.
+    const [reviewQueued, setReviewQueued] = useState(false);
+    useEffect(() => { setReviewQueued(false); }, [chainId, ticker]);
+    useEffect(() => {
+        if (!reviewQueued || tickerCheck.status === 'checking' || tickerCheck.ticker !== ticker.trim()) return;
+        setReviewQueued(false);
+        handleReview({ preventDefault() {} });
+    });
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -467,7 +488,10 @@ export function IssueTokenForm({ walletId, onBack }) {
         const checkedTicker = ticker.trim();
         if (tickerLookupSupported
             && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
-            setFormError('Wait for the ticker availability check to finish.');
+            // A submit that lands inside the debounce or the lookup is held
+            // and replayed when the check settles, rather than refused.
+            setFormError(null);
+            setReviewQueued(true);
             return;
         }
         if (tickerCheck.ticker === checkedTicker && tickerCheck.status === 'taken') {

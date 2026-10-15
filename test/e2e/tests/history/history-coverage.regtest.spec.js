@@ -695,7 +695,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         const mintTick = async (amount) => {
             await gotoPalette(page, 'Advanced action');
             await selectVenueChain(page);
-            await page.getByLabel('Action').selectOption('MINT');
+            await page.getByLabel('Action', { exact: true }).selectOption('MINT');
             await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(tick);
             await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
             await page.getByRole('button', { name: 'Sign action' }).click();
