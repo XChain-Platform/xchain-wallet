@@ -137,29 +137,29 @@ const ROUTING_CASES = [
 
 const EXPLANATION_CASES = [
     {
-        name: 'payment URI whose address belongs to another chain',
+        name: 'payment URI whose address belongs to another network',
         input: `bitcoin:${LTC}?amount=1`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
-        name: 'payment URI whose chain parameter contradicts its scheme',
+        name: 'payment URI whose network parameter contradicts its scheme',
         input: `bitcoin:${BTC}?chain=litecoin-mainnet`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
-        name: 'xchain payment whose address contradicts its chain',
+        name: 'xchain payment whose address contradicts its network',
         input: `xchain:LTC/send?to=${BTC}&amount=1`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'unsupported required BIP21 parameter',
         input: `bitcoin:${BTC}?req-something=1`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'uppercase unsupported required BIP21 parameter',
         input: `BITCOIN:${BTC.toUpperCase()}?REQ-SOMETHING=1`,
-        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'scientific-notation BIP21 amount',

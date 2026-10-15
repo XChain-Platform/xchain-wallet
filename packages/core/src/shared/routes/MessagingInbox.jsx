@@ -269,7 +269,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             setMessages(Array.isArray(result?.messages) ? result.messages : []);
             const failedAddresses = Array.isArray(result?.errors) ? result.errors.length : 0;
             setInboxWarning(failedAddresses > 0
-                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the chain service did not answer. Try again.`
+                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the network service did not answer. Try again.`
                 : null);
             setStage('inbox');
             setPassword('');
@@ -360,6 +360,76 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             return next;
         });
     }
+
+    // "Share my key" runs here rather than in the request row, so its
+    // confirmation replaces the whole inbox screen (as every other action's
+    // does) instead of rendering a second screen, header and Back included,
+    // inside one row of the list. One share runs at a time; each request
+    // keeps its own outcome (sending, sent, error, unsigned PSBT).
+    const [shareTarget, setShareTarget] = useState(
+        /** @type {{ request: { id: string, from: string, ownerAddress: string }, record: any } | null} */ (null),
+    );
+    const [shareStates, setShareStates] = useState(
+        /** @type {Record<string, { stage?: 'idle' | 'sending' | 'sent', error?: string | null, watcherResult?: any }>} */ ({}),
+    );
+    const shareLane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId: shareTarget?.record?.chainId,
+        owner: shareTarget?.record || null,
+        software: 'sendHandshake',
+        hardware: 'sendHandshakeHw',
+    });
+    const shareLaneRef = useRef(shareLane);
+    shareLaneRef.current = shareLane;
+    useEffect(() => {
+        if (!shareTarget) return;
+        const { request, record } = shareTarget;
+        const update = (patch) => setShareStates((prev) => ({
+            ...prev,
+            [request.id]: { ...(prev[request.id] || {}), ...patch },
+        }));
+        update({ stage: 'sending', error: null });
+        (async () => {
+            try {
+                const { actionData } = flowsLib.buildHandshakeActionData({
+                    chainRegistry,
+                    chainId: record.chainId,
+                    from: record,
+                    destination: request.from,
+                    version: 1,
+                });
+                const result = await shareLaneRef.current.run({
+                    actionData,
+                    submitExtra: { destination: request.from, version: 1 },
+                });
+                if (shareLaneRef.current.isWatcherMode) update({ stage: 'idle', watcherResult: result });
+                else update({ stage: 'sent' });
+            } catch (err) {
+                if (isUserRejection(err)) {
+                    update({ stage: 'idle' });
+                    return;
+                }
+                const name = err?.name;
+                let message;
+                if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
+                    message = 'Incorrect password.';
+                } else {
+                    const descriptor = chainRegistry.get(record.chainId);
+                    message = submitFailureMessage(err, {
+                        chainId: record.chainId,
+                        coinTicker: tickerForDescriptor(descriptor),
+                        verb: 'share your key',
+                        fallback: 'Could not share your key. Check your connection and try again.',
+                    });
+                }
+                update({ stage: 'idle', error: message });
+            } finally {
+                setShareTarget(null);
+            }
+        })();
+    }, [shareTarget]);
+
     const conversations = useMemo(
         () => buildConversations(conversableMessages, ownerSet),
         [conversableMessages, ownerSet],
@@ -618,6 +688,20 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         );
     }
 
+    // A key share under review takes the whole screen.
+    if (shareTarget && shareLane.open) {
+        const descriptor = chainRegistry.get(shareTarget.record.chainId);
+        return (
+            <ActionConfirmScreen
+                {...shareLane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || shareTarget.record.chainId}
+                signerReady={signerReady}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     // Thread view: tapping a conversation opens its full back-and-forth on a
     // dedicated screen. The header's back arrow returns to the list; a composer
     // docked in the footer sends a reply to the same counterparty.
@@ -687,7 +771,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             </span>
                                         ) : null}
                                         {content ? (
-                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" />
+                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" appearance="outlined" />
                                         ) : null}
                                     </div>
                                 </li>
@@ -782,12 +866,15 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                 <SessionRequestRow
                                     key={r.from}
                                     request={r}
-                                    record={record}
-                                    signerReady={signerReady}
-                                    messaging={messaging}
                                     walletId={walletId}
-                                    variant={variant}
                                     contactName={contactsByAddress[r.from]}
+                                    shareState={shareStates[r.id] || null}
+                                    shareBusy={Boolean(shareTarget)}
+                                    onShare={() => setShareTarget({ request: r, record })}
+                                    onClearWatcherResult={() => setShareStates((prev) => ({
+                                        ...prev,
+                                        [r.id]: { ...(prev[r.id] || {}), watcherResult: null },
+                                    }))}
                                     onDecline={() => handleRequestDeclined(r.id)}
                                     onMessage={onCompose ? () => onCompose({
                                         chainId: record.chainId,
@@ -970,109 +1057,43 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * needs the hardware-approval gate; a password is asked for only when the
  * session signer isn't already unlocked.
  *
+ * The share itself runs in MessagingInbox (its confirmation takes the whole
+ * screen); this row shows the request and that share's outcome.
+ *
  * @param {object} props
  * @param {{ id: string, from: string, ownerAddress: string }} props.request
- * @param {any} props.record                 owner address record (incl. chainId)
- * @param {boolean} props.signerReady
- * @param {any} props.messaging
  * @param {string} props.walletId
- * @param {'small'|'full'} props.variant
  * @param {string} [props.contactName]
+ * @param {{ stage?: 'idle' | 'sending' | 'sent', error?: string | null, watcherResult?: any } | null} props.shareState
+ * @param {boolean} props.shareBusy            a share (this one or another) is running
+ * @param {() => void} props.onShare
+ * @param {() => void} props.onClearWatcherResult
  * @param {() => void} props.onDecline
  * @param {(() => void) | null} [props.onMessage]
  */
 function SessionRequestRow({
     request,
-    record,
-    signerReady,
-    messaging,
     walletId,
-    variant,
     contactName,
+    shareState,
+    shareBusy,
+    onShare,
+    onClearWatcherResult,
     onDecline,
     onMessage,
 }) {
     const demoGuard = useDemoGuard(walletId);
-    const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
-    const lane = useOwnerActionLane({
-        messaging,
-        walletId,
-        chainId: record.chainId,
-        owner: record,
-        software: 'sendHandshake',
-        hardware: 'sendHandshakeHw',
-    });
-
-    async function share() {
-        setStage('sending');
-        setError(null);
-        try {
-            const { actionData } = flowsLib.buildHandshakeActionData({
-                chainRegistry,
-                chainId: record.chainId,
-                from: record,
-                destination: request.from,
-                version: 1,
-            });
-            const result = await lane.run({
-                actionData,
-                submitExtra: { destination: request.from, version: 1 },
-            });
-            if (lane.isWatcherMode) {
-                setWatcherResult(result);
-                setStage('idle');
-                return;
-            }
-            setStage('sent');
-        } catch (err) {
-            if (isUserRejection(err)) {
-                setStage('idle');
-                return;
-            }
-            const name = err?.name;
-            if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
-                setError('Incorrect password.');
-            } else {
-                const descriptor = chainRegistry.get(record.chainId);
-                setError(submitFailureMessage(err, {
-                    chainId: record.chainId,
-                    coinTicker: tickerForDescriptor(descriptor),
-                    verb: 'share your key',
-                    fallback: 'Could not share your key. Check your connection and try again.',
-                }));
-            }
-            setStage('idle');
-        }
-    }
-
-    function handleShare() {
-        share();
-    }
-
-    if (lane.open) {
-        const descriptor = chainRegistry.get(record.chainId);
-        return (
-            <li className={local.requestRow}>
-                <ActionConfirmScreen
-                    {...lane.confirmProps}
-                    screenVariant={variant}
-                    chainLabel={descriptor?.displayName || record.chainId}
-                    signerReady={signerReady}
-                    hintClassName={styles.hint}
-                />
-            </li>
-        );
-    }
+    const stage = shareState?.stage || 'idle';
+    const error = shareState?.error || null;
+    const watcherResult = shareState?.watcherResult || null;
 
     if (watcherResult) {
         return (
             <li className={local.requestRow}>
                 <WatcherResultPanel
                     result={watcherResult}
-                    onBuildAnother={() => setWatcherResult(null)}
-                    onDone={() => setWatcherResult(null)}
+                    onBuildAnother={onClearWatcherResult}
+                    onDone={onClearWatcherResult}
                 />
             </li>
         );
@@ -1089,15 +1110,15 @@ function SessionRequestRow({
                 </StatusMessage>
             ) : (
                 <div className={local.requestActions}>
-                    <Button variant="ghost" onClick={onDecline} disabled={stage === 'sending'}>
+                    <Button variant="secondary" onClick={onDecline} disabled={stage === 'sending'}>
                         Decline
                     </Button>
                     {onMessage ? (
-                        <Button variant="ghost" onClick={onMessage} disabled={stage === 'sending'}>
+                        <Button variant="secondary" onClick={onMessage} disabled={stage === 'sending'}>
                             Message
                         </Button>
                     ) : null}
-                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'} disabled={demoGuard.blocked}>
+                    <Button variant="primary" onClick={onShare} loading={stage === 'sending'} disabled={demoGuard.blocked || shareBusy}>
                         Share my key
                     </Button>
                 </div>

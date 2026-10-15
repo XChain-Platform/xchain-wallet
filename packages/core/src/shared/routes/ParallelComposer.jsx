@@ -10,6 +10,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// A native select cannot middle-truncate, and a full address ran under the
+// chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -133,7 +136,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before composing parallel actions.',
+                        'No addresses on any network yet. Use Receive to generate one before composing parallel actions.',
                     );
                     return;
                 }
@@ -194,7 +197,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         if (rows.length === 0) return 'Add at least one action.';
         for (let i = 0; i < rows.length; i += 1) {
             const r = rows[i];
-            if (!r.chainId) return `Row ${i + 1}: pick a chain.`;
+            if (!r.chainId) return `Row ${i + 1}: pick a network.`;
             if (!r.fromAddressId) return `Row ${i + 1}: pick a from-address.`;
             if (!(addressesByChain?.[r.chainId] || []).some((address) => address.id === r.fromAddressId)) {
                 return `Row ${i + 1}: the from-address is no longer available. Pick another address.`;
@@ -631,7 +634,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 }
 
 function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, actionsList, onChange, onRemove, canRemove }) {
-    const descriptor = row.chainId ? chainRegistry.get(row.chainId) : null;
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
 
     return (
@@ -643,7 +645,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
             </div>
 
             <Select
-                label="Chain"
+                label="Network"
                 value={row.chainId || ''}
                 onChange={(e) => {
                     const cid = e.target.value;
@@ -670,7 +672,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 onChange={(e) => onChange({ fromAddressId: e.target.value })}
             >
                 {addrs.map((a) => (
-                    <option key={a.id} value={a.id}>{a.address}</option>
+                    <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
                 ))}
             </Select>
 
@@ -706,11 +708,6 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 </Button>
             </div>
 
-            {descriptor ? (
-                <p className={styles.hint} style={{ textAlign: 'left', marginTop: 'var(--xc-space-2)' }}>
-                    <ChainBadge descriptor={descriptor} size="sm" showName={false} />
-                </p>
-            ) : null}
         </FormSection>
     );
 }
@@ -722,7 +719,7 @@ function RowDetail({ row, addressesByChain }) {
         <dl className={styles.detailsList}>
             {descriptor ? (
                 <>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                 </>
             ) : null}

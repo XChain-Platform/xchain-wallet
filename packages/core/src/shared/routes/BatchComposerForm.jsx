@@ -37,6 +37,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainPicker, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// A native select cannot middle-truncate, and a full address ran under the
+// chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -230,7 +233,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                 .map(([cid]) => cid);
             if (chains.length === 0) {
-                setLoadError('No addresses on any chain yet. Use Receive to generate one before composing a batch.');
+                setLoadError('No addresses on any network yet. Use Receive to generate one before composing a batch.');
                 return;
             }
             setChainId(chains[0]);
@@ -290,7 +293,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // A chain switch keeps queued rows, so every row is checked against
         // the chain that will receive the batch.
         if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
-            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected chain.`;
+            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected network.`;
         }
         if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
             return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
@@ -749,7 +752,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             </details>
             <FormSection title="Batch settings">
                 <ChainPicker
-                    label="Chain"
+                    label="Network"
                     value={chainId || ''}
                     onChange={(cid) => {
                         clearPreReviewErrors();
@@ -767,7 +770,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     onChange={(e) => { clearPreReviewErrors(); setFromAddressId(e.target.value); }}
                 >
                     {(addressesByChain[chainId] || []).map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
+                        <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
                     ))}
                 </Select>
             </FormSection>

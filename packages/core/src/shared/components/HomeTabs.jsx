@@ -928,9 +928,9 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-// Format a satoshi-string amount using the tick's divisibility. Plain
+// Format a base-unit amount string using the tick's divisibility. Plain
 // string math, no BigInt; these are demo values and stay small.
-function formatAmount(raw, divisibility) {
+function formatBaseUnits(raw, divisibility) {
     const s = String(raw ?? '').trim();
     if (!s) return '';
     const div = Number.isFinite(divisibility) ? divisibility : 8;
@@ -977,9 +977,14 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
     const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
-    const amount = rawAmount ? formatAmount(rawAmount, tokenInfo?.divisibility ?? 8) : '';
     const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
+    // A SEND row carries a whole-unit decimal amount, the figure History
+    // prints, so it is shown as-is; reading it as base units showed a 100 BTC
+    // receive as 0.000001 BTC. Other actions carry base units.
+    const isSend = String(entry.action || '').toUpperCase() === 'SEND';
+    const amount = !rawAmount ? ''
+        : isSend ? String(rawAmount) : formatBaseUnits(rawAmount, tokenInfo?.divisibility ?? 8);
     const primary = amount
         ? `${formatHistoryAmount(amount, direction)}${tick ? ` ${tick}` : ''}`
         : (tick || nativeTicker);
@@ -1059,7 +1064,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
     }, [entries]);
 
     if (entries.length === 0) {
-        return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any chains active." />;
+        return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any networks active." />;
     }
     return (
         <ul className={styles.demoList}>

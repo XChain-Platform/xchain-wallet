@@ -86,6 +86,7 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useResponsivePlaceholder } from '../../ui/Input.jsx';
+import { AddressText, truncateAddress } from '../../ui/AddressText.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { shareOrCopy, ShareOutcome } from '../share.js';
@@ -492,8 +493,17 @@ function historyAmountDirection(entry) {
     return source.toLowerCase() === address.toLowerCase() ? 'out' : 'in';
 }
 
+/**
+ * The amount a row prints in its amount column. A settled SEND prints its
+ * own figure. So does a blockless SEND that carries no pending metadata (a
+ * synthesized demo row or an older shell's row): it has no pending
+ * annotation to print instead, and without this its amount column said
+ * only "pending", beside a status chip that already says Pending, where
+ * Home's Activity tab prints the same row's amount.
+ */
 function settledAmountAnnotation(entry) {
-    if (!entry?.blockIndex || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    if (!entry.blockIndex && entry.pending) return null;
     const raw = entry.raw || {};
     const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     const tick = raw.tick ?? raw.TICK ?? raw.token;
@@ -1689,6 +1699,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setRefreshTick((n) => n + 1);
     }, [messaging]);
 
+    // Every shell routes a row to the standalone detail page; only a host
+    // that wires no handler falls back to the inline expand.
+    const opensDetail = typeof onSelectEntry === 'function';
     const onRowClick = useCallback((entry) => {
         // When the parent shell wired the navigation callback, send the
         // selected entry up so it can route to the standalone ActionDetail
@@ -2233,6 +2246,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     key={entry.key}
                                                     entry={entry}
                                                     selected={selectedKey === entry.key}
+                                                    opensDetail={opensDetail}
                                                     showConnector={
                                                         item.subkind === 'link-pair'
                                                             ? false
@@ -2283,6 +2297,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             key={entry.key}
                             entry={entry}
                             selected={selectedKey === entry.key}
+                            opensDetail={opensDetail}
                             showConnector={connectorByKey.has(entry.key)}
                             onClick={onRowClick}
                             peerCache={selectedKey === entry.key ? peerCache : EMPTY_PEER_CACHE}
@@ -2968,6 +2983,32 @@ function failedReasonOf(stored) {
     return { reason: h.message, details: raw };
 }
 
+const DESTINATION_SLOT = '\u0000';
+
+/**
+ * One decoded output, "+100 BTC to <address>". The address keeps both ends
+ * on one line with a copy button after it; printed whole, it wrapped across
+ * two lines on a phone with no way to copy it.
+ */
+function PendingOutputLine({ text, destination }) {
+    const [before, after = ''] = String(text).split(DESTINATION_SLOT);
+    if (!destination) return <>{before}{after}</>;
+    return (
+        <span className={styles.copyableValue}>
+            <span className={styles.copyableText}>
+                {before}
+                <AddressText address={destination} size="md" />
+                {after}
+            </span>
+            <HistoryCopyButton
+                value={destination}
+                label={t('history.copy.walletAddress')}
+                visibleLabel={t('common.copy')}
+            />
+        </span>
+    );
+}
+
 /**
  * M2.3 pending branch of the detail card. Everything a user can be told
  * honestly about a transaction that has been sent and not yet indexed:
@@ -3079,11 +3120,14 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed, tr
                 <ul className={styles.pendingOutputs}>
                     {desc.outputs.map((o, i) => (
                         <li key={`${o.destination}:${i}`}>
-                            {t('pending.detail.sendOutput', {
-                                amount: amountOf(o.amount),
-                                tick: o.tick,
-                                destination: o.destination,
-                            })}
+                            <PendingOutputLine
+                                text={t('pending.detail.sendOutput', {
+                                    amount: amountOf(o.amount),
+                                    tick: o.tick,
+                                    destination: DESTINATION_SLOT,
+                                })}
+                                destination={o.destination}
+                            />
                             {o.memo ? (
                                 <span className={styles.pendingMemo}>
                                     {' '}{t('pending.detail.memo', { memo: o.memo })}
@@ -3200,16 +3244,27 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
  * table for fields a user typically needs to paste somewhere else
  * (action_index, tx_hash, source / destination addresses).
  */
+/**
+ * A Details value with its copy button after it. A long identifier (an
+ * address, a transaction ID) keeps both ends on one line and copies in
+ * full; the button says "Copy" and names what it copies to assistive tech.
+ * The button used to sit first with its whole name as text, which wrapped
+ * to two lines on a phone and pushed every value out of line.
+ */
 function CopyableValue({ display, fullValue, ariaLabel }) {
+    const full = String(fullValue ?? '');
+    const identifier = typeof display === 'string' && display === full && full.length > 14 && !/\s/.test(full);
     return (
         <span className={styles.copyableValue}>
-            <HistoryCopyButton value={String(fullValue ?? '')} label={ariaLabel} />
-            <span className={styles.copyableText}>{display}</span>
+            <span className={styles.copyableText}>
+                {identifier ? <AddressText address={full} size="md" /> : display}
+            </span>
+            <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('common.copy')} />
         </span>
     );
 }
 
-function HistoryCopyButton({ value, label = t('history.copy.clipboard') }) {
+function HistoryCopyButton({ value, label = t('history.copy.clipboard'), visibleLabel = label }) {
     const [copied, setCopied] = useState(false);
     const onCopied = () => {
         setCopied(true);
@@ -3223,7 +3278,7 @@ function HistoryCopyButton({ value, label = t('history.copy.clipboard') }) {
         >
             <CopyButton
                 value={value}
-                label={label}
+                label={visibleLabel}
                 ariaLabel={label}
                 onCopied={onCopied}
             />
@@ -3239,8 +3294,8 @@ const DETAIL_FIELD_LABELS = Object.freeze({
     action_index: 'Action number',
     address: 'Address',
     block_index: 'Block',
-    chain: 'Chain',
-    chain_id: 'Chain',
+    chain: 'Network',
+    chain_id: 'Network',
     destination: 'To',
     source: 'From',
     time: 'Time',
@@ -3327,12 +3382,13 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
             />
         )]);
     }
-    // Split chainId (e.g. 'bitcoin-regtest') into two rows so the
-    // chain family and network kind read separately.
+    // The chain family reads from the chainId (e.g. 'bitcoin-regtest').
+    // The network kind is not printed: the wallet never labels it (the
+    // network is a Settings choice), so a "Network: Regtest" row was the one
+    // place the detail page did.
     if (entry.chainId) {
-        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
-        if (coin) rows.push(['Chain', capitalize(coin)]);
-        rows.push(['Network', capitalize(network)]);
+        const [coin = ''] = String(entry.chainId).split('-');
+        if (coin) rows.push(['Network', capitalize(coin)]);
     }
     if (txHash) {
         rows.push(['Transaction ID', (
@@ -4031,27 +4087,50 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
+/**
+ * True when `label` is the name the wallet generated for an address
+ * ("BTC Address #1", "LTC Change #2", "Imported Address") rather than one the
+ * user chose. A generated name only repeats the coin, which the row's asset
+ * mark already shows, so a row names the receiving address only when the
+ * user named it.
+ *
+ * @param {string} label
+ * @param {string | undefined} chainId
+ * @returns {boolean}
+ */
+export function isGeneratedAddressLabel(label, chainId) {
+    let text = String(label || '').trim();
+    if (!text || text === 'Imported Address') return true;
+    const ticker = tickerForCoin(coinOfChainId(chainId) || '');
+    if (ticker && text.startsWith(`${ticker} `)) text = text.slice(ticker.length + 1);
+    return /^(Address|Change|Dispenser)( #\d+)?$/.test(text);
+}
+
+export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
+    const [balancesHidden] = useBalancesHidden();
     const settledAmount = settledAmountAnnotation(entry);
     const actionKind = classifyEntryAction(entry, walletAddresses);
     const receiveLabel = entry.receiveLabel
         && actionKind === 'receive'
+        && !isGeneratedAddressLabel(entry.receiveLabel, entry.chainId)
         ? entry.receiveLabel
         : '';
     const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });
     const rawTick = entry.raw?.tick ?? entry.raw?.TICK ?? entry.raw?.token;
     const tick = String(settledAmount?.tick || rawTick || nativeTick || '?');
+    // Hidden balances mask the figure here as they do on Home and in the
+    // pending annotation; the ticker stays, since it is not an amount.
     const amount = settledAmount ? (
         <span
             data-history-amount={settledAmount.direction || 'unknown'}
-            aria-label={formatHistoryAmountForSpeech(
+            aria-label={balancesHidden ? undefined : formatHistoryAmountForSpeech(
                 settledAmount.amount,
                 settledAmount.tick,
                 settledAmount.direction,
             )}
         >
-            {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+            {balancesHidden ? '•••••' : formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
         </span>
     ) : entry.blockIndex ? tick : (
         <>
@@ -4059,12 +4138,14 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
             <PendingAmountLabel entry={entry} />
         </>
     );
-    const contextLabel = contractRowLabel(entry)
-        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '')
-        // A row names its counterparty, so a send shows where it went.
-        || peerAddressOfEntry(entry)
-        || entry.source
-        || '';
+    const namedContext = contractRowLabel(entry)
+        || (receiveLabel ? t('history.row.receivedAt', { label: receiveLabel }) : '');
+    // A row names its counterparty, so a send shows where it went. The
+    // address keeps both identifying ends: an end-clipped one showed only its
+    // first characters on a phone.
+    const counterparty = namedContext ? '' : (peerAddressOfEntry(entry) || entry.source || '');
+    const contextLabel = namedContext || counterparty;
+    const contextText = namedContext || truncateAddress(counterparty);
     const linkedTo = entry.link
         ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
         : '';
@@ -4080,7 +4161,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 onClick={() => onClick(entry)}
                 data-history-row
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
-                aria-expanded={selected}
+                // A row that opens the detail page is a link to it, not a
+                // disclosure: no expand chevron and no expanded state.
+                aria-expanded={opensDetail ? undefined : selected}
                 chainId={entry.chainId}
                 tick={tick}
                 isNative={tick === nativeTick}
@@ -4091,7 +4174,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                         {verify ? (
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
                         ) : null}
-                        {contextLabel ? <span title={contextLabel}>{contextLabel}</span> : null}
+                        {contextLabel ? <span title={contextLabel}>{contextText}</span> : null}
                     </>
                 )}
                 amount={amount}
@@ -4105,7 +4188,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 selected={selected}
                 aria-description={rowDescription || undefined}
                 decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}
-                trailing={<DoubleChevron direction={selected ? 'up' : 'down'} />}
+                trailing={opensDetail ? null : <DoubleChevron direction={selected ? 'up' : 'down'} />}
             />
             {selected ? (
                 <DetailCard
@@ -4681,7 +4764,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     ) : (
                         <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
                     )}
-                    <span>{selectedDesc ? selectedDesc.displayName : t('history.filters.allChains')}</span>
+                    <span>{selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}</span>
                 </span>
                 <SingleChevron direction="down" />
             </button>
@@ -4702,7 +4785,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                             onClick={() => choose('all')}
                         >
                             <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>{t('history.filters.allChains')}</span>
+                            <span>{t('common.allNetworks')}</span>
                         </button>
                     </li>
                     {activeChainIds.map((cid) => {

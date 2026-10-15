@@ -124,7 +124,8 @@ describe('long content layout', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByTitle(address)).toHaveTextContent(address);
+        // The whole address stays in the title; the row shows both ends.
+        expect(screen.getByTitle(address)).toHaveTextContent(`${address.slice(0, 6)}…${address.slice(-6)}`);
         // The amount is shown digit-grouped; every digit must still be there.
         const pendingAmount = document.querySelector('[data-pending-amount]');
         expect(pendingAmount.getAttribute('title').replace(/,/g, '')).toContain(amount);

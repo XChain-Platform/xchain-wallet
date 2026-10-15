@@ -908,7 +908,7 @@ function ComposeMessageForm({
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={descriptor} size="sm" />
                             </dd>

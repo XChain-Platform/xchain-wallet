@@ -64,6 +64,16 @@ function submitPhrase(phrase, importMnemonic = vi.fn().mockResolvedValue({})) {
 }
 
 describe('ImportWallet recovery phrase entry', () => {
+    it('keeps the secret phrase field out of autofill, spellcheck, autocapitalize and autocorrect', () => {
+        renderImport();
+        const phrase = screen.getByLabelText('Recovery phrase');
+        expect(phrase.tagName).toBe('TEXTAREA');
+        expect(phrase).toHaveAttribute('autocomplete', 'off');
+        expect(phrase).toHaveAttribute('spellcheck', 'false');
+        expect(phrase).toHaveAttribute('autocapitalize', 'off');
+        expect(phrase).toHaveAttribute('autocorrect', 'off');
+    });
+
     it('names the next missing field beside the disabled import action', () => {
         renderImport();
         const action = screen.getByRole('button', { name: 'Import' });

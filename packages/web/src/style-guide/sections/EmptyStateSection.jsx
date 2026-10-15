@@ -34,7 +34,7 @@ export function EmptyStateSection() {
     <EmptyState
         icon={<Icon.HandshakeIcon />}
         title="No polls yet"
-        body="Create the first poll on this chain."
+        body="Create the first poll on this network."
         actionLabel="Create poll"
         onAction={() => onCreate(chainId)}
     />

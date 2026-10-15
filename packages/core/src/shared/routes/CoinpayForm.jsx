@@ -499,7 +499,7 @@ export function CoinpayForm({
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <DetailRow
-                            label="Chain"
+                            label="Network"
                             value={<ChainBadge descriptor={descriptor} size="sm" />}
                         />
                     ) : null}
@@ -649,7 +649,7 @@ export function CoinpayForm({
                     <dl className={styles.detailsList}>
                         {descriptor ? (
                             <>
-                                <dt className={styles.detailsLabel}>Chain</dt>
+                                <dt className={styles.detailsLabel}>Network</dt>
                                 <dd className={styles.detailsValue}>
                                     <ChainBadge descriptor={descriptor} size="sm" />
                                 </dd>

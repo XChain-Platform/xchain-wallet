@@ -141,7 +141,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
-                    setLoadError('No address on any chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on any network yet. Use Receive to generate one first.');
                 } else {
                     setChainId((prev) => prev || chains[0]);
                 }
@@ -413,7 +413,7 @@ export function PublishFileForm({ walletId, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
@@ -677,7 +677,7 @@ export function PublishFileForm({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                         </>
                     ) : null}
@@ -837,7 +837,7 @@ export function PublishFileForm({ walletId, onBack }) {
             ) : (
                 <>
                     <ChainPicker
-                        label="Chain"
+                        label="Network"
                         value={chainId}
                         onChange={setChainId}
                         chainIds={chainIds}
@@ -890,7 +890,7 @@ export function PublishFileForm({ walletId, onBack }) {
                             upload: shorter names and titles leave a little more
                             room for the file itself.
                             {envelopeAvailable
-                                ? ' This chain and account support the compact Taproot'
+                                ? ' This network and account support the compact Taproot'
                                   + ' encoding, which is what makes the larger ceiling'
                                   + ' possible. Files are compressed automatically when'
                                   + ' that makes them smaller, so what lands on-chain is'

@@ -24,6 +24,10 @@ import {
     waitForValidAction,
 } from '../../fixtures/regtest.js';
 
+// The composers list source addresses as first6…last6 (a native select cannot
+// shorten text, and a full address ran under the chevron on phones).
+const shortAddress = (address) => `${address.slice(0, 6)}…${address.slice(-6)}`;
+
 const PASSWORD = 'regtestpassword123';
 const STAMP = Date.now().toString().slice(-6);
 const TICK_ONE = `XTA${STAMP}`;
@@ -133,7 +137,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
                 await rowField(row, 'combobox', 'Chain').selectOption(REGTEST_CHAIN_ID);
                 expect(await rowField(row, 'combobox', 'From address')
                     .evaluate((el) => el.options[el.selectedIndex]?.text || ''))
-                    .toBe(source);
+                    .toBe(shortAddress(source));
             }
 
             await rowField(rows[0], 'textbox', 'Params (JSON object)').fill(JSON.stringify({

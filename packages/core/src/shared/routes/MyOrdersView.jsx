@@ -706,8 +706,8 @@ function OrderActionPanel({
                 {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
             </p>
             <dl className={F.detailsList}>
-                <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                <dt className={F.detailsLabel}>Network</dt>
+                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                 <dt className={F.detailsLabel}>Order</dt>
                 <dd className={F.detailsValue}>#{detailText(row.action_index)}</dd>
                 <dt className={F.detailsLabel}>From</dt>
