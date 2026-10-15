@@ -21,7 +21,7 @@ permissions: {}
 jobs:
   base-branch-guard:
     name: base-branch guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Require develop, release/* or hotfix/* from this repository
         # Event fields go through env, never inline, so a branch name cannot inject shell.
