@@ -199,6 +199,113 @@ export const SIGN_IN_DEFAULT_EXPIRY_MS = 5 * 60 * 1000;
 export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
 export const SIGN_IN_CHALLENGE_SEPARATOR = ' | ';
 
+// Expose the injection event from the plain-JS entry point so packed and
+// unbundled consumers receive the TypeScript declaration barrel's runtime surface.
+export const PROVIDER_READY_EVENT = 'xchain#initialized';
+
+export function isXChainAvailable() {
+    return (
+        typeof globalThis !== 'undefined' &&
+        'xchain' in globalThis &&
+        globalThis.xchain?.isXChainWallet === true
+    );
+}
+
+/**
+ * Await the injected provider, or return null when the timeout expires.
+ *
+ * @param {{timeoutMs?: number}} [opts]
+ * @returns {Promise<import('./index.ts').XChainProvider | null>}
+ */
+export function getProvider(opts = {}) {
+    const timeoutMs = opts.timeoutMs ?? 1000;
+
+    if (isXChainAvailable()) {
+        return Promise.resolve(globalThis.xchain ?? null);
+    }
+
+    if (timeoutMs <= 0 || typeof globalThis.addEventListener !== 'function') {
+        return Promise.resolve(null);
+    }
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            globalThis.removeEventListener(PROVIDER_READY_EVENT, onReady);
+            clearTimeout(timer);
+            resolve(value);
+        };
+        const onReady = () => finish(globalThis.xchain ?? null);
+        const timer = setTimeout(() => finish(null), timeoutMs);
+        globalThis.addEventListener(PROVIDER_READY_EVENT, onReady, { once: true });
+        // Re-check after listener registration so an injection between the first read and registration is not lost.
+        if (isXChainAvailable()) onReady();
+    });
+}
+
+/**
+ * Generate a cryptographically random hex nonce.
+ *
+ * @param {number} [byteLength]
+ * @returns {string}
+ */
+export function generateNonce(byteLength = 16) {
+    const crypto = globalThis.crypto;
+    if (!crypto?.getRandomValues) {
+        throw new Error('Web Crypto API is required to generate a nonce');
+    }
+    const bytes = new Uint8Array(byteLength);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Build sign-in parameters with a fresh nonce and bounded expiry.
+ *
+ * @param {string} appId
+ * @param {{expiresInMs?: number, nonce?: string}} [opts]
+ * @returns {import('./index.ts').SignInParams}
+ */
+export function makeSignInParams(appId, opts = {}) {
+    return {
+        appId,
+        nonce: opts.nonce ?? generateNonce(),
+        expiresInMs: opts.expiresInMs ?? SIGN_IN_DEFAULT_EXPIRY_MS,
+    };
+}
+
+/**
+ * Validate the signed challenge fields before a caller verifies its signature.
+ *
+ * @param {import('./index.ts').SignInChallengeV2} parts
+ * @param {{appId: string, origin: string, nonce?: string, now?: number}} expected
+ * @returns {string | null}
+ */
+export function validateSignInChallenge(parts, expected) {
+    if (parts.version !== SIGN_IN_CHALLENGE_VERSION) {
+        return `Unsupported challenge version: ${parts.version}`;
+    }
+    if (parts.appId !== expected.appId) {
+        return `Challenge appId mismatch: expected ${expected.appId}, got ${parts.appId}`;
+    }
+    if (parts.origin !== expected.origin) {
+        return `Challenge origin mismatch: expected ${expected.origin}, got ${parts.origin}`;
+    }
+    if (expected.nonce !== undefined && parts.nonce !== expected.nonce) {
+        return 'Challenge nonce mismatch';
+    }
+    const now = expected.now ?? Date.now();
+    if (!Number.isFinite(parts.timestamp) || parts.timestamp > now) {
+        return 'Challenge timestamp is in the future';
+    }
+    if (!Number.isFinite(parts.expiresAt) || parts.expiresAt <= now) {
+        return 'Challenge is expired';
+    }
+    return null;
+}
+
 /**
  * @param {import('./index.ts').SignInChallengeV2} parts
  * @returns {string}

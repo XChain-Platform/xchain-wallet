@@ -66,6 +66,9 @@ export function PriceAlertForm({
     const [err, setErr] = useState(/** @type {string|null} */ (null));
     const mountedRef = useRef(false);
     const inputVersionRef = useRef(0);
+    // An alert saved for a coin that has since left the price list keeps its
+    // own option, so editing it does not silently switch to the first coin.
+    const unavailableChain = chainId && !MAINNET_PRICE_CHAINS.includes(chainId) ? chainId : null;
 
     useEffect(() => {
         mountedRef.current = true;
@@ -129,6 +132,11 @@ export function PriceAlertForm({
                         onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
                     >
                         {/* Native options remain because Select owns the listbox control, not its choices. */}
+                        {unavailableChain ? (
+                            <option value={unavailableChain}>
+                                {t('settings.notifications.coinUnavailable', { coin: coinLabelForChain(unavailableChain) })}
+                            </option>
+                        ) : null}
                         {MAINNET_PRICE_CHAINS.map((c) => (
                             <option key={c} value={c}>{coinLabelForChain(c)}</option>
                         ))}
