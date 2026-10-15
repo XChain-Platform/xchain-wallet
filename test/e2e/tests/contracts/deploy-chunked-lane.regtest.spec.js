@@ -191,8 +191,8 @@ async function gotoPalette(page, title) {
 async function openDeployForm(page) {
     await gotoPalette(page, 'Contracts');
     const main = page.getByRole('main');
-    const deploy = main.getByRole('button', { name: /deploy/i }).first();
-    await expect(deploy, 'the Contracts route offers no Deploy control').toBeVisible({ timeout: 30_000 });
+    const deploy = main.getByRole('button', { name: '+ Publish contract', exact: true });
+    await expect(deploy, 'the Contracts route offers no Publish contract control').toBeVisible({ timeout: 30_000 });
     await deploy.click();
     await expect(main.getByLabel('Gas limit'), 'the deploy form did not open')
         .toBeVisible({ timeout: 30_000 });
