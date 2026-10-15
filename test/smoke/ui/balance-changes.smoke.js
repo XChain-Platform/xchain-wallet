@@ -42,16 +42,16 @@ assert.match(src, /export function BalanceChanges\(/, 'named export');
 assert.match(src, /props\.result/, 'consumes a SimulationResult prop');
 assert.match(src, /loading = false/, 'has loading prop with false default');
 assert.match(src, /error = null/, 'has error prop with null default');
-assert.match(src, /title = 'Balance changes'/, 'has overridable title');
+assert.match(src, /title = t\('components.balanceChanges.balanceChanges'\)/, 'has overridable title');
 
 // --- Three lifecycle states -----------------------------------------------
 
 assert.match(src, /data-state="loading"/, 'loading state has data-state hook');
 assert.match(src, /aria-busy="true"/, 'loading state announces busy');
-assert.match(src, /Calculating preview…/, 'loading copy matches §21 cadence');
+assert.match(src, /components.balanceChanges.calculatingPreview/, 'loading copy matches §21 cadence');
 
 assert.match(src, /data-state="error"/, 'error state has data-state hook');
-assert.match(src, /\(preview unavailable/, 'error copy is honest, not alarming');
+assert.match(src, /components.balanceChanges.weCouldnTEstimateThis/, 'error copy is honest, not alarming');
 
 assert.match(src, /if \(!result\) return null;/, 'no-result branch renders nothing');
 assert.match(
@@ -64,8 +64,8 @@ assert.match(
 
 assert.match(src, /function DeltaRow/, 'delta row helper present');
 assert.match(src, /delta\.isFee/, 'fee row branches separately');
-assert.match(src, /Network fee/, 'fee row label is "Network fee" per §21.7');
-assert.match(src, /Your \{delta\.tick\}/, 'token row label is "Your <TICK>" per §21.2');
+assert.match(src, /send\.networkFee/, 'fee row label is "Network fee" per §21.7');
+assert.match(src, /receive\.your/, 'token row label is "Your <TICK>" per §21.2');
 assert.match(src, /data-direction=/, 'rows expose direction for color coding');
 
 // directionOf helper: semantic correctness
@@ -83,7 +83,7 @@ assert.match(src, /data-direction=/, 'rows expose direction for color coding');
 // --- Side-effects + notes -------------------------------------------------
 
 assert.match(src, /sideEffects\.map/, 'side effects rendered as a list');
-assert.match(src, /aria-label="Side effects"/, 'side-effects list announced');
+assert.match(src, /components\.balanceChanges\.sideEffects/, 'side-effects list announced');
 assert.match(src, /notes\.map/, 'notes rendered as a list');
 
 // --- CSS module: hooks the JSX references --------------------------------
