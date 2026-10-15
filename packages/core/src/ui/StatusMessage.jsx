@@ -39,19 +39,25 @@ import styles from './StatusMessage.module.css';
  * @param {string} [props.className]                          appended after the variant class so callers can space-suffix layout adjustments
  * @param {string} [props.details]                            technical text shown only in a collapsed disclosure
  * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string }} [props.recovery]   one-click fix shown inline with the message
+ * @param {'alert' | 'status' | 'note'} [props.role]   overrides the variant's role where the tone and the
+ *   announcement differ: a caution the user must hear at once (warning tone, alert role), or
+ *   a verification verdict that is a result rather than a failure (error tone, status role).
+ *   The look always follows the variant, so one tone keeps one style.
  */
-export function StatusMessage({ variant = 'status', id, children, className, details, recovery }) {
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride }) {
     if (children === null || children === undefined || children === '') return null;
     const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
-    const role = presentation.tone === 'error' ? 'alert' : 'status';
-    const live = presentation.tone === 'error' ? 'assertive' : 'polite';
+    const role = ROLE_LIVE[roleOverride] !== undefined
+        ? roleOverride
+        : (presentation.tone === 'error' ? 'alert' : 'status');
+    const live = ROLE_LIVE[role];
     const variantClass = styles[presentation.tone];
     const classNames = [styles.row, variantClass, className].filter(Boolean).join(' ');
     return (
         <div
             role={role}
             aria-live={live}
-            aria-atomic="true"
+            aria-atomic={live ? 'true' : undefined}
             id={id}
             className={classNames}
             data-variant={presentation.tone}
@@ -83,6 +89,9 @@ export function StatusMessage({ variant = 'status', id, children, className, det
         </div>
     );
 }
+
+// A note is static context, so it is not a live region at all.
+const ROLE_LIVE = { alert: 'assertive', status: 'polite', note: null };
 
 const STATUS_PRESENTATION = {
     status: { tone: 'info', icon: 'ℹ' },
