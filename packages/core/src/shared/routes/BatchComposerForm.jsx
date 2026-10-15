@@ -749,7 +749,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 <StatusMessage variant="error" className={styles.error}>{preReviewError || constraintError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={validatingRows}>
+                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={shownRowErrors.some(Boolean) || Boolean(constraintError) || validatingRows}>
                     Review
                 </Button>
             )}

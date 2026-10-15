@@ -621,7 +621,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         type="submit"
                         variant="primary"
                         loading={validating}
-                        disabled={validating}
+                        disabled={Boolean(shownComposeError) || validating}
                     >
                         Review
                     </Button>

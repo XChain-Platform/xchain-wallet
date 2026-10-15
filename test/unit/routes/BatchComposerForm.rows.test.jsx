@@ -76,16 +76,17 @@ describe('BatchComposerForm rows', () => {
         expect(screen.queryByText(/pick an action/)).toBeNull();
         expect(review).not.toBeDisabled();
 
+        fireEvent.click(review);
+        expect(screen.getByText('Step 1: pick an action.')).toBeInTheDocument();
+        expect(review).toBeDisabled();
+
         fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
         const rows = screen.getAllByRole('region', { name: /Step \d/ });
+        expect(within(rows[1]).queryByText(/pick an action/)).toBeNull();
         fireEvent.change(within(rows[1]).getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0","TEXT":"hi"}' },
         });
         expect(within(rows[1]).getByText('Step 2: pick an action.')).toBeInTheDocument();
-        expect(within(rows[0]).queryByText(/pick an action/)).toBeNull();
-
-        fireEvent.click(review);
-        expect(within(rows[0]).getByText('Step 1: pick an action.')).toBeInTheDocument();
     });
 
     it('shows validation beside the affected row and retracts it when the field is fixed', async () => {

@@ -64,6 +64,7 @@ describe('ParallelComposer row editor', () => {
 
         fireEvent.click(review);
         expect(await screen.findByText('Row 1: pick an action.')).toBeTruthy();
+        expect(review).toBeDisabled();
 
         fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
         fireEvent.change(screen.getAllByRole('combobox', { name: 'Action' })[0], { target: { value: 'SEND' } });
