@@ -5,7 +5,7 @@
 
 import { expect, it } from 'vitest';
 
-import { classifyRequest, emptyBatchBody } from './offlineVenue.js';
+import { classifyRequest, emptyBatchBody } from '../../e2e/fixtures/offlineVenue.js';
 
 it('answers the batch balances route and refuses every other external request', () => {
     expect(classifyRequest('POST', 'https://explorer.xchain.io/BTC/api/balances')).toBe('balances');

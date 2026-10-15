@@ -266,11 +266,12 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     // bcrt1 address nor an "on Bitcoin" string, so grepping for those found
     // nothing here while the browse filter still asked Bitcoin for a dispenser
     // this run had just created on Litecoin.
-    // Scoped to main and matched exactly: getByLabel substring-matches, and
+    // Scoped to main and matched by exact role name: getByLabel substring-matches, and
     // the app header carries controls whose labels contain "network", so an
     // unscoped or partial lookup is a strict-mode violation. Only reachable once the
     // earlier chain fixes let the spec get this far.
-    await page.getByRole('main').getByLabel('Network', { exact: true }).selectOption(REGTEST_CHAIN_ID);
+    await page.getByRole('main').getByRole('combobox', { name: 'Network', exact: true })
+        .selectOption(REGTEST_CHAIN_ID);
 
     // Search by the SELLER's address rather than by ticker: the ticker lane
     // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag
