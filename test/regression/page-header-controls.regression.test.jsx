@@ -9,6 +9,8 @@
 //        boxes and centred icons stay aligned on both edges.
 //   [P1] 2026-10-14: That footprint is the Back control's small size, so a
 //        screen with a trailing action is no taller than one without.
+//   [P1] 2026-10-15: The page header holds only the title and Back. History's
+//        Refresh left it for the content actions row, as a labelled button.
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -51,18 +53,16 @@ function renderHistory() {
 afterEach(() => cleanup());
 
 describe('regression/page-header-controls', () => {
-    it('[REGRESSION P1] aligns the History back and refresh controls on the Back control footprint', () => {
+    it('[REGRESSION P1] keeps the page header trailing footprint on the Back control size', () => {
         renderHistory();
 
         const back = screen.getByRole('button', { name: 'Back to home' });
-        const refresh = screen.getByRole('button', { name: 'Refresh history' });
 
         // 21b makes the back control the kit small secondary Button; the
-        // trailing slot sizes its action to the same small control height
-        // while its lane keeps the header side width.
+        // trailing slot, still used by screens outside this fix, sizes its
+        // action to the same small control height while its lane keeps the
+        // header side width.
         expect(back).toHaveClass(buttonStyles.btn, buttonStyles.sm, buttonStyles.iconOnly);
-        expect(refresh.closest(`.${pageHeaderStyles.trailing}`)).not.toBeNull();
-        expect(refresh).toHaveClass(buttonStyles.btn, buttonStyles.md, buttonStyles.iconOnly);
         for (const body of [ruleBody('.trailing button:not([role="menuitem"])')]) {
             expect(body).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
             expect(body).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
@@ -71,12 +71,14 @@ describe('regression/page-header-controls', () => {
         expect(pageHeaderCss).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
     });
 
-    it('[REGRESSION P1] renders History Refresh as one icon child without a label span', () => {
+    it('[REGRESSION P1] renders History Refresh in the content actions row, not the page header', () => {
         renderHistory();
 
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
 
-        expect(refresh.children).toHaveLength(1);
-        expect(refresh.querySelector(`.${buttonStyles.label}`)).toBeNull();
+        expect(refresh.closest(`.${pageHeaderStyles.trailing}`)).toBeNull();
+        expect(refresh.closest('[data-xc-page-actions]')).not.toBeNull();
+        expect(refresh).toHaveClass(buttonStyles.btn, buttonStyles.md);
+        expect(refresh.querySelector(`.${buttonStyles.label}`)).toHaveTextContent('Refresh history');
     });
 });

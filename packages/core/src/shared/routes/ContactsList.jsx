@@ -612,19 +612,21 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     : (mode === 'edit' && !active) ? <Icon.PlusIcon />
                     : undefined
             }
-            trailing={mode === 'list' ? (
-                <Button
-                    type="button"
-                    className={picker.addButton}
-                    onClick={() => { setActiveId(null); startEdit(null); }}
-                    aria-label="Add contact"
-                    title="Add contact"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : null}
         />
     );
+    // The page header holds only the title and Back, so Add contact sits in
+    // the list's actions row. An empty list offers Create first contact from
+    // its EmptyState instead, so the screen never shows the action twice.
+    const listActions = (emptyOffersCreate = false) => (mode === 'list' && !emptyOffersCreate ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            onClick={() => { setActiveId(null); startEdit(null); }}
+        >
+            Add contact
+        </Button>
+    ) : null);
 
     // The list keeps its own offset: a contact or the edit form swaps into
     // this same Screen, and with one key the short detail view clamped the
@@ -651,26 +653,33 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     if (loadError) {
         return wrap(
-            <StatusMessage
-                variant="error"
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setContacts(null);
-                        return loadContacts();
-                    },
-                }}
-            >
-                {loadError}
-            </StatusMessage>,
+            <ListPage
+                notices={(
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setContacts(null);
+                                return loadContacts();
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                )}
+                actions={listActions()}
+            />,
         );
     }
 
     if (contacts === null) {
         return wrap(
-            <div role="status" aria-label="Loading contacts">
-                <Skeleton.List rows={5} />
-            </div>,
+            <ListPage actions={listActions()}>
+                <div role="status" aria-label="Loading contacts">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
         );
     }
 
@@ -706,6 +715,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
                 <AddressField
                     label="Address"
+                    paste
                     value={entry0.address}
                     onChange={(e) => {
                         const address = e.target.value;
@@ -923,6 +933,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
                             <AddressField
                                 label="Address"
+                                paste
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
                                 error={addAddrError}
@@ -950,6 +961,43 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // mode === 'list'
     return wrap(
         <ListPage
+            notices={(
+                <>
+                    {duplicateGroups.length > 0 ? (
+                        <StatusMessage
+                            id="contacts-duplicate-names"
+                            recovery={{ label: merging ? 'Merging…' : 'Merge', onAction: handleMergeDuplicates }}
+                        >
+                            {duplicateGroups.length === 1
+                                ? `${duplicateGroups[0].length} contacts are named ${duplicateGroups[0][0].name}.`
+                                : `${duplicateGroups.length} names are used by more than one contact.`}
+                            {' '}Merge them into one contact per person, with all of their addresses.
+                        </StatusMessage>
+                    ) : null}
+                    {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
+                        <StatusMessage
+                            id="contacts-publish-nudge"
+                            recovery={typeof onOpenBackup === 'function'
+                                ? { label: 'Open Backup', onAction: onOpenBackup }
+                                : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
+                        >
+                            {unpublished === 1
+                                ? 'One contact change is only on this device.'
+                                : `${unpublished} contact changes are only on this device.`}
+                            {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
+                            {typeof onOpenBackup === 'function' ? (
+                                <>
+                                    {' '}
+                                    <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
+                                        Not now
+                                    </Button>
+                                </>
+                            ) : null}
+                        </StatusMessage>
+                    ) : null}
+                </>
+            )}
+            actions={listActions(contacts.length === 0)}
             toolbar={(
                 <div className={picker.toolbar}>
                     <div className={picker.search}>
@@ -991,38 +1039,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 </div>
             )}
         >
-            {duplicateGroups.length > 0 ? (
-                <StatusMessage
-                    id="contacts-duplicate-names"
-                    recovery={{ label: merging ? 'Merging…' : 'Merge', onAction: handleMergeDuplicates }}
-                >
-                    {duplicateGroups.length === 1
-                        ? `${duplicateGroups[0].length} contacts are named ${duplicateGroups[0][0].name}.`
-                        : `${duplicateGroups.length} names are used by more than one contact.`}
-                    {' '}Merge them into one contact per person, with all of their addresses.
-                </StatusMessage>
-            ) : null}
-            {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
-                <StatusMessage
-                    id="contacts-publish-nudge"
-                    recovery={typeof onOpenBackup === 'function'
-                        ? { label: 'Open Backup', onAction: onOpenBackup }
-                        : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
-                >
-                    {unpublished === 1
-                        ? 'One contact change is only on this device.'
-                        : `${unpublished} contact changes are only on this device.`}
-                    {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
-                    {typeof onOpenBackup === 'function' ? (
-                        <>
-                            {' '}
-                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
-                                Not now
-                            </Button>
-                        </>
-                    ) : null}
-                </StatusMessage>
-            ) : null}
             {contacts.length === 0 ? (
                 <EmptyState
                     title="No contacts yet"

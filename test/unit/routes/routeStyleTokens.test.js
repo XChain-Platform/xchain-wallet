@@ -86,7 +86,6 @@ describe('route styles use the shared geometry tokens (staking, settings, wizard
 
         expect(css).toMatch(/\.iconWrap\s*\{[^}]*width:\s*var\(--xc-control-h-lg\);[^}]*height:\s*var\(--xc-control-h-lg\)/s);
         expect(css).toMatch(/\.chainOverlay\s*\{[^}]*width:\s*var\(--xc-icon-lg\);[^}]*height:\s*var\(--xc-icon-lg\)[^}]*box-shadow:\s*var\(--xc-shadow-surface-ring\)/s);
-        expect(css).toMatch(/\.addBtn\s*\{[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s);
         expect(css).toMatch(/\.status\s*\{[^}]*border-radius:\s*var\(--xc-radius-pill\)/s);
         // The claimable panel is the shared card; its padding and radius come from it.
         expect(css).toMatch(/\.claimable\s*\{[^}]*composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css';[^}]*gap:\s*var\(--xc-space-3\);[^}]*margin-bottom:\s*var\(--xc-space-3\)/s);

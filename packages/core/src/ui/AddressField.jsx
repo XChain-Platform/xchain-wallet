@@ -8,9 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef } from 'react';
+import { forwardRef, useLayoutEffect, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
 import { Button } from './Button.jsx';
+import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
+import { inspectClipboardPaste, syncPasteWidth } from './inFieldPaste.js';
 import { AddressText } from './AddressText.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
@@ -44,12 +46,18 @@ const ICONS = {
  *   - iconLabel     accessible label override for the icon button
  *   - onPaste       host callback for URI handling; unconsumed plain text
  *                     with surrounding whitespace is trimmed before insertion
+ *   - paste         renders the in-field Paste button that Send's recipient
+ *                     field uses (never on a read-only field). A Paste tap
+ *                     runs the same clipboard check, hands the text to
+ *                     `onPaste` first, then sets the field through
+ *                     `onChange` as a typed value would.
  *
  * @typedef {object} AddressFieldOwnProps
  * @property {'contacts' | 'addresses'} [icon]
  * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
  * @property {boolean} [wrapReadOnlyAddress]
+ * @property {boolean} [paste]
  */
 export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
     {
@@ -64,19 +72,69 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
         value,
         onChange,
         onPaste,
+        paste = false,
+        error,
         ...rest
     },
     ref,
 ) {
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
     const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
+    const showPaste = Boolean(paste) && !rest.readOnly;
+    const [pasteError, setPasteError] = useState('');
+    const wrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const pasteSlotRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
+    const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    useLayoutEffect(() => {
+        if (!showPaste) return undefined;
+        const wrap = wrapRef.current;
+        const button = pasteSlotRef.current?.querySelector('button') ?? null;
+        syncPasteWidth(wrap, button);
+        if (!button || typeof ResizeObserver !== 'function') return undefined;
+        const observer = new ResizeObserver(() => syncPasteWidth(wrap, button));
+        observer.observe(button);
+        return () => observer.disconnect();
+    }, [showPaste]);
+
     const wrapClass = [
         styles.wrap,
         styles[size] || '',
         label ? '' : styles.noLabel,
         showReadOnlyAddress ? styles.readOnly : '',
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
+        showPaste ? styles.withPaste : '',
     ].filter(Boolean).join(' ');
+
+    // Room at the field's end for Paste, the icon action, or both.
+    const endRoom = showPaste
+        ? (IconComponent
+            ? 'calc(var(--address-paste-width) + var(--address-control-height))'
+            : 'var(--address-paste-width)')
+        : (IconComponent ? 'calc(var(--address-control-height) + var(--xc-space-2))' : null);
+
+    const handleChange = (event) => {
+        if (pasteError) setPasteError('');
+        onChange?.(event);
+    };
+
+    const pasteFromClipboard = (text) => {
+        const inspected = inspectClipboardPaste(text);
+        if (!inspected.ok) {
+            setPasteError(inspected.error);
+            return;
+        }
+        setPasteError('');
+        const pasteEvent = {
+            clipboardData: { getData: () => inspected.value },
+            defaultPrevented: false,
+            currentTarget: inputRef.current,
+            target: inputRef.current,
+            preventDefault() { this.defaultPrevented = true; },
+        };
+        onPaste?.(pasteEvent);
+        if (!pasteEvent.defaultPrevented) onChange?.({ target: { value: inspected.value } });
+    };
 
     const handlePaste = (event) => {
         onPaste?.(event);
@@ -96,9 +154,13 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
     };
 
     return (
-        <div className={wrapClass}>
+        <div className={wrapClass} ref={wrapRef}>
             <Input
-                ref={ref}
+                ref={(node) => {
+                    inputRef.current = node;
+                    if (typeof ref === 'function') ref(node);
+                    else if (ref) ref.current = node;
+                }}
                 label={label}
                 size={size}
                 disabled={disabled}
@@ -106,15 +168,16 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={IconComponent ? {
-                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                style={endRoom ? {
+                    paddingInlineEnd: endRoom,
                     ...style,
                 } : style}
                 title={showReadOnlyAddress ? value : undefined}
                 value={value}
-                onChange={onChange}
+                onChange={handleChange}
                 onPaste={handlePaste}
                 pasteGuard
+                error={pasteError || error}
                 {...rest}
                 dir="ltr"
             />
@@ -134,6 +197,15 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
                         disabled={disabled}
                         aria-label={iconLabel || defaultLabel}
                         title={iconLabel || defaultLabel}
+                    />
+                </span>
+            ) : null}
+            {showPaste ? (
+                <span className={styles.pasteAction} ref={pasteSlotRef}>
+                    <ClipboardPasteButton
+                        disabled={disabled}
+                        onMessage={(message) => { if (message) setPasteError(message); }}
+                        onPaste={pasteFromClipboard}
                     />
                 </span>
             ) : null}

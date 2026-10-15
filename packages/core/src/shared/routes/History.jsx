@@ -1882,30 +1882,60 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             onBack={onBack}
             backLabel={t('common.backToHome')}
             title={t('history.title')}
-            trailing={(
-                <Button
-                    variant="ghost"
-                    icon={(
-                        <span className={refreshing ? styles.refreshing : undefined}>
-                            <Icon.RefreshIcon />
-                        </span>
-                    )}
-                    aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
-                    title={networkOffline
-                        ? t('history.offline.refreshTitle')
-                        : refreshing ? t('history.refreshing') : t('history.refresh')}
-                    disabled={networkOffline || refreshing || !historyLoaded}
-                    onClick={() => {
-                        const throttle = pollThrottleRef.current;
-                        if (throttle.isInFlight()) return;
-                        throttle.reset();
-                        throttle.start();
-                        setRefreshing(true);
-                        setRefreshTick((n) => n + 1);
-                    }}
-                />
-            )}
         />
+    );
+    // The page header holds only the title and Back, so Refresh sits in the
+    // content's actions row. It shows whether or not there is any history
+    // yet: an empty list is where a refresh matters most. Export joins it
+    // once there is history to export, outside the collapsible filter card
+    // so it stays reachable while the filters are folded away.
+    const actions = (
+        <>
+            <Button
+                variant="secondary"
+                icon={(
+                    <span className={refreshing ? styles.refreshing : undefined}>
+                        <Icon.RefreshIcon />
+                    </span>
+                )}
+                title={networkOffline ? t('history.offline.refreshTitle') : undefined}
+                disabled={networkOffline || refreshing || !historyLoaded}
+                onClick={() => {
+                    const throttle = pollThrottleRef.current;
+                    if (throttle.isInFlight()) return;
+                    throttle.reset();
+                    throttle.start();
+                    setRefreshing(true);
+                    setRefreshTick((n) => n + 1);
+                }}
+            >
+                {refreshing ? t('history.refreshing') : t('history.refresh')}
+            </Button>
+            {entries.length > 0 ? (
+                <>
+                    <Button
+                        className={`${styles.toolbarControl} ${styles.exportButton}`}
+                        variant="secondary"
+                        icon={null}
+                        aria-haspopup="dialog"
+                        aria-expanded={exportModalOpen}
+                        aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                        onClick={() => setExportModalOpen(true)}
+                        disabled={visibleEntries.length === 0}
+                    >
+                        {t('history.export.open')}
+                    </Button>
+                    {visibleEntries.length === 0 ? (
+                        <span
+                            id="history-export-disabled-reason"
+                            className={styles.visuallyHidden}
+                        >
+                            {t('history.export.noMatchingRows')}
+                        </span>
+                    ) : null}
+                </>
+            ) : null}
+        </>
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -1959,7 +1989,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     }
     if (!addressesByChain) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actions}>
                 <div role="status" aria-label={t('history.loading')} aria-busy="true">
                     <Skeleton.List rows={5} rowHeight={88} avatar={false} />
                 </div>
@@ -1981,7 +2011,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     }
 
     return wrap(
-        <ListPage toolbar={entries.length > 0 ? (
+        <ListPage
+            notices={!browserOnline || showingCachedHistory ? (
+                <StatusMessage
+                    variant="warning"
+                    id="history-offline-action-reason"
+                >
+                    {!browserOnline
+                        ? (showingCachedHistory
+                            ? t('history.offline.cached')
+                            : t('history.offline.empty'))
+                        : t('history.offline.refreshFailed')}
+                </StatusMessage>
+            ) : null}
+            actions={actions}
+            toolbar={entries.length > 0 ? (
             <>
                 <div className={styles.toolbarTop}>
                     <div className={styles.phoneFilterToggle}>
@@ -1997,28 +2041,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             {t('history.filters.toggle', { count: activeFilterCount })}
                         </Button>
                     </div>
-                    {/* Export stays outside the collapsible filter card so it is
-                        reachable while the filters are folded away. */}
-                    <Button
-                        className={`${styles.toolbarControl} ${styles.exportButton}`}
-                        variant="secondary"
-                        icon={null}
-                        aria-haspopup="dialog"
-                        aria-expanded={exportModalOpen}
-                        aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
-                        onClick={() => setExportModalOpen(true)}
-                        disabled={visibleEntries.length === 0}
-                    >
-                        {t('history.export.open')}
-                    </Button>
-                    {visibleEntries.length === 0 ? (
-                        <span
-                            id="history-export-disabled-reason"
-                            className={styles.visuallyHidden}
-                        >
-                            {t('history.export.noMatchingRows')}
-                        </span>
-                    ) : null}
                 </div>
                 <div
                     id="history-filter-panel"
@@ -2226,20 +2248,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 ) : null}
                 </div>
             </>
-        ) : null}>
-
-            {!browserOnline || showingCachedHistory ? (
-                <StatusMessage
-                    variant="warning"
-                    id="history-offline-action-reason"
-                >
-                    {!browserOnline
-                        ? (showingCachedHistory
-                            ? t('history.offline.cached')
-                            : t('history.offline.empty'))
-                        : t('history.offline.refreshFailed')}
-                </StatusMessage>
-            ) : null}
+        ) : null}
+        >
 
             {exportModalOpen ? (
                 <ExportModal

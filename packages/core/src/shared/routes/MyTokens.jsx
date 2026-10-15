@@ -182,26 +182,20 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             backLabel="Back to home"
             title="My tokens"
             titleIcon={<Icon.TokenIcon />}
-            trailing={
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    icon={null}
-                    className={styles.issueButton}
-                    onClick={onIssue}
-                    aria-label="Issue new token"
-                    title="Issue new token"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            }
         />
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={(
+            {/* The page header holds only the title and Back, so Issue new token
+                sits in the content's actions row. An empty list offers Issue
+                token from its EmptyState instead, so the screen never shows
+                it twice. */}
+            <ListPage actions={isEmpty ? null : (
+                <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onIssue}>
+                    Issue new token
+                </Button>
+            )} toolbar={(
                 <>
                     <div className={styles.search}>
                         <Input

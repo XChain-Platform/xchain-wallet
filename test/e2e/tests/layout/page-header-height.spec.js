@@ -12,9 +12,10 @@
 // Back is hidden on screens the visible nav links to (Send, Settings) and
 // shown on nested screens (Settings > Privacy). Holding the hidden case at
 // the larger trailing-control size made every header 8px taller than the
-// Back control it is meant to match. Trailing actions (History refresh,
-// Contacts add) take the Back control size too, so a screen with one is the
-// same height as a screen without.
+// Back control it is meant to match. Trailing actions (Payments due
+// refresh) take the Back control size too, so a screen with one is the same
+// height as a screen without. History and Contacts hold only the title and
+// Back: their actions sit in the content's actions row.
 // Settings also opens at its first row however far it was scrolled before.
 
 import {
@@ -82,16 +83,17 @@ for (const [width, height] of SIZES) {
         expect(send.row).toBe(privacy.row);
         expect(send.band).toBe(privacy.band);
 
-        // Screens with a trailing action: History (Back hidden, it is a nav
-        // destination) and Contacts (Back shown where the tab bar does not
-        // link it). The action matches Back, so neither band grows.
-        await gotoSection(page, 'History');
-        const history = await headerBox(page, 'History');
-        await gotoSection(page, 'Contacts');
-        const contacts = await headerBox(page, 'Contacts');
-        for (const [name, box] of [['History', history], ['Contacts', contacts]]) {
-            expect(box.actionHeights.length, `${name} has a header action`).toBeGreaterThan(0);
-            for (const h of box.actionHeights) expect(h, `${name} action height`).toBe(privacy.backHeight);
+        // No screen puts an action in the page header: History (Back hidden,
+        // it is a nav destination), Contacts (Back shown where the tab bar
+        // does not link it) and Payments due hold only the title and Back,
+        // at the same height.
+        const boxes = [];
+        for (const name of ['History', 'Contacts', 'Payments due']) {
+            await gotoSection(page, name);
+            boxes.push([name, await headerBox(page, name)]);
+        }
+        for (const [name, box] of boxes) {
+            expect(box.actionHeights, `${name} page header holds only the title and Back`).toEqual([]);
             expect(box.row, `${name} row height`).toBe(privacy.row);
             expect(box.band, `${name} band height`).toBe(privacy.band);
         }
