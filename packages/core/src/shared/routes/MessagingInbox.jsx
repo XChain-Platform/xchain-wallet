@@ -269,7 +269,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             setMessages(Array.isArray(result?.messages) ? result.messages : []);
             const failedAddresses = Array.isArray(result?.errors) ? result.errors.length : 0;
             setInboxWarning(failedAddresses > 0
-                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the chain service did not answer. Try again.`
+                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the network service did not answer. Try again.`
                 : null);
             setStage('inbox');
             setPassword('');

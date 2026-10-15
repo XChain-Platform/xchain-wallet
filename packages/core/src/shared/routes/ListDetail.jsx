@@ -202,8 +202,8 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
     return wrap(
         <>
             <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Chain</dt>
-                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                <dt className={styles.detailsLabel}>Network</dt>
+                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                 <dt className={styles.detailsLabel}>List index</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
                 {name !== null ? (

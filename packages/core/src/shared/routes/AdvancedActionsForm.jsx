@@ -201,7 +201,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 setActiveByChain(active || {});
                 if (Object.keys(byChain || {}).length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before authoring an action.',
+                        'No addresses on any network yet. Use Receive to generate one before authoring an action.',
                     );
                     return;
                 }

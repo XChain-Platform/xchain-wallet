@@ -77,7 +77,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
     const explanation = affectedNames.length > 0
         ? `${label}: ${affectedNames.join(', ')}`
         : state === 'offline'
-            ? `${label}: no selected chain is reachable`
+            ? `${label}: no selected network is reachable`
             : label;
     const networkName = activeNetworkLabel(normalizeActiveNetwork(activeNetwork));
     const triggerLabel = `${networkName}. ${explanation}`;
@@ -130,9 +130,9 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
             >
                 <div className={styles.title}>{label}</div>
                 {state === 'normal' ? (
-                    <div className={styles.detail}>All selected chains are reachable.</div>
+                    <div className={styles.detail}>All selected networks are reachable.</div>
                 ) : state === 'unknown' ? (
-                    <div className={styles.detail}>Checking selected chains.</div>
+                    <div className={styles.detail}>Checking selected networks.</div>
                 ) : affected.length > 0 ? (
                     <ul className={styles.chains}>
                         {affected.map((chain, index) => (
@@ -142,7 +142,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
                         ))}
                     </ul>
                 ) : (
-                    <div className={styles.detail}>No selected chain is reachable.</div>
+                    <div className={styles.detail}>No selected network is reachable.</div>
                 )}
                 <button
                     type="button"

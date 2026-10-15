@@ -170,7 +170,7 @@ describe('CallbackForm review safety', () => {
         fireEvent.click(await readySubmit());
 
         expect(await screen.findByText(
-            'Callback is not allowed until block 100. The chain is at 99.',
+            'Callback is not allowed until block 100. The network is at 99.',
         )).toBeTruthy();
         expect(height).toHaveBeenCalledTimes(2);
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();

@@ -60,7 +60,7 @@ afterEach(() => {
     shim.resolveApproval = async () => ({ approved: true });
 });
 
-describe('ConnectApproval chain checklist', () => {
+describe('ConnectApproval network checklist', () => {
     it('shows the host ending before the full origin and safely labels the dApp name', () => {
         const longOrigin = 'https://wallet.example.com.login.account.security.attacker.test';
         const { container } = render(
@@ -87,7 +87,7 @@ describe('ConnectApproval chain checklist', () => {
         expect(screen.queryByText('Verified site')).toBeNull();
         expect(screen.getByText(/Only connect if you recognize and trust this site/))
             .toHaveTextContent(
-                'Only connect if you recognize and trust this site. It can view the accounts and chains you select.',
+                'Only connect if you recognize and trust this site. It can view the accounts and networks you select.',
             );
     });
 
@@ -108,12 +108,12 @@ describe('ConnectApproval chain checklist', () => {
         expect(screen.queryByText('https://safe.test\u202E.example')).toBeNull();
     });
 
-    it('lists the granted capabilities and only offers chains the site requested', () => {
+    it('lists the granted capabilities and only offers networks the site requested', () => {
         mount([bundled.id]);
 
         const permissions = screen.getByRole('region', { name: 'Requested permissions' });
         expect(permissions.textContent).toContain('addresses and balances');
-        expect(permissions.textContent).toContain('only the chains you select');
+        expect(permissions.textContent).toContain('only the networks you select');
         expect(permissions.textContent).toContain('before signing any message or transaction');
         expect(screen.getByLabelText(label(bundled))).toBeTruthy();
         expect(screen.queryByLabelText(label(notRequested))).toBeNull();
@@ -138,7 +138,7 @@ describe('ConnectApproval chain checklist', () => {
         expect(onReject).toHaveBeenCalledTimes(1);
     });
 
-    it('offers and pre-selects a user-added chain that arrives with the settings read', async () => {
+    it('offers and pre-selects a user-added network that arrives with the settings read', async () => {
         const added = custom('operator-connect', 'Operator Connect');
         shim.getSettings = async () => ({ customChains: [added] });
 
@@ -150,7 +150,7 @@ describe('ConnectApproval chain checklist', () => {
         expect(defaultRegistry().has(added.id)).toBe(true);
     });
 
-    it('still renders the bundled chains when the settings read fails on a locked vault', async () => {
+    it('still renders the bundled networks when the settings read fails on a locked vault', async () => {
         shim.getSettings = async () => { throw new Error('vault is locked'); };
 
         mount([bundled.id]);
@@ -159,7 +159,7 @@ describe('ConnectApproval chain checklist', () => {
         expect(box.checked).toBe(true);
     });
 
-    it('leaves a chain the user unchecked unchecked when hydration lands after it', async () => {
+    it('leaves a network the user unchecked unchecked when hydration lands after it', async () => {
         const added = custom('operator-connect-late', 'Operator Late');
         let release = () => {};
         shim.getSettings = () => new Promise((resolve) => {
