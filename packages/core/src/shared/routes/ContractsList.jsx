@@ -359,7 +359,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return wrap(
             <EmptyState
                 title="No supported address"
-                body="Contracts require an address on a chain that supports them."
+                body="Contracts require an address on a network that supports them."
             />,
         );
     }
@@ -494,7 +494,7 @@ function ChainSection({
 
 function ChainFilterBar({ chains, value, onChange }) {
     return (
-        <div role="tablist" aria-label="Chain filter" className={contractStyles.chainFilters}>
+        <div role="tablist" aria-label="Network filter" className={contractStyles.chainFilters}>
             <Button
                 type="button"
                 variant={value === 'all' ? 'primary' : 'secondary'}

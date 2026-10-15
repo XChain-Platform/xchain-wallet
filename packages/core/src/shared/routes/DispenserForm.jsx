@@ -31,6 +31,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { t } from '../../i18n/index.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -454,7 +455,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before opening a dispenser.',
+                        'No addresses on any network yet. Use Receive to generate one before opening a dispenser.',
                     );
                     return;
                 }
@@ -1294,7 +1295,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -1322,7 +1323,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
@@ -1409,7 +1410,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     // whether the chain will accept it before Create enables.
                     key: 'another-address',
                     label: 'Another address',
-                    sublabel: 'Enter any address on this chain',
+                    sublabel: 'Enter any address on this network',
                     onSelect: () => {
                         setAddressMode('other');
                         setExistingAddressId(null);
@@ -1584,7 +1585,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             label="Dispenser address"
                             icon="addresses"
                             value={outsideAddress}
-                            placeholder="Any address on the active chain"
+                            placeholder="Any address on the active network"
                             onChange={(e) => setOutsideAddress(e.target.value)}
                             error={outsideFormatError || undefined}
                             onIconClick={() => setAddressPickerOpen(true)}
@@ -1659,7 +1660,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             ) : null}
             <AmountField
                 id="dispenser-give"
-                label="Give amount (per fill)"
+                label={t('dispenserForm.giveAmountPerFill')}
                 hint="Tokens sent to the buyer every time the dispenser is triggered."
                 amount={giveAmount}
                 tick={ticker}
@@ -1721,7 +1722,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                     <Input
                         id="dispenser-payment-amount"
-                        label="Payment amount (per fill)"
+                        label={t('dispenserForm.paymentAmountPerFill')}
                         hint="Amount of the payment token buyers send per fill."
                         inputMode="decimal"
                         value={getTokenAmount}

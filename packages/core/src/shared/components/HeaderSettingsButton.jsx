@@ -24,6 +24,7 @@ import {
 import styles from './HeaderSettingsButton.module.css';
 import menuStyles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { t } from '../../i18n/index.js';
 
 // The chain filter renders only inside the open popover, so it loads with the
 // header menu rather than in the startup bundle. The component starts the
@@ -205,7 +206,7 @@ export function HeaderSettingsButton({
                                 <Icon.GearIcon />
                                 {anyNonDefault ? <span className={styles.dot} /> : null}
                             </span>
-                            <span className={menuStyles.rowLabel}>Settings</span>
+                            <span className={menuStyles.rowLabel}>{t('home.settings')}</span>
                             <span className={menuStyles.rowIcon} aria-hidden="true"><Icon.ForwardIcon /></span>
                         </button>
                     ) : (
@@ -220,8 +221,8 @@ export function HeaderSettingsButton({
                             onClick={() => setOpen((v) => !v)}
                             aria-haspopup="dialog"
                             aria-expanded={open ? 'true' : 'false'}
-                            aria-label="Settings"
-                            title="Settings"
+                            aria-label={t('home.settings')}
+                            title={t('home.settings')}
                             data-active={anyNonDefault ? 'true' : undefined}
                         />
                     )}
@@ -231,22 +232,22 @@ export function HeaderSettingsButton({
                         variant="popover"
                         surfaceRef={popoverPlacement.ref}
                         style={popoverPlacement.style}
-                        title="Wallet settings"
+                        title={t('shell.settingsButton.walletSettings')}
                         titleId="xc-wallet-settings-title"
                         aria-labelledby="xc-wallet-settings-title"
                         onMouseDown={(event) => event.stopPropagation()}
                     >
                     {/* Picker destinations stay native buttons to preserve full-row navigation semantics. */}
                     {onOpenWalletPicker ? (
-                        <Section title="Wallet">
+                        <Section title={t('settings.thisWallet.wallet')}>
                             <button
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => navigate(onOpenWalletPicker)}
-                                title={walletLabel || 'Choose wallet'}
+                                title={walletLabel || t('shell.settingsButton.chooseWallet')}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
-                                    {walletLabel || 'No wallet'}
+                                    {walletLabel || t('shell.settingsButton.noWallet')}
                                 </span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
@@ -254,15 +255,15 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {onOpenAccountPicker && activeWallet ? (
-                        <Section title="Account">
+                        <Section title={t('shell.settingsButton.account')}>
                             <button
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => navigate(onOpenAccountPicker)}
-                                title={accountLabel || 'Choose account'}
+                                title={accountLabel || t('shell.settingsButton.chooseAccount')}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
-                                    {accountLabel || 'Account 1'}
+                                    {accountLabel || t('shell.settingsButton.account1')}
                                 </span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
@@ -270,13 +271,13 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {showActiveNetwork ? (
-                        <Section title="Network">
+                        <Section title={t('settings.network.label')}>
                             <select
                                 className={styles.networkSelect}
                                 value={currentNetwork}
                                 disabled={switchingNetwork || Boolean(confirmDialog.request)}
                                 onChange={(event) => switchNetwork(event.target.value)}
-                                aria-label="Active network in header"
+                                aria-label={t('shell.settingsButton.activeNetworkInHeader')}
                             >
                                 {networkOptions.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -287,7 +288,7 @@ export function HeaderSettingsButton({
 
                     {showNetwork ? (
                         <Suspense fallback={null}>
-                            <Section title="Chain filter">
+                            <Section title={t('shell.settingsButton.chainFilter')}>
                                 <NetworkFilter
                                     chainRegistry={chainRegistry}
                                     coinFamilies={coinFamilies}
@@ -304,9 +305,9 @@ export function HeaderSettingsButton({
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => navigate(onOpenSettings)}
-                                title="All settings"
+                                title={t('shell.settingsButton.allSettings')}
                             >
-                                <span className={styles.summaryName}>All settings</span>
+                                <span className={styles.summaryName}>{t('shell.settingsButton.allSettings')}</span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
                         </div>

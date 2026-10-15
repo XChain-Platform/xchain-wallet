@@ -116,7 +116,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one first.',
+            'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const ticker = isTick ? (initialTick || '').toUpperCase() : '';
@@ -568,7 +568,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -752,7 +752,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             <RadioGroup
@@ -783,7 +783,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     label="Duration (blocks)"
                     hint={calculatedResumeBlock != null
                         ? `Wake block: ${calculatedResumeBlock.toLocaleString('en-US')}.${resumeBlockEstimate ? ` Est. ${resumeBlockEstimate}.` : ''}`
-                        : 'Enter how many blocks the pause or lock lasts. The wake block is calculated from the current chain height.'}
+                        : 'Enter how many blocks the pause or lock lasts. The wake block is calculated from the current network height.'}
                     inputMode="numeric"
                     value={durationBlocksInput}
                     onChange={(e) => setDurationBlocksInput(e.target.value)}

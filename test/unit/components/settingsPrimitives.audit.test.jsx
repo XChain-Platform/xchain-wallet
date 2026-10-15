@@ -136,7 +136,7 @@ describe('shared settings row semantics', () => {
         consoleError.mockRestore();
     });
 
-    it('disambiguates fee controls by chain and connects validation errors', () => {
+    it('disambiguates fee controls by network and connects validation errors', () => {
         settings = {
             ...createDefaultSettings(),
             fees: {
@@ -178,7 +178,7 @@ describe('settings actions and mode choices', () => {
         }));
         render(<DeveloperModeSection />);
 
-        const remove = await screen.findByRole('button', { name: 'Remove custom chain fork-regtest' });
+        const remove = await screen.findByRole('button', { name: 'Remove custom network fork-regtest' });
         expect(remove.className).toMatch(/danger/);
     });
 

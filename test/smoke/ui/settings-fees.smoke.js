@@ -28,7 +28,7 @@ assert.match(src, /import \{ useSettings \}/, 'imports useSettings');
 assert.match(
     src,
     /import \{ flows as flowsLib, registry as registryLib \} from '@xchain-wallet\/core'/,
-    'imports chain registry',
+    'imports network registry',
 );
 assert.match(
     src,
@@ -61,10 +61,10 @@ assert.doesNotMatch(src, /sats \/ KB/, 'no fixed sats/KB label');
 // is deliberately reworded for plain language from time to time, and pinning the
 // label makes a copy edit look like a lost feature.
 assert.match(src, /checked=\{Boolean\(fees\.rbfByDefault\)\}/, 'RBF toggle present');
-assert.match(src, /disabled=\{!descriptor\?\.feeStrategy\?\.rbfSupported\}/, 'RBF toggle gates on chain support');
+assert.match(src, /disabled=\{!descriptor\?\.feeStrategy\?\.rbfSupported\}/, 'RBF toggle gates on the network support');
 
 // Empty-state message when no fee profiles present
-assert.match(src, /No chain fee profiles yet/, 'empty-state copy present');
+assert.match(src, /No network fee profiles yet/, 'empty-state copy present');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

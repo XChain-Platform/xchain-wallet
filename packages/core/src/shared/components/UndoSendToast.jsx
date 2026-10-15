@@ -11,6 +11,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import styles from './UndoSendToast.module.css';
 import { restingPlacement } from './toastPlacement.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * Props-only countdown toast for a held send. Owns no timer or state: the
@@ -40,7 +41,7 @@ export function UndoSendToast({ status, remaining, onCancel }) {
                     aria-live="polite"
                     aria-atomic="true"
                 >
-                    {counting ? `Sending in ${remaining} s` : 'Send cancelled'}
+                    {counting ? t('undoSend.toast.sendingInS', { remaining }) : t('undoSend.toast.sendCancelled')}
                 </span>
                 {counting && (
                     <div className={styles.controls}>
@@ -51,7 +52,7 @@ export function UndoSendToast({ status, remaining, onCancel }) {
                                 if (typeof onCancel === 'function') onCancel();
                             }}
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                     </div>
                 )}

@@ -156,7 +156,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 setActiveByChain(active || {});
                 const chains = chainsWithAddresses(byChain);
                 if (chains.length === 0) {
-                    setLoadError('No addresses on any chain yet. Use Receive to create one before moving anything across the bridge.');
+                    setLoadError('No addresses on any network yet. Use Receive to create one before moving anything across the bridge.');
                     return;
                 }
                 setSourceChainId((current) => (current && chains.includes(current) ? current : chains[0]));
@@ -342,7 +342,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         const error = bridgeDestinationError({
             tick, sourceCoin, destCoin, bridgeChains,
         });
-        return error ? 'This token cannot move to the selected destination chain.' : null;
+        return error ? 'This token cannot move to the selected destination network.' : null;
     }, [tick, sourceCoin, destCoin, bridgeChains]);
 
     const overBalanceError = useMemo(() => {
@@ -472,7 +472,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             return;
         }
         if (!destChainId || !actionParams) {
-            setFormError('Pick a destination chain for this bridge move.');
+            setFormError('Pick a destination network for this bridge move.');
             return;
         }
         if (blockingError || amountInputError) return;
@@ -547,7 +547,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ? 'Unsigned bridge transfer'
             : 'Bridge transfer pending';
     const header = (
-        <PageHeader onBack={onBack} title={stage === 'done' ? doneTitle : 'Move across chains'} />
+        <PageHeader onBack={onBack} title={stage === 'done' ? doneTitle : 'Move across networks'} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -669,7 +669,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     return wrap(
         <FormPage
             demoGuard={demoGuard}
-            label="Move across chains"
+            label="Move across networks"
             onSubmit={handleSubmit}
             status={(feeWarning || blockingError || formError || submitError) ? (
                 <>
@@ -754,10 +754,10 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             {noDestinationAccount ? (
                 <StatusMessage variant="error" className={styles.error}>
                     {leg.fixedDestination
-                        ? 'You have no address on the required destination chain in this wallet yet.'
-                            + ' Use Receive to create one first: this bridged copy can only move back to its origin chain,'
+                        ? 'You have no address on the required destination network in this wallet yet.'
+                            + ' Use Receive to create one first: this bridged copy can only move back to its origin network,'
                             + ' and the release cannot be redirected once it applies.'
-                        : 'You have no address on another chain yet.'
+                        : 'You have no address on another network yet.'
                             + ' Use Receive to create one first: a bridge transfer credits an address you control,'
                             + ' and the credit cannot be redirected once it applies.'}
                 </StatusMessage>
@@ -839,7 +839,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 <dl className={styles.detailsList} aria-label="Bridge route">
                     {sourceDescriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Source chain</dt>
+                            <dt className={styles.detailsLabel}>Source network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={sourceDescriptor} size="sm" showName={false} />
                             </dd>
@@ -847,7 +847,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     ) : null}
                     {destDescriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Destination chain</dt>
+                            <dt className={styles.detailsLabel}>Destination network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={destDescriptor} size="sm" showName={false} />
                             </dd>
@@ -861,8 +861,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             {!blockingError && destChainId && leg.version ? (
                 <p className={styles.hint}>
                     {leg.leg === 'lock'
-                        ? `This locks ${shown.label} on the source chain and credits it on the destination chain. The credit cannot be undone or redirected.`
-                        : 'This burns the copy on the source chain and releases the original on the destination chain. The release cannot be undone or redirected.'}
+                        ? `This locks ${shown.label} on the source network and credits it on the destination network. The credit cannot be undone or redirected.`
+                        : 'This burns the copy on the source network and releases the original on the destination network. The release cannot be undone or redirected.'}
                 </p>
             ) : null}
 
@@ -918,7 +918,7 @@ export function BridgePendingPanel({
                 <dd className={styles.detailsValue}>{moved}</dd>
                 {sourceDescriptor ? (
                     <>
-                        <dt className={styles.detailsLabel}>Source chain</dt>
+                        <dt className={styles.detailsLabel}>Source network</dt>
                         <dd className={styles.detailsValue}>
                             <ChainBadge descriptor={sourceDescriptor} size="sm" showName={false} />
                         </dd>
@@ -926,7 +926,7 @@ export function BridgePendingPanel({
                 ) : null}
                 {destDescriptor ? (
                     <>
-                        <dt className={styles.detailsLabel}>Destination chain</dt>
+                        <dt className={styles.detailsLabel}>Destination network</dt>
                         <dd className={styles.detailsValue}>
                             <ChainBadge descriptor={destDescriptor} size="sm" showName={false} />
                         </dd>
@@ -942,7 +942,7 @@ export function BridgePendingPanel({
                 <dd className={styles.detailsValue}>{expectedArrivalText(minDepth)}</dd>
             </dl>
             <p className={styles.hint}>
-                {`This transfer is in flight. The ${leg.leg === 'lock' ? 'credit' : 'release'} appears on the destination chain`
+                {`This transfer is in flight. The ${leg.leg === 'lock' ? 'credit' : 'release'} appears on the destination network`
                     + ' once the validators have seen the source transaction confirmed and signed the transfer'
                     + (minDepth ? `, which this token requires to be at least ${minDepth} confirmations deep` : '')
                     + '. Nothing further is needed from you, and it cannot be cancelled or redirected.'}

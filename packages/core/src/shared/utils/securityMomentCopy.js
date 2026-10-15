@@ -15,7 +15,7 @@ export const PRIVATE_KEY_WARNING =
     'Never share this private key. Anyone with it can spend funds from this address.';
 
 export const CONNECT_SITE_WARNING =
-    'Only connect if you recognize and trust this site. It can view the accounts and chains you select.';
+    'Only connect if you recognize and trust this site. It can view the accounts and networks you select.';
 
 export const CONTRACT_CALL_WARNING =
     'Only approve a contract call you understand. Review the contract, method, amounts, and permissions first.';

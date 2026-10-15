@@ -45,6 +45,7 @@ import {
     Status,
     ToggleRow,
 } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -74,9 +75,9 @@ export function FeesSection() {
     const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
     const [saveErrors, setSaveErrors] = useState(/** @type {Record<string, string>} */ ({}));
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     // Chains are named without their network kind, so only the active
     // network's chains are listed and each chain appears once.
@@ -88,7 +89,7 @@ export function FeesSection() {
     if (chainIds.length === 0) {
         return (
             <Status
-                text="No chain fee profiles yet. They're seeded automatically when a chain is activated."
+                text={t('settings.fees.noChainFeeProfilesYet')}
             />
         );
     }
@@ -132,8 +133,8 @@ export function FeesSection() {
                         <div id={headingId} style={CHAIN_HEADER}>{displayName}</div>
 
                         <SettingsFieldRow
-                            label="Fee strategy"
-                            hint="Choose the balance between confirmation speed and network cost."
+                            label={t('settings.fees.feeStrategy')}
+                            hint={t('settings.fees.chooseTheBalanceBetweenConfirmation')}
                             embedded
                         >
                             <select
@@ -143,7 +144,7 @@ export function FeesSection() {
                                     customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? seedRate) : null,
                                     rbfByDefault: fees.rbfByDefault,
                                 })}
-                                aria-label={`${displayName} fee strategy`}
+                                aria-label={t('settings.fees.feeStrategy2', { displayName })}
                                 style={SELECT}
                             >
                                 {STRATEGIES.map((s) => (
@@ -154,8 +155,8 @@ export function FeesSection() {
 
                         {fees.strategy === 'custom' ? (
                             <SettingsFieldRow
-                                label="Custom fee rate"
-                                hint={`Enter the rate in ${unit}.`}
+                                label={t('settings.fees.customFeeRate')}
+                                hint={t('settings.fees.enterTheRateIn', { unit })}
                                 embedded
                             >
                                 <input
@@ -197,7 +198,7 @@ export function FeesSection() {
                                         }, () => { input.value = previous; });
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                                    aria-label={`${displayName} custom fee rate`}
+                                    aria-label={t('settings.fees.customFeeRate2', { displayName })}
                                     aria-invalid={rateErrors[chainId] ? 'true' : undefined}
                                     aria-errormessage={rateErrors[chainId] ? rateErrorId : undefined}
                                     aria-describedby={rateErrors[chainId] ? rateErrorId : undefined}
@@ -209,11 +210,11 @@ export function FeesSection() {
                         {saveErrors[chainId] ? <Status text={saveErrors[chainId]} tone="error" /> : null}
 
                         <ToggleRow
-                            label="Allow fee bump (Replace-by-Fee)"
+                            label={t('settings.fees.allowFeeBumpReplaceBy')}
                             accessibleLabel={`${displayName} allow fee bump (Replace-by-Fee)`}
                             hint={descriptor?.feeStrategy?.rbfSupported
-                                ? 'Keep this on so you can raise the fee later to speed up a stuck send on this chain.'
-                                : `Fee bumping is not supported on ${displayName}.`}
+                                ? t('settings.fees.keepThisOnSoYou')
+                                : t('settings.fees.feeBumpingIsNotSupported', { displayName })}
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {
                                 strategy: fees.strategy,

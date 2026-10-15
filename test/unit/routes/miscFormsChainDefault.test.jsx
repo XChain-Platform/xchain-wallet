@@ -122,21 +122,21 @@ const expectNetworkButton = async (displayName) => {
     });
 };
 
-describe('AdvancedActionsForm chain default', () => {
-    it('opens on the last-used chain, not the first-created one', async () => {
+describe('AdvancedActionsForm network default', () => {
+    it('opens on the last-used network, not the first-created one', async () => {
         const messaging = mount(AdvancedActionsForm, {}, messagingWith());
         await expectNetworkButton('Dogecoin');
         expect(messaging.getSettings).toHaveBeenCalled();
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
+    it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(AdvancedActionsForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
         await expectNetworkButton('Bitcoin');
     });
 
-    it('still opens, on the first chain, when the settings read fails', async () => {
+    it('still opens, on the first network, when the settings read fails', async () => {
         mount(AdvancedActionsForm, {}, messagingWith({
             getSettings: vi.fn().mockRejectedValue(new Error('vault locked')),
         }));
@@ -144,20 +144,20 @@ describe('AdvancedActionsForm chain default', () => {
     });
 });
 
-describe('TokenWizard chain default', () => {
+describe('TokenWizard network default', () => {
     async function mountOnChainStage(messaging) {
         mount(TokenWizard, {}, messaging);
         const memeCard = await screen.findByRole('button', { name: /Meme token/ });
         fireEvent.click(memeCard);
     }
 
-    it('opens the chain stage on the last-used chain, not the first-created one', async () => {
+    it('opens the network stage on the last-used network, not the first-created one', async () => {
         const messaging = messagingWith();
         await mountOnChainStage(messaging);
         await expectNetworkButton('Dogecoin');
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
+    it('falls back to the first network when the last-used network has no addresses any more', async () => {
         await mountOnChainStage(messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
@@ -165,18 +165,18 @@ describe('TokenWizard chain default', () => {
     });
 });
 
-describe('ControllerBindForm chain default', () => {
-    it('opens on the last-used chain when the route seeds no chain', async () => {
+describe('ControllerBindForm network default', () => {
+    it('opens on the last-used network when the route seeds no network', async () => {
         mount(ControllerBindForm, {}, messagingWith());
         await expectNetworkButton('Dogecoin');
     });
 
-    it('a chain seeded by the route still wins over the last-used chain', async () => {
+    it('a network seeded by the route still wins over the last-used network', async () => {
         mount(ControllerBindForm, { chainId: LTC }, messagingWith());
         await expectNetworkButton('Litecoin');
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
+    it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(ControllerBindForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
@@ -184,35 +184,35 @@ describe('ControllerBindForm chain default', () => {
     });
 });
 
-describe('LinkForm chain default', () => {
-    const chainButtons = async () => screen.findAllByRole('button', { name: /^Chain: / });
+describe('LinkForm network default', () => {
+    const chainButtons = async () => screen.findAllByRole('button', { name: /^Network: / });
 
-    it('COIN1 opens on the last-used chain, not the first-created one', async () => {
+    it('COIN1 opens on the last-used network, not the first-created one', async () => {
         mount(LinkForm, {}, messagingWith());
         await waitFor(async () => {
             const [first] = await chainButtons();
-            expect(first.getAttribute('aria-label')).toMatch(/^Chain: Dogecoin/);
+            expect(first.getAttribute('aria-label')).toMatch(/^Network: Dogecoin/);
         });
     });
 
-    it('COIN2 still lands on a distinct chain from COIN1', async () => {
+    it('COIN2 still lands on a distinct network from COIN1', async () => {
         mount(LinkForm, {}, messagingWith());
         await waitFor(async () => {
             const [first, second] = await chainButtons();
             const firstName = first.getAttribute('aria-label');
             const secondName = second.getAttribute('aria-label');
             expect(firstName).not.toEqual(secondName);
-            expect(secondName).toMatch(/^Chain: Bitcoin/);
+            expect(secondName).toMatch(/^Network: Bitcoin/);
         });
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
+    it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(LinkForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
         await waitFor(async () => {
             const [first] = await chainButtons();
-            expect(first.getAttribute('aria-label')).toMatch(/^Chain: Bitcoin/);
+            expect(first.getAttribute('aria-label')).toMatch(/^Network: Bitcoin/);
         });
     });
 });
@@ -223,22 +223,22 @@ describe('LinkForm chain default', () => {
 // pre-existing, separate defect out of scope for this issue. The internal
 // `chainId` default is still verified through the chain-scoped address
 // select, which correctly reacts to it.
-describe('SignMessageForm chain default', () => {
+describe('SignMessageForm network default', () => {
     const addressSelect = async () => screen.findByRole('combobox', { name: 'Address' });
 
-    it('defaults the signing chain to the last-used chain, not the first-created one', async () => {
+    it('defaults the signing network to the last-used network, not the first-created one', async () => {
         mount(SignMessageForm, {}, messagingWith());
         await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_DOGE.id));
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
+    it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(SignMessageForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
         await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_BTC.id));
     });
 
-    it('still opens, on the first chain, when the settings read fails', async () => {
+    it('still opens, on the first network, when the settings read fails', async () => {
         mount(SignMessageForm, {}, messagingWith({
             getSettings: vi.fn().mockRejectedValue(new Error('vault locked')),
         }));
@@ -246,15 +246,15 @@ describe('SignMessageForm chain default', () => {
     });
 });
 
-describe('PsbtSignForm chain default', () => {
+describe('PsbtSignForm network default', () => {
     const addressSelect = async () => screen.findByRole('combobox', { name: 'Signing address' });
 
-    it('defaults the signing chain to the last-used chain, not the first-created one', async () => {
+    it('defaults the signing network to the last-used network, not the first-created one', async () => {
         mount(PsbtSignForm, {}, messagingWith());
         await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_DOGE.id));
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
+    it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(PsbtSignForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
@@ -262,24 +262,24 @@ describe('PsbtSignForm chain default', () => {
     });
 });
 
-describe('Receive chain default', () => {
+describe('Receive network default', () => {
     const tokenButton = async () => screen.findByRole('button', { name: /^Change asset / });
 
-    it('opens on the last-used chain, not the first-created one', async () => {
+    it('opens on the last-used network, not the first-created one', async () => {
         mount(Receive, {}, messagingWith());
         await waitFor(async () => {
             expect((await tokenButton()).getAttribute('aria-label')).toMatch(/on Dogecoin/);
         });
     });
 
-    it('a chain sent by ReceivePicker prefill still wins over the last-used chain', async () => {
+    it('a network sent by ReceivePicker prefill still wins over the last-used network', async () => {
         mount(Receive, { prefill: { chainId: LTC } }, messagingWith());
         await waitFor(async () => {
             expect((await tokenButton()).getAttribute('aria-label')).toMatch(/on Litecoin/);
         });
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
+    it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(Receive, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
@@ -288,7 +288,7 @@ describe('Receive chain default', () => {
         });
     });
 
-    it('still opens, on the first chain, when the settings read fails', async () => {
+    it('still opens, on the first network, when the settings read fails', async () => {
         mount(Receive, {}, messagingWith({
             getSettings: vi.fn().mockRejectedValue(new Error('vault locked')),
         }));

@@ -714,7 +714,7 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
         });
         expect(await screen.findByText('No polls yet')).toBeTruthy();
-        expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
+        expect(screen.getByText('Polls created on this network appear here.')).toBeTruthy();
     });
 
     it('hides poll rows that belong to the previous wallet while the next list loads', async () => {

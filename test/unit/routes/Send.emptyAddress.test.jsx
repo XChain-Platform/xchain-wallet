@@ -62,7 +62,7 @@ function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalan
 afterEach(() => cleanup());
 
 describe('Send from an address holding no coin', () => {
-    it('shows a Receive action instead of the form when the selected chain is empty', async () => {
+    it('shows a Receive action instead of the form when the selected network is empty', async () => {
         const { onReceive } = mount('0');
 
         const heading = await screen.findByRole('heading', { name: 'Nothing to send yet' });
@@ -73,7 +73,7 @@ describe('Send from an address holding no coin', () => {
         // Every empty state is unboxed, so the plain variant has no class of its own.
         expect(emptyState.className).toMatch(/wrap/);
         expect(screen.queryByRole('group', { name: 'Send' })).toBeNull();
-        expect(within(emptyState).getByText('Receive coins or tokens on this chain before creating a payment.'))
+        expect(within(emptyState).getByText('Receive coins or tokens on this network before creating a payment.'))
             .toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Send' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));

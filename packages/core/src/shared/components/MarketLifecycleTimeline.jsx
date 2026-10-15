@@ -26,6 +26,7 @@ import { useEffect, useState } from 'react';
 import S from './MarketLifecycleTimeline.module.css';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const LABEL = {
     created: 'Created',
@@ -117,18 +118,18 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
         return () => { cancelled = true; };
     }, [messaging, kind, chainId, address, actionIndex, createdBlock]);
 
-    if (state.loading) return <StatusMessage variant="status" className={S.status}>Loading timeline…</StatusMessage>;
+    if (state.loading) return <StatusMessage variant="status" className={S.status}>{t('components.marketLifecycleTimeline.loadingTimeline')}</StatusMessage>;
     const errorNotice = state.error
         ? <StatusMessage variant="error" className={S.status}>{state.error}</StatusMessage>
         : null;
     if (!state.events || state.events.length === 0) {
-        return errorNotice || <div className={S.status}>No lifecycle events yet.</div>;
+        return errorNotice || <div className={S.status}>{t('components.marketLifecycleTimeline.noLifecycleEventsYet')}</div>;
     }
 
     return (
         <>
         {errorNotice}
-        <ul className={S.timeline} aria-label="Trade lifecycle">
+        <ul className={S.timeline} aria-label={t('components.marketLifecycleTimeline.tradeLifecycle')}>
             {state.events.slice(0, 40).map((e, i) => (
                 <li key={`${e.kind}-${e.row.action_index ?? 'unknown'}-${i}`} className={S.event}>
                     <span className={S.label}>{LABEL[e.kind] || e.kind}</span>
@@ -136,7 +137,7 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
                         {e.kind === 'matches' && e.row.give_amount != null
                             ? `${formatDecimalAmount(e.row.give_amount)} ${e.row.give_tick || e.row.give_coin || ''}`.trim()
                             : e.row.block_index != null
-                                ? `block ${formatDecimalAmount(e.row.block_index)}`
+                                ? t('components.marketLifecycleTimeline.block', { formatDecimalAmountValue: formatDecimalAmount(e.row.block_index) })
                                 : (e.row.action_index != null ? `#${formatDecimalAmount(e.row.action_index)}` : '')}
                     </span>
                 </li>

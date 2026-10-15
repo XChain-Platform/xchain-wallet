@@ -224,7 +224,7 @@ export function TokenWizard({ walletId, onBack }) {
                 if (Object.keys(signingByChain).length === 0) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before issuing a token.');
+                        : 'No addresses on any network yet. Use Receive to generate one before issuing a token.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
@@ -860,7 +860,7 @@ export function TokenWizard({ walletId, onBack }) {
                     ) : null}
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -880,7 +880,7 @@ export function TokenWizard({ walletId, onBack }) {
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                     <DetailRow
                         label="Protocol fee paid in"
@@ -1213,7 +1213,7 @@ function renderChainStage({
     return (
         <FormPage
             demoGuard={demoGuard}
-            label="Choose token chain"
+            label="Choose token network"
             onSubmit={(event) => {
                 event.preventDefault();
                 if (fromAddress) onNext();

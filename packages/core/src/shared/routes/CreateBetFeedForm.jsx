@@ -188,7 +188,7 @@ export function CreateBetFeedForm({
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
-                if (!sourceId) { setLoadError('No address on this chain. Use Receive to generate one first.'); return; }
+                if (!sourceId) { setLoadError('No address on this network. Use Receive to generate one first.'); return; }
                 setLoadError(null);
                 setFromAddressId(sourceId);
             })
@@ -386,10 +386,10 @@ export function CreateBetFeedForm({
     // them host-side and is the authority; this just avoids a compose round trip
     // to learn that an outcome label has a comma in it.
     function validate() {
-        if (!fromAddress) return 'No address on this chain to create a market from.';
+        if (!fromAddress) return 'No address on this network to create a market from.';
         if (!label.trim()) return 'Give the market a question or title.';
         if (label.trim().length > MAX_LABEL) return `The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`;
-        if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the chain coin cannot be wagered.';
+        if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the network coin cannot be wagered.';
         if (cleanOutcomes.length !== outcomes.length) return 'Fill in every outcome, or remove the empty one.';
         if (cleanOutcomes.length < 2) return 'A market needs at least two outcomes.';
         if (cleanOutcomes.length > MAX_OUTCOMES) return `A market can have at most ${MAX_OUTCOMES} outcomes.`;

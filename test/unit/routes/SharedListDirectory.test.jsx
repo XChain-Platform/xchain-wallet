@@ -144,6 +144,22 @@ describe('SharedListDirectory', () => {
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
+    it('names every failed chain in one notice and shows no empty state beside it', async () => {
+        mount({
+            response: {
+                lists: [],
+                unavailable: ['litecoin-mainnet', 'dogecoin-mainnet'],
+            },
+        });
+
+        await screen.findByRole('img', { name: 'Litecoin' });
+        const notices = screen.getAllByText(/Shared lists unavailable/);
+        expect(notices).toHaveLength(1);
+        expect(within(notices[0].closest('[role="alert"], [role="status"]') || notices[0]).getByRole('img', { name: 'Dogecoin' }))
+            .toBeTruthy();
+        expect(screen.queryByText('No shared lists yet')).toBeNull();
+    });
+
     it('does not expose an unknown network kind through fallback text', async () => {
         mount({
             response: {

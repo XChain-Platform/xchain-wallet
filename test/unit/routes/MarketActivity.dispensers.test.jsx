@@ -166,10 +166,11 @@ describe('demo Marketplace feed', () => {
         const { dispenserRateLabel, isOpenDispenserSelling } = await import('../../../packages/core/src/shared/utils/dispenserPricing.js');
         const { dispenseIsValid } = await import('../../../packages/core/src/flows/dispenserQueries.js');
         const demo = synthesizeDemoMarketActivity('XCHAIN', { now: 1785186698000 });
-        expect(demo.offers.map(({ row }) => isOpenDispenserSelling(row, 'XCHAIN'))).toEqual([true, true]);
-        expect(demo.offers.map(({ row }) => dispenserRateLabel(row))).toEqual([
-            '1,000 XCHAIN per 0.02 BTC', '500 XCHAIN per 0.01 BTC',
-        ]);
+        const rare = synthesizeDemoMarketActivity('RAREPEPE', { now: 1785186698000 });
+        const pepecash = synthesizeDemoMarketActivity('PEPECASH', { now: 1785186698000 });
+        expect(rare.offers.map(({ row }) => isOpenDispenserSelling(row, 'RAREPEPE'))).toEqual([true]);
+        expect(rare.offers.map(({ row }) => dispenserRateLabel(row))).toEqual(['1 RAREPEPE per 0.005 BTC']);
+        expect(pepecash.offers.map(({ row }) => dispenserRateLabel(row))).toEqual(['500 PEPECASH per 5 XCP']);
         expect(demo.sales.every(({ row }) => dispenseIsValid(row) && Number(row.get_amount) > 0)).toBe(true);
         expect(demo.dexOrders.every(({ row }) => row.status === 'valid'
             && row.give_amount != null && row.get_amount != null
@@ -178,6 +179,38 @@ describe('demo Marketplace feed', () => {
             && row.swap_status === 'complete'
             && row.give_amount != null && row.get_amount != null
             && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
+    });
+
+    // Demo listings used ids no demo dispenser had, so every tap opened
+    // "Dispenser not found". Each listing must be a demo dispenser the detail
+    // page resolves on the same chain.
+    it('lists only demo dispensers the detail page resolves', async () => {
+        const { synthesizeDemoMarketActivity, synthesizeDemoDispensers } = await import('../../../packages/core/src/flows/demoFixtures.js');
+        const networks = [
+            ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet'],
+            ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'],
+        ];
+        const ticks = ['XCHAIN', 'RAREPEPE', 'PEPECASH', 'BANANE', 'EXAMPLE', 'MWEB', 'DOGI', 'WOW', 'NOSUCHTOKEN'];
+        let listed = 0;
+        for (const chainIds of networks) {
+            for (const tick of ticks) {
+                const { offers } = synthesizeDemoMarketActivity(tick, { chainIds });
+                for (const { chainId, row } of offers) {
+                    listed += 1;
+                    expect(chainIds).toContain(chainId);
+                    const resolved = synthesizeDemoDispensers(chainId, 'demo-owner')
+                        .find((r) => String(r.action_index) === String(row.action_index));
+                    expect(resolved, `${tick} #${row.action_index} on ${chainId}`).toBeTruthy();
+                    expect(resolved.give_tick).toBe(tick);
+                    expect(resolved.status).toBe('open');
+                }
+            }
+            // Every open demo dispenser shows on its token's market.
+            expect(synthesizeDemoMarketActivity('RAREPEPE', { chainIds }).offers.map(({ row }) => row.action_index)).toEqual(['4200981']);
+            expect(synthesizeDemoMarketActivity('MWEB', { chainIds }).offers.map(({ row }) => row.action_index)).toEqual(['2107744']);
+            expect(synthesizeDemoMarketActivity('DOGI', { chainIds }).offers.map(({ row }) => row.action_index)).toEqual(['7301556']);
+        }
+        expect(listed).toBeGreaterThan(0);
     });
 });
 

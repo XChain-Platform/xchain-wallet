@@ -281,7 +281,7 @@ describe('History filters', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
         expect(screen.getByRole('button', { name: 'All action types' }))
             .toHaveAttribute('aria-pressed', 'false');
-        chooseOption(/^All chains$/, 'Litecoin');
+        chooseOption(/^All networks$/, 'Litecoin');
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
         chooseOption(/^All action types$/, 'Send');
@@ -415,14 +415,14 @@ describe('History filters', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
         chooseOption(/^No special filters$/, 'Cross-chain only');
-        chooseOption(/^All chains$/, 'Dogecoin');
+        chooseOption(/^All networks$/, 'Dogecoin');
 
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:20:${LTC_ADDRESS}`]));
-        expect(screen.getByRole('button', { name: 'All chains' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'All networks' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'No special filters' })).toBeInTheDocument();
         expect(screen.getByLabelText('From date')).toHaveValue('');
         expect(screen.getByLabelText('To date')).toHaveValue('');
@@ -437,7 +437,7 @@ describe('History filters', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
-        chooseOption(/^All chains$/, 'Dogecoin');
+        chooseOption(/^All networks$/, 'Dogecoin');
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));

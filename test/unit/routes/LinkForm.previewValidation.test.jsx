@@ -49,7 +49,7 @@ describe('LinkForm action preview validation', () => {
         fireEvent.change(inputs[1], { target: { value: '20' } });
 
         expect(await screen.findByRole('button', { name: 'Looking up actions…' })).toBeDisabled();
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify the action on chain A'));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify the action on the network A'));
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();

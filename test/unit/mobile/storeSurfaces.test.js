@@ -201,7 +201,7 @@ describe('the DEX views', () => {
 
 // Imports the surface merely USES, which registry.js deliberately leaves out
 // of SURFACE_MODULES (ReceivePicker also serves `receive-picker`).
-const DEX_SHARED_IMPORTS = ['react', 'shared/routes/ReceivePicker.jsx'];
+const DEX_SHARED_IMPORTS = ['react', 'shared/routes/ReceivePicker.jsx', 'core/src/i18n/index.js'];
 
 /** dex.jsx with comments stripped, so prose naming a view or module is not counted. */
 function dexCode() {

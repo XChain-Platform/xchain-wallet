@@ -254,7 +254,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (!fromAddress) {
             setFormError(ownerMissing
                 ? `This wallet does not hold the owner address for ${tick}; only the token owner can publish gated files.`
-                : 'No signing address available on this chain.');
+                : 'No signing address available on this network.');
             return;
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
@@ -323,7 +323,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 const current = await messaging.getIndexerWatermark({ chainId });
                 const height = Number(current?.watermark);
                 if (!Number.isFinite(height) || height < thresholdScheduledHeight) {
-                    setFormError('Unlock thresholds are not active on this chain right now. Remove the threshold to continue.');
+                    setFormError('Unlock thresholds are not active on this network right now. Remove the threshold to continue.');
                     return;
                 }
             } catch {

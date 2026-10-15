@@ -1,3 +1,4 @@
+import { t } from '../../i18n/index.js';
 // Copyright © 2025–2026 Dankest, LLC
 // Based on XChain Platform by Dankest, LLC – https://dankest.llc
 //
@@ -11,8 +12,8 @@
 export function WatchOnlyBadge({ visible = false }) {
     if (!visible) return null;
     return (
-        <span role="status" aria-label="Watch-only wallet" style={BADGE_STYLE}>
-            Watch-only
+        <span role="status" aria-label={t('components.watchOnlyBadge.watchOnlyWallet')} style={BADGE_STYLE}>
+            {t('components.watchOnlyBadge.watchOnly')}
         </span>
     );
 }
