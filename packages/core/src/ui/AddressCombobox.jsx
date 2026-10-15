@@ -11,52 +11,19 @@
 import { forwardRef, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
 import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
+import { inspectClipboardPaste, syncPasteWidth } from './inFieldPaste.js';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
 import { t } from '../i18n/index.js';
 
+export { syncPasteWidth };
+
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
     addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
 };
-
-function inspectClipboardPaste(value) {
-    const edges = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
-    const hiddenCharacters = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
-    const normalized = String(value ?? '').replace(edges, '');
-    const hidden = hiddenCharacters.test(normalized);
-    return hidden
-        ? {
-            ok: false,
-            value: normalized,
-            error: 'Pasted text contains hidden characters. Check it and try again.',
-        }
-        : { ok: true, value: normalized, error: null };
-}
-
-/**
- * Keeps `--address-paste-width` on the field equal to the room the in-field
- * Paste button really takes: its width plus its end inset on both sides,
- * rounded up. The stylesheet's value is the default-text estimate; Paste
- * grows with the text size (and with a longer translated label), and the
- * icon action and the input's text both lay out against this width, so an
- * estimate alone let the icon run into Paste at large text.
- *
- * @param {HTMLElement | null} wrap   the field's wrapper, which owns the property
- * @param {HTMLElement | null} paste  the Paste button
- * @returns {number | null} the width written, or null when nothing was measured
- */
-export function syncPasteWidth(wrap, paste) {
-    if (!wrap || !paste) return null;
-    const width = paste.getBoundingClientRect().width;
-    if (!(width > 0)) return null;
-    const inset = Number.parseFloat(getComputedStyle(paste).insetInlineEnd);
-    const room = Math.ceil(width) + 2 * (Number.isFinite(inset) ? inset : 0);
-    wrap.style.setProperty('--address-paste-width', `${room}px`);
-    return room;
-}
 
 /**
  * AddressCombobox: destination input for Send / authoring forms, with
