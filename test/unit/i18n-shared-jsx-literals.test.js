@@ -82,6 +82,7 @@ const PARTIAL_COPY_FILES = [
     '/settings/DeveloperModeSection.jsx',
     '/routes/CreateOrderForm.jsx',
     '/routes/DispenserExplorer.jsx',
+    '/routes/DispenserForm.jsx',
 ];
 
 describe('shipping JSX localization', () => {

@@ -83,7 +83,7 @@ async function openDispenserConfirm(page) {
     await page.getByRole('button', { name: /^Select Rare Pepe/ }).click();
 
     main = page.getByRole('main');
-    await main.getByLabel('Give amount (per fill)').fill('1');
+    await main.getByLabel('Give amount per fill').fill('1');
     await main.getByLabel('Escrow amount').fill('2');
     await main.getByLabel(/^Trigger price/).fill('0.004');
     await scrollFormToBottom(page);

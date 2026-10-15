@@ -77,6 +77,9 @@ export const en = {
     'common.allNetworks': 'All networks',
     'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
     'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
+    // AmountField appends the unit in brackets, so these labels carry none.
+    'dispenserForm.giveAmountPerFill': 'Give amount per fill',
+    'dispenserForm.paymentAmountPerFill': 'Payment amount per fill',
     'addressList.hidden.show':
         '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
     'addressList.hidden.hide':
