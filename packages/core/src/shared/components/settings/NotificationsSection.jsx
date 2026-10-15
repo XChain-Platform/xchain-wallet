@@ -544,6 +544,9 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
     const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
     const priceDataOff = settings?.privacy?.priceDataEnabled === false;
     const fiatCurrency = (typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency) || 'usd';
+    // One message per state: while a hint says why alerts cannot fire, the
+    // empty-list line stays out of the way and the add form speaks for itself.
+    const hintShown = priceDataOff || !enabled;
     const editingAlert = alerts.find((alert) => alert.id === editingId) || null;
     const hasOriginalCurrencyAlert = alerts.some((alert) =>
         String(alert.fiatCurrency || 'usd').toLowerCase() !== fiatCurrency.toLowerCase());
@@ -582,9 +585,9 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 <StatusMessage variant="error" recovery={{ label: t('common.tryAgain'), onAction: reload }}>
                     {t('settings.notifications.couldNotLoadPriceAlerts')}
                 </StatusMessage>
-            ) : alerts.length === 0 ? (
+            ) : alerts.length === 0 ? (hintShown ? null : (
                 <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
-            ) : (
+            )) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>
                         <span>
