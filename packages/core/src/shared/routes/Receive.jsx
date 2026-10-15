@@ -21,6 +21,7 @@ import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
 import { shareContent, ShareOutcome } from '../share.js';
@@ -394,6 +395,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (!activeChainId || !chainsByWallet || typeof messaging.getAddressHistory !== 'function') {
             return undefined;
         }
+        // A demo wallet's addresses stay off every explorer. The demo lands
+        // on mainnet, so this lookup would otherwise send its throwaway
+        // addresses to a public mainnet explorer the moment Receive opens.
+        if (isDemoWallet(walletId)) return undefined;
         const candidates = chainsByWallet[activeChainId] || [];
         const contextKey = receiveContextKey;
         let cancelled = false;
@@ -430,7 +435,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             }
         });
         return () => { cancelled = true; };
-    }, [activeChainId, chainsByWallet, messaging, receiveContextKey]);
+    }, [walletId, activeChainId, chainsByWallet, messaging, receiveContextKey]);
 
     // §17.6: is the shown address backed by a hardware signer? Only those
     // need (and support) on-device confirmation. Reset the verify state
