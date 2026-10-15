@@ -180,10 +180,6 @@
             "count": 1,
             "reason": "A floating update banner over the page."
         },
-        "packages/web/src/style-guide/sections/DesignTokensSection.jsx": {
-            "count": 1,
-            "reason": "Style-guide token swatch."
-        },
         "packages/web/src/style-guide/sections/IconsSection.jsx": {
             "count": 1,
             "reason": "Style-guide icon tile."
