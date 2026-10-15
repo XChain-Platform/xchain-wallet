@@ -1264,7 +1264,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {address ? (
                 <>
-                    <div>
+                    <div className={styles.amountEditor}>
                         <AmountField
                             size="md"
                             amount={reqAmount}
