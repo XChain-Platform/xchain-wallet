@@ -999,9 +999,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
-                <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
-                    {loadError}
-                </div>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </Screen>
         );
     }
@@ -1075,14 +1073,12 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         <CopyButton value={broadcastTxid} label="Copy txid" />
                     </div>
                 ) : broadcastState === 'queued' ? (
-                    <div role="status" aria-live="polite" style={{ color: 'var(--xc-text-muted)' }}>
+                    <StatusMessage variant="warning">
                         The network could not take the transaction yet. Its signed bytes are saved in the
                         queued-transactions banner, where you can retry without signing again.
-                    </div>
+                    </StatusMessage>
                 ) : broadcastState === 'error' ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-sm)' }}>
-                        {broadcastError}
-                    </div>
+                    <StatusMessage variant="error">{broadcastError}</StatusMessage>
                 ) : signedPsbtHex ? (
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                         Broadcast directly from this wallet, or hand the signed transaction
@@ -1392,15 +1388,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <div style={{ marginTop: 'var(--xc-space-2)' }}>
                         <QrScanner onFrame={handleScannerFrame} alt="Transaction QR scanner" />
                         {scanProgress ? (
-                            <p
-                                role="status"
-                                aria-live="polite"
-                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}
-                            >
+                            <StatusMessage variant="info">
                                 {scanProgress.format === 'UR'
                                     ? `UR decoding progress: ${scanProgress.percent}%`
                                     : `${scanProgress.format} frames received: ${scanProgress.received} of ${scanProgress.total}`}
-                            </p>
+                            </StatusMessage>
                         ) : null}
                     </div>
                 ) : null}
