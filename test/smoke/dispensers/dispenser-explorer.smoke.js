@@ -75,12 +75,12 @@ for (const mode of ["'token'", "'address'"]) {
 }
 assert.ok(
     /filterChainIdsByActiveNetwork/.test(explorerSrc),
-    'explorer scopes its chain fan-out to the active Settings network',
+    'explorer scopes its network fan-out to the active Settings network',
 );
 // Operator ruling: the chain filter stays, but its options name the chain
 // without the network kind.
-assert.ok(/<Select\b[\s\S]*?label="Chain"/.test(explorerSrc) && /chainFilter/.test(explorerSrc),
-    'explorer keeps a chain filter');
+assert.ok(/<Select\b[\s\S]*?label="Network"/.test(explorerSrc) && /chainFilter/.test(explorerSrc),
+    'explorer keeps a network filter');
 assert.ok(!/networkKind\}/.test(explorerSrc),
     'explorer renders no network-kind label');
 assert.ok(
@@ -104,7 +104,7 @@ assert.ok(
 );
 assert.ok(
     /Promise\.all\(targetChains\.map/.test(explorerSrc),
-    'explorer fans out queries per target chain in parallel',
+    'explorer fans out queries per target network in parallel',
 );
 
 // --- 4. DispenserDetail buyer surfaces --------------------------------

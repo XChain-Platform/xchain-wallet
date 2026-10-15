@@ -161,7 +161,7 @@ describe('settings diagnostic disclosures', () => {
         ))).toBeTruthy();
     });
 
-    it('skips unknown fields, unsupported chains, and duplicate contacts with one summary', async () => {
+    it('skips unknown fields, unsupported networks, and duplicate contacts with one summary', async () => {
         const messaging = {
             listContacts: vi.fn().mockResolvedValue([]),
             saveContact: vi.fn().mockResolvedValue(undefined),
@@ -186,7 +186,7 @@ describe('settings diagnostic disclosures', () => {
         });
         fireEvent.click(screen.getByText('Skipped contacts (3)'));
         expect(screen.getByText(/unknown field "nickname"/)).toBeTruthy();
-        expect(screen.getByText(/address chain must be bitcoin, litecoin, or dogecoin/)).toBeTruthy();
+        expect(screen.getByText(/address network must be bitcoin, litecoin, or dogecoin/)).toBeTruthy();
         expect(screen.getByText(/duplicates Alice \(contact 1\)/)).toBeTruthy();
     });
 

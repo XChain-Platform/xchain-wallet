@@ -128,7 +128,7 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                 <ToggleRow
                     label={t('settings.toggle.turnOn')}
                     accessibleLabel={t('settings.developerMode.switchAccessibleLabel')}
-                    hint="Unlocks test networks, endpoint overrides, custom chains, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet."
+                    hint="Unlocks test networks, endpoint overrides, custom networks, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet."
                     checked={developerMode}
                     onChange={onDeveloperModeToggle}
                 />
@@ -603,7 +603,7 @@ function CustomChainsRow({ developerMode }) {
             setChains(Array.isArray(r?.descriptors) ? r.descriptors : []);
             setLoadError(null);
         } catch (err) {
-            setLoadError(err?.message || 'Failed to load custom chains.');
+            setLoadError(err?.message || 'Failed to load custom networks.');
         } finally {
             setLoading(false);
         }
@@ -624,7 +624,7 @@ function CustomChainsRow({ developerMode }) {
             })
             .catch((err) => {
                 if (cancelled) return;
-                setLoadError(err?.message || 'Failed to load custom chains.');
+                setLoadError(err?.message || 'Failed to load custom networks.');
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
@@ -666,9 +666,9 @@ function CustomChainsRow({ developerMode }) {
             } catch { /* host already accepted the chain; the next read re-hydrates */ }
             // Say which descriptor the vault now holds, since a same-id add may keep the saved one.
             if (r?.restored) {
-                setStatusText(`Restored saved chain "${id}". To change its descriptor, remove it and add it again.`);
+                setStatusText(`Restored saved network "${id}". To change its descriptor, remove it and add it again.`);
             } else if (r?.replaced) {
-                setStatusText(`Replaced saved chain "${id}" (the saved copy is no longer valid).`);
+                setStatusText(`Replaced saved network "${id}" (the saved copy is no longer valid).`);
             } else {
                 setStatusText(`Added "${id}".`);
             }
@@ -676,7 +676,7 @@ function CustomChainsRow({ developerMode }) {
             setOpen(false);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to add custom chain.');
+            setErrorText(err?.message || 'Failed to add custom network.');
         } finally {
             setBusy(false);
         }
@@ -701,7 +701,7 @@ function CustomChainsRow({ developerMode }) {
             setStatusText(`Removed "${chainId}".`);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to remove custom chain.');
+            setErrorText(err?.message || 'Failed to remove custom network.');
         } finally {
             setBusy(false);
         }
@@ -709,17 +709,17 @@ function CustomChainsRow({ developerMode }) {
 
     return (
         <FormSection
-            title="Custom chains"
+            title="Custom networks"
             description={(
                 <>
                     Plug in a non-bundled ChainDescriptor (e.g. a fork's regtest, an alt explorer). Persists across restarts. Removed chains are also un-registered immediately.
-                    {!developerMode ? ' Turn Developer Mode on to manage custom chains.' : ''}
+                    {!developerMode ? ' Turn Developer Mode on to manage custom networks.' : ''}
                 </>
             )}
         >
             {loadError ? <Status text={loadError} tone="error" /> : null}
             {!loading && chains.length === 0 && !loadError ? (
-                <EmptyState title="No custom chains yet" titleAs="h3" body="Chains you add here appear in this list." />
+                <EmptyState title="No custom networks yet" titleAs="h3" body="Networks you add here appear in this list." />
             ) : null}
             {chains.length > 0 ? (
                 <>
@@ -738,7 +738,7 @@ function CustomChainsRow({ developerMode }) {
                                             icon={null}
                                             onClick={() => onRemove(d?.id)}
                                             disabled={!developerMode || busy}
-                                            aria-label={`Remove custom chain ${d?.id}`}
+                                            aria-label={`Remove custom network ${d?.id}`}
                                         >
                                             Remove
                                         </Button>
@@ -753,7 +753,7 @@ function CustomChainsRow({ developerMode }) {
                 <form onSubmit={onAdd} className={styles.form}>
                     <Textarea
                         id="custom-chain-descriptor"
-                        label="Custom chain descriptor JSON"
+                        label="Custom network descriptor JSON"
                         hint="Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress)."
                         value={pasted}
                         onChange={(e) => setPasted(e.target.value)}
@@ -766,11 +766,11 @@ function CustomChainsRow({ developerMode }) {
                     <ClipboardPasteButton
                         onPaste={setPasted}
                         disabled={busy}
-                        label="Paste custom chain descriptor"
+                        label="Paste custom network descriptor"
                     />
                     <div className={styles.actions}>
                         <Button type="submit" size="sm" icon={null} disabled={busy || pasted.length === 0}>
-                            {busy ? 'Adding…' : 'Add chain'}
+                            {busy ? 'Adding…' : 'Add network'}
                         </Button>
                         <Button
                             type="button"
@@ -794,7 +794,7 @@ function CustomChainsRow({ developerMode }) {
                     disabled={!developerMode || busy}
                     className={styles.startAction}
                 >
-                    Add custom chain…
+                    Add custom network…
                 </Button>
             )}
             {statusText ? <Status text={statusText} /> : null}

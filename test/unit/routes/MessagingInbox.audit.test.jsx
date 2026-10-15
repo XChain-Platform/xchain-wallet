@@ -197,7 +197,7 @@ describe('MessagingInbox audit states', () => {
         }));
 
         const warning = await screen.findByText(/could not be loaded from 1 address/i);
-        expect(warning.textContent).toMatch(/chain service did not answer/i);
+        expect(warning.textContent).toMatch(/network service did not answer/i);
         expect(warning.textContent).not.toMatch(/\/api\/messages|secret|HTTP 502/i);
     });
 

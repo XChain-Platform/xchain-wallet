@@ -130,7 +130,7 @@ describe('<FeeSelector>', () => {
 
     it('renders an unavailable state without a slider', () => {
         render(<FeeSelector tiers={null} value={{ mode: 'normal' }} onChange={() => {}} label="Fee" />);
-        expect(screen.getByText('Fee estimate unavailable for this chain.')).toBeInTheDocument();
+        expect(screen.getByText('Fee estimate unavailable for this network.')).toBeInTheDocument();
         expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
 

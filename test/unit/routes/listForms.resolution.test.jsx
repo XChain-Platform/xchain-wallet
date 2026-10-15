@@ -483,7 +483,7 @@ describe('ListCreateForm checks token items before publishing', () => {
     const KNOWN = { creator: 'nowner', totalSupply: '100', canonicalTick: 'SWAPTEST' };
     const UNKNOWN = { creator: null, totalSupply: null, canonicalTick: null };
 
-    it('counts valid, duplicate and malformed names, and flags a tick the chain does not know', async () => {
+    it('counts valid, duplicate and malformed names, and flags a tick the network does not know', async () => {
         const getTokenInfo = vi.fn(({ tick }) => Promise.resolve(tick === 'SWAPTEST' ? KNOWN : UNKNOWN));
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} }, messagingWith({ getTokenInfo }));
         fireEvent.change(await screen.findByLabelText(/Tokens \(one per line\)/), {
@@ -493,7 +493,7 @@ describe('ListCreateForm checks token items before publishing', () => {
         expect(counts.textContent).toMatch(/1 duplicate ignored/);
         expect(counts.textContent).toMatch(/1 invalid/);
         await waitFor(() => expect(counts.textContent).toMatch(/1 found · 1 not found/), { timeout: 3000 });
-        expect(screen.getByRole('alert').textContent).toMatch(/Not found on the selected chain: NOSUCHTICKQA/);
+        expect(screen.getByRole('alert').textContent).toMatch(/Not found on the selected network: NOSUCHTICKQA/);
         expect(getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'NOSUCHTICKQA', demo: false });
     });
 
@@ -504,7 +504,7 @@ describe('ListCreateForm checks token items before publishing', () => {
         expect(tickLookupVerdict(KNOWN)).toBe('found');
     });
 
-    it('classifies token-list items with the chain ticker grammar', () => {
+    it('classifies token-list items with the network ticker grammar', () => {
         expect(classifyTickItems('FLAM1N-H0T-CHEET0S, Wow!, c#, .A, A..B, A.')).toEqual({
             valid: ['FLAM1N-H0T-CHEET0S', 'Wow!', 'c#'],
             invalid: ['.A', 'A..B', 'A.'],
@@ -634,8 +634,8 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
     });
 });
 
-describe('ListCreateForm chain default', () => {
-    it('opens on the last-used chain, not the first-created one', async () => {
+describe('ListCreateForm network default', () => {
+    it('opens on the last-used network, not the first-created one', async () => {
         const messaging = mount(ListCreateForm, { walletId: 'w', onBack() {} }, messagingWith({
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet', lastUsedChain: { mainnet: DOGE } }),
         }));
@@ -644,7 +644,7 @@ describe('ListCreateForm chain default', () => {
         expect(messaging.getSettings).toHaveBeenCalled();
     });
 
-    it('falls back to the first chain when nothing was used yet', async () => {
+    it('falls back to the first network when nothing was used yet', async () => {
         mount(ListCreateForm, { walletId: 'w', onBack() {} }, messagingWith());
         const button = await screen.findByRole('button', { name: /^Network: / });
         expect(button.getAttribute('aria-label') || button.textContent).toMatch(/^Network: Bitcoin/);

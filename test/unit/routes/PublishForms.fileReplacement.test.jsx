@@ -93,10 +93,10 @@ describe('publish forms replace file state safely', () => {
         expect(screen.getByText('7 / 120')).toBeInTheDocument();
     });
 
-    it('keeps the public chain picker free of network-kind text', async () => {
+    it('keeps the public network picker free of network-kind text', async () => {
         mount(<PublishFileForm walletId="w" onBack={() => {}} />);
 
-        await screen.findByRole('button', { name: /^Chain: Bitcoin/ });
+        await screen.findByRole('button', { name: /^Network: Bitcoin/ });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
@@ -485,7 +485,7 @@ describe('publish forms replace file state safely', () => {
         fireEvent.click(screen.getByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('not active on this chain right now');
+        expect(await screen.findByRole('alert')).toHaveTextContent('not active on this network right now');
         expect(client.getIndexerWatermark).toHaveBeenCalledTimes(2);
     });
 });

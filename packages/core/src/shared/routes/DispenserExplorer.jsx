@@ -103,7 +103,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const searchDisabledReason = !settings
         ? 'Loading available networks…'
         : chains.length === 0
-            ? 'No chains are available for the active network.'
+            ? 'No networks are available for the active network.'
             : !query.trim()
                 ? `Enter ${searchMode === 'token' ? 'a token ticker' : 'an address'} to search.`
                 : null;
@@ -318,7 +318,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     <div className={local.chainControl}>
                         {/* Options name the chain alone; the active network is set in Settings. */}
                         <Select
-                            label="Chain"
+                            label="Network"
                             size="md"
                             value={chainFilter}
                             onChange={(e) => setChainFilter(e.target.value)}

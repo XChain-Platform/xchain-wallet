@@ -61,7 +61,7 @@ function publicKeyEntries(result) {
     return keys
         .filter((key) => PUBLIC_EXTENDED_KEY_RE.test(key?.xpub || ''))
         .map((key) => ({
-            chainId: typeof key.chainId === 'string' ? key.chainId : 'Unknown chain',
+            chainId: typeof key.chainId === 'string' ? key.chainId : 'Unknown network',
             addressType: typeof key.addressType === 'string' ? key.addressType : '',
             path: typeof key.path === 'string' ? key.path : '',
             xpub: key.xpub,

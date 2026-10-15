@@ -44,7 +44,7 @@ describe('NetworkSection', () => {
         fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
 
         expect(screen.getByRole('dialog', { name: 'Switch to Testnet?' })).toBeInTheDocument();
-        expect(screen.getByText(/Mainnet balances and chain settings stay unchanged/)).toBeInTheDocument();
+        expect(screen.getByText(/Mainnet balances and network settings stay unchanged/)).toBeInTheDocument();
         expect(setActiveNetworkSpy).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));

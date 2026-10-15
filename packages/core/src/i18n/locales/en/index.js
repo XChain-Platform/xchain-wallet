@@ -115,7 +115,7 @@ export const en = {
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchTitle': 'Switch to {network}?',
     'settings.network.switchMessage':
-        'The wallet will reload and show {nextNetwork} chains. Your {currentNetwork} balances and chain settings stay unchanged. Unlock the wallet again after it reloads.',
+        'The wallet will reload and show {nextNetwork} networks. Your {currentNetwork} balances and network settings stay unchanged. Unlock the wallet again after it reloads.',
     'settings.network.switchConfirm': 'Switch network',
     'settings.network.switchError': "Couldn't switch networks. Try again.",
     'settings.undoSend.label': 'Hold signed sends before broadcast',
@@ -400,7 +400,7 @@ export const en = {
     'gatedPublish.gatedContent': 'Gated content',
     'gatedPublish.formHint.beforeToken': 'Publish a file that only holders of',
     'gatedPublish.formHint.afterToken':
-        'can read. The file is encrypted before it touches the chain; the key travels automatically with every normal send of the token.',
+        'can read. The file is encrypted before it touches the network; the key travels automatically with every normal send of the token.',
     'gatedPublish.ownerMissing.beforeAddress': "This wallet doesn't hold the owner address",
     'gatedPublish.ownerMissing.afterAddress':
         'for {tick}. Only the token owner can publish gated files.',
@@ -425,7 +425,7 @@ export const en = {
     // --- governance ----------------------------------------------
     'governance.title': 'Governance',
     'governance.noAddress.title': 'No governance address',
-    'governance.noAddress.body': 'Governance requires an address on a supported chain.',
+    'governance.noAddress.body': 'Governance requires an address on a supported network.',
     'governance.createPoll': 'Create poll',
     'governance.delegateVotes': 'Delegate votes',
     'governance.loadingAddresses': 'Loading governance addresses…',
@@ -435,7 +435,7 @@ export const en = {
     'governance.error.addresses': "Couldn't load governance addresses. Try again.",
     'governance.error.polls': "Couldn't load governance polls. Try again.",
     'governance.empty.title': 'No polls yet',
-    'governance.empty.body': 'Polls created on this chain appear here.',
+    'governance.empty.body': 'Polls created on this network appear here.',
     'governance.closesAtBlock': 'Closes at block {block}',
 
     // --- wallet import -------------------------------------------
@@ -453,10 +453,10 @@ export const en = {
     'importWallet.wif.fullTitle': 'Import a private key',
     'importWallet.wif.title': 'Import private key',
     'importWallet.wif.subtitle':
-        'Import one WIF private key as a wallet. Pick the matching chain so the correct address is derived.',
+        'Import one WIF private key as a wallet. Pick the matching network so the correct address is derived.',
     'importWallet.wif.tab': 'Private key',
     'importWallet.wif.key': 'WIF private key',
-    'importWallet.wif.chain': 'Private key chain',
+    'importWallet.wif.chain': 'Private key network',
     'importWallet.wif.ack': "I understand this key isn't recoverable from a recovery phrase.",
     'importWallet.freeWallet.fullSubtitle':
         'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect BIP39 or the legacy Counterwallet/FreeWallet format automatically.',
@@ -534,9 +534,9 @@ export const en = {
     'issue.lockSupplyWarning':
         'Locking minting means the {amount} left under the cap can never be minted. Clear this box to mint it later.',
     'issue.bridgingHint':
-        'Bridging is off. After the token exists you can open it to other chains from Manage Token, set how deep a lock must be buried before validators sign it, and freeze both settings for your holders.',
+        'Bridging is off. After the token exists you can open it to other networks from Manage Token, set how deep a lock must be buried before validators sign it, and freeze both settings for your holders.',
     'issue.boundListHint':
-        "One thing to decide now: a token bound to an address allow-list or block-list can't be bridged, and a bound list can never be cleared. If you may want this token on other chains, don't bind a list to it.",
+        "One thing to decide now: a token bound to an address allow-list or block-list can't be bridged, and a bound list can never be cleared. If you may want this token on other networks, don't bind a list to it.",
     'issue.transferOwnershipOptional': 'Transfer ownership to (optional)',
     'issue.transferOwnershipHint':
         "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; use the field below to send those too.",
@@ -551,7 +551,7 @@ export const en = {
     'send.demo.blocked': "Demo wallets can't move funds. Create a real wallet to send.",
     'send.demo.createRealWallet': 'Create a real wallet',
     'send.empty.title': 'Nothing to send yet',
-    'send.empty.body': 'Receive coins or tokens on this chain before creating a payment.',
+    'send.empty.body': 'Receive coins or tokens on this network before creating a payment.',
     'send.review': 'Review and send',
     'send.backToEdit': 'Edit payment',
     'send.memoForbiddenChars': "A memo can't include a vertical bar (|) or semicolon (;).",
@@ -574,7 +574,7 @@ export const en = {
     'send.success.sendAnother': 'Send another',
     'send.fields.amount': 'Amount',
     'send.fields.to': 'To',
-    'send.fields.chain': 'Chain',
+    'send.fields.chain': 'Network',
     'send.fields.from': 'From',
     'send.fields.token': 'Token',
     'send.reviewLabel': 'Review payment',
@@ -625,7 +625,7 @@ export const en = {
     'send.draft.discard': 'Discard',
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
-    'send.source.noAddress': 'No address on this chain. Use Receive to generate one first.',
+    'send.source.noAddress': 'No address on this network. Use Receive to generate one first.',
     'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
     'send.offline.title': 'Sending needs a network connection',
     'send.destination.placeholder': 'Enter or paste an address or name…',
@@ -675,7 +675,7 @@ export const en = {
     'send.rbf.enabledHint':
         'You can speed up or cancel this transaction by paying a higher network fee before confirmation.',
     'send.rbf.unsupported': "Changing the network fee later isn't supported on {chain}.",
-    'send.rbf.thisChain': 'this chain',
+    'send.rbf.thisChain': 'this network',
     // M2.4: the success card's in-wallet link to the merged History entry.
     // The entry exists the moment this card does (built from the wallet's
     // own pending record), but the network has not necessarily reported it
@@ -755,7 +755,7 @@ export const en = {
     'scan.error.unknownXchainIntent':
         "This XChain link isn't supported. Check the link and try again.",
     'scan.error.paymentRequest':
-        "This payment request doesn't match a supported chain or valid address. Check the request and scan again, or paste the address instead.",
+        "This payment request doesn't match a supported network or valid address. Check the request and scan again, or paste the address instead.",
     'scan.error.wif':
         'This is a private key. Open Import wallet, choose Private key, and scan it there.',
     'scan.error.mnemonic':
@@ -799,7 +799,7 @@ export const en = {
         'Cross-chain transfers appear here after you send or receive one.',
     'history.empty.noActivityTitle': 'No activity yet',
     'history.empty.noActivityBody':
-        'Activity appears here after you send or receive on a selected chain.',
+        'Activity appears here after you send or receive on a selected network.',
     'history.empty.startReceiving': 'Start receiving',
     'history.filters.label': 'History filters',
     'history.filters.toggle': 'Filters ({count})',
@@ -827,7 +827,6 @@ export const en = {
     'history.filters.filter': 'filter',
     'history.filters.special': 'Special',
     'history.filters.multisigOnly': 'Multisig only',
-    'history.filters.allChains': 'All chains',
     'history.filters.datePresets': 'Date range presets',
     'history.filters.last7Days': '7 days',
     'history.filters.last30Days': '30 days',
@@ -848,9 +847,9 @@ export const en = {
     'history.detail.loadingPeer': 'Loading the linked transaction…',
     'history.detail.peerError': "Couldn't load the linked transaction. Try again.",
     'history.detail.copyPeerRawJson': 'Copy peer raw JSON',
-    'history.detail.peerUnavailableTitle': 'Peer chain unavailable',
+    'history.detail.peerUnavailableTitle': 'Peer network unavailable',
     'history.detail.peerUnavailable':
-        'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
+        'Peer network not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
     'history.detail.openNewWindow': 'Open in new window',
     'history.contact.saveAs': 'Save {address} as',
     'history.contact.save': 'Save',
@@ -999,14 +998,14 @@ export const en = {
     'extension.connect.permissions': 'Requested permissions',
     'extension.connect.permission.accounts':
         'View the accounts you select, including their addresses and balances',
-    'extension.connect.permission.chains': 'Use only the chains you select below',
+    'extension.connect.permission.chains': 'Use only the networks you select below',
     'extension.connect.permission.signing':
         'Ask separately before signing any message or transaction',
-    'extension.connect.chains': 'Chains',
+    'extension.connect.chains': 'Networks',
     'extension.connect.chains.requestedHint':
-        'Choose from the chains this site requested. You can change this later.',
+        'Choose from the networks this site requested. You can change this later.',
     'extension.connect.chains.hint':
-        'Pick which chains this site can see. You can change this later.',
+        'Pick which networks this site can see. You can change this later.',
     'extension.connect.chains.allow': 'Allow {chain} {network}',
     'extension.connect.accounts.hint': 'Pick which accounts this site can see.',
     'extension.connect.accounts.share': 'Share {name}',
@@ -1073,7 +1072,7 @@ export const en = {
     'flows.pairPartner.modeMismatch':
         'This wallet is in {localMode} mode, so its partner must be in {partnerMode} mode. The wallet you scanned is in {scannedMode} mode.',
     'flows.pairPartner.noSharedChains':
-        'The two wallets have no chain in common, so there is nothing to compare. Switch on at least one matching chain in both wallets and try again.',
+        'The two wallets have no network in common, so there is nothing to compare. Switch on at least one matching network in both wallets and try again.',
     'flows.pairPartner.seedMismatch':
         "These two wallets were made from different recovery phrases ({chains} doesn't match). Restore both halves from the same phrase and pair again.",
     'flows.pairPartner.paired':
@@ -1089,7 +1088,7 @@ export const en = {
     'flows.protocolFee.paidIn': 'Protocol fee is paid in {ticker}',
     'flows.protocolFee.paidInPlural': 'Protocol fees are paid in {ticker}',
     'flows.protocolFee.onlyWay':
-        '{ticker} is the only way to pay a protocol fee on this chain.',
+        '{ticker} is the only way to pay a protocol fee on this network.',
     'flows.protocolFee.unverifiedNotice':
         "The amount is exact, but the network doesn't check contract actions in advance, so it can't tell you beforehand whether this one will be accepted. If it's rejected, the fee is still spent.",
     'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker} instead of XCHAIN',
