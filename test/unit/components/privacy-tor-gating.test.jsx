@@ -86,6 +86,19 @@ describe('the Tor routing row', () => {
         expect(screen.queryByText(/Tor must already be running/i)).toBeNull();
     });
 
+    it("names the app web view, not browser wallets, inside the iOS and Android apps", () => {
+        globalThis.Capacitor = { isNativePlatform: () => true, getPlatform: () => "ios" };
+        try {
+            render(<PrivacySection />);
+            const hint = screen.getByText(/Not available in the iOS and Android apps/i);
+            expect(hint.textContent).toMatch(/system web view/i);
+            expect(hint.textContent).toMatch(/desktop app/i);
+            expect(hint.textContent).not.toMatch(/browser wallets/i);
+        } finally {
+            delete globalThis.Capacitor;
+        }
+    });
+
     it('IS offered, live, when the shell can proxy', () => {
         setShellCapabilities({ socksProxy: true });
         render(<PrivacySection />);
