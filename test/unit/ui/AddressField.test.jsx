@@ -88,9 +88,8 @@ describe('<AddressField>', () => {
 
         const amountInput = screen.getByRole('textbox', { name: 'Amount (BTC)' });
         expect(amountInput.parentElement.parentElement).toHaveClass(inputStyles[size]);
-        // Max is an in-field action like Paste, so it keeps the compact size in every field size.
         expect(screen.getByRole('button', { name: 'Use max available amount' }))
-            .toHaveClass(buttonStyles.sm);
+            .toHaveClass(buttonStyles[size]);
     });
 
     it('trims surrounding whitespace from a plain pasted address', () => {

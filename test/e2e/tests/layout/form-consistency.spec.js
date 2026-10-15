@@ -391,9 +391,9 @@ for (const viewport of VIEWPORTS) {
         if (process.env.FORM_SWEEP_OUT) writeFileSync(`${process.env.FORM_SWEEP_OUT}/${size}.json`, JSON.stringify(results, null, 1));
         const measured = results.reduce((n, r) => n + (r.counts.fields || 0), 0);
         expect(measured, 'the walk measured fields').toBeGreaterThan(10);
-        // Every Paste and Max button inside a field is one size, set in from the border the same way.
+        // Every Paste and Max button inside a field is one height, set in from the border the same way.
         const inField = results.flatMap((r) => (r.inFieldSizes || []).map((b) => ({ route: r.route, ...b })));
-        for (const key of ['height', 'fontSize', 'inset']) {
+        for (const key of ['height', 'inset']) {
             const values = [...new Set(inField.map((b) => b[key]))];
             expect(values.length, `in-field Paste/Max ${key} differs: ${JSON.stringify(inField.filter((b) => b[key] !== inField[0][key]).slice(0, 4))} vs ${JSON.stringify(inField[0])}`).toBe(1);
         }

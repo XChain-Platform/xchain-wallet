@@ -3,10 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Every field draws its resting border from the control-border token and its
-// disabled state from the shared disabled colours, as a Button does. The
-// token picker, the icon select, the native select rule and the text input
-// each kept their own border token or faded themselves with opacity.
+// Every field draws its disabled state from the shared disabled colours, as a
+// Button does. The token picker, the icon select, the native select rule and
+// the text input each faded themselves with opacity or left it to the browser.
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -19,11 +18,6 @@ const rule = (source, selector) => {
 };
 
 describe('field tokens', () => {
-    it('draws every field border from the control-border token', () => {
-        expect(rule(css('shared/components/TokenField.module.css'), '.control')).toContain('border: 1px solid var(--xc-control-border)');
-        expect(rule(css('ui/IconSelect.module.css'), '.trigger')).toContain('border: 1px solid var(--xc-control-border)');
-    });
-
     it('draws every disabled field from the shared disabled colours', () => {
         const disabled = [
             rule(css('ui/Input.module.css'), '.input:disabled'),

@@ -38,7 +38,7 @@
     font-size: var(--xc-control-font);
     color: var(--xc-text);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-control-border);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-control-radius);
     cursor: pointer;
     text-align: start;
