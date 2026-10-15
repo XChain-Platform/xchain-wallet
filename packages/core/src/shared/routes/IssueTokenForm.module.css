@@ -79,6 +79,19 @@
     margin-bottom: var(--xc-space-3);
 }
 
+/* A labelled set of checkboxes inside a form: the label keeps the label gap
+   to its options, and the options keep the label gap to each other. */
+.checkGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-gap);
+    min-width: 0;
+}
+
+.checkGroup > .pickerLabel {
+    margin-bottom: 0;
+}
+
 .picker {
     display: block;
     width: 100%;

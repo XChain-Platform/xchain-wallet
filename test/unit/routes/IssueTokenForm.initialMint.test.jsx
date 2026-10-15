@@ -266,7 +266,7 @@ describe('IssueTokenForm initial mint', () => {
         fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
         await submit();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for the active chain/i);
+        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for the active network/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

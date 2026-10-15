@@ -3308,8 +3308,8 @@ const DETAIL_FIELD_LABELS = Object.freeze({
     action_index: 'Action number',
     address: 'Address',
     block_index: 'Block',
-    chain: 'Chain',
-    chain_id: 'Chain',
+    chain: 'Network',
+    chain_id: 'Network',
     destination: 'To',
     source: 'From',
     time: 'Time',
@@ -3402,7 +3402,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
     // place the detail page did.
     if (entry.chainId) {
         const [coin = ''] = String(entry.chainId).split('-');
-        if (coin) rows.push(['Chain', capitalize(coin)]);
+        if (coin) rows.push(['Network', capitalize(coin)]);
     }
     if (txHash) {
         rows.push(['Transaction ID', (
@@ -4797,7 +4797,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     ) : (
                         <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
                     )}
-                    <span>{selectedDesc ? selectedDesc.displayName : t('history.filters.allChains')}</span>
+                    <span>{selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}</span>
                 </span>
                 <SingleChevron direction="down" />
             </button>
@@ -4818,7 +4818,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                             onClick={() => choose('all')}
                         >
                             <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>{t('history.filters.allChains')}</span>
+                            <span>{t('common.allNetworks')}</span>
                         </button>
                     </li>
                     {activeChainIds.map((cid) => {

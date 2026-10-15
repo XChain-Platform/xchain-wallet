@@ -18,7 +18,7 @@
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '../fixtures/wallet.js';
-import { createSweep, layoutSweepFailures } from './sweep.js';
+import { createSweep, layoutSweepFailures, measureInPage } from './sweep.js';
 
 const DARK = process.env.LAYOUT_SCHEME === 'dark';
 const OUT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'tmp', DARK ? 'dark-sweep' : 'layout-sweep');
@@ -38,12 +38,31 @@ test('layout gutter assertion contract', () => {
         'lost scale: root font size 16px, expected 24px',
         'unread: root font size unread, expected 20.8px',
     ]);
+    // One 12px page gutter at every width.
     expect(layoutSweepFailures([
-        { label: 'compact', vw: 639, layout: layout(12, 'list', 12) },
-        { label: 'rail lower bound', vw: 640, layout: layout(16) },
-        { label: 'rail upper bound', vw: 899, layout: layout(16) },
-        { label: 'full', vw: 900, layout: layout(24) },
+        { label: 'compact', vw: 639, layout: layout(12) },
+        { label: 'rail', vw: 834, layout: layout(12) },
+        { label: 'full', vw: 1280, layout: layout(12) },
     ])).toEqual([]);
+    expect(layoutSweepFailures([
+        { label: 'old rail gutter', vw: 834, layout: layout(16) },
+    ])).toEqual([
+        'old rail gutter: content left 16px, expected 12px',
+        'old rail gutter: header left 16px, expected 12px',
+        'old rail gutter: first content left 16px, expected 12px',
+    ]);
+    // A wide step that centres its column passes; one pushed off-centre does not.
+    const column = (left, rightGap) => ({
+        contentLeft: 12, contentRightGap: 12, headerLeft: null, first: { kind: 'list', left, rightGap, topGap: 12 },
+    });
+    expect(layoutSweepFailures([
+        { label: 'centred', vw: 834, layout: column(177, 177) },
+        { label: 'off centre', vw: 834, layout: column(177, 60) },
+        { label: 'narrow centred', vw: 411, layout: column(40, 40) },
+    ])).toEqual([
+        'off centre: first content left 177px, expected 12px',
+        'narrow centred: first content left 40px, expected 12px',
+    ]);
     expect(layoutSweepFailures([
         {
             label: 'activity',
@@ -52,27 +71,71 @@ test('layout gutter assertion contract', () => {
                 contentLeft: 12,
                 contentRightGap: 9,
                 headerLeft: 18,
-                first: { kind: 'list', left: 11, rightGap: 8, topGap: 12 },
+                first: { kind: 'list', left: 9, rightGap: 8, topGap: 12 },
             },
         },
         {
             label: 'send',
             vw: 768,
             layout: {
-                contentLeft: 16,
-                contentRightGap: 16,
-                headerLeft: 16,
+                contentLeft: 12,
+                contentRightGap: 12,
+                headerLeft: 12,
                 first: { kind: 'form', left: 104, rightGap: 104, topGap: 16 },
             },
         },
     ])).toEqual([
-        'activity: content left 12px, expected 16px',
-        'activity: content right gap 9px, expected at least 16px',
-        'activity: header left 18px, expected 16px',
-        'activity: first content left 11px, expected 16px',
-        'activity: first content right gap 8px, expected at least 16px',
+        'activity: content right gap 9px, expected at least 12px',
+        'activity: header left 18px, expected 12px',
+        'activity: first content left 9px, expected 12px',
+        'activity: first content right gap 8px, expected at least 12px',
         'form top gaps [16] do not match list top gaps [12]',
     ]);
+});
+
+test('clip measurement skips text nobody can see', async ({ page, browserName }) => {
+    await page.setContent(`
+        <style>
+            .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+            input { width: 120px; font: 16px monospace; }
+            .cut { display: block; width: 60px; overflow: hidden; white-space: nowrap; }
+        </style>
+        <span class="sr-only">Screen reader text far wider than one pixel</span>
+        <input aria-label="hidden address" readonly style="color: transparent" value="bc1qhiddenvaluefarwiderthanitsfield0000000">
+        <input aria-label="shown address" readonly value="bc1qshownvaluefarwiderthanitsfield00000000">
+        <span class="cut">Visible text cut by its own box</span>
+    `);
+    const { clipped } = await page.evaluate(measureInPage, {});
+    // WebKit does not report an input's text overflow, so only Chromium
+    // can show the visible address being caught.
+    expect(clipped.map(({ el }) => el)).toEqual([
+        ...(browserName === 'chromium' ? ['input "shown address"'] : []),
+        'span.cut "Visible text cut by its own box"',
+    ]);
+});
+
+test('overlap measurement reports controls drawn over each other, not overlays', async ({ page }) => {
+    await page.setContent(`
+        <style>
+            body { margin: 0; }
+            button { position: absolute; top: 10px; height: 40px; width: 80px; }
+            .sheet { position: fixed; inset: 100px 0 0 0; background: white; }
+            .scroller { position: fixed; top: 60px; left: 300px; width: 200px; height: 300px; overflow-y: auto; }
+            .scroller > div { position: relative; height: 900px; }
+            .bar { position: fixed; top: 330px; left: 300px; width: 200px; height: 40px; background: white; }
+        </style>
+        <button style="left: 10px">Contacts</button>
+        <button style="left: 60px">Paste</button>
+        <button style="left: 200px">Apart</button>
+        <button style="left: 10px; top: 60px; width: 200px; height: 30px">Row</button>
+        <button style="left: 170px; top: 63px; width: 24px; height: 24px">Row action</button>
+        <button style="left: 10px; top: 150px">Under the sheet</button>
+        <div class="sheet"><button style="left: 20px; top: 40px">On the sheet</button></div>
+        <div class="scroller"><div><button style="left: 10px; top: 240px">Row passing under the bar</button></div></div>
+        <div class="bar"><button style="left: 10px; top: 0">Nav</button></div>
+    `);
+    const { overlaps } = await page.evaluate(measureInPage, {});
+    expect(overlaps).toEqual([{ el: 'button "Contacts"', with: 'button "Paste"', w: 30, h: 40 }]);
 });
 
 test('layout sweep', async ({ page }, testInfo) => {

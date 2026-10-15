@@ -172,7 +172,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before a callback.',
+            'No addresses on any network yet. Use Receive to generate one before a callback.',
     });
 
     const ticker = (initialTick || '').toUpperCase();
@@ -537,7 +537,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setCurrentHeight(height);
             const freshBlock = Number(freshInfo.callbackBlock);
             if (height < freshBlock) {
-                return `Callback is not allowed until block ${freshBlock.toLocaleString('en-US')}. The chain is at ${height.toLocaleString('en-US')}.`;
+                return `Callback is not allowed until block ${freshBlock.toLocaleString('en-US')}. The network is at ${height.toLocaleString('en-US')}.`;
             }
             if (typeof messaging?.tokenHolderSummary !== 'function') {
                 return 'Could not refresh the callback payout. Try again.';
@@ -929,7 +929,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     <p className={styles.warning}>
                         Callback is not allowed yet. It becomes available at block{' '}
                         {cbBlock?.toLocaleString('en-US')}
-                        {currentHeight != null ? ` (chain is at ${currentHeight.toLocaleString('en-US')})` : ''}.
+                        {currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.
                     </p>
                 </div>
             ) : null}

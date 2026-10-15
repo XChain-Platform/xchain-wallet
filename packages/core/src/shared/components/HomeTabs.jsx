@@ -1050,7 +1050,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
     }, [entries]);
 
     if (entries.length === 0) {
-        return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any chains active." />;
+        return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any networks active." />;
     }
     return (
         <ul className={styles.demoList}>

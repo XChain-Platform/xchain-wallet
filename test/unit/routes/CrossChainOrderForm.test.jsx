@@ -192,8 +192,8 @@ describe('CrossChainOrderForm', () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
         // The get chain defaulted to the other coin, and the receiver was
         // resolved on THAT chain, not on the chain being signed.
-        expect(pickerName(utils, 'Give chain')).toBe('Give chain: Dogecoin');
-        expect(pickerName(utils, 'Get chain')).toBe('Get chain: Bitcoin');
+        expect(pickerName(utils, 'Give network')).toBe('Give network: Dogecoin');
+        expect(pickerName(utils, 'Get network')).toBe('Get network: Bitcoin');
         expect(utils.getByLabelText('Receive at').value).toBe(BTC_ADDRESS.address);
         expect(calls.filter((c) => c.method === 'getNewestAddress').map((c) => c.args.chainId)).toEqual([BTC]);
         const disclosure = utils.getByText('How orders fill').closest('details');
@@ -232,7 +232,7 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'swapAction')).toBe(false);
     });
 
-    it('re-resolves the receiver when the get chain changes, and keeps a typed one', async () => {
+    it('re-resolves the receiver when the get network changes, and keeps a typed one', async () => {
         const { utils } = await mount({ initialChainId: DOGE }, {
             getAddressesByChain: () => Promise.resolve({
                 [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
@@ -246,12 +246,12 @@ describe('CrossChainOrderForm', () => {
             await drainMicrotasks();
         });
         expect(utils.getByLabelText('Receive at').value).toBe('typed-by-user');
-        await pickChain(utils, 'Get chain', 'Litecoin');
-        expect(pickerName(utils, 'Get chain')).toBe('Get chain: Litecoin');
+        await pickChain(utils, 'Get network', 'Litecoin');
+        expect(pickerName(utils, 'Get network')).toBe('Get network: Litecoin');
         expect(utils.getByLabelText('Receive at').value).toBe('newest-on-litecoin-mainnet');
     });
 
-    it('clears amounts when either token or chain changes the represented asset', async () => {
+    it('clears amounts when either token or network changes the represented asset', async () => {
         const { utils } = await mount({ initialChainId: DOGE }, {
             getAddressesByChain: () => Promise.resolve({
                 [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
@@ -269,13 +269,13 @@ describe('CrossChainOrderForm', () => {
         expect(utils.getByLabelText(/^Get amount/).value).toBe('');
 
         await fillPair(utils);
-        await pickChain(utils, 'Get chain', 'Litecoin');
+        await pickChain(utils, 'Get network', 'Litecoin');
         expect(utils.getByLabelText('Get token').value).toBe('');
         expect(utils.getByLabelText(/^Get amount/).value).toBe('');
         expect(utils.getByLabelText('Give token').value).toBe('JDOG');
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
 
-        await pickChain(utils, 'Give chain', 'Bitcoin');
+        await pickChain(utils, 'Give network', 'Bitcoin');
         expect(utils.getByLabelText('Give token').value).toBe('');
         expect(utils.getByLabelText(/^Give amount/).value).toBe('');
     });
@@ -338,9 +338,9 @@ describe('CrossChainOrderForm', () => {
 
     it('refuses a same-coin pair and points at Create order', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
-        await pickChain(utils, 'Get chain', 'Dogecoin');
+        await pickChain(utils, 'Get network', 'Dogecoin');
         await fillPair(utils);
-        expect(utils.container.textContent).toMatch(/Give and get chains must differ/);
+        expect(utils.container.textContent).toMatch(/Give and get networks must differ/);
         expect(utils.getByRole('button', { name: 'Place order' }).disabled).toBe(true);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
@@ -357,7 +357,7 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('will not compose without a receive address on the get chain', async () => {
+    it('will not compose without a receive address on the get network', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE }, {
             getNewestAddress: () => Promise.resolve(null),
         });
@@ -530,11 +530,11 @@ describe('CrossChainOrderForm', () => {
         expect(utils.container.textContent).not.toMatch(/UTXO/i);
     });
 
-    it('explains itself on a wallet with addresses on one chain only', async () => {
+    it('explains itself on a wallet with addresses on one network only', async () => {
         const { utils } = await mount({}, {
             getAddressesByChain: () => Promise.resolve({ [DOGE]: [DOGE_ADDRESS] }),
         });
-        expect(utils.container.textContent).toMatch(/addresses on two different chains/);
+        expect(utils.container.textContent).toMatch(/addresses on two different networks/);
         expect(utils.queryByRole('button', { name: 'Place order' })).toBeNull();
     });
 });

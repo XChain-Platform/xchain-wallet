@@ -51,11 +51,11 @@ function mount({ settings = {}, props = {}, addresses = ADDRESSES } = {}) {
     );
 }
 
-const chainButton = () => screen.findByRole('button', { name: /^Give and get chain: / });
+const chainButton = () => screen.findByRole('button', { name: /^Give and get network: / });
 
 afterEach(() => cleanup());
 
-describe('SwapForm opens on the last-used chain', () => {
+describe('SwapForm opens on the last-used network', () => {
     it('does not render the selected network kind', async () => {
         const chainId = 'bitcoin-regtest';
         mount({
@@ -64,22 +64,22 @@ describe('SwapForm opens on the last-used chain', () => {
             addresses: { [chainId]: ADDRESSES[BTC] },
         });
 
-        await screen.findByRole('button', { name: 'Give and get chain: Bitcoin' });
+        await screen.findByRole('button', { name: 'Give and get network: Bitcoin' });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('opens on Dogecoin when Bitcoin was created first and Dogecoin was used last', async () => {
         mount({ settings: { lastUsedChain: { mainnet: DOGE } } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Dogecoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get network: Dogecoin'));
     });
 
-    it('a caller-seeded chain wins over the last-used chain', async () => {
+    it('a caller-seeded network wins over the last-used network', async () => {
         mount({ settings: { lastUsedChain: { mainnet: DOGE } }, props: { initialChainId: BTC } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Bitcoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get network: Bitcoin'));
     });
 
-    it('falls back to the first chain when the last-used chain has no addresses', async () => {
+    it('falls back to the first network when the last-used network has no addresses', async () => {
         mount({ settings: { lastUsedChain: { mainnet: LTC } } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Bitcoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get network: Bitcoin'));
     });
 });
