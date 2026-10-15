@@ -119,12 +119,14 @@ export const FormPage = forwardRef(function FormPage(
     };
     // Notices raised by controls inside the form (the fee selector) join the
     // form's own status at the top instead of sitting under their field.
-    const [controlNotices, setControlNotices] = useState(/** @type {Record<string, string>} */ ({}));
+    const [controlNotices, setControlNotices] = useState(/** @type {Record<string, { text: string, variant: string, role?: any }>} */ ({}));
     const noticeApi = useMemo(() => ({
-        report: (id, text) => setControlNotices((prev) => {
-            if ((prev[id] ?? null) === text) return prev;
+        report: (id, entry) => setControlNotices((prev) => {
+            const had = prev[id];
+            if (!entry && !had) return prev;
+            if (entry && had && had.text === entry.text && had.variant === entry.variant && had.role === entry.role) return prev;
             const next = { ...prev };
-            if (text) next[id] = text; else delete next[id];
+            if (entry) next[id] = entry; else delete next[id];
             return next;
         }),
     }), []);
@@ -141,8 +143,8 @@ export const FormPage = forwardRef(function FormPage(
         ? (
             <div className={styles.status}>
                 {demoBlocked ? demoGuard.note : status}
-                {!demoBlocked ? controlNoticeList.map(([id, text]) => (
-                    <StatusMessage key={id} variant="warning">{text}</StatusMessage>
+                {!demoBlocked ? controlNoticeList.map(([id, entry]) => (
+                    <StatusMessage key={id} variant={entry.variant} role={entry.role}>{entry.text}</StatusMessage>
                 )) : null}
             </div>
         )

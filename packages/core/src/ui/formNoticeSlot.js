@@ -10,13 +10,14 @@
 
 import { createContext } from 'react';
 
-// A control deep in a form (the fee selector) that has something to say hands
-// the text up to its FormPage, which shows it with the form's other notices at
-// the top of the content. That keeps every notice the first item of the page
-// instead of a line under the field that raised it. The value is null outside
-// a FormPage, where the control keeps its own inline notice.
+// A notice raised from inside a form body (see FormNotice.jsx) is handed up to
+// its FormPage, which shows it with the form's other notices at the top of the
+// content. That keeps every notice the first item of the page instead of a line
+// among the fields. The value is null outside a FormPage, where FormNotice
+// renders in place.
 //
-//   report(id, text)  show `text` for control `id`; pass null to withdraw it
+//   report(id, entry)  show `entry` for notice `id`; pass null to withdraw it
+//   entry              { text, variant, role } with text a plain string
 export const FormNotices = createContext(
-    /** @type {{ report: (id: string, text: string | null) => void } | null} */ (null),
+    /** @type {{ report: (id: string, entry: { text: string, variant: string, role?: 'alert' | 'status' | 'note' | null } | null) => void } | null} */ (null),
 );
