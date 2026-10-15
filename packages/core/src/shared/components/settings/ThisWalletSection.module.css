@@ -1,32 +1,17 @@
 .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
+    gap: var(--xc-settings-row-gap);
 }
 
-.row,
-.panel,
-.keyPanel {
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-}
-
-.panel,
-.keyPanel,
+/* An opened row's form is the shared card (ui/Card.module.css), set on the
+   FormSection in the JSX, so it reads as that row expanded. The card keeps
+   the one card look: no tinted border for the remove confirm, whose title,
+   copy and danger button already name the risk. */
 .form {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-}
-
-.keyPanel {
-    margin-top: var(--xc-space-2);
-}
-
-.dangerPanel {
-    border-color: var(--xc-danger-fg);
 }
 
 .actions {
@@ -38,6 +23,8 @@
 
 .xpub {
     color: var(--xc-text);
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
     overflow-wrap: anywhere;

@@ -22,6 +22,8 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { tickerReferenceError } from '../shared/utils/tickerGrammar.js';
+import { memoLengthError } from '../shared/utils/memoLimit.js';
 
 /**
  * @typedef {Object} CallbackActionOpts
@@ -55,6 +57,24 @@ export async function callbackAction(opts) {
     }
     if (typeof opts.params.TICK !== 'string' || opts.params.TICK.length === 0) {
         throw new Error('callbackAction: params.TICK is required');
+    }
+    if (opts.params.TICK !== opts.params.TICK.trim()) {
+        throw new Error('callbackAction: params.TICK cannot start or end with spaces');
+    }
+    const tickError = tickerReferenceError(opts.params.TICK, { noun: 'Token ticker' });
+    if (tickError) throw new Error(`callbackAction: ${tickError}`);
+    if (opts.params.VERSION != null && String(opts.params.VERSION) !== '0') {
+        throw new Error('callbackAction: params.VERSION must be "0"');
+    }
+    if (opts.params.MEMO != null) {
+        if (typeof opts.params.MEMO !== 'string') {
+            throw new Error('callbackAction: params.MEMO must be text');
+        }
+        if (/[|;]/.test(opts.params.MEMO)) {
+            throw new Error('callbackAction: Memo cannot contain "|" or ";".');
+        }
+        const memoError = memoLengthError(opts.params.MEMO);
+        if (memoError) throw new Error(`callbackAction: ${memoError}`);
     }
     const source = normalizeSource(opts.from, 'callbackAction');
 

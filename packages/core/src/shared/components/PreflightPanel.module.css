@@ -5,13 +5,10 @@
    under a colour-vision deficiency. */
 
 .panel {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg-muted);
     font-size: var(--xc-text-sm);
 }
 
@@ -22,6 +19,7 @@
 
 .chip {
     align-self: flex-start;
+    /* Two pixels preserves the compact chip height; the spacing scale starts at four. */
     padding: 2px var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     font-size: var(--xc-text-xs);
@@ -50,17 +48,18 @@
 .chip_unreached {
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
-    border: 1px dashed var(--xc-border-strong);
+    border: 1px solid var(--xc-border-strong);
 }
 
 .restrictedChip {
     align-self: flex-start;
+    /* Two pixels preserves the compact chip height; the spacing scale starts at four. */
     padding: 2px var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     font-size: var(--xc-text-xs);
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
-    border: 1px dashed var(--xc-border-strong);
+    border: 1px solid var(--xc-border-strong);
 }
 
 .errors,
@@ -81,6 +80,7 @@
     padding: var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
     /* A leading bar keeps severity legible without relying on hue alone. */
+    /* Three pixels gives the severity bar emphasis; no border-width token matches it. */
     border-inline-start: 3px solid transparent;
     overflow-wrap: anywhere;
 }
@@ -112,7 +112,8 @@
     background: var(--xc-bg-muted);
     color: var(--xc-text);
     border-inline-start-color: var(--xc-border-strong);
-    border: 1px dashed var(--xc-border-strong);
+    border: 1px solid var(--xc-border-strong);
+    /* Three pixels gives the severity bar emphasis; no border-width token matches it. */
     border-inline-start: 3px solid var(--xc-border-strong);
 }
 

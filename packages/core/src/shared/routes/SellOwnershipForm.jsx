@@ -9,15 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -71,6 +72,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -114,7 +116,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 setAddressesByChain(byChain || {});
                 const all = (byChain || {})[chainId] || [];
                 if (all.length === 0) {
-                    setLoadError(`No address on this chain to sign from. Use Receive to generate one first.`);
+                    setLoadError(`No address on this network to sign from. Use Receive to generate one first.`);
                     return;
                 }
                 if (initialFromAddress) {
@@ -430,7 +432,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
         </Screen>
     );
@@ -484,6 +490,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review ownership sale"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -514,7 +521,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Chain" value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId} />
+                    {descriptor ? <DetailRow label="Network" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
                     <DetailRow label="Mechanism" value={mechanismLabel} />
@@ -594,6 +601,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`Sell ${tokenUpper} name`}
             onSubmit={handleReview}
             inert={actionConfirm.composing ? '' : undefined}
@@ -622,7 +630,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+            <ChainPicker
+                label="Network"
+                value={chainId}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                chainRegistry={chainRegistry}
+                hideNetworkKind
+            />
 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Selling the name</dt>
@@ -634,10 +649,6 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     </>
                 ) : null}
             </dl>
-
-            <p className={styles.hint} style={{ marginTop: 0 }}>
-                You're selling the entire ownership of {tokenUpper}. Single sale, no partial fills.
-            </p>
 
             <div
                 className={receivePickerStyles.kindSegments}
@@ -697,10 +708,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             </div>
 
             {getMode === 'token' ? (
-                <TokenField
-                    label="Price token"
-                    value={getTick && chainId ? { chainId, tick: getTick } : null}
-                    onOpenPicker={() => setTokenPickerOpen(true)}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    icon={getTick && chainId
+                        ? <TickerIcon chainId={chainId} tick={getTick} size={40} />
+                        : <Icon.TokenIcon />}
+                    aria-label={getTick ? `Price token: ${getTick}. Change asset` : 'Choose price token'}
+                    onClick={() => setTokenPickerOpen(true)}
                 />
             ) : null}
 

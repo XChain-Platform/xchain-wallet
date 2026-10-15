@@ -242,6 +242,25 @@ export function t(key, vars) {
     return format(raw, vars, formatLocale);
 }
 
+/**
+ * Join values as an "or" list in the current locale's grammar, for a
+ * dictionary string to interpolate: ['12', '15', '24'] reads
+ * "12, 15, or 24" in English and a single value stays bare.
+ *
+ * @param {Array<string | number>} items
+ * @returns {string}
+ */
+export function formatOrList(items) {
+    const values = items.map(String);
+    try {
+        return new Intl.ListFormat(resolveFormatLocale(currentLocale), { type: 'disjunction' })
+            .format(values);
+    } catch (_err) {
+        // No Intl.ListFormat on this engine: a plain list still reads.
+        return values.join(', ');
+    }
+}
+
 // --- formatjs message formatting -------------------------------------
 
 // `Intl` rejects a structurally invalid BCP-47 tag with a RangeError,
@@ -418,9 +437,11 @@ function fillMissingArgs(mf, values) {
 
 // --- legacy fallback substitution ------------------------------------
 //
-// The pre-formatjs hand-rolled ICU subset, kept only as a last-resort
-// path for templates formatjs refuses to parse. It handles simple
-// substitution, plural, select, `=N` exact match, and `#`.
+// The pre-formatjs hand-rolled ICU subset, kept as the fallback for a
+// template formatjs throws on AND for one whose caller omitted a coercing
+// argument (fillMissingArgs returns null; see COERCING_ARG_TYPES). It
+// handles simple substitution, plural, select, `=N` exact match, and `#`;
+// any other type, `number` included, renders as plain substitution.
 
 function legacyFormat(template, vars, locale = 'en') {
     if (typeof template !== 'string') return String(template);

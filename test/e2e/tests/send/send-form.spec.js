@@ -143,8 +143,10 @@ test.describe('send form', () => {
         // §5.2.5: the fee comes from the composed PSBT, so it is an exact
         // amount, not the form's rate estimate.
         await expect(confirm).toContainText(/Network fee: [\d.]+ BTC/);
-        // §5.2.6: the hardware note names this screen as the intent surface.
-        await expect(confirm).toContainText(/hardware device verifies native outputs/i);
+        // §5.2.6: the hardware note names this screen as the intent surface,
+        // so it appears only when a hardware device signs. This wallet signs
+        // in software, so the review leaves it out.
+        await expect(confirm).not.toContainText(/hardware device verifies native outputs/i);
     });
 
     // §1.7 / wallet spec §21.7. The confirm page is the last place the user
@@ -210,10 +212,33 @@ test('a zero-balance wallet offers Receive instead of the Send form', async ({ p
     await createWallet(page, { password: PASSWORD });
     await gotoSection(page, 'Send');
 
-    await expect(page.getByRole('heading', { name: /wallet has no coins to send yet/i }))
+    // The dev services are not running, so once the balance check gives up the
+    // same screen says the balances could not be checked; either way it offers
+    // Receive and no form.
+    await expect(page.getByRole('heading', { name: 'Nothing to send yet', exact: true })
+        .or(page.getByRole('heading', { name: "Balances couldn't be checked", exact: true })))
         .toBeVisible();
     await expect(page.getByRole('form', { name: 'Send' })).toHaveCount(0);
 
     await mainButton(page, 'Receive').click();
     await expect(page.getByRole('heading', { name: 'Receive', exact: true })).toBeVisible();
+});
+
+test('a zero-balance wallet whose balances could not be checked says so once', async ({ page }) => {
+    test.slow();
+    await serveZeroBalances(page);
+    await createWallet(page, { password: PASSWORD });
+    // No dev services run here, so the check fails once its startup grace
+    // ends; Home's empty Coins tab is the first place that says so.
+    const unchecked = page.getByText("Balances couldn't be checked", { exact: true });
+    await expect(unchecked.first()).toBeVisible({ timeout: 90_000 });
+    await gotoSection(page, 'Send');
+
+    await expect(page.getByRole('heading', { name: "Balances couldn't be checked", exact: true })).toBeVisible();
+    await expect(page.getByText('Your balance may be out of date. Try again to refresh it.')).toBeVisible();
+    // One message: no "Nothing to send yet" and no stale-balances notice beside it.
+    await expect(page.getByText('Nothing to send yet')).toHaveCount(0);
+    await expect(page.getByText('Some balances may be out of date')).toHaveCount(0);
+    await expect(mainButton(page, 'Try again')).toBeVisible();
+    await expect(mainButton(page, 'Receive')).toBeVisible();
 });

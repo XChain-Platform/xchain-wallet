@@ -71,7 +71,9 @@ describe('PlaceOrderPanel validation', () => {
         mount({}, { getWalletBalances: vi.fn(() => balanceRequest.promise) });
 
         expect(screen.getByRole('status')).toHaveTextContent('Loading wallet balances…');
-        expect(screen.getByRole('button', { name: 'Loading wallet…' })).toBeDisabled();
+        const loadingSubmit = screen.getByRole('button', { name: 'Place buy order' });
+        expect(loadingSubmit).toBeDisabled();
+        expect(loadingSubmit).toHaveAttribute('aria-busy', 'true');
 
         await act(async () => balanceRequest.resolve({}));
 
@@ -91,11 +93,22 @@ describe('PlaceOrderPanel validation', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('uses a consent checkbox for CoinPay auto-pay', async () => {
+        mount();
+
+        const consent = await screen.findByRole('checkbox', {
+            name: /Enable CoinPay auto-pay/,
+        });
+        expect(consent).toBeChecked();
+        fireEvent.click(consent);
+        expect(consent).not.toBeChecked();
+    });
+
     it('rejects wire amounts with more precision than either market asset supports', async () => {
         const messaging = mount({}, {
             getWalletBalances: vi.fn().mockResolvedValue(balances()),
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1.001' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
@@ -117,7 +130,7 @@ describe('PlaceOrderPanel validation', () => {
         const messaging = mount({}, {
             getWalletBalances: vi.fn().mockResolvedValue(balances({ xchain: '1000' })),
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '10.01' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
@@ -133,7 +146,7 @@ describe('PlaceOrderPanel validation', () => {
             getWalletBalances: vi.fn().mockResolvedValue(balances()),
             getTokenInfo: vi.fn(async ({ tick }) => ({ divisibility: tick === 'OTHER' ? 1 : 2 })),
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Sell XCHAIN' }));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
         fireEvent.change(screen.getByLabelText('Price (OTHER)'), { target: { value: '0.01' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'OTHER' })));
@@ -145,7 +158,7 @@ describe('PlaceOrderPanel validation', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('accepts grouped decimal entry and uses theme tokens for side controls', async () => {
+    it('accepts grouped decimal entry and selects the order side as a radio group', async () => {
         mount();
         const price = await screen.findByLabelText('Price (BTC)');
         fireEvent.change(price, { target: { value: '1,234.5' } });
@@ -153,12 +166,15 @@ describe('PlaceOrderPanel validation', () => {
         expect(price.style.textAlign).toBe('right');
         expect(price.style.fontVariantNumeric).toBe('tabular-nums');
 
-        const buy = screen.getByRole('button', { name: 'Buy XCHAIN' });
-        const sell = screen.getByRole('button', { name: 'Sell XCHAIN' });
+        const buy = screen.getByRole('radio', { name: 'Buy XCHAIN' });
+        const sell = screen.getByRole('radio', { name: 'Sell XCHAIN' });
         expect(buy.parentElement.className).toMatch(/sideToggle/);
-        expect(buy.style.background).toBe('var(--xc-success)');
-        expect(sell.style.background).toBe('var(--xc-danger)');
-        expect(buy.style.color).toBe('var(--xc-on-accent)');
+        expect(buy).toHaveAttribute('aria-checked', 'true');
+        expect(buy).toHaveAttribute('data-tone', 'success');
+        expect(sell).toHaveAttribute('data-tone', 'danger');
+        fireEvent.keyDown(buy, { key: 'ArrowRight' });
+        expect(sell).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('button', { name: 'Place sell order' })).toBeEnabled();
 
         const expiration = screen.getByRole('combobox', { name: 'Expiration' });
         fireEvent.change(expiration, { target: { value: 'custom' } });
@@ -169,7 +185,7 @@ describe('PlaceOrderPanel validation', () => {
         mount({}, {}, 360);
 
         await screen.findByLabelText('Price (BTC)');
-        expect(screen.getByRole('group', { name: 'Order side' }).className).toMatch(/sideToggle/);
+        expect(screen.getByRole('radiogroup', { name: 'Order side' }).className).toMatch(/sideToggle/);
         expect(screen.getByRole('group', { name: 'Price and amount' }).className).toMatch(/priceAmountFields/);
 
         const tradingCss = readFileSync(resolve(
@@ -268,6 +284,23 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.keyDown(window, { key: 'Escape' });
 
+        expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
+        expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
+        expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();
+    });
+
+    it('returns from review without resubmitting and preserves the order fields', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        mount({}, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        });
+
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Edit order' }))).toBe(false);
         expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
         expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
         expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();

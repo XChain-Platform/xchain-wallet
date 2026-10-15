@@ -244,6 +244,7 @@ export function resolveUndoSendWindowSeconds(settings) {
  * @property {string[]} [watchedTokens]                                                                      v2-tolerant: list of `chainId:tick` keys the user added to the balance list even when the wallet holds none
  * @property {Record<string, string[]>} [pinnedTokensByWallet]                                               v3-tolerant: wallet-scoped pinned token lists keyed by wallet id
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
+ * @property {boolean} [hideUnknownTokens]                                                                   v3-tolerant: collapse held tokens without metadata or an explicit user relationship into the Hidden section
  * @property {boolean} [showPinAffordance]                                                                   v2-tolerant: when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings > Display.
  * @property {boolean} [showHideAffordance]                                                                  v2-tolerant: when true, balance rows render a per-row hide affordance. Default false; the Settings > Display unhide list still works regardless.
  * @property {typeof SMALL_BALANCE_THRESHOLDS[number]} [smallBalanceThreshold]                               v3-tolerant: threshold used when privacy.hideSmallBalances is enabled. `dust` keeps the chain-aware relay/token heuristic; decimal values are whole asset units.
@@ -386,6 +387,7 @@ export function createDefaultSettings() {
         watchedTokens: [],
         pinnedTokensByWallet: {},
         hiddenTokens: [],
+        hideUnknownTokens: false,
         showPinAffordance: false,
         showHideAffordance: false,
         smallBalanceThreshold: SMALL_BALANCE_THRESHOLD_DEFAULT,
@@ -599,6 +601,14 @@ export function validateSettings(record) {
             'hiddenTokens',
             Array.isArray(r.hiddenTokens) && r.hiddenTokens.every(isString),
             'must be an array of strings (chainId:tick keys)',
+        );
+    }
+    if (r.hideUnknownTokens !== undefined) {
+        check(
+            errors,
+            'hideUnknownTokens',
+            isBoolean(r.hideUnknownTokens),
+            'must be a boolean when present',
         );
     }
     if (r.showPinAffordance !== undefined) {

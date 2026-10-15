@@ -139,7 +139,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const changeDisplay = percentChangeDisplay(changePct);
     const changeColor = changeDisplay?.direction === 'positive'
         ? 'var(--xc-success)'
-        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
     const marketKey = `${chainId}:${tick1}:${tick2}`;
 
     const header = (
@@ -156,11 +156,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     const headerCard = (
         <div style={{
-            background: 'var(--xc-bg-muted)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-3)',
-            marginBottom: 'var(--xc-space-3)',
+            background: 'var(--xc-card-bg)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
+            padding: 'var(--xc-card-pad)',
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--xc-space-2)',
@@ -187,8 +186,13 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             background: 'var(--xc-surface-raised)',
                             border: '1px solid var(--xc-border)',
                             borderRadius: '50%',
-                            width: 32,
-                            height: 32,
+                            // The button's own inline padding left no room
+                            // for the icon inside 32px, so it drew an empty
+                            // circle; square and unpadded, the icon shows.
+                            width: 36,
+                            minWidth: 36,
+                            height: 36,
+                            padding: 0,
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -242,7 +246,15 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     return wrap(
         <>
-            <div role="region" aria-label={t('market.summary')} aria-busy={summaryLoading || undefined}>
+            {/* The page's own gap spaces the summary, chart, panel tabs and
+                panel; a stale or failed-price notice under the summary card
+                takes the same gap inside this region. */}
+            <div
+                role="region"
+                aria-label={t('market.summary')}
+                aria-busy={summaryLoading || undefined}
+                style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' }}
+            >
                 {summaryLoading ? (
                     <div role="status" aria-label={t('market.loading')}>
                         <Skeleton height={159} />
@@ -280,7 +292,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 )}
             </div>
 
-            <div style={{ marginTop: 'var(--xc-space-3)' }}>
+            <div>
                 <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:chart`}>
                     <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
                 </RouteErrorBoundary>
@@ -290,7 +302,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 className={receivePickerStyles.kindSegments}
                 role="tablist"
                 aria-label={t('market.panels')}
-                style={{ width: '100%', marginTop: 'var(--xc-space-3)', marginBottom: 'var(--xc-space-3)', flexShrink: 1 }}
+                style={{ width: '100%', flexShrink: 1 }}
             >
                 {[
                     { id: 'book',    label: 'Book' },

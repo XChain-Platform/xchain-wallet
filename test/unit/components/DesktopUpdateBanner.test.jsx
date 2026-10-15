@@ -82,9 +82,11 @@ describe('DesktopUpdateBanner', () => {
 
         const card = screen.getByRole('status');
         expect(card.style.position).toBe('fixed');
-        expect(card.style.left).not.toBe('');
-        expect(card.style.right).not.toBe('');
-        expect(card.style.maxWidth).not.toBe('');
+        expect(card.style.insetInline).toContain('safe-area-inset-left');
+        expect(card.style.insetInline).toContain('safe-area-inset-right');
+        expect(card.style.maxInlineSize).not.toBe('');
+        expect(card.style.left).toBe('');
+        expect(card.style.right).toBe('');
     });
 
     it('keeps the floating card inside the device safe-area insets', () => {
@@ -93,9 +95,11 @@ describe('DesktopUpdateBanner', () => {
         bridge.emit({ type: 'available', info: { version: '0.339.0' } });
 
         const card = screen.getByRole('status');
-        expect(card.style.top).toContain('env(safe-area-inset-top');
-        expect(card.style.left).toContain('env(safe-area-inset-left');
-        expect(card.style.right).toContain('env(safe-area-inset-right');
+        // Logical insets keep the card mirrored in RTL while still clearing
+        // both physical side cutouts.
+        expect(card.style.insetBlockStart).toContain('env(safe-area-inset-top');
+        expect(card.style.insetInline).toContain('env(safe-area-inset-left');
+        expect(card.style.insetInline).toContain('env(safe-area-inset-right');
     });
 
     it('shows no version at all rather than a version the feed made up', () => {

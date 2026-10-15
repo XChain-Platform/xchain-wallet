@@ -2,26 +2,17 @@
    Send token selector (BalanceList) but with a 48px token logo (matching the token selector) and
    the chain icon overlaid in its lower-right corner. */
 
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    /* Same tight toolbar-to-list gap as the messaging inbox. */
-    margin-bottom: calc(var(--xc-space-1) + 2px);
-}
-
 .search {
     flex: 1 1 0;
     min-width: 0;
+    height: var(--xc-control-h-md);
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
 }
 
 .searchField {
@@ -38,14 +29,11 @@
 }
 
 .list {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
-    padding: 0;
     margin: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -54,6 +42,7 @@
 }
 
 .row {
+    min-width: 0;
     padding: var(--xc-space-3);
     border: none;
     border-radius: 0;
@@ -144,6 +133,7 @@
 /* Status chip on the row's trailing edge; tinted per state. */
 .status {
     flex: 0 0 auto;
+    white-space: nowrap;
     font-size: var(--xc-text-xs);
     font-weight: 600;
     text-transform: uppercase;
@@ -246,9 +236,7 @@
     }
 
     .status {
-        max-width: 100%;
         box-sizing: border-box;
-        white-space: normal;
         overflow-wrap: anywhere;
         line-height: 1.3;
     }

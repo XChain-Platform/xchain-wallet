@@ -83,7 +83,7 @@ describe('primary actions explain missing form input', () => {
         expect(await screen.findByText('Choose an outcome.')).toBeTruthy();
     });
 
-    it('CreateBetFeedForm explains that the selected chain has no source address', async () => {
+    it('CreateBetFeedForm explains that the selected network has no source address', async () => {
         mount(CreateBetFeedForm, {
             walletId: 'wallet-1', chainId: BTC, presetTick: 'XCHAIN', onBack() {},
         });
@@ -95,7 +95,7 @@ describe('primary actions explain missing form input', () => {
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
-        expect(await screen.findByText('No address on this chain to create a market from.')).toBeTruthy();
+        expect(await screen.findByText('No address on this network to create a market from.')).toBeTruthy();
     });
 
     it('CreatePollForm asks for its governance token', async () => {

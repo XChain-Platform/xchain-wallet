@@ -10,6 +10,7 @@
 
 import { forwardRef } from 'react';
 import { Input } from './Input.jsx';
+import { Button } from './Button.jsx';
 import { AddressText } from './AddressText.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
@@ -50,7 +51,7 @@ const ICONS = {
  * @property {string} [iconLabel]
  * @property {boolean} [wrapReadOnlyAddress]
  */
-export const AddressField = forwardRef(function AddressField(
+export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
     {
         icon,
         onIconClick,
@@ -71,7 +72,7 @@ export const AddressField = forwardRef(function AddressField(
     const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
         showReadOnlyAddress ? styles.readOnly : '',
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
@@ -105,7 +106,10 @@ export const AddressField = forwardRef(function AddressField(
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                style={IconComponent ? {
+                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                    ...style,
+                } : style}
                 title={showReadOnlyAddress ? value : undefined}
                 value={value}
                 onChange={onChange}
@@ -116,20 +120,22 @@ export const AddressField = forwardRef(function AddressField(
             />
             {showReadOnlyAddress ? (
                 <span className={styles.readOnlyValue} aria-hidden="true">
-                    <AddressText address={value} truncate={!wrapReadOnlyAddress} />
+                    <AddressText address={value} truncate={!wrapReadOnlyAddress} focusable={false} />
                 </span>
             ) : null}
             {IconComponent ? (
-                <button
-                    type="button"
-                    className={styles.iconButton}
-                    onClick={onIconClick}
-                    disabled={disabled}
-                    aria-label={iconLabel || defaultLabel}
-                    title={iconLabel || defaultLabel}
-                >
-                    <IconComponent />
-                </button>
+                <span className={styles.iconButton}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size={size}
+                        icon={<IconComponent />}
+                        onClick={onIconClick}
+                        disabled={disabled}
+                        aria-label={iconLabel || defaultLabel}
+                        title={iconLabel || defaultLabel}
+                    />
+                </span>
             ) : null}
         </div>
     );

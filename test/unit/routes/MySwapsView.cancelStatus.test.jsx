@@ -92,6 +92,7 @@ describe('MySwapsView: cancel row status', () => {
         const row = within(list).getByText('#700', { exact: false }).closest('li');
         expect(within(row).getByText('Open')).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+        expect(row).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('a valid cancel row files the swap under Closed as Cancelled', async () => {
@@ -115,10 +116,10 @@ describe('MySwapsView: cancel row status', () => {
         expect([...collectCancelledKeys(results)].sort()).toEqual([`${CHAIN}:2`, `${CHAIN}:3`]);
     });
 
-    it('shows plain copy and blocks a malformed swap action ID before compose', async () => {
-        const utils = await open([swapRow('not-an-id')], []);
+    it('shows plain copy and blocks a non-canonical swap action ID before compose', async () => {
+        const utils = await open([swapRow('007')], []);
         const row = within(utils.getByRole('list', { name: 'Open swaps' }))
-            .getByText('#not-an-id', { exact: false }).closest('li');
+            .getByText('#007', { exact: false }).closest('li');
 
         fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
 

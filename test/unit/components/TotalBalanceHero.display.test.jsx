@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TotalBalanceHero } from '../../../packages/core/src/shared/components/TotalBalanceHero.jsx';
 
@@ -56,6 +56,7 @@ beforeEach(() => window.localStorage.clear());
 afterEach(() => {
     cleanup();
     window.localStorage.clear();
+    vi.unstubAllGlobals();
 });
 
 describe('TotalBalanceHero privacy', () => {
@@ -119,7 +120,9 @@ describe('TotalBalanceHero fiat formatting', () => {
             nativePrices: { 'bitcoin-mainnet': { change24hPct: 10 } },
         });
 
-        expect(await screen.findByText(/CHF\s*112\.23 \(\+10\.00%\)/)).toBeInTheDocument();
+        const change = await screen.findByText(/CHF\s*112\.23 \(\+10\.00%\) · 24h/);
+        expect(change).toBeInTheDocument();
+        expect(change).toHaveAccessibleName(/24-hour change\. Increase: \+10\.00%/);
     });
 
     it('keeps every digit of a total beyond Number safe-integer range', () => {
@@ -145,7 +148,35 @@ describe('TotalBalanceHero fiat formatting', () => {
     });
 });
 
+describe('TotalBalanceHero message formatting', () => {
+    it.each([
+        ['Price unavailable', [row({ fiatRate: null })]],
+        ['Test coins have no value', [row({ chainId: 'bitcoin-testnet', fiatRate: null })]],
+    ])('renders "%s" in secondary body text', (copy, rows) => {
+        mount({ rows });
+
+        const amount = screen.getByText(copy).closest('[aria-label]');
+        expect(amount.className).toMatch(/amountMessage/);
+        expect(cssRule('amountMessage')).toMatch(/font-family:\s*var\(--xc-font-sans\)/);
+        expect(cssRule('amountMessage')).toMatch(/font-size:\s*var\(--xc-text-lg\)/);
+    });
+
+    it('keeps numeric totals in the headline amount style', () => {
+        mount();
+
+        expect(screen.getByText('$1,234.56').closest('[aria-label]').className)
+            .not.toMatch(/amountMessage/);
+        expect(cssRule('amount')).toMatch(/font-size:\s*32px/);
+    });
+});
+
 describe('TotalBalanceHero refresh status', () => {
+    it('renders the current update label once', () => {
+        mount({ lastSyncedAt: Date.now() });
+
+        expect(screen.getAllByText('Updated just now')).toHaveLength(1);
+    });
+
     it('shows one shared status using the oldest balance or price update', () => {
         const onRefresh = vi.fn();
         const lastSyncedAt = Date.now() - 2 * 60_000;
@@ -179,9 +210,12 @@ describe('TotalBalanceHero responsive layout', () => {
         mount();
 
         const label = screen.getByText('Active address balance');
+        const region = screen.getByRole('region', { name: 'Active address balance' });
         const total = screen.getByText('$1,234.56');
         const action = screen.getByRole('button', { name: 'Hide balance' });
 
+        expect(region).toHaveAttribute('aria-labelledby', label.id);
+        expect(region).not.toHaveAttribute('aria-label');
         expect(label.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
         expect(total.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING)
@@ -193,5 +227,35 @@ describe('TotalBalanceHero responsive layout', () => {
         expect(cssRule('metaLeft')).toMatch(/flex-wrap:\s*wrap/);
         expect(cssRule('amount')).toMatch(/flex-wrap:\s*wrap/);
         expect(cssRule('amountValue')).toMatch(/overflow-wrap:\s*anywhere/);
+    });
+
+    it('collapses narrow-screen icon actions into one overflow menu', () => {
+        vi.stubGlobal('matchMedia', vi.fn((query) => ({
+            matches: query === '(max-width: 479px)',
+            media: query,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+        })));
+        const onOpenSettings = vi.fn();
+        const onCommandPalette = vi.fn();
+        const onToggleFilter = vi.fn();
+        const onLockWallet = vi.fn();
+        mount({ onOpenSettings, onCommandPalette, onToggleFilter, onLockWallet });
+
+        const trigger = screen.getByRole('button', { name: 'Balance actions' });
+        expect(screen.getAllByRole('button')).toEqual([trigger]);
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.click(trigger);
+        const menu = screen.getByRole('menu', { name: 'Balance actions' });
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        expect([
+            ...within(menu).getAllByRole('menuitem'),
+            ...within(menu).getAllByRole('menuitemcheckbox'),
+        ]).toHaveLength(6);
+        fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open settings' }));
+        expect(onOpenSettings).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('menu', { name: 'Balance actions' })).toBeNull();
+        expect(STYLES).toMatch(/@media not all and \(min-width: 480px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) var\(--xc-control-h-sm\)/);
     });
 });

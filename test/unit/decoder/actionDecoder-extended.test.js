@@ -585,6 +585,18 @@ describe('decodeAction extended', () => {
             expect(d.warnings.some((w) => /positive/i.test(w))).toBe(true);
         });
     });
+
+    describe('CALLBACK', () => {
+        it('shows the exact optional memo and warns when it is malformed', () => {
+            const d = decodeAction({
+                action: 'CALLBACK',
+                params: { VERSION: '0', TICK: 'JDOG', MEMO: 'final;note' },
+            });
+            expect(d.details).toContainEqual({ label: 'Memo', value: 'final;note' });
+            expect(d.warnings.some((warning) => /Memo contains/.test(warning))).toBe(true);
+        });
+    });
+
     // PC-30. The two standing warnings are the point of this case: they
     // are properties of the protocol (the 24h delay with no retraction,
     // and third parties settling against the quote) rather than of any

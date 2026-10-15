@@ -164,7 +164,7 @@ describe('encrypted backup restore flow', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(/file is not valid JSON/i);
+        expect(await screen.findByRole('alert')).toHaveTextContent(/not a wallet backup file this app can read/i);
         expect(await target.wallets.list()).toHaveLength(1);
 
         await chooseFile(fileContent, 'savings.xchain-wallet');

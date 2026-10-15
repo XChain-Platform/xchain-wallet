@@ -116,14 +116,54 @@ describe('transaction detail field sources', () => {
 
         expect(field('Direction')).toHaveTextContent(direction);
         expect(field('Amount')).toHaveTextContent(amount);
-        expect(field('Counterparty')).toHaveTextContent(counterparty);
+        // A long address keeps both ends on screen and the whole value in
+        // its title; a short value such as "Self" reads in full.
+        const counterpartyCell = field('Counterparty');
+        if (counterparty.length > 14) {
+            expect(counterpartyCell.querySelector(`[title="${counterparty}"]`)).toBeTruthy();
+            expect(counterpartyCell).toHaveTextContent(`${counterparty.slice(0, 6)}…${counterparty.slice(-6)}`);
+            // The copy button follows the value and says only "Copy".
+            const copy = within(counterpartyCell).getByRole('button', { name: 'Copy counterparty address' });
+            expect(copy).toHaveTextContent(/^Copy$/);
+        } else {
+            expect(counterpartyCell).toHaveTextContent(counterparty);
+        }
         expect(field('Network fee')).toHaveTextContent(/0\.000[123] BTC/);
         expect(field('Confirmations')).toHaveTextContent('11');
         expect(field('Block')).toHaveTextContent('100');
+        // The network is named; the network kind (regtest) is not.
+        expect(field('Network')).toHaveTextContent('Bitcoin');
+        expect(within(screen.getByRole('tabpanel')).queryByRole('rowheader', { name: 'Network type' })).toBeNull();
         expect(field('Time')).not.toHaveTextContent(/^-$|^$/);
         expect(field('Memo')).not.toHaveTextContent('-');
         expect(within(field('Explorer')).getByRole('link', { name: 'Open in explorer' }))
             .toHaveAttribute('href', 'https://explorer.xchain.io/BTC/action/42');
+    });
+
+    it.each([
+        ['an outgoing send', entry(), 'Send #42'],
+        ['an incoming send', entry({
+            source: THEIRS,
+            raw: { source: THEIRS, destination: OURS, amount: '3.25', tick: 'WALLETCOIN' },
+        }), 'Receive #42'],
+        // Home's rows can arrive without the wallet address list; the row's
+        // own address still says the value came in.
+        ['an incoming send with no wallet address list', entry({
+            source: THEIRS,
+            raw: { source: THEIRS, destination: OURS, amount: '3.25', tick: 'WALLETCOIN' },
+            detailContext: { chainTip: 110 },
+        }), 'Receive #42'],
+        ['a pending incoming send', entry({
+            source: THEIRS,
+            actionIndex: '',
+            blockIndex: 0,
+            raw: { source: THEIRS, destination: OURS, amount: '3.25', tick: 'WALLETCOIN' },
+        }), 'Receive'],
+        ['a non-transfer action', entry({ action: 'ISSUE' }), 'Issue #42'],
+    ])('names %s by its direction in the page header', (_label, value, title) => {
+        renderDetails(value);
+
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(new RegExp(`^${title}$`));
     });
 
     it('shows token-action amounts without inventing transfer direction or a counterparty', () => {

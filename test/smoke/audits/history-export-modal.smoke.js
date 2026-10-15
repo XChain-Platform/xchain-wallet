@@ -182,8 +182,8 @@ assert.ok(/<ExportModal\b/.test(historySrc) || /function ExportModal\(/.test(his
     'History.jsx mounts an ExportModal');
 assert.ok(/role="dialog"[\s\S]{0,80}?aria-modal="true"/.test(historySrc),
     'ExportModal carries role="dialog" + aria-modal');
-assert.ok(/name="export-format"[\s\S]*?value="csv"[\s\S]*?value="json"/.test(historySrc),
-    'ExportModal radio group covers CSV + JSON');
+assert.ok(/<RadioGroup[\s\S]*?name="export-format"[\s\S]*?value: 'csv'[\s\S]*?value: 'json'/.test(historySrc),
+    'ExportModal kit radio group covers CSV + JSON');
 assert.ok(!/name="export-scope"/.test(historySrc),
     'ExportModal cannot switch away from the filtered view');
 assert.ok(/EXPORT_COLUMNS\.map/.test(historySrc),

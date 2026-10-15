@@ -214,7 +214,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await gotoPalette(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -229,11 +229,11 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await gotoPalette(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token/ }).click();
             await page.getByText(TICK, { exact: true }).first().click();
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
 

@@ -1,23 +1,12 @@
-/* ConfirmActionModal (§5.1-5.2), page form.
-   Approve/Reject flow inline at the end of the content, like every other
-   form's action row, rather than docking to the viewport bottom. The
-   §5.2.7 reachability property still holds: this is an ordinary page, so
-   the buttons are always one scroll away and can never be trapped
-   behind a fixed region. */
+/* ConfirmActionModal (§5.1-5.2), full-screen review page. Screen owns the
+   scrolling body and keeps the decision footer reachable below it. */
 
 .page {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    /* The fallback retains the shell-provided bottom bar length unit. */
     padding-bottom: var(--xc-bottom-bar-h, 0px);
-}
-
-/* Chrome 102 WebViews lack container queries; there the viewport media query
-   below still reflows the narrow layout. */
-@supports (container-type: inline-size) {
-    .page {
-        container-type: inline-size;
-    }
 }
 
 /* --- intent header row (under the "Confirm" page header) --- */
@@ -41,7 +30,7 @@
 
 .chainBadge {
     flex: 0 0 auto;
-    padding: 2px var(--xc-space-2);
+    padding: calc(var(--xc-space-1) / 2) var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
@@ -68,15 +57,14 @@
 }
 
 .fee {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
+    composes: card from '../../ui/Card.module.css';
     font-size: var(--xc-text-sm);
     font-weight: 700;
     color: var(--xc-text);
     font-variant-numeric: tabular-nums;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
 }
 
@@ -106,20 +94,13 @@
     min-width: 0;
 }
 
-.sourceName {
-    font-weight: 600;
+.sourceValue > span {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
-/* §5.3.4 in-page error (e.g. a bad password), sitting directly above the
-   credentials it refers to. */
-.error {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-danger);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-danger-bg);
-    color: var(--xc-danger-text);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
+.sourceName {
+    font-weight: 600;
 }
 
 .credentials {
@@ -155,6 +136,7 @@
 /* §5.5 message variant: the full signed text, verbatim. It wraps and
    long messages scroll vertically inside their own labelled box. */
 .messageText {
+    composes: scrollArea from '../../ui/Screen.module.css';
     margin: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-bg-muted);
@@ -167,19 +149,6 @@
     max-block-size: 16rem;
     overflow-y: auto;
     overscroll-behavior: contain;
-}
-
-/* §5.5 fail-closed refusal: the wallet will not sign this at all. Styled
-   as danger (not warning) because there is no override. */
-.refusal {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-danger);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-danger-bg);
-    color: var(--xc-danger-text);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
 }
 
 .hwNote {
@@ -196,12 +165,12 @@
     color: var(--xc-text-muted);
 }
 
-/* --- action row (matches the forms' own .actions spacing) --- */
+/* --- pinned action row supplied through Screen.footer --- */
 
 .footer {
     display: flex;
     gap: var(--xc-space-2);
-    margin-top: var(--xc-space-4);
+    margin-top: var(--xc-space-2);
 }
 
 /* Reject / Approve share the width evenly; a long label wraps inside its
@@ -224,23 +193,15 @@
     text-overflow: clip;
 }
 
-@media not all and (min-width: 400px) {
+/* Phone viewports include page padding and a scrollbar gutter, so reflow
+   before the usable content width drops below 400px. */
+@media (max-width: 480px) {
+    .credentials dl {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--xc-space-1);
+    }
+
     .footer {
         flex-direction: column;
-    }
-}
-
-/* A 412px device leaves less than 400px inside Screen after padding and the
-   scrollbar gutter. Reflow against that usable width, not only the viewport. */
-@supports (container-type: inline-size) {
-    @container not (min-width: 400px) {
-        .credentials dl {
-            grid-template-columns: minmax(0, 1fr);
-            gap: var(--xc-space-1);
-        }
-
-        .footer {
-            flex-direction: column;
-        }
     }
 }

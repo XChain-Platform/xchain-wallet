@@ -201,7 +201,7 @@ describe('HomeTabs empty states', () => {
         widgetFailure.current = failure;
         mount('real-wallet');
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('tablist', { name: 'Wallet view' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 
@@ -215,7 +215,7 @@ describe('HomeTabs empty states', () => {
         mount('real-wallet');
         fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('tab', { name: 'Coins' })).toBeInTheDocument();
 
         widgetFailure.current = null;

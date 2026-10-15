@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -22,6 +22,7 @@ import {
 } from '../utils/dispenserPricing.js';
 import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { t } from '../../i18n/index.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispenserExplorer.module.css';
 
@@ -43,8 +44,8 @@ const RESULTS_PAGE_SIZE = 25;
  *     `address` to `dispensersForAddress`, matching either source or
  *     dispenser address.
  *
- * Chain filter narrows the query to a single chain; "All chains"
- * fans out in parallel and merges results. Click a row → host's
+ * Searches fan out across the chains on the active Settings network and merge
+ * results; the chain filter narrows a search to one of them. Click a row → host's
  * onOpenDispenser(chainId, actionIndex) navigates to the detail page
  * (same one Piece 7b-part-1 "My dispensers" uses).
  *
@@ -58,8 +59,8 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
 
     const { settings } = useSettings();
 
-    // D-34(b): scope BOTH the dropdown and the "All chains" fan-out to the
-    // user's active network. `supportedChains()` is every chain the registry
+    // D-34(b): scope the search fan-out to the user's active network.
+    // `supportedChains()` is every chain the registry
     // knows, so a wallet sitting on Regtest was querying mainnet and testnet
     // explorers on every search - requests it has no business making, against
     // hosts it is not configured for, whose failures it then showed the user.
@@ -86,8 +87,11 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const searchRequestId = useRef(0);
     const searchInFlightRef = useRef(/** @type {string | null} */ (null));
     const loadMoreInFlightRef = useRef(/** @type {Set<string>} */ (new Set()));
+    const chainScopeRef = useRef('');
     useEffect(() => {
-        if (chainFilter === 'all' || chains.includes(chainFilter)) return;
+        const scope = chains.join('\u0000');
+        if (scope === chainScopeRef.current) return;
+        chainScopeRef.current = scope;
         searchRequestId.current += 1;
         searchInFlightRef.current = null;
         loadMoreInFlightRef.current.clear();
@@ -95,11 +99,11 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         setSearching(false);
         setRowsByChain({});
         setLastQueried(null);
-    }, [chainFilter, chains]);
+    }, [chains]);
     const searchDisabledReason = !settings
         ? 'Loading available networks…'
         : chains.length === 0
-            ? 'No chains are available for the active network.'
+            ? 'No networks are available for the active network.'
             : !query.trim()
                 ? `Enter ${searchMode === 'token' ? 'a token ticker' : 'an address'} to search.`
                 : null;
@@ -113,7 +117,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         const q = query.trim();
         if (!q) return;
         const mode = searchMode;
-        const targetChains = chainFilter === 'all' ? chains : [chainFilter];
+        const targetChains = chainFilter === 'all' || !chains.includes(chainFilter)
+            ? chains
+            : [chainFilter];
         const searchKey = `${mode}\u0000${q}\u0000${targetChains.join('\u0000')}`;
         if (searchInFlightRef.current === searchKey) return;
         const requestId = searchRequestId.current + 1;
@@ -294,67 +300,59 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             title="Dispenser explorer"
         />
     );
-    const toolbar = (
-        <form className={local.searchForm} onSubmit={handleSearch} noValidate>
-                <div className={local.searchModes}>
-                    <Input
-                        type="radio"
-                        name="searchMode"
-                        value="token"
-                        label="By token"
-                        className={local.searchModeInput}
-                        checked={searchMode === 'token'}
-                        onChange={() => setSearchMode('token')}
-                    />
-                    <Input
-                        type="radio"
-                        name="searchMode"
-                        value="address"
-                        label="By address"
-                        className={local.searchModeInput}
-                        checked={searchMode === 'address'}
-                        onChange={() => setSearchMode('address')}
-                    />
-                </div>
-                <Select
-                    label="Chain"
-                    value={chainFilter}
-                    onChange={(e) => setChainFilter(e.target.value)}
-                    className={local.chainSelect}
-                >
-                    <option value="all">All chains</option>
-                    {chains.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        return (
-                            <option key={cid} value={cid}>
-                                {d ? `${d.displayName} (${d.networkKind})` : cid}
-                            </option>
-                        );
-                    })}
-                </Select>
-                <Input
-                    type="search"
-                    role="textbox"
-                    label={searchMode === 'token' ? 'Token ticker' : 'Address'}
-                    hint={searchMode === 'token'
-                        ? 'Ticker name, such as MYTOKEN, or a token reference from the explorer.'
-                        : 'Dispenser address or source address.'}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
-                    autoCorrect="off"
-                    spellCheck={false}
+    const searchForm = (
+        <FormPage className={local.searchForm} onSubmit={handleSearch} sectioned label="Find open dispensers">
+            <FormSection title="Find open dispensers">
+                <RadioGroup
+                    legend="Search mode"
+                    name="searchMode"
+                    value={searchMode}
+                    onChange={setSearchMode}
+                    options={[
+                        { value: 'token', label: 'By token' },
+                        { value: 'address', label: 'By address' },
+                    ]}
+                    className={local.searchModes}
                 />
-                {searchDisabledReason ? (
-                    <p id="dispenser-search-disabled-reason" className={styles.entryDescription}>
-                        {searchDisabledReason}
-                    </p>
-                ) : null}
-                <div className={local.searchActions}>
+                <div className={local.filterRow}>
+                    <div className={local.chainControl}>
+                        {/* Options name the chain alone; the active network is set in Settings. */}
+                        <Select
+                            label="Network"
+                            size="md"
+                            value={chainFilter}
+                            onChange={(e) => setChainFilter(e.target.value)}
+                            className={local.chainSelect}
+                        >
+                            <option value="all">{t('common.allNetworks')}</option>
+                            {chains.map((cid) => (
+                                <option key={cid} value={cid}>
+                                    {chainRegistry.get(cid)?.displayName || cid.split('-')[0]}
+                                </option>
+                            ))}
+                        </Select>
+                    </div>
+                    <div className={local.queryControl}>
+                        <Input
+                            type="search"
+                            role="textbox"
+                            size="md"
+                            label={searchMode === 'token' ? 'Token ticker' : 'Address'}
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoComplete="off"
+                            autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
+                            autoCorrect="off"
+                            spellCheck={false}
+                            hint={searchMode === 'token'
+                                ? t('dispenserExplorer.searchHint.token')
+                                : t('dispenserExplorer.searchHint.address')}
+                        />
+                    </div>
                     <Button
                         type="submit"
                         variant="primary"
+                        size="md"
                         loading={searching}
                         disabled={Boolean(searchDisabledReason)}
                         aria-describedby={searchDisabledReason ? 'dispenser-search-disabled-reason' : undefined}
@@ -362,12 +360,19 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {searching ? 'Searching…' : 'Search'}
                     </Button>
                 </div>
-        </form>
+                {searchDisabledReason ? (
+                    <p id="dispenser-search-disabled-reason" className={styles.entryDescription}>
+                        {searchDisabledReason}
+                    </p>
+                ) : null}
+            </FormSection>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
+            <ListPage>
+            {searchForm}
             {lastQueried ? (
                 <ResultsPane
                     rowsByChain={rowsByChain}
@@ -378,12 +383,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     onRetry={runSearch}
                     onReset={resetFilters}
                 />
-            ) : (
-                <p className={styles.entryDescription}>
-                    Search by token ticker to find open dispensers, or by address to find
-                    a specific creator's or dispenser's listings.
-                </p>
-            )}
+            ) : null}
             </ListPage>
         </Screen>
     );
@@ -440,8 +440,8 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                         <SectionHeader
                             title={(
                                 <>
-                                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
-                                    {' '}
+                                    {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                                    {d ? ' ' : null}
                                     <span>
                                         {state.total != null && state.total > state.rows.length
                                             ? `${state.rows.length} of ${state.total}`
@@ -483,7 +483,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                                         variant="secondary"
                                         loading={state.loadingMore}
                                         onClick={() => onLoadMore(cid)}
-                                        aria-label={`Load more results for ${d?.displayName || cid}`}
+                                        aria-label={`Load more results for ${d?.displayName || 'this chain'}`}
                                     >
                                         Load more results
                                     </Button>
@@ -518,11 +518,11 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
             >
                 <span className={local.factRow} role="listitem">
                     <span className={local.factLabel}>Give per fill</span>
-                    <span className={local.factValue}>{give}</span>
+                    <span className={`${local.factValue} ${local.numericValue}`}>{give}</span>
                 </span>
                 <span className={local.factRow} role="listitem">
                     <span className={local.factLabel}>Price per fill</span>
-                    <span className={local.factValue}>{price}</span>
+                    <span className={`${local.factValue} ${local.numericValue}`}>{price}</span>
                 </span>
                 <span className={local.factRow} role="listitem">
                     <span className={local.factLabel}>Status</span>

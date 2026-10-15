@@ -1,0 +1,10 @@
+{
+    ":has()": 0,
+    "native CSS nesting": 0,
+    "@container style query": 0,
+    "color-mix()": 131,
+    "text-wrap: balance": 0,
+    "text-wrap: pretty": 0,
+    "dvh unit": 1,
+    "subgrid": 0
+}

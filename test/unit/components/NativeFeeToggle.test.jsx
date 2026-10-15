@@ -24,7 +24,7 @@ describe('NativeFeeToggle', () => {
         expect(screen.getByText(/isn't refunded if the network rejects/i)).toBeTruthy();
     });
 
-    it('renders nothing when coinTicker is empty (unknown/custom chain)', () => {
+    it('renders nothing when coinTicker is empty (unknown/custom network)', () => {
         const { container } = render(
             <NativeFeeToggle checked={false} onChange={() => {}} coinTicker="" />,
         );
@@ -54,12 +54,12 @@ describe('NativeFeeToggle', () => {
     it('states the fee rather than offering a switch when mandatory', () => {
         render(<NativeFeeToggle checked mandatory onChange={() => {}} coinTicker="LTC" />);
         expect(screen.queryByRole('switch')).toBeNull();
-        expect(screen.getByText(/only way to pay a protocol fee on this chain/i)).toBeTruthy();
+        expect(screen.getByText(/only way to pay a protocol fee on this network/i)).toBeTruthy();
         // The fee is still a real on-chain payment, so the forfeit warning stays.
         expect(screen.getByText(/isn't refunded if the network rejects/i)).toBeTruthy();
     });
 
-    it('still renders nothing on an unknown chain even when mandatory is passed', () => {
+    it('still renders nothing on an unknown network even when mandatory is passed', () => {
         const { container } = render(
             <NativeFeeToggle checked mandatory onChange={() => {}} coinTicker="" />,
         );

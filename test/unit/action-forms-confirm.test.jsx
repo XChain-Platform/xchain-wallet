@@ -126,6 +126,11 @@ function recordingMessaging(overrides = {}) {
         }),
         // AdvancedActionsForm's action picker is populated from the host.
         listActions: () => Promise.resolve(['BROADCAST', 'SEND']),
+        validateAction: () => Promise.resolve({ valid: true, errors: [] }),
+        getAddressBalances: () => Promise.resolve({
+            native: { tick: 'BTC', quantity: '100000000000', divisibility: 8 },
+            tokens: [{ tick: 'JDOG', quantity: '100000000000', divisibility: 8 }],
+        }),
         // PollDetail renders its ballot editor from a loaded, OPEN poll.
         governancePoll: () => Promise.resolve({
             poll_index: 7, tick: 'JDOG', poll_status: 'open',
@@ -1135,9 +1140,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             actionLabel: 'Vote',
             fill: (utils) => {
                 // Approval mode: tick the first option.
-                const box = utils.container.querySelector('input[type="checkbox"]');
-                if (!box) throw new Error('no option checkbox on the ballot editor');
-                fireEvent.click(box);
+                fireEvent.click(utils.getByRole('checkbox', { name: '0: Yes' }));
             },
         });
 

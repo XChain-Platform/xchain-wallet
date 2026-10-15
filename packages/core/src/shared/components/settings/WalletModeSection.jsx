@@ -12,11 +12,13 @@
 // signing surface, so the choice stays pending until the user confirms it.
 
 import { useState } from 'react';
+import { RadioGroup } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { WALLET_MODES, WALLET_MODE_DEFAULT } from '../../../schemas/settings.js';
-import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useBackHandler } from '../../../ui/backStack.js';
+import { t } from '../../../i18n/index.js';
 
 const MODE_OPTIONS = /** @type {const} */ ([
     {
@@ -46,9 +48,9 @@ export function WalletModeSection() {
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
     useBackHandler(pending ? () => setPending(null) : undefined, saving);
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const current = WALLET_MODES.includes(settings.walletMode)
         ? settings.walletMode
@@ -80,66 +82,30 @@ export function WalletModeSection() {
     const pendingOption = MODE_OPTIONS.find((opt) => opt.value === pending);
 
     return (
-        <fieldset
-            style={{
-                ...STACK,
-                border: 'none',
-                padding: 0,
-                margin: 0,
-            }}
-        >
-            <legend
-                style={{
-                    color: 'var(--xc-text-muted)',
-                    fontSize: 'var(--xc-text-xs)',
-                    marginBottom: 'var(--xc-space-1)',
-                }}
-            >
-                Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing.
-            </legend>
-            {MODE_OPTIONS.map((opt) => (
-                <label
-                    key={opt.value}
-                    style={{
-                        ...ROW,
-                        alignItems: 'flex-start',
-                        cursor: 'pointer',
-                    }}
-                >
-                    <input
-                        type="radio"
-                        name="walletMode"
-                        value={opt.value}
-                        checked={selected === opt.value}
-                        onChange={() => onChange(opt.value)}
-                        disabled={saving}
-                        aria-describedby={`walletMode-${opt.value}-hint`}
-                        style={{
-                            marginTop: 2,
-                            marginInlineEnd: 'var(--xc-space-2)',
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                        }}
-                    />
-                    <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{opt.label}</span>
-                        <span id={`walletMode-${opt.value}-hint`} style={ROW_HINT}>
-                            {opt.hint}
-                        </span>
-                    </span>
-                </label>
-            ))}
+        <>
+            <RadioGroup
+                legend="Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing."
+                name="walletMode"
+                value={selected}
+                onChange={onChange}
+                disabled={saving}
+                options={MODE_OPTIONS.map((opt) => ({
+                    value: opt.value,
+                    label: opt.label,
+                    description: opt.hint,
+                }))}
+            />
             {pendingOption ? (
                 <ConfirmModal
-                    title={`Switch to ${pendingOption.label} mode?`}
+                    title={t('settings.walletMode.switchToMode', { label: pendingOption.label })}
                     message={pendingOption.confirmation}
-                    confirmLabel="Confirm mode change"
+                    confirmLabel={t('settings.walletMode.confirmModeChange')}
                     busy={saving}
                     error={saveError}
                     onConfirm={confirmChange}
                     onCancel={() => setPending(null)}
                 />
             ) : null}
-        </fieldset>
+        </>
     );
 }

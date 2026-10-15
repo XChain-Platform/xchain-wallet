@@ -28,6 +28,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import dashStyles from '../routes/ActionsMenu.module.css';
 import formStyles from '../routes/IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SECTION_STYLE = {
@@ -198,7 +199,7 @@ function usePublisherSubmission({ messaging, walletId, chainId, coinTicker, from
 
 function publisherResultPanel(result, clearResult) {
     if (result?.queued) {
-        return <QueuedResultPanel onDone={clearResult} what="oracle value" unsaved={result.unsaved} />;
+        return <QueuedResultPanel onDone={clearResult} what={t('components.operatorPublisherMode.oracleValue')} unsaved={result.unsaved} />;
     }
     if (result?.psbtHex && !(result.txid || result.broadcast?.txid)) {
         return <WatcherResultPanel result={result} onBuildAnother={clearResult} onDone={clearResult} />;
@@ -214,20 +215,20 @@ function PublisherForm({ open, onToggle, feed, feedActionIndex, onFeedActionInde
     return (
         <section style={SECTION_STYLE}>
             <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.25rem' }}>
-                Publisher mode
+                {t('components.operatorPublisherMode.publisherMode')}
                 <button
                     type="button"
                     onClick={onToggle}
                     aria-expanded={open}
                     style={{ marginInlineStart: '0.5rem', fontSize: '0.85rem' }}
                 >
-                    {open ? 'Leave publisher mode' : 'Enter publisher mode'}
+                    {open ? t('components.operatorPublisherMode.leavePublisherMode') : t('components.operatorPublisherMode.enterPublisherMode')}
                 </button>
             </h3>
             <p className={dashStyles.entryDescription}>
-                Publisher mode creates an on-chain update of the selected feed reference with the value you enter. You review each update before it is signed and sent. {open
-                    ? 'Choose Leave publisher mode to close the form and return to the dashboard.'
-                    : 'Choose Enter publisher mode to open the form.'}
+                {t('components.operatorPublisherMode.publisherModeCreatesAnOn')} {open
+                    ? t('components.operatorPublisherMode.chooseLeavePublisherModeTo')
+                    : t('components.operatorPublisherMode.chooseEnterPublisherModeTo')}
             </p>
             {open ? (
                 <form onSubmit={submission.submit} noValidate>
@@ -250,10 +251,10 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
     return (
         <>
             <Input
-                label="Feed reference number"
+                label={t('components.operatorPublisherMode.feedReferenceNumber')}
                 hint={feed
-                    ? 'Pre-filled from the most recent feed you created. Override it to publish to a different feed.'
-                    : 'No feed found for this address. Enter its reference number, or create a feed first.'}
+                    ? t('components.operatorPublisherMode.preFilledFromTheMost')
+                    : t('components.operatorPublisherMode.noFeedFoundForThis')}
                 value={feedActionIndex}
                 onChange={(event) => onFeedActionIndex(event.target.value)}
                 inputMode="numeric"
@@ -262,14 +263,14 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
                 spellCheck={false}
             />
             <Input
-                label="Value"
-                hint="The feed value to publish. The previous value clears on success; the next value is one keystroke away."
+                label={t('home.tabs.value')}
+                hint={t('components.operatorPublisherMode.theFeedValueToPublish')}
                 value={value}
                 onChange={(event) => onValue(event.target.value)}
                 inputMode="decimal"
                 autoComplete="off"
             />
-            {!fromAddress ? <p className={dashStyles.entryDescription}>Loading source address…</p> : null}
+            {!fromAddress ? <p className={dashStyles.entryDescription}>{t('components.operatorPublisherMode.loadingSourceAddress')}</p> : null}
         </>
     );
 }
@@ -280,7 +281,7 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
         <>
             {fee.tiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={fee.tiers}
                     value={fee.pick}
@@ -290,7 +291,7 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
             ) : null}
             {submission.ownerLane.isWatcherMode ? (
                 <p className={dashStyles.entryDescription}>
-                    Watcher mode builds an unsigned transaction for a Signer-mode wallet.
+                    {t('components.operatorPublisherMode.watcherModeBuildsAnUnsigned')}
                 </p>
             ) : null}
             {submission.error ? (
@@ -298,12 +299,12 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
             ) : null}
             {lastTxid ? (
                 <p className={dashStyles.entryDescription}>
-                    Last published: txid {String(lastTxid).slice(0, 16)}…
+                    {t('components.operatorPublisherMode.lastPublishedTxid')} {String(lastTxid).slice(0, 16)}…
                 </p>
             ) : null}
             <div className={formStyles.actions}>
                 <Button type="submit" variant="primary" loading={busy} disabled={busy}>
-                    {submission.ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Publish value'}
+                    {submission.ownerLane.isWatcherMode ? t('components.placeOrderPanel.createUnsignedTransaction') : t('components.operatorPublisherMode.publishValue')}
                 </Button>
             </div>
         </>

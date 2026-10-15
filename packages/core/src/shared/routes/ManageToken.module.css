@@ -11,15 +11,12 @@
 /* ───── Hero - token identity (no balance, this is the issuer view). ───── */
 
 .hero {
+    composes: card from '../../ui/Card.module.css';
     position: relative;
     display: flex;
     flex-direction: row;
     align-items: flex-start;
     gap: var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg, 12px);
-    padding: var(--xc-space-4);
 }
 
 .heroIconWrap {
@@ -44,23 +41,27 @@
 
 .heroTick {
     margin: 0;
-    font-size: var(--xc-text-2xl, 1.5rem);
+    font-size: var(--xc-text-2xl);
     font-weight: 700;
     max-width: 100%;
     overflow-wrap: anywhere;
 }
 
+.heroBadges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+    margin-inline-start: auto;
+}
+
 .lockBadge {
-    position: absolute;
-    top: var(--xc-space-3);
-    inset-inline-end: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
     padding: var(--xc-space-1) var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
+    border-radius: var(--xc-radius-pill);
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
@@ -76,8 +77,8 @@
 }
 
 .lockBadge > svg {
-    width: 12px;
-    height: 12px;
+    width: var(--xc-icon-xs);
+    height: var(--xc-icon-xs);
 }
 
 .heroSub {
@@ -89,14 +90,11 @@
     gap: var(--xc-space-1);
 }
 
-.heroDot {
-    margin: 0 var(--xc-space-1);
-    color: var(--xc-text-muted);
-}
-
 .heroOwner {
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .heroDescription {
@@ -110,30 +108,40 @@
 /* ───── Market panel - stats strip + chart placeholder. ───── */
 
 .marketPanel {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg, 12px);
-    padding: var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
 }
 
+/* Supply and holding are whole token quantities (up to 19 digits plus
+   separators and decimals). A quarter of the card is wide enough for them
+   only from 1024px; below that it broke the value mid-number, so the strip
+   goes two by two: quantities on the first row, the two counts on the second. */
 .statsStrip {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-3);
 }
 
-@media not all and (min-width: 600px) {
+@media (min-width: 1024px) {
     .statsStrip {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* Half a phone row is still too narrow: there each quantity takes a whole
+   row and the two small counts share the row below. */
+@media not all and (min-width: 600px) {
+    .stat:nth-child(-n + 2) {
+        grid-column: 1 / -1;
     }
 }
 
 .stat {
     display: flex;
     flex-direction: column;
+    /* Half-grid spacing keeps the three compact statistic lines grouped. */
     gap: 2px;
     min-width: 0;
 }
@@ -147,13 +155,15 @@
 }
 
 .statValue {
-    font-size: var(--xc-text-lg, 1.125rem);
+    font-size: var(--xc-text-lg);
     font-weight: 700;
     color: var(--xc-text);
     font-variant-numeric: tabular-nums;
     overflow: hidden;
     text-overflow: ellipsis;
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .statSub {
@@ -162,31 +172,18 @@
 }
 
 .supplyBar {
+    /* The slim progress track has no matching control or spacing token. */
     height: 6px;
     background: var(--xc-bg-muted);
-    border-radius: var(--xc-radius-pill, 999px);
+    border-radius: var(--xc-radius-pill);
     overflow: hidden;
 }
 
 .supplyBarFill {
     height: 100%;
     background: var(--xc-accent-primary);
-    border-radius: var(--xc-radius-pill, 999px);
+    border-radius: var(--xc-radius-pill);
     transition: width 0.2s ease-out;
-}
-
-/* Owner-mismatch banner above the action grid. Yellow / warning tone
-   so it reads as informational rather than error; sits flush above the
-   action buttons whose disabled-state it explains. */
-.ownerWarning {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: color-mix(in srgb, var(--xc-warning, #d99000) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #d99000) 40%, transparent);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
 }
 
 /* ───── Manage action grid (carried over). ───── */
@@ -206,13 +203,13 @@
 .manageGrid > button,
 .manageMoreWrap > button {
     flex-direction: column;
-    min-height: 72px;
+    min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6));
 }
 
 .manageGrid > button svg,
 .manageMoreWrap > button svg {
-    width: 18px;
-    height: 18px;
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
 }
 
 /* "More" dropdown - mirrors Home's quickActionMore. */
@@ -232,11 +229,12 @@
     position: absolute;
     inset-inline-end: 0;
     top: calc(100% + var(--xc-space-1));
+    /* The menu width fits its longest localized action and has no matching token. */
     min-width: 220px;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--xc-shadow-md);
     z-index: 20;
     display: flex;
     flex-direction: column;
@@ -255,6 +253,7 @@
     overflow-x: auto;
     overflow-y: hidden;
     border-bottom: 1px solid var(--xc-border);
+    /* The one-pixel overlap joins the active tab edge to the hairline border. */
     padding-bottom: 1px;
     margin-bottom: -1px;
     scrollbar-width: none;
@@ -292,6 +291,21 @@
     border-bottom-color: var(--xc-accent-primary);
 }
 
+/* Phones: all five panels fit a 360px screen on tighter spacing instead of
+   scrolling the last tab out of view. The tabs share the row's spare width so
+   the strip still spans the content. */
+@media not all and (min-width: 480px) {
+    .tabs {
+        gap: 0;
+    }
+
+    .tab {
+        flex: 1 1 auto;
+        justify-content: center;
+        padding-inline: var(--xc-space-1);
+    }
+}
+
 .tabPanel {
     display: flex;
     flex-direction: column;
@@ -311,21 +325,20 @@
 }
 
 .row {
+    composes: card from '../../ui/Card.module.css';
+    /* The tap floor the audit can read; the control-height min-height below wins. */
+    min-block-size: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
     width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: transparent;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
     cursor: pointer;
-    min-height: 36px;
+    min-height: calc(var(--xc-control-h-md) - var(--xc-space-1));
 }
 
 .row:disabled { cursor: default; }
@@ -349,6 +362,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .holderAddress,
@@ -364,6 +379,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .error {
@@ -378,10 +395,7 @@ button.row:hover:not(:disabled) {
    without competing with the tabs above. ───── */
 
 .genesisPanel {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg, 12px);
-    padding: var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -408,6 +422,8 @@ button.row:hover:not(:disabled) {
 
 .genesisMono {
     font-family: var(--xc-font-mono, monospace);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .copyableGenesis {
@@ -424,9 +440,10 @@ button.row:hover:not(:disabled) {
 }
 
 .subassetItem {
+    /* Half-grid block padding keeps compact metadata chips aligned with text. */
     padding: 2px var(--xc-space-2);
     background: var(--xc-bg-muted);
-    border-radius: var(--xc-radius-pill, 999px);
+    border-radius: var(--xc-radius-pill);
     font-size: var(--xc-text-xs);
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
@@ -442,15 +459,13 @@ button.row:hover:not(:disabled) {
    and don't need the full history-row chrome. ───── */
 
 .histRow {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
@@ -516,8 +531,8 @@ button.row:hover:not(:disabled) {
 }
 
 .histChainIcon {
-    width: 16px;
-    height: 16px;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
@@ -537,8 +552,8 @@ button.row:hover:not(:disabled) {
     display: inline-flex;
     align-items: center;
     padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    font-size: 11px;
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: 1.6;
     letter-spacing: 0.04em;
@@ -564,6 +579,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .histSource {
@@ -571,6 +588,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     word-break: break-all;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .histMeta {

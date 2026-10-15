@@ -252,7 +252,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             // identified by its prefix.
             await gotoPalette(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)

@@ -9,14 +9,15 @@
 // contact legal@dankest.llc.
 
 import { useRef, useState } from 'react';
+import { Button } from './Button.jsx';
 import styles from './CopyButton.module.css';
 import { CopyIcon, CheckIcon } from './icons/index.jsx';
 import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
-import { useToast } from '../shared/components/ToastHost.jsx';
 // SSC-4: every copy in the wallet goes through one path, so a
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
 import { copyText, CopyFailure } from '../shared/clipboard.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Copies `value` to the system clipboard and briefly shows a confirmation
@@ -34,15 +35,26 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
  * @param {number} [props.feedbackMs]
  * @param {boolean} [props.sensitive]     seed words, private keys: never to a synced or unmarked clipboard (SSC-4)
  * @param {() => void} [props.onCopied]   fires after a successful copy
+ * @param {'filled' | 'outlined'} [props.appearance]  outlined for a per-row action
+ *   repeated down a list (each message in a thread); filled everywhere else
  */
-export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
+export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLabel, feedbackMs = 1500, sensitive = false, onCopied, appearance = 'filled' }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
+    const [copiedText, setCopiedText] = useState('');
+    const [announcement, setAnnouncement] = useState({
+        id: 0,
+        text: '',
+        error: false,
+        parentOwns: false,
+    });
     const buttonRef = useRef(null);
     const haptic = useHapticFeedback();
-    const { announce } = useToast();
 
     async function handleCopy() {
+        const actionLabel = String(ariaLabel || label).trim();
+        const subject = actionLabel.replace(/^copy(?:\s+to\s+clipboard)?\s*/i, '').trim() || 'value';
+        const successText = `Copied: ${subject}`;
         // A sensitive copy can come back false on a native shell whose
         // clipboard plugin did not register: the shared path refuses rather
         // than leaking through the web API, and the user sees "Copy failed"
@@ -51,6 +63,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
         if (ok) {
             setState('copied');
             setFailureText('');
+            setCopiedText(successText);
             haptic.tap();
             onCopied?.();
         } else {
@@ -61,30 +74,56 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
             haptic.error();
         }
         const resultText = ok
-            ? 'Copied'
+            ? successText
             : reason === CopyFailure.NO_NATIVE_CLIPBOARD
                 ? 'Copy blocked: this app has no secure clipboard.'
                 : 'Copy failed: the clipboard is unavailable.';
-        const localRegion = buttonRef.current?.parentElement?.closest(
-            '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
-        );
-        if (!localRegion) announce(resultText);
-        setTimeout(() => setState('idle'), feedbackMs);
+        setAnnouncement((current) => ({
+            id: current.id + 1,
+            text: resultText,
+            error: !ok,
+            parentOwns: Boolean(buttonRef.current?.parentElement?.closest(
+                '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
+            )),
+        }));
+        setTimeout(() => {
+            setState('idle');
+            setAnnouncement((current) => (
+                current.error ? current : { ...current, text: '' }
+            ));
+        }, feedbackMs);
     }
 
-    const text = state === 'copied' ? 'Copied' : state === 'failed' ? failureText : label;
+    const text = state === 'copied' ? copiedText : state === 'failed' ? failureText : label;
     const icon = state === 'copied' ? <CheckIcon /> : <CopyIcon />;
     return (
-        <button
-            ref={buttonRef}
-            type="button"
-            onClick={handleCopy}
-            className={styles.btn}
-            aria-label={ariaLabel || label}
-            data-state={state}
-        >
-            <span className={styles.icon} aria-hidden="true">{icon}</span>
-            <span>{text}</span>
-        </button>
+        <>
+            <Button
+                ref={buttonRef}
+                size="sm"
+                className={appearance === 'outlined' ? `${styles.btn} ${styles.outlined}` : styles.btn}
+                onClick={handleCopy}
+                icon={icon}
+                aria-label={state === 'copied' ? text : ariaLabel || label}
+                title={text}
+                data-state={state}
+                style={{ minHeight: 'var(--xc-control-h-sm)' }}
+            >
+                {text}
+            </Button>
+            <span
+                key={announcement.id}
+                className="sr-only"
+                role={announcement.parentOwns || !announcement.text
+                    ? undefined
+                    : (announcement.error ? 'alert' : 'status')}
+                aria-live={announcement.parentOwns
+                    ? undefined
+                    : (announcement.error ? 'assertive' : 'polite')}
+                aria-atomic={announcement.parentOwns ? undefined : 'true'}
+            >
+                {announcement.text}
+            </span>
+        </>
     );
 }

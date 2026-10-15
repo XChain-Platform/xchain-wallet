@@ -47,7 +47,7 @@ const CLAIM_ROWS = [
     { id: 2, amount: '100', status: 'rejected' },
 ];
 
-function mountForm(extra = {}, mode = 'claim-rewards') {
+function mountForm(extra = {}, mode = 'claim-rewards', chainId = 'bitcoin-mainnet') {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getRewardsForAddress: vi.fn().mockResolvedValue(REWARD_ROWS),
@@ -60,7 +60,7 @@ function mountForm(extra = {}, mode = 'claim-rewards') {
             MessagingProvider,
             { shell: 'web', messaging },
             React.createElement(StakingActionForm, {
-                mode, walletId: 'w', chainId: 'bitcoin-mainnet', onBack() {},
+                mode, walletId: 'w', chainId, onBack() {},
             }),
         ),
     );
@@ -117,9 +117,42 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         expect(await screen.findByText('12 XCHAIN available')).toBeInTheDocument();
         expect(screen.getByLabelText(/Signing public key/)).toHaveValue(activeKey);
     });
+
+    it('refuses an unstake before activation and names the unlock height', async () => {
+        const lockedKey = 'c'.repeat(64);
+        const messaging = mountForm({
+            getStakesForAddress: vi.fn().mockResolvedValue([{
+                signing_pubkey: lockedKey,
+                status: 'valid',
+                amount: '12',
+                activation_block: 1_106,
+                deactivation_block: null,
+            }]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 1_100 }),
+        }, 'unstake');
+
+        expect(await screen.findByText('0 XCHAIN available')).toBeInTheDocument();
+        expect(screen.getByLabelText(/Signing public key/)).toHaveValue(lockedKey);
+        fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+
+        expect(await screen.findByText('This stake cannot be unstaked until block 1,106.')).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
 });
 
 describe('StakingActionForm network picker', () => {
+    it('does not render the selected network kind', async () => {
+        const chainId = 'bitcoin-regtest';
+        mountForm({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [chainId]: ADDRESSES['bitcoin-mainnet'],
+            }),
+        }, 'claim-rewards', chainId);
+
+        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
     it('offers only Bitcoin chains for UNSTAKE and COLLECT', async () => {
         const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
         for (const mode of ['unstake', 'claim-rewards']) {

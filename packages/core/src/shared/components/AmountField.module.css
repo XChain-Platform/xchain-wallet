@@ -15,11 +15,96 @@
     margin-bottom: 0;
 }
 
-/* The shared Input owns field sizing through its `size` prop. AmountField
-   forwards that value and reserves the right gutter for the Max button. */
+/* The shared controls own their dimensions through the same `size` prop. */
 
 .amountFieldWrap {
+    --amount-control-height: var(--xc-control-h-md);
+    --amount-action-width: calc(var(--amount-control-height) + var(--xc-space-8));
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
     position: relative;
+}
+
+.sm {
+    --amount-control-height: var(--xc-control-h-sm);
+}
+
+.md {
+    --amount-control-height: var(--xc-control-h-md);
+}
+
+.lg {
+    --amount-control-height: var(--xc-control-h-lg);
+}
+
+.amountFieldWrap label {
+    line-height: var(--xc-space-5);
+}
+
+.amountFieldWrap > div:first-child {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.pasteAction,
+.pasteAction > span {
+    display: contents !important;
+}
+
+/* The wrapper class lifts these above the kit Button's own position rule,
+   which would otherwise win whenever its stylesheet loads later. */
+.amountFieldWrap .pasteAction button,
+.amountFieldWrap .maxAction {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    /* Inside the field box at its inner height, clear of the border. */
+    top: calc(var(--xc-space-5) + var(--xc-space-2));
+    flex: none;
+    width: auto;
+    min-width: max-content;
+    max-width: none;
+    height: calc(var(--amount-control-height) - var(--xc-space-2));
+    min-height: calc(var(--amount-control-height) - var(--xc-space-2));
+    white-space: nowrap;
+}
+
+.pasteAction button {
+    inset-inline-end: var(--xc-space-1);
+    gap: var(--xc-space-1);
+    padding-inline: calc(var(--xc-space-1) / 2);
+}
+
+.hasMax .pasteAction button {
+    inset-inline-end: calc(var(--amount-action-width) + var(--xc-space-1));
+}
+
+.amountFieldWrap .maxAction {
+    inset-inline-end: var(--xc-space-1);
+    padding-inline: var(--xc-space-2);
+}
+
+.pasteAction button > span,
+.maxAction > span {
+    min-width: max-content;
+    white-space: nowrap;
+}
+
+.pasteAction [role='alert'] {
+    flex: 1 0 100%;
+    margin-block-start: var(--xc-help-gap);
+}
+
+.amountFieldWrap input,
+.amountSwapValue,
+.amountFooterRight > span {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.amountFieldWrap input {
+    min-width: 0;
 }
 
 .amountFooter {
@@ -36,33 +121,6 @@
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-2);
-}
-
-.amountUnitSwap {
-    --xc-icon-size: var(--xc-icon-xs);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    background: transparent;
-    border: none;
-    /* slice 2: the fiat/coin swap is a daily control that measured
-       14px tall. Padding (not a fixed height) so the text stays where it
-       sits and only the target grows to the 24px floor. */
-    padding: var(--xc-space-1) 0;
-    min-height: var(--xc-tap-min);
-    font: inherit;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-}
-
-.amountUnitSwap:hover,
-.amountUnitSwap:focus-visible {
-    color: var(--xc-text);
-}
-
-.amountUnitSwap svg {
-    flex-shrink: 0;
 }
 
 @media not all and (min-width: 400px) {

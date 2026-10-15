@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { decimalFromBaseUnits } from '../shared/utils/amountFormat.js';
+
 // §25.2 / Cluster J FOLLOWUP 1: synthesized fixture data for demo
 // wallets so Home / History / TokenDetail surfaces feel populated
 // without requiring the user to fund the wallet.
@@ -149,7 +151,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
         ],
     },
     'dogecoin-regtest': {
-        native: { tick: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.15 }, // 10000 rDOGE @ $0.15
+        native: { tick: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.08 }, // 10000 rDOGE @ $0.08
         tokens: [
             // Divisible DRC-20-style tokens
             { tick: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '500000000000', fiatRate: 0.01 },
@@ -268,6 +270,11 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     const fixture = PER_CHAIN_DEFAULTS[chainId];
     if (!fixture || !fixture.native) return [];
     const tick = fixture.native.tick;
+    const nativeAmount = decimalFromBaseUnits(
+        fixture.native.quantity,
+        fixture.native.divisibility,
+    );
+    const outgoingAmount = decimalFromBaseUnits('5000000', fixture.native.divisibility);
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
     // Pick a representative divisible token and a representative
@@ -301,13 +308,13 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
         source: 'demo-faucet-1xchainpubdemoxchain',
         destination: address,
         tick,
-        amount: fixture.native.quantity,
-        quantity: fixture.native.quantity,
+        amount: nativeAmount,
+        quantity: nativeAmount,
         memo: 'Welcome to the demo wallet',
         params: {
             source: 'demo-faucet-1xchainpubdemoxchain',
             destination: address,
-                amount: fixture.native.quantity,
+            amount: nativeAmount,
             memo: 'Welcome to the demo wallet',
         },
     });
@@ -317,7 +324,8 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     // Activity so the icon swaps to the token's image / tinted letter
     // instead of the chain icon.
     if (divisibleToken) {
-        const tokenAmount = '100000000'; // 1.0 of an 8-divisibility token
+        // History rows carry whole-token units, like the native receive above.
+        const tokenAmount = decimalFromBaseUnits('100000000', divisibleToken.divisibility);
         rows.push({
             action_index: 100011,
             tx_hash: `demo-${chainId}-token-recv-1`,
@@ -377,13 +385,13 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             source: address,
             destination: 'demo-friend-1xchainpubrecipient',
             tick,
-            amount: '5000000', // 0.05 of the native coin
-            quantity: '5000000',
+            amount: outgoingAmount, // 0.05 of the native coin
+            quantity: outgoingAmount,
             memo: 'thanks for lunch',
             params: {
                 source: address,
                 destination: 'demo-friend-1xchainpubrecipient',
-                    amount: '5000000',
+                amount: outgoingAmount,
                 memo: 'thanks for lunch',
             },
         },
@@ -918,21 +926,23 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     // clean 8-dp value so toLocaleString() reads nicely.
     const px = (qty) => Number((unit * qty).toFixed(8));
     const wrap = (row) => ({ chainId, row });
-    // Dispenser and dispense rows use the explorer's own fields (decimal
-    // strings, a string status, the lifecycle beside it) so the demo drives
-    // the same render path real rows do.
+    // Dispense rows use the explorer's own fields (decimal strings, a
+    // string status) so the demo drives the same render path real rows do.
     const pxs = (qty) => px(qty).toFixed(8).replace(/\.?0+$/, '');
-    const offer = (idx, give, remaining) => ({
-        action_index: idx, status: 'valid', current_status: 'open',
-        give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give),
-        escrow_remaining: String(remaining),
-    });
     const sale = (n, give, ago) => ({
         tx_hash: `demo-${chainId}-dispense-${n}`, status: 'valid',
         give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give), timestamp: sec(ago),
     });
 
-    const offers = [offer(900101, 1000, 7500), offer(900102, 500, 2000)].map(wrap);
+    // Open dispensers are the demo wallet's own open fixtures selling this
+    // token on each visible chain, the same rows DispenserDetail resolves,
+    // so every listing opens its detail page. A token with no open demo
+    // dispenser lists none.
+    const offers = requestedChainIds.flatMap((cid) => demoDispenserRows(cid)
+        .filter((r) => String(r.status).toLowerCase() === 'open'
+            && String(r.give_tick || '').toUpperCase() === tick
+            && Number(r.escrow_remaining) > 0)
+        .map((r) => ({ chainId: cid, row: { ...r } })));
 
     const sales = [sale(1, 1000, 3_600), sale(2, 250, 14_400), sale(3, 2000, 86_400)].map(wrap);
 
@@ -951,46 +961,44 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     return { offers, sales, dexOrders, dexSwaps };
 }
 
-// Five contacts seeded into a fresh demo wallet so the address book, Send
-// picker, Contacts screen, and message inbox all show realistic contact data.
-// Each spans one to three chains. Addresses are illustrative demo strings
-// (AddressText truncates them); the first contact's Bitcoin address doubles as
-// a messaging counterparty, so one inbox row shows a contact name in place of
-// an address while the others show raw addresses for contrast.
+// Five demo contacts, one to three chains each. Addresses are valid mainnet
+// addresses hashed from the contact name (no one holds the keys), since the
+// edit form re-validates them on save. Erin's Bitcoin address is also an
+// inbox counterparty, so one inbox row shows a contact name.
 const DEMO_CONTACTS = [
     {
         name: 'Erin Calloway',
         entries: [
-            { chain: 'bitcoin', address: 'demo1erincallowaybtc0000000000000000001', label: 'Main' },
-            { chain: 'litecoin', address: 'demoLerincallowayltc0000000000000000001', label: 'LTC' },
-            { chain: 'dogecoin', address: 'demoDerincallowaydoge000000000000000001', label: 'DOGE tips' },
+            { chain: 'bitcoin', address: 'bc1q3wkwr0udwwkynvuy53tct3r4jfgek5v2c3pftc', label: 'Main' },
+            { chain: 'litecoin', address: 'ltc1qqtte56w7s7gst5evtgc64p0vczch7g574fawyk', label: 'LTC' },
+            { chain: 'dogecoin', address: 'DCchvMkFGrjDx28gZsgQro4jexPZ8QDC68', label: 'DOGE tips' },
         ],
     },
     {
         name: 'Marcus Webb',
         entries: [
-            { chain: 'bitcoin', address: 'demo1marcuswebbbtc00000000000000000002', label: 'Cold storage' },
-            { chain: 'litecoin', address: 'demoLmarcuswebbltc00000000000000000002', label: '' },
+            { chain: 'bitcoin', address: 'bc1q9dtk64wl74dyllt0mjmsw609a5hry6r7j8l4fu', label: 'Cold storage' },
+            { chain: 'litecoin', address: 'ltc1qncndj80v4q7pkmymyqz4zhe8jqtwe5pvx38jel', label: '' },
         ],
     },
     {
         name: 'Priya Nair',
         entries: [
-            { chain: 'bitcoin', address: 'demo1priyanairbtc000000000000000000003', label: '' },
+            { chain: 'bitcoin', address: 'bc1q52zecvw8lrg75c3xypsld6w4qyc6s8x3aplpw9', label: '' },
         ],
     },
     {
         name: 'Diego Santos',
         entries: [
-            { chain: 'litecoin', address: 'demoLdiegosantosltc0000000000000000004', label: 'Savings' },
-            { chain: 'dogecoin', address: 'demoDdiegosantosdoge000000000000000004', label: '' },
+            { chain: 'litecoin', address: 'ltc1qp86vwem7c3f4w4u6j4rf5sh5p958lcp2r985a9', label: 'Savings' },
+            { chain: 'dogecoin', address: 'DN2LX8cnzuW3M5RRADSxyp43k6CWyKNRph', label: '' },
         ],
     },
     {
         name: 'Yuki Tanaka',
         entries: [
-            { chain: 'bitcoin', address: 'demo1yukitanakabtc00000000000000000005', label: 'Trading' },
-            { chain: 'dogecoin', address: 'demoDyukitanakadoge0000000000000000005', label: 'Memes' },
+            { chain: 'bitcoin', address: 'bc1q6g6t6t3kd4hlynpc60udg5s3ygw38n58fgajfd', label: 'Trading' },
+            { chain: 'dogecoin', address: 'DT9cQMVsSvZoTETsDo9bAn6Zb13ALzCZYs', label: 'Memes' },
         ],
     },
 ];
@@ -1185,10 +1193,21 @@ const DEMO_DISPENSES = /** @type {Record<string, any[]>} */ ({
  */
 export function synthesizeDemoDispensers(chainId, sourceAddress) {
     if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
-    const rows = DEMO_DISPENSERS[chainId]
+    return demoDispenserRows(chainId).map((r) => ({ ...r, source: sourceAddress }));
+}
+
+/**
+ * The demo dispenser fixture rows for `chainId`. Regtest and testnet ids
+ * reuse their mainnet fixture, so every network the demo wallet can show
+ * resolves the same dispensers.
+ *
+ * @param {string} chainId
+ * @returns {any[]}
+ */
+function demoDispenserRows(chainId) {
+    return DEMO_DISPENSERS[chainId]
         || DEMO_DISPENSERS[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')]
         || [];
-    return rows.map((r) => ({ ...r, source: sourceAddress }));
 }
 
 /**

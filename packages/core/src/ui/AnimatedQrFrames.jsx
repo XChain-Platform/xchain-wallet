@@ -11,6 +11,8 @@
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { useReducedMotion } from './reducedMotion.js';
+import qrStyles from './QrDisplay.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * Render a sequence of strings as animated QR codes; frames advance
@@ -40,7 +42,7 @@ export function AnimatedQrFrames({
     frames,
     fps = 3,
     size = 240,
-    alt = 'Animated QR',
+    alt = t('ui.animatedQrFrames.animatedQr'),
     announceLoading = true,
 }) {
     const [index, setIndex] = useState(0);
@@ -145,78 +147,76 @@ export function AnimatedQrFrames({
         <div
             data-testid="animated-qr-frames"
             data-reduced-motion={reducedMotion ? 'true' : 'false'}
+            className={qrStyles.stack}
             style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '0.5rem',
-                width: '100%',
-                maxWidth: normalizedSize,
+                '--xc-qr-frame-size': `calc(${normalizedSize}px + (2 * var(--xc-space-3)))`,
             }}
         >
-            {dataUrl ? (
-                <img
-                    src={dataUrl}
-                    alt={qrAlt}
-                    width={normalizedSize}
-                    height={normalizedSize}
-                    style={{
-                        display: 'block',
-                        width: '100%',
-                        maxWidth: normalizedSize,
-                        height: 'auto',
-                        aspectRatio: '1 / 1',
-                        background: '#FFFFFF',
-                        borderRadius: 4,
-                    }}
-                />
-            ) : (
-                <div
-                    role={announceLoading ? 'status' : undefined}
-                    aria-label={announceLoading ? `Preparing ${qrAlt}` : undefined}
-                    style={{
-                        width: '100%',
-                        maxWidth: normalizedSize,
-                        aspectRatio: '1 / 1',
-                        background: 'var(--xc-bg-muted)',
-                        borderRadius: 4,
-                    }}
-                />
-            )}
-            <span style={{ fontSize: '0.875rem', color: 'var(--xc-text)' }}>
-                Frame {safeIndex + 1} / {frameCount}
+            <div className={qrStyles.frame}>
+                {dataUrl ? (
+                    <img
+                        src={dataUrl}
+                        alt={qrAlt}
+                        width={normalizedSize}
+                        height={normalizedSize}
+                        style={{
+                            display: 'block',
+                            width: '100%',
+                            maxWidth: normalizedSize,
+                            height: 'auto',
+                            aspectRatio: '1 / 1',
+                            background: '#FFFFFF',
+                            borderRadius: 'var(--xc-radius-sm)',
+                        }}
+                    />
+                ) : (
+                    <div
+                        role={announceLoading ? 'status' : undefined}
+                        aria-label={announceLoading ? t('ui.animatedQrFrames.preparing', { qrAlt }) : undefined}
+                        style={{
+                            width: '100%',
+                            maxWidth: normalizedSize,
+                            aspectRatio: '1 / 1',
+                            background: 'var(--xc-bg-muted)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                        }}
+                    />
+                )}
+            </div>
+            <span className={qrStyles.caption}>
+                {t('ui.animatedQrFrames.frame')} {safeIndex + 1} / {frameCount}
                 {cadenceLabel ? ` · ${cadenceLabel}` : ''}
             </span>
             {multiFrame ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.5rem' }}>
+                <div className={qrStyles.actions}>
                     {!reducedMotion ? (
                         <button
                             type="button"
-                            aria-label={paused ? 'Resume animation' : 'Pause animation'}
+                            aria-label={paused ? t('ui.animatedQrFrames.resumeAnimation') : t('ui.animatedQrFrames.pauseAnimation')}
                             aria-pressed={paused}
                             onClick={() => setPaused((value) => !value)}
                             style={controlStyle}
                         >
-                            {paused ? 'Resume' : 'Pause'}
+                            {paused ? t('ui.animatedQrFrames.resume') : t('ui.animatedQrFrames.pause')}
                         </button>
                     ) : null}
                     {manual ? (
                         <>
                             <button
                                 type="button"
-                                aria-label="Previous frame"
+                                aria-label={t('ui.animatedQrFrames.previousFrame')}
                                 onClick={() => step(-1)}
                                 style={controlStyle}
                             >
-                                Prev
+                                {t('ui.animatedQrFrames.prev')}
                             </button>
                             <button
                                 type="button"
-                                aria-label="Next frame"
+                                aria-label={t('ui.animatedQrFrames.nextFrame')}
                                 onClick={() => step(1)}
                                 style={controlStyle}
                             >
-                                Next
+                                {t('onboarding.carousel.next')}
                             </button>
                         </>
                     ) : null}

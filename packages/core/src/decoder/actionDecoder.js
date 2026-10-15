@@ -849,6 +849,7 @@ function decodeLink(p, chainSuffix) {
 function decodeSleep(p, chainSuffix) {
     const resumeBlock = str(p.RESUME_BLOCK);
     const tick = str(p.TICK);
+    const memo = str(p.MEMO);
     const isAddress = str(p.VERSION) === '0';
     const until = resumeBlock === '-1' ? ' indefinitely' : ` until block ${resumeBlock || '?'}`;
     let summary;
@@ -860,6 +861,7 @@ function decodeSleep(p, chainSuffix) {
         details: [
             ...(tick ? [{ label: 'Token', value: tick }] : []),
             { label: 'Resume block', value: resumeBlock },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
             ...(resumeBlock === '0' ? []
@@ -873,12 +875,19 @@ function decodeSleep(p, chainSuffix) {
 /* CALLBACK decoder: force-redeem a token per its callback terms. */
 function decodeCallback(p, chainSuffix) {
     const tick = str(p.TICK);
+    const memo = str(p.MEMO);
     return {
         summary: `Trigger callback redemption of ${tick || '?'}${chainSuffix}`,
-        details: [{ label: 'Token', value: tick }],
+        details: [
+            { label: 'Token', value: tick },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
         warnings: [
             'Callback redeems ALL holders\' tokens at the configured callback terms. This cannot be undone.',
             ...(!tick ? ['Token ticker is empty.'] : []),
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
         ],
     };
 }

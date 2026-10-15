@@ -100,17 +100,25 @@ assert.match(
     /disabled=\{password\.length === 0 \|\| isLockedOut\}/,
     'submit button disabled while locked',
 );
-assert.match(
+assert.doesNotMatch(
     lockedSrc,
-    /Locked \(\$\{formatCountdown\(remainingMs\)\}\)/,
-    'button label flips to Locked + countdown',
+    /locked\.locked'?, \{ formatCountdownValue: formatCountdown\(remainingMs\) \}|Locked \(\$\{formatCountdown\(remainingMs\)\}\)/,
+    'the banner alone says how long to wait; the button does not repeat the countdown',
 );
 
 // --- banner aria + countdown formatting -------------------------------
 
-assert.match(lockedSrc, /role="status"/, 'banner uses status role');
-assert.match(lockedSrc, /aria-live="polite"/, 'banner is aria-live polite');
-assert.match(lockedSrc, /Too many incorrect passwords/, 'banner copy present');
+// The shared warning notice carries role="status" and aria-live="polite".
+assert.match(lockedSrc, /<StatusMessage variant="warning" className=\{styles\.lockoutBanner\}>/, 'banner is the shared warning notice');
+assert.match(lockedSrc, /className=\{styles\.lockoutCountdown\} aria-live="off"/, 'the countdown ticks without re-announcing the notice');
+// Run alone the screen names its locale key; the smoke runner swaps in the
+// English copy. Either way the English locale carries the sentence.
+const localeSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'),
+    'utf8',
+);
+assert.match(lockedSrc, /Too many incorrect passwords|t\('locked\.tooManyIncorrectPasswordsOn'\)/, 'banner copy present');
+assert.match(localeSrc, /'locked\.tooManyIncorrectPasswordsOn':\s*'Too many incorrect passwords/, 'banner copy in the English locale');
 
 assert.match(
     lockedSrc,
@@ -124,7 +132,7 @@ assert.match(
 );
 assert.match(
     lockedSrc,
-    /totalSec === 1 \? 'second' : 'seconds'/,
+    /locked\.countdown\.seconds', \{ count: totalSec \}/,
     'countdown uses plain-language time units',
 );
 

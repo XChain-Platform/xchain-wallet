@@ -60,7 +60,9 @@ function mount(child, messaging) {
 function expectNoEmptyDetailCells(container) {
     expect(container.textContent).not.toMatch(/\b(?:undefined|null|NaN)\b/);
     for (const cell of container.querySelectorAll('dd, td')) {
-        expect(cell.textContent.trim()).not.toBe('');
+        // An icon-only chain badge fills its cell with a named image instead of text.
+        const named = cell.querySelector('[role="img"][aria-label]')?.getAttribute('aria-label') || '';
+        expect(cell.textContent.trim() || named).not.toBe('');
     }
 }
 
@@ -68,6 +70,9 @@ function valueBeside(label) {
     const heading = screen.getByText(label, { exact: true });
     const row = heading.closest('tr');
     if (row) return row.querySelector('td');
+    const listItem = screen.queryAllByRole('listitem')
+        .find((candidate) => candidate.contains(heading));
+    if (listItem) return listItem.firstElementChild?.lastElementChild;
     return heading.nextElementSibling;
 }
 
@@ -140,7 +145,7 @@ describe('detail screens with sparse records', () => {
         expect(valueBeside('Current balance')).toHaveTextContent('1,234.56 PRECISE');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
-        const holders = await screen.findByRole('table', { name: 'Holder balances' });
+        const holders = await screen.findByRole('list', { name: 'Holder balances' });
         expect(within(holders).getByText('1,234.56')).toBeTruthy();
     });
 
@@ -158,7 +163,7 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        await screen.findByRole('heading', { name: 'Dispenser details' });
+        await waitFor(() => expect(valueBeside('Dispensing')).toHaveTextContent('-'));
         expect(valueBeside('Dispensing')).toHaveTextContent('-');
         expect(valueBeside('Payment')).toHaveTextContent('-');
         expect(valueBeside('Status')).toHaveTextContent('-');
@@ -184,7 +189,7 @@ describe('detail screens with sparse records', () => {
             messaging,
         );
 
-        await screen.findByRole('heading', { name: 'Position details' });
+        await waitFor(() => expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN'));
         expect(valueBeside('Staked')).toHaveTextContent('- XCHAIN');
         expect(valueBeside('Delegated key')).toHaveTextContent('None');
         const rewards = screen.getByRole('list');

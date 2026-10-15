@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import toastStyles from '../../../../packages/core/src/shared/components/ToastHost.module.css';
 
 const mocks = vi.hoisted(() => ({
     haptic: {
@@ -148,5 +150,39 @@ describe('ToastHost', () => {
         dismiss.focus();
         fireEvent.keyDown(dismiss, { key: 'Escape' });
         expect(screen.queryByText('Copied')).toBeNull();
+    });
+
+    it('uses the shared notice geometry and dismiss control size', () => {
+        setup();
+        show({
+            id: 'undo',
+            message: 'Contact deleted',
+            actionLabel: 'Undo',
+            onAction: vi.fn(),
+            durationMs: 0,
+        });
+
+        expect(screen.getByText('Contact deleted').closest('div')).toHaveClass(toastStyles.toast);
+        expect(screen.getByRole('button', { name: 'Dismiss notification' }))
+            .toHaveClass(toastStyles.dismissBtn);
+
+        const css = readFileSync(
+            'packages/core/src/shared/components/ToastHost.module.css',
+            'utf8',
+        );
+        expect(css).toMatch(/\.toast\s*\{[^}]*padding:\s*var\(--xc-card-pad\)/s);
+        expect(css).toMatch(/\.toast\s*\{[^}]*border-radius:\s*var\(--xc-card-radius\)/s);
+        expect(css).toMatch(/\.dismissBtn\s*\{[^}]*min-width:\s*var\(--xc-control-h-sm\)[^}]*min-height:\s*var\(--xc-control-h-sm\)/s);
+    });
+
+    it('lays every tone tint over the opaque raised surface', () => {
+        // The tone tints are 10 to 14 percent alpha; on their own they let the
+        // page text show through a floating toast (Receive at 360 wide).
+        const css = readFileSync('packages/core/src/shared/components/ToastHost.module.css', 'utf8');
+        for (const tone of ['info', 'warning', 'success', 'error']) {
+            const block = css.match(new RegExp(`\\.variant_${tone}\\s*\\{([^}]*)\\}`));
+            expect(block, tone).not.toBeNull();
+            expect(block[1], tone).toMatch(/background:\s*linear-gradient\([^;]*\),\s*var\(--xc-surface-raised\);/);
+        }
     });
 });

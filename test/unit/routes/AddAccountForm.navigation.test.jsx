@@ -45,6 +45,16 @@ describe('AddAccountForm navigation', () => {
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
+    it('puts account guidance with the name field instead of above the form', () => {
+        render(
+            <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
+        );
+
+        expect(screen.queryByText('A new set of derived addresses under the same recovery phrase.')).toBeNull();
+        expect(screen.getByText(/Names a separate set of addresses in this wallet/))
+            .toBeInTheDocument();
+    });
+
     it('uses the highest derivation index for the default name', async () => {
         messaging.listAccounts.mockResolvedValue([
             { id: 'account-1', index: 0, name: 'Account 1' },

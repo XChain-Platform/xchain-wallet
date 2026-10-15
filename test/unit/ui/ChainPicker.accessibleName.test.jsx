@@ -29,7 +29,7 @@ describe('<ChainPicker> accessible name', () => {
                 onChange={() => {}}
             />,
         );
-        expect(screen.getByRole('button', { name: 'Network: Bitcoin · regtest' }))
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin' }))
             .toBeInTheDocument();
     });
 
@@ -48,9 +48,9 @@ describe('<ChainPicker> accessible name', () => {
         );
         expect(screen.getByRole('button', { name: /^Give chain:/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Get chain:/ })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Give chain: Bitcoin · regtest' }))
+        expect(screen.getByRole('button', { name: 'Give chain: Bitcoin' }))
             .toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Get chain: Litecoin · regtest' }))
+        expect(screen.getByRole('button', { name: 'Get chain: Litecoin' }))
             .toBeInTheDocument();
     });
 
@@ -65,10 +65,10 @@ describe('<ChainPicker> accessible name', () => {
             .toBeInTheDocument();
     });
 
-    it('honours hideNetworkKind, so the name matches what is on screen', () => {
+    it('never includes the network kind in the field name', () => {
         render(
             <ChainPicker
-                label="Network" value="bitcoin-regtest" hideNetworkKind
+                label="Network" value="bitcoin-regtest"
                 chainIds={CHAINS} chainRegistry={reg} onChange={() => {}}
             />,
         );
@@ -87,7 +87,7 @@ describe('<ChainPicker> accessible name', () => {
         expect(screen.getByRole('button', { name: /Bitcoin/ })).toBeInTheDocument();
     });
 
-    it('announces testnet and regtest while leaving mainnet implicit', () => {
+    it('uses the same display name for every network kind', () => {
         const { rerender } = render(
             <ChainPicker
                 label="Network" value="bitcoin-mainnet"
@@ -104,7 +104,7 @@ describe('<ChainPicker> accessible name', () => {
                 chainRegistry={reg} onChange={() => {}}
             />,
         );
-        expect(screen.getByRole('button', { name: 'Network: Bitcoin · testnet' }))
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin' }))
             .toBeInTheDocument();
 
         rerender(
@@ -114,7 +114,7 @@ describe('<ChainPicker> accessible name', () => {
                 chainRegistry={reg} onChange={() => {}}
             />,
         );
-        expect(screen.getByRole('button', { name: 'Network: Bitcoin · regtest' }))
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin' }))
             .toBeInTheDocument();
     });
 });
@@ -166,7 +166,7 @@ describe('picker keyboard operation', () => {
                 chainIds={CHAINS} chainRegistry={reg} onChange={onChange}
             />,
         );
-        const trigger = screen.getByRole('button', { name: 'Network: Bitcoin · regtest' });
+        const trigger = screen.getByRole('button', { name: 'Network: Bitcoin' });
 
         fireEvent.keyDown(trigger, { key: 'ArrowDown' });
         const options = screen.getAllByRole('option');
@@ -232,7 +232,7 @@ describe('picker keyboard operation', () => {
 });
 
 describe('<NetworkField>', () => {
-    it('uses the default label and exposes the selected network kind', () => {
+    it('uses the default label without exposing the selected network kind', () => {
         render(
             <NetworkField
                 value="bitcoin-testnet"
@@ -241,7 +241,7 @@ describe('<NetworkField>', () => {
                 onChange={() => {}}
             />,
         );
-        expect(screen.getByRole('button', { name: 'Network: Bitcoin · testnet' }))
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin' }))
             .toBeInTheDocument();
     });
 });

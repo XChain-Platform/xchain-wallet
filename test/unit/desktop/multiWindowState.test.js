@@ -51,6 +51,52 @@ describe('desktop multi-window state notifications', () => {
     });
 });
 
+describe('desktop multi-window settings notifications', () => {
+    const saved = { schemaVersion: 2, activeNetwork: 'mainnet', theme: 'dark', fiatCurrency: 'EUR' };
+
+    it('broadcasts the saved settings for a settings.update that leaves the network alone', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { patch: { theme: 'dark' } } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'settings', settings: saved });
+        // The host also accepts the patch as the request itself.
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { fiatCurrency: 'EUR' } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'settings', settings: saved });
+    });
+
+    it('broadcasts a network change for a patch that moves the active network', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { patch: { activeNetwork: 'testnet' } } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'network', settings: saved });
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { activeNetwork: 'testnet', developerMode: false } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'network', settings: saved });
+    });
+
+    it('broadcasts a network change for settings.setActiveNetwork', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.setActiveNetwork', request: { walletId: 'wallet-1', network: 'testnet' } },
+            { ok: true, result: { settings: saved, addresses: [] } },
+        )).toEqual({ kind: 'network', settings: saved });
+    });
+
+    it('does not broadcast a failed settings write or one with no settings object', () => {
+        const update = { type: 'settings.update', request: { patch: { theme: 'dark' } } };
+        expect(stateChangeForMessage(update, { ok: false, result: saved })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true, result: null })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true, result: [saved] })).toBeNull();
+        expect(stateChangeForMessage(
+            { type: 'settings.setActiveNetwork', request: {} },
+            { ok: true, result: { addresses: [] } },
+        )).toBeNull();
+    });
+});
+
 describe('desktop window bounds memory', () => {
     it('round-trips a normal window rectangle through the file store', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'xchain-window-bounds-'));
@@ -129,14 +175,21 @@ describe('desktop window bounds memory', () => {
         )).toEqual({ x: 0, y: 100, width: 900, height: 700 });
     });
 
-    it('shrinks an oversized saved window without moving its in-area origin', () => {
+    it('shrinks and clamps an oversized saved window to its origin display', () => {
         expect(restoreWindowBounds(
             { x: 2100, y: 100, width: 2500, height: 1400 },
             [
                 { workArea: { x: 0, y: 0, width: 1920, height: 1080 } },
                 { workArea: { x: 1920, y: 0, width: 1280, height: 1024 } },
             ],
-        )).toEqual({ x: 2100, y: 100, width: 1280, height: 1024 });
+        )).toEqual({ x: 1920, y: 0, width: 1280, height: 1024 });
+    });
+
+    it('drops an edge origin that leaves less than a usable window area visible', () => {
+        expect(restoreWindowBounds(
+            { x: 1919, y: 1079, width: 900, height: 700 },
+            [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
+        )).toEqual({ width: 900, height: 700 });
     });
 
     it('cascades an additional window without changing its remembered size', () => {
@@ -150,5 +203,16 @@ describe('desktop window bounds memory', () => {
     it('rejects malformed and undersized rectangles', () => {
         expect(normalizeWindowBounds({ x: 0, y: 0, width: 100, height: 100 })).toBeNull();
         expect(normalizeWindowBounds({ width: '900', height: 700 })).toBeNull();
+    });
+
+    it('accepts the compact 360 by 600 desktop layout floor', () => {
+        expect(normalizeWindowBounds({ x: 0, y: 0, width: 360, height: 600 })).toEqual({
+            x: 0,
+            y: 0,
+            width: 360,
+            height: 600,
+        });
+        expect(normalizeWindowBounds({ width: 359, height: 600 })).toBeNull();
+        expect(normalizeWindowBounds({ width: 360, height: 599 })).toBeNull();
     });
 });

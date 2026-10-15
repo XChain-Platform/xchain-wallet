@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -141,6 +142,7 @@ function abiArgumentError(param, value, descriptor) {
  */
 export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -199,7 +201,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 // operating address.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain can call the contract. Use Receive to generate one first.');
+                    setLoadError('No address on this network can call the contract. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -761,6 +763,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('execute.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
@@ -782,9 +785,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             ? t('send.review.createUnsigned')
                             : isHwSource
                                 ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                                : (descriptor
-                                    ? t('execute.executeOn', { network: descriptor.displayName })
-                                    : t('execute.callContract'))}
+                                : t('execute.callContract')}
                     </Button>
                 )}
             >
@@ -800,10 +801,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     })}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -854,10 +857,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     PSBT leaves for a signer wallet, so the forfeiture terms are
                     stated here rather than only on the confirm page. */}
                 {nativeFee.payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                        <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{NATIVE_FEE_WARNING}</p>
+                        <p>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -892,7 +895,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -948,6 +951,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('execute.callContract')}
             onSubmit={handleReview}
             noValidate
@@ -966,8 +970,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             )}
         >
             <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
-            {/* The target contract pins the network, so the field is single-option. */}
-            <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label={t('execute.caller')}
@@ -1064,7 +1066,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         label={t('execute.depositAmount')}
                         hint={t('execute.depositHint', {
                             contract: contractActionIndex,
-                            chain: descriptor?.displayName || t('send.rbf.thisChain'),
+                            chain: t('send.rbf.thisChain'),
                         })}
                         amount={depositQuantity}
                         tick={depositTick}

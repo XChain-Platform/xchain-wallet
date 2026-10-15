@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../../core/src/i18n/index.js';
 import { useExtensionWallet } from '../useExtensionWallet.js';
 import styles from './ExtensionBanner.module.css';
@@ -80,15 +81,14 @@ export function ExtensionBanner() {
     }
 
     return (
-        <div role="status" className={styles.banner} data-state="offer">
+        <div
+            role="status"
+            className={error ? `${styles.banner} ${styles.withMessage}` : styles.banner}
+            data-state="offer"
+        >
             <span className={styles.label}>
                 <strong>{t('extensionBanner.detectedTitle')}</strong>
                 {' '}{t('extensionBanner.detectedBody')}
-                {error ? (
-                    <span role="alert" className={styles.error}>
-                        {' '}{error}
-                    </span>
-                ) : null}
             </span>
             <span className={styles.actions}>
                 <button
@@ -110,6 +110,13 @@ export function ExtensionBanner() {
                     {t('extensionBanner.notNow')}
                 </button>
             </span>
+            {/* Its own full-width row, so the failure is not squeezed into the
+                text column beside the buttons on a phone. */}
+            {error ? (
+                <div className={styles.message}>
+                    <StatusMessage variant="error">{error}</StatusMessage>
+                </div>
+            ) : null}
         </div>
     );
 }

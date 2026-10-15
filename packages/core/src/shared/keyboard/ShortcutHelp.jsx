@@ -15,11 +15,12 @@
 // the footer points there.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from '../../ui/index.js';
+import { Button, Icon } from '../../ui/index.js';
 import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js';
 import styles from './ShortcutHelp.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { t } from '../../i18n/index.js';
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;
@@ -75,12 +76,18 @@ export function ShortcutHelp({ open, onClose, overrides }) {
         >
             <div className={styles.panel} role="presentation" onMouseDown={(e) => e.stopPropagation()}>
                 <header className={styles.header}>
-                    <span id="xc-shortcut-help-title" className={styles.title}>Keyboard shortcuts</span>
-                    <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
-                        <Icon.XIcon />
-                    </button>
+                    <span id="xc-shortcut-help-title" className={styles.title}>{t('keyboard.shortcutHelp.keyboardShortcuts')}</span>
+                    <span className={styles.close}>
+                        <Button
+                            variant="secondary"
+                            size="md"
+                            icon={<Icon.XIcon />}
+                            onClick={onClose}
+                            aria-label={t('components.gatedFileViewer.close')}
+                        />
+                    </span>
                 </header>
-                <div id="xc-shortcut-help-body" className={styles.body} role="region" aria-label="Shortcut list" tabIndex={0}>
+                <div id="xc-shortcut-help-body" className={styles.body} role="region" aria-label={t('keyboard.shortcutHelp.shortcutList')} tabIndex={0}>
                     {SHORTCUT_GROUPS.map((group) => (
                         <section key={group} className={styles.group}>
                             <h2 className={styles.groupTitle}>{group}</h2>
@@ -92,7 +99,7 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                                             <kbd className={styles.kbd}>{formatBinding(s.binding, mac)}</kbd>
                                             {s.altBinding ? (
                                                 <>
-                                                    <span className={styles.or}>or</span>
+                                                    <span className={styles.or}>{t('ui.qrScanner.or')}</span>
                                                     <kbd className={styles.kbd}>{formatBinding(s.altBinding, mac)}</kbd>
                                                 </>
                                             ) : null}
@@ -104,13 +111,13 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                     ))}
                     {extensionCommands.length > 0 ? (
                         <section className={styles.group}>
-                            <h2 className={styles.groupTitle}>Browser extension</h2>
+                            <h2 className={styles.groupTitle}>{t('keyboard.shortcutHelp.browserExtension')}</h2>
                             <dl className={styles.list}>
                                 {extensionCommands.map((command) => (
                                     <div key={command.name} className={styles.row}>
                                         <dt className={styles.label}>{command.description}</dt>
                                         <dd className={styles.keys}>
-                                            <kbd className={styles.kbd}>{command.shortcut || 'Not set'}</kbd>
+                                            <kbd className={styles.kbd}>{command.shortcut || t('keyboard.shortcutHelp.notSet')}</kbd>
                                         </dd>
                                     </div>
                                 ))}
@@ -118,9 +125,9 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                         </section>
                     ) : null}
                     <p className={styles.footerNote}>
-                        Rebind wallet shortcuts in Settings → Keyboard.
+                        {t('keyboard.shortcutHelp.rebindWalletShortcutsInSettings')}
                         {extensionCommands.length > 0
-                            ? ' Manage browser extension shortcuts in your browser.'
+                            ? t('keyboard.shortcutHelp.manageBrowserExtensionShortcutsIn')
                             : null}
                     </p>
                 </div>

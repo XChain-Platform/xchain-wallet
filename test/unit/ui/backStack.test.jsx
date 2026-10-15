@@ -19,6 +19,7 @@ import {
     registerBackHandler,
     resetBackStackForTests,
     setRouteHistoryManaged,
+    useNativeBackRoot,
 } from '../../../packages/core/src/ui/backStack.js';
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
@@ -33,6 +34,11 @@ async function pressBack() {
 
 function swipeBackFromIOS() {
     window.dispatchEvent(new Event('xchain:native-edge-back'));
+}
+
+function NativeBackRoot() {
+    useNativeBackRoot();
+    return null;
 }
 
 beforeEach(() => {
@@ -79,14 +85,53 @@ function ConfirmStep() {
 }
 
 describe('back stack', () => {
-    it('minimizes through the Capacitor App plugin on a root screen', async () => {
-        render(<PageHeader title="Home" />);
+    it('requires a second native Back press to minimize from Home', async () => {
+        vi.spyOn(Date, 'now')
+            .mockReturnValueOnce(10_000)
+            .mockReturnValueOnce(11_000);
+        render(<><NativeBackRoot /><PageHeader title="Home" /></>);
         await settle();
         expect(capacitorApp.addListener).toHaveBeenCalledTimes(1);
 
         nativeBack({ canGoBack: false });
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+        nativeBack({ canGoBack: false });
 
         expect(capacitorApp.minimizeApp).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses available app history before considering a Home exit', async () => {
+        const historyBack = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+        render(<><NativeBackRoot /><PageHeader title="Home" /></>);
+        await settle();
+
+        nativeBack({ canGoBack: true });
+
+        expect(historyBack).toHaveBeenCalledTimes(1);
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
+    it('does not minimize when an empty handler stack is not the Home root', async () => {
+        render(<PageHeader title="Unlock" />);
+        await settle();
+
+        nativeBack({ canGoBack: false });
+        nativeBack({ canGoBack: false });
+
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
+    it('expires the first Home Back press after the exit window', async () => {
+        vi.spyOn(Date, 'now')
+            .mockReturnValueOnce(10_000)
+            .mockReturnValueOnce(12_001);
+        render(<><NativeBackRoot /><PageHeader title="Home" /></>);
+        await settle();
+
+        nativeBack({ canGoBack: false });
+        nativeBack({ canGoBack: false });
+
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
     it('preserves a confirm step draft when native Back returns to its form', async () => {

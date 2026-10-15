@@ -79,14 +79,20 @@ export function fileActionParams({ name, type, title, memo }) {
  */
 export async function fileAction(opts) {
     if (!opts) throw new Error('fileAction: opts is required');
-    if (typeof opts.name !== 'string' || opts.name.length === 0) {
+    if (typeof opts.name !== 'string' || opts.name.trim().length === 0) {
         throw new Error('fileAction: name is required');
     }
-    if (typeof opts.type !== 'string' || opts.type.length === 0) {
+    if (typeof opts.type !== 'string' || opts.type.trim().length === 0) {
         throw new Error('fileAction: type (MIME) is required');
     }
     if (typeof opts.rawData !== 'string' || opts.rawData.length === 0) {
         throw new Error('fileAction: rawData (file bytes) is required');
+    }
+    if (opts.title !== undefined && typeof opts.title !== 'string') {
+        throw new Error('fileAction: title must be text');
+    }
+    if (opts.memo !== undefined && typeof opts.memo !== 'string') {
+        throw new Error('fileAction: memo must be text');
     }
     for (const [field, value] of [['name', opts.name], ['type', opts.type], ['title', opts.title], ['memo', opts.memo]]) {
         if (typeof value === 'string' && /[|;]/.test(value)) {

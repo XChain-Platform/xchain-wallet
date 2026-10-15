@@ -122,8 +122,9 @@ describe('Addresses delete confirm names what the address holds', () => {
         const dialog = await openDeleteDialog(FUNDED, messagingWith(), /1\.50000000 BTC/);
         const text = dialog.textContent;
         expect(text).toMatch(/It holds 1\.50000000 BTC, 1,000 XCP\./);
-        expect(text).toMatch(/active Bitcoin address/);
-        expect(text).toMatch(/Generate on Bitcoin re-derives the lowest missing address/);
+        expect(text).toMatch(/active address/);
+        expect(text).toMatch(/Add address > Generate re-derives the lowest missing address/);
+        expect(text).not.toMatch(/Bitcoin|regtest|testnet|not mainnet/i);
         expect(text).not.toMatch(/imported key is gone/);
     });
 
@@ -141,7 +142,7 @@ describe('Addresses delete confirm names what the address holds', () => {
         expect(text).not.toMatch(/It holds/);
         expect(text).not.toMatch(/dispenser/);
         expect(text).not.toMatch(/active/);
-        expect(text).toMatch(/not lost: Add address > Generate on Bitcoin re-derives the lowest missing address/);
+        expect(text).toMatch(/not lost: Add address > Generate re-derives the lowest missing address/);
         expect(text).not.toMatch(/imported key is gone/);
     });
 
@@ -152,14 +153,15 @@ describe('Addresses delete confirm names what the address holds', () => {
         expect(text).not.toMatch(/re-derives/);
     });
 
-    it('the only address on a chain says the chain leaves the wallet', async () => {
+    it('the only address on a network says the network leaves the wallet', async () => {
         const messaging = messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [hd('addr-plain', PLAIN, 2)] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: 'addr-plain', address: PLAIN } }),
         });
         const dialog = await openDeleteDialog(PLAIN, messaging);
-        expect(dialog.textContent).toMatch(/only Bitcoin address in this wallet/);
-        expect(dialog.textContent).toMatch(/active Bitcoin address/);
+        expect(dialog.textContent).toMatch(/only address on this network/);
+        expect(dialog.textContent).toMatch(/active address/);
+        expect(dialog.textContent).not.toMatch(/Bitcoin|regtest|testnet|not mainnet/i);
     });
 
     it('confirming still deletes the record', async () => {
@@ -175,7 +177,6 @@ describe('deleteAddressMessage', () => {
     it('hides amounts in Privacy Mode but still says funds exist', () => {
         const text = deleteAddressMessage({
             record: hd('x', PLAIN, 0),
-            chainName: 'Dogecoin',
             holdings: ['12.5 DOGE'],
             hidden: true,
         });
@@ -186,12 +187,10 @@ describe('deleteAddressMessage', () => {
     it('a hardware-derived address gets the re-derive path, a watch-only one does not', () => {
         const hw = deleteAddressMessage({
             record: { source: 'trezor', derivationPath: "m/84'/0'/0'/0/3", role: 'receive' },
-            chainName: 'Bitcoin',
         });
         expect(hw).toMatch(/re-derives the lowest missing address/);
         const wo = deleteAddressMessage({
             record: { source: 'watch-only', derivationPath: null, role: 'receive' },
-            chainName: 'Bitcoin',
         });
         expect(wo).toMatch(/watch-only address can be added again/);
         expect(wo).not.toMatch(/re-derives/);

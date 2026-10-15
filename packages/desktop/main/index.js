@@ -40,12 +40,17 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
+// First import on purpose: the test network guard must be in place before
+// any other module evaluates (see networkGuardBoot.js). Off unless a test
+// harness sets XCHAIN_TEST_NETWORK_GUARD or --xchain-test-network-guard.
+import { networkGuard, runNetworkGuardProbeAndExit } from './networkGuardBoot.js';
 import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
 
 import { IPC_CHANNEL } from './messageHost.js';
@@ -58,7 +63,7 @@ import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import {
     attachRendererCspHeaders,
-    isHttpUrl,
+    allowlistedExternalUrl,
     hasNoIpcArguments,
     isValidDesktopIpcMessage,
     normalizeOpenWindowArgs,
@@ -109,6 +114,8 @@ import {
     wipeRuntimeStores,
 } from './runtime.js';
 
+logConsole.attach();
+
 const here = dirname(fileURLToPath(import.meta.url));
 installProcessErrorHandlers();
 
@@ -117,6 +124,12 @@ installProcessErrorHandlers();
 // `win.loadFile(...)` target in createWindow: they are the same directory
 // said twice, and a drift between them locks the app out of its own IPC.
 const APP_ROOT = join(here, '..', 'renderer', 'dist');
+// Pinch zoom may magnify but never shrink below 1: a lower floor lets
+// Chromium show the page at that scale, which widens the layout viewport past
+// the window so the fixed-height shell fills only part of it and the whole
+// document scrolls.
+const MIN_VISUAL_ZOOM_LEVEL = 1;
+const MAX_VISUAL_ZOOM_LEVEL = 3;
 
 /**
  * Sender-trust gate for the privileged IPC channels, bound to this app's
@@ -279,16 +292,18 @@ function hardenWebContents(contents) {
         }
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
-        if (isHttpUrl(url)) {
-            void runMainTask(() => shell.openExternal(url), 'external link open');
+        const externalUrl = allowlistedExternalUrl(url);
+        if (externalUrl) {
+            void runMainTask(() => shell.openExternal(externalUrl), 'external link open');
         }
         return { action: 'deny' };
     });
     contents.on('will-navigate', (event, url) => {
         if (shouldBlockNavigation(url, APP_ROOT)) {
             event.preventDefault();
-            if (isHttpUrl(url)) {
-                void runMainTask(() => shell.openExternal(url), 'external navigation open');
+            const externalUrl = allowlistedExternalUrl(url);
+            if (externalUrl) {
+                void runMainTask(() => shell.openExternal(externalUrl), 'external navigation open');
             }
         }
     });
@@ -540,6 +555,7 @@ export function createWindow(opts = {}) {
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
+            zoomFactor: 1,
             // A console in the shipped wallet invites "paste this to fix
             // your wallet" scams against a page that holds unlocked keys;
             // the mobile shells ship with WebView debugging off for the
@@ -548,6 +564,13 @@ export function createWindow(opts = {}) {
         },
         show: false,
     });
+    void runMainTask(
+        () => win.webContents.setVisualZoomLevelLimits(
+            MIN_VISUAL_ZOOM_LEVEL,
+            MAX_VISUAL_ZOOM_LEVEL,
+        ),
+        'window zoom limits',
+    );
 
     // Renderer is built into packages/desktop/renderer/dist by Step 19's
     // packaging pipeline (vite build). In packaged mode that's what
@@ -760,6 +783,23 @@ function restoreWindowAfterIdleCheck() {
 }
 
 /**
+ * Reload only the focused renderer so the main-process vault, signer pool, and
+ * cached session keep the same unlocked state across Cmd/Ctrl+R.
+ *
+ * @param {BrowserWindow | undefined} menuWindow
+ * @param {boolean} [ignoreCache]
+ * @returns {boolean}
+ */
+export function reloadRendererWindow(menuWindow, ignoreCache = false) {
+    const target = menuWindow ?? BrowserWindow.getFocusedWindow();
+    const contents = target?.webContents;
+    if (!contents || contents.isDestroyed?.()) return false;
+    if (ignoreCache) contents.reloadIgnoringCache();
+    else contents.reload();
+    return true;
+}
+
+/**
  * Wire the application menu. File > New Window runs the idle-lock gate;
  * direct-download builds also expose a visible update check, and every
  * platform can open the version-pinned native About panel.
@@ -820,8 +860,16 @@ export function installApplicationMenu({
         {
             label: '&View',
             submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
+                    click: (_item, win) => { reloadRendererWindow(win); },
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    click: (_item, win) => { reloadRendererWindow(win, true); },
+                },
                 ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
                 { type: 'separator' },
                 { role: 'resetZoom' },
@@ -835,8 +883,8 @@ export function installApplicationMenu({
             label: '&Window',
             submenu: [
                 { role: 'minimize' },
-                { role: 'zoom' },
                 ...(isMac ? [
+                    { role: 'zoom' },
                     { type: 'separator' },
                     { role: 'front' },
                 ] : [
@@ -901,6 +949,12 @@ function ensureRendererCspHeaders() {
 
 void runMainTask(async () => {
     await app.whenReady();
+    // Before anything in main can fetch or open a window.
+    networkGuard.attachSession(session.defaultSession, 'default session');
+    if (networkGuard.probe) {
+        await runNetworkGuardProbeAndExit();
+        return;
+    }
     ensureRendererCspHeaders();
 
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
@@ -1188,6 +1242,11 @@ void runMainTask(async () => {
     });
 }, 'desktop startup', {
     recover: () => {
+        networkGuard.attachSession(session.defaultSession, 'default session');
+        if (networkGuard.probe) {
+            app.exit(1);
+            return;
+        }
         ensureRendererCspHeaders();
         canCreateWindows = true;
         if (liveWindows().length === 0) createWindow();

@@ -11,6 +11,7 @@ const SOURCE = 'bcrt1qwallet';
 const DESTINATION = 'bcrt1qrecipient';
 const PARENT = 'aa'.repeat(32);
 const SPK = `0014${'33'.repeat(20)}`;
+const BTC = { dustThreshold: 546, supportsSegwit: true };
 
 const parent = ({ sequence = 0xffffffff, change = 20000 } = {}) => ({
     // parent fee is fixed at 1000 sats whatever the change is
@@ -28,6 +29,7 @@ describe('planCpfpChild feeRate', () => {
     it('spends only the wallet change and covers parent plus child at the feeRate', () => {
         const plan = planCpfpChild({
             parentTxid: PARENT, parent: parent(), sourceAddress: SOURCE, feeRate: 20, parentVbytes: 200,
+            network: BTC,
         });
         // parent paid 1000; package 310 vB at 20 sat/vB = 6200; child pays 5200
         expect(plan.parentFeeSats).toBe('1000');
@@ -42,7 +44,7 @@ describe('planCpfpChild feeRate', () => {
     it('never pays the child less than the feeRate on its own bytes', () => {
         const plan = planCpfpChild({
             parentTxid: PARENT, parent: parent(), sourceAddress: SOURCE,
-            feeRate: 2, parentVbytes: 100, childVbytes: 100,
+            feeRate: 2, parentVbytes: 100, childVbytes: 100, network: BTC,
         });
         // parent pays 1000 (> package 400) so the child floor 200 applies
         expect(plan.childFeeSats).toBe('200');
@@ -51,8 +53,8 @@ describe('planCpfpChild feeRate', () => {
     it('refuses when the change cannot fund the child', () => {
         expect(() => planCpfpChild({
             parentTxid: PARENT, parent: parent({ change: 2000 }), sourceAddress: SOURCE,
-            feeRate: 100, parentVbytes: 200,
-        })).toThrow(CpfpPlanError);
+            feeRate: 100, parentVbytes: 200, network: BTC,
+        })).toThrow(/cannot cover the child fee/);
     });
 
     it('refuses a parent with no wallet-owned output', () => {
@@ -70,11 +72,81 @@ describe('planCpfpChild feeRate', () => {
     });
 });
 
+const DOGE = { dustThreshold: 100000, supportsSegwit: false };
+const LTC = { dustThreshold: 5460, supportsSegwit: true };
+const P2PKH = `76a914${'33'.repeat(20)}88ac`;
+
+// A parent whose wallet change pays to `spk`; its fee stays 1000.
+const parentPaying = (spk, change) => {
+    const p = parent({ change });
+    p.outputs[1].scriptPubKeyHex = spk;
+    return p;
+};
+const plan = (p, network, extra = {}) => planCpfpChild({
+    parentTxid: PARENT, parent: p, sourceAddress: SOURCE, feeRate: 10, parentVbytes: 200, network, ...extra,
+});
+
+describe('planCpfpChild chain dust floor', () => {
+    it('refuses a Dogecoin child output under 100000 koinu that Bitcoin rules would pass', () => {
+        // 392 B package at 10 sat/B = 3920; parent paid 1000, so the child pays 2920 and keeps 47080
+        expect(() => plan(parentPaying(P2PKH, 50000), DOGE)).toThrow(/cannot cover the child fee/);
+        expect(plan(parentPaying(P2PKH, 50000), { dustThreshold: 546, supportsSegwit: false })
+            .encoderOpts.customOutputs).toEqual([{ address: SOURCE, value: 47080 }]);
+    });
+
+    it('sizes a funded Dogecoin child as a 192-byte P2PKH spend', () => {
+        const p = plan(parentPaying(P2PKH, 200000), DOGE);
+        expect(p.packageVbytes).toBe(392);
+        expect(p.childFeeSats).toBe('2920');
+        expect(p.encoderOpts.customOutputs).toEqual([{ address: SOURCE, value: 197080 }]);
+    });
+
+    it('refuses a Litecoin child output under 5460', () => {
+        // 310 vB package = 3100; the child pays 2100 and would keep 4900
+        expect(() => plan(parentPaying(SPK, 7000), LTC)).toThrow(/cannot cover the child fee/);
+        expect(plan(parentPaying(SPK, 7000), BTC).childFeeSats).toBe('2100');
+    });
+
+    it('refuses without a known dust floor instead of assuming 546', () => {
+        expect(() => plan(parent(), undefined)).toThrow(/dust floor is unknown/);
+        expect(() => plan(parent(), { dustThreshold: 0, supportsSegwit: true })).toThrow(/dust floor is unknown/);
+        expect(() => plan(parent(), { supportsSegwit: true })).toThrow(CpfpPlanError);
+    });
+});
+
+describe('planCpfpChild child size and segwit', () => {
+    it('sizes the child from the spent script type', () => {
+        expect(plan(parentPaying(SPK, 20000), BTC).packageVbytes).toBe(310);
+        expect(plan(parentPaying(`a914${'33'.repeat(20)}87`, 20000), BTC).packageVbytes).toBe(334);
+        expect(plan(parentPaying(`5120${'33'.repeat(32)}`, 20000), BTC).packageVbytes).toBe(311);
+    });
+
+    it('refuses a script it cannot size unless childVbytes is passed', () => {
+        const p2wsh = `0020${'33'.repeat(32)}`;
+        expect(() => plan(parentPaying(p2wsh, 20000), BTC)).toThrow(/cannot size the child/);
+        expect(plan(parentPaying(p2wsh, 20000), BTC, { childVbytes: 150 }).packageVbytes).toBe(350);
+    });
+
+    it('refuses a witness output on a chain without segwit', () => {
+        expect(() => plan(parentPaying(SPK, 200000), DOGE)).toThrow(/no segwit/);
+        expect(() => plan(parentPaying(`0020${'33'.repeat(32)}`, 200000), DOGE, { childVbytes: 150 }))
+            .toThrow(/no segwit/);
+    });
+
+    it('planSpeedUp forwards the network to the CPFP branch', () => {
+        expect(() => planSpeedUp({
+            conflict: parentPaying(P2PKH, 50000), parentTxid: PARENT, sourceAddress: SOURCE,
+            feeRate: 10, transactionBytes: 200, network: DOGE,
+        })).toThrow(/cannot cover the child fee/);
+    });
+});
+
 describe('planSpeedUp', () => {
     it('offers CPFP for a parent that is not RBF-flagged', () => {
         expect(signalsReplaceability(parent())).toBe(false);
         const { method, plan } = planSpeedUp({
             conflict: parent(), parentTxid: PARENT, sourceAddress: SOURCE, feeRate: 10, transactionBytes: 200,
+            network: BTC,
         });
         expect(method).toBe('cpfp');
         expect(plan.encoderOpts.options.exactInputs).toBe(true);

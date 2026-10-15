@@ -1,5 +1,5 @@
 /* Inline filter row above the Home asset tabs: a flex-growing search
-   box on the left, a fixed-width network dropdown on the right. */
+   box at the start, a fixed-width network dropdown at the end. */
 .bar {
     display: flex;
     align-items: center;
@@ -21,9 +21,15 @@
     align-items: center;
 }
 
+.searchWrap > div {
+    flex: 1 1 0;
+    width: 100%;
+}
+
 .searchIcon {
     position: absolute;
     inset-inline-start: 10px;
+    z-index: calc(var(--xc-z-base) + 1);
     display: inline-flex;
     align-items: center;
     color: var(--xc-text-muted);
@@ -33,15 +39,15 @@
 .search {
     appearance: none;
     width: 100%;
-    min-height: 38px;
     box-sizing: border-box;
-    padding: var(--xc-space-2) 10px var(--xc-space-2) var(--xc-space-8);
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-space-8) 10px;
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-sm);
+    /* The kit Input md owns the height and radius so the network filter
+       beside it can match them. */
     background: var(--xc-bg);
     color: var(--xc-text);
     font-family: inherit;
-    font-size: var(--xc-text-sm);
 }
 
 /* No focus ring on the search box: the user wants it to look identical

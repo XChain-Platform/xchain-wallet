@@ -110,7 +110,7 @@ afterAll(() => {
 });
 
 describe('primary routes at 768x1024', () => {
-    it('renders Home as a full-width list with rail navigation and a bounded lone card', async () => {
+    it('renders Home as a full-width list with rail navigation and the demo quick actions', async () => {
         markDemoWallet(WALLET_ID);
         const hostMessaging = messaging({
             listWallets: vi.fn().mockResolvedValue([{ id: WALLET_ID, name: 'Tablet demo' }]),
@@ -135,8 +135,9 @@ describe('primary routes at 768x1024', () => {
         const actions = await screen.findByRole('group', { name: 'Quick actions' });
         expectRailNavigation(view.container);
         expectListPage(view.container);
-        expect(actions.className).toMatch(/quickActionsSingle/);
-        expect(within(actions).getAllByRole('button')).toHaveLength(1);
+        // A demo wallet keeps Send (it explains the demo) beside Exchange, so the row holds two actions.
+        expect(actions.className).not.toMatch(/quickActionsSingle/);
+        expect(within(actions).getAllByRole('button')).toHaveLength(2);
         expect(screen.getByRole('button', { name: 'Exchange' })).toBeInTheDocument();
     });
 
@@ -211,10 +212,11 @@ describe('primary routes at 768x1024', () => {
     });
 
     it('locks the portrait sizing rules to cards, list lanes, and the scrollbar gutter', () => {
-        expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form\s*\{[^}]*max-width:\s*560px[^}]*margin:[^;]*auto/s);
-        expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form:not\(\.sectioned\)\s*\{[^}]*background:\s*var\(--xc-surface-raised\)[^}]*border:/s);
+        expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form\s*\{[^}]*max-width:\s*var\(--xc-form-card-max-width\)[^}]*margin:[^;]*auto/s);
+        expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form\s*\{[^}]*background:\s*var\(--xc-card-bg\)[^}]*border:/s);
         expect(listCss).toMatch(/\.page\s*\{[^}]*width:\s*100%[^}]*max-width:\s*48rem[^}]*margin-inline:\s*auto/s);
-        expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto[^}]*scrollbar-gutter:\s*stable/s);
+        expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto/s);
+        expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);
         expect(navCss).toMatch(/\.layout\[data-xc-tier='rail'\] \.sidebar\s*\{[^}]*flex:\s*0 0 64px/s);
         expect(homeCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.quickActionsSingle\s*\{[^}]*grid-template-columns:\s*minmax\(76px, 10rem\)/s);
         expect(collectibleCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.grid\s*\{[^}]*minmax\(10rem, 12rem\)/s);

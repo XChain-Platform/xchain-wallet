@@ -56,7 +56,7 @@ assert.ok(
     'ToastHost computes hiddenCount from the truncated render set',
 );
 assert.ok(
-    /\{hiddenCount > 0 \?[\s\S]*?\+\$\{hiddenCount\} more/.test(src),
+    /\{hiddenCount > 0 \?[\s\S]*?(?:\+\$\{hiddenCount\} more|components\.toastHost\.more', \{ hiddenCount \})/.test(src),
     'overflow indicator renders only when hiddenCount > 0',
 );
 

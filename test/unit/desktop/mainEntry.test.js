@@ -36,7 +36,13 @@ const electron = vi.hoisted(() => {
         constructor(options) {
             browserWindowOptions.push(options);
             this.options = options;
-            this.webContents = { send: vi.fn() };
+            this.webContents = {
+                send: vi.fn(),
+                setVisualZoomLevelLimits: vi.fn(async () => {}),
+                isDestroyed: vi.fn(() => false),
+                reload: vi.fn(),
+                reloadIgnoringCache: vi.fn(),
+            };
             this.loadFile = vi.fn(() => state.loadFileError
                 ? Promise.reject(state.loadFileError)
                 : undefined);
@@ -480,7 +486,7 @@ describe('desktop main entry point', () => {
 
         expect(electron.browserWindowOptions[0]).toMatchObject({
             ...expected,
-            minWidth: 640,
+            minWidth: 360,
             minHeight: 600,
         });
     });
@@ -497,6 +503,32 @@ describe('desktop main entry point', () => {
         await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
 
         expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
+    });
+
+    it.each([
+        {
+            label: 'off every connected display',
+            savedBounds: { x: 4000, y: 3000, width: 900, height: 700 },
+            expected: { width: 900, height: 700 },
+        },
+        {
+            label: 'too small to be usable',
+            savedBounds: { x: 80, y: 60, width: 100, height: 100 },
+            expected: { width: 1024, height: 768 },
+        },
+    ])('drops an unusable saved position when it is $label', async ({ savedBounds, expected }) => {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
+        tempDirs.push(userDataDir);
+        writeFileSync(join(userDataDir, 'window-bounds.json'), JSON.stringify(savedBounds));
+        electron.state.userDataDir = userDataDir;
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
+
+        expect(electron.browserWindowOptions[0]).toMatchObject(expected);
+        expect(electron.browserWindowOptions[0]).not.toHaveProperty('x');
+        expect(electron.browserWindowOptions[0]).not.toHaveProperty('y');
     });
 
     it('restores the saved position on one ultrawide display', async () => {
@@ -517,7 +549,7 @@ describe('desktop main entry point', () => {
         expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
     });
 
-    it('keeps an origin inside either display instead of clamping to the larger overlap', async () => {
+    it('clamps saved bounds inside the display containing their origin', async () => {
         const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
         tempDirs.push(userDataDir);
         const savedBounds = { x: 1800, y: 200, width: 900, height: 700 };
@@ -532,7 +564,10 @@ describe('desktop main entry point', () => {
         await import('../../../packages/desktop/main/index.js');
         await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
 
-        expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
+        expect(electron.browserWindowOptions[0]).toMatchObject({
+            ...savedBounds,
+            x: 1020,
+        });
     });
 
     it('hides on macOS close, permits an explicit quit, and reveals hidden windows', async () => {
@@ -580,8 +615,20 @@ describe('desktop main entry point', () => {
 
         expect(contents.setWindowOpenHandler).toHaveBeenCalledOnce();
         expect(permissions.observeHidFrames).toHaveBeenCalledWith(contents);
-        expect(openHandler({ url: 'https://example.com', frameName: '' })).toEqual({ action: 'deny' });
-        expect(electron.shell.openExternal).toHaveBeenCalledWith('https://example.com');
+        expect(openHandler({
+            url: 'HTTPS://Example.COM/docs?q=one two',
+            frameName: '',
+        })).toEqual({ action: 'deny' });
+        expect(electron.shell.openExternal)
+            .toHaveBeenCalledExactlyOnceWith('https://example.com/docs?q=one%20two');
+
+        expect(openHandler({
+            url: 'https://trusted.example@evil.example/',
+            frameName: '',
+        })).toEqual({ action: 'deny' });
+        expect(openHandler({ url: 'file:///tmp/untrusted.html', frameName: '' }))
+            .toEqual({ action: 'deny' });
+        expect(electron.shell.openExternal).toHaveBeenCalledTimes(1);
 
         const navigation = { preventDefault: vi.fn() };
         handlers.get('will-navigate')(navigation, 'file:///tmp/untrusted.html');
@@ -651,7 +698,19 @@ describe('desktop main entry point', () => {
             sandbox: true,
             nodeIntegration: false,
             webSecurity: true,
+            devTools: false,
         });
+    });
+
+    it('starts at 100 percent zoom and allows pinch zoom only above it', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+
+        const win = createWindow();
+
+        expect(win.options.webPreferences.zoomFactor).toBe(1);
+        // A floor below 1 shows the page zoomed out, so the fixed-height shell
+        // fills part of the window and the whole document scrolls.
+        expect(win.webContents.setVisualZoomLevelLimits).toHaveBeenCalledExactlyOnceWith(1, 3);
     });
 
     it('contains a renderer load rejection and reveals a recoverable window', async () => {
@@ -756,9 +815,14 @@ describe('desktop window bounds on close and quit', () => {
         return { win, handler, onDisk };
     }
 
-    it('writes the latest bounds before the close handler returns', async () => {
-        const { handler, onDisk } = await bootWithSavedBounds();
+    it.each([
+        ['normal', null],
+        ['minimized', 'isMinimized'],
+        ['maximized', 'isMaximized'],
+    ])('writes normal bounds before a %s window close returns', async (_state, stateMethod) => {
+        const { win, handler, onDisk } = await bootWithSavedBounds();
         electron.state.normalBounds = MOVED;
+        if (stateMethod) win[stateMethod] = vi.fn(() => true);
 
         handler('close')({ preventDefault: vi.fn() });
 
@@ -830,8 +894,60 @@ describe('desktop application menu', () => {
         const file = submenu(template, fileLabel);
 
         expect(file.at(-1)).toEqual({ role: finalRole });
-        expect(submenu(template, '&View').map((item) => item.role).filter(Boolean)).toContain('reload');
+        expect(submenu(template, '&View').find((item) => item.label === 'Reload')).toMatchObject({
+            accelerator: 'CmdOrCtrl+R',
+            click: expect.any(Function),
+        });
         expect(actionableLeaves(template).every((item) => item.role || item.click)).toBe(true);
+    });
+
+    it('provides native editing commands and only platform-valid window commands', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        installApplicationMenu({ isMac: false });
+        let template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(submenu(template, '&Edit').map((item) => item.role).filter(Boolean)).toEqual([
+            'undo',
+            'redo',
+            'cut',
+            'copy',
+            'paste',
+            'selectAll',
+        ]);
+        expect(submenu(template, '&Window').map((item) => item.role).filter(Boolean)).toEqual([
+            'minimize',
+            'close',
+        ]);
+
+        installApplicationMenu({ isMac: true });
+        template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(submenu(template, '&Window').map((item) => item.role).filter(Boolean)).toEqual([
+            'minimize',
+            'zoom',
+            'front',
+        ]);
+    });
+
+    it('reloads renderer contents without clearing the unlocked main-process session', async () => {
+        const { createWindow, installApplicationMenu } = await import(
+            '../../../packages/desktop/main/index.js'
+        );
+        const win = createWindow();
+        installApplicationMenu({ isMac: false });
+        const template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        const view = submenu(template, '&View');
+        const reload = view.find((item) => item.label === 'Reload');
+        const forceReload = view.find((item) => item.label === 'Force Reload');
+
+        reload.click({}, win);
+        forceReload.click({}, win);
+
+        expect(reload.accelerator).toBe('CmdOrCtrl+R');
+        expect(forceReload.accelerator).toBe('CmdOrCtrl+Shift+R');
+        expect(win.webContents.reload).toHaveBeenCalledOnce();
+        expect(win.webContents.reloadIgnoringCache).toHaveBeenCalledOnce();
+        expect(runtime.tearDownHost).not.toHaveBeenCalled();
+        expect(runtime.instance.sessionBackend.clear).not.toHaveBeenCalled();
     });
 
     it('places About in the native macOS app menu and invokes it from Help elsewhere', async () => {
@@ -869,7 +985,26 @@ describe('desktop application menu', () => {
             .filter(Boolean)
             .map((accelerator) => accelerator.toLowerCase());
         expect(new Set(accelerators).size).toBe(accelerators.length);
-        expect(accelerators).toEqual(['cmdorctrl+shift+n']);
+        expect(accelerators).toEqual([
+            'cmdorctrl+shift+n',
+            'cmdorctrl+r',
+            'cmdorctrl+shift+r',
+        ]);
+    });
+
+    it('provides native zoom shortcuts including reset to 100 percent', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        installApplicationMenu({ isMac: false });
+        const template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+
+        // Reload and Force Reload are labelled commands, not roles.
+        expect(submenu(template, '&View').map((item) => item.role).filter(Boolean)).toEqual([
+            'resetZoom',
+            'zoomIn',
+            'zoomOut',
+            'togglefullscreen',
+        ]);
     });
 });
 

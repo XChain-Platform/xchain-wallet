@@ -128,7 +128,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 if (Object.keys(signingByChain).length === 0) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before signing.');
+                        : 'No addresses on any network yet. Use Receive to generate one before signing.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
@@ -238,7 +238,7 @@ export function SignMessageForm({ walletId, onBack }) {
         event.preventDefault();
         if (confirmAction.composing || pendingRequestRef.current) return;
         setError(null);
-        if (!chainId) { setError('Pick a chain.'); return; }
+        if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId || !selectedAddress) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
         if (typeof messaging.signMessageRequest !== 'function') {
@@ -279,9 +279,7 @@ export function SignMessageForm({ walletId, onBack }) {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
-                        {loadError}
-                    </div>
+                    <StatusMessage variant="error">{loadError}</StatusMessage>
                 </ListPage>
             </Screen>
         );
@@ -299,7 +297,7 @@ export function SignMessageForm({ walletId, onBack }) {
                             id crashed this screen on every successful signing. */}
                         {chainRegistry.get(signedResult.chainId)
                             ? <ChainBadge descriptor={chainRegistry.get(signedResult.chainId)} size="sm" />
-                            : <span>{signedResult.chainId}</span>}
+                            : null}
                         <AddressText address={signedResult.address} />
                     </div>
                 </div>
@@ -412,7 +410,8 @@ export function SignMessageForm({ walletId, onBack }) {
                         setChainId(nextChainId);
                         if (error) setError(null);
                     }}
-                    label="Chain"
+                    label="Network"
+                    hideNetworkKind
                 />
             </div>
             <Select

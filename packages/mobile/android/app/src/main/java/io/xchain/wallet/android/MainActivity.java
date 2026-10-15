@@ -4,6 +4,7 @@ import android.content.res.Configuration;
 import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.splashscreen.SplashScreen;
 
@@ -29,6 +30,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         splashScreen.setKeepOnScreenCondition(() -> !shellReady);
+        configureSystemBars();
         // Registration must happen BEFORE super.onCreate: that is where the
         // Bridge is built, and a plugin registered afterwards is missing from
         // the map the WebView sees. The symptom would not be a crash - it
@@ -45,10 +47,16 @@ public class MainActivity extends BridgeActivity {
         // FLAG_SECURE stays out of the activity-wide setup. The vault plugin
         // applies it only while the SPA is showing or accepting key material.
         super.onCreate(savedInstanceState);
+        configureWebViewLayout();
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();
         routeBackKeyToTheSpa();
-        lastFontScale = getResources().getConfiguration().fontScale;
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        dispatchFontScale();
     }
 
     /** Releases the launch splash after the SPA has committed its shell. */
@@ -56,41 +64,47 @@ public class MainActivity extends BridgeActivity {
         shellReady = true;
     }
 
-    private float lastFontScale = 1f;
-
-    /**
-     * Follow a system font-size change in place.
-     *
-     * The manifest now claims fontScale (and the Android 12 bold-text
-     * fontWeightAdjustment) as handled, because the default was to destroy
-     * and recreate the activity: the WebView reloaded and the wallet came
-     * back locked mid-task. Measured on an LG K51, 2026-10-12. With the
-     * activity kept, the WebView would otherwise stay at the old size until
-     * the next launch, so scale its text zoom by the same ratio the system
-     * font changed by. Bold text needs nothing here; the WebView reads it
-     * from the configuration on its next layout.
-     */
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        configureWebViewLayout();
+        dispatchFontScale();
+    }
+
+    private void configureSystemBars() {
+        // Capacitor's CSS inset shim keeps edge-to-edge safe on Chrome 102.
+        EdgeToEdge.enable(this);
+        // Day/night resources color the backdrop; SystemBars controls icon contrast.
+    }
+
+    private void configureWebViewLayout() {
         Bridge bridge = getBridge();
         WebView webView = bridge == null ? null : bridge.getWebView();
-        if (webView == null || lastFontScale <= 0f || newConfig.fontScale == lastFontScale) {
-            return;
-        }
+        if (webView == null) return;
+
         WebSettings settings = webView.getSettings();
-        int zoom = Math.round(settings.getTextZoom() * newConfig.fontScale / lastFontScale);
-        settings.setTextZoom(zoom);
-        lastFontScale = newConfig.fontScale;
+        // The SPA's large-text setting owns scaling so fixed layouts stay stable.
+        settings.setTextZoom(100);
+        // The fixed shell does not expose scroll continuation beyond its bounds.
+        webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
+    }
+
+    private void dispatchFontScale() {
+        Bridge bridge = getBridge();
+        if (bridge == null || bridge.getPlugin("App") == null) return;
+        XChainAppPlugin app = (XChainAppPlugin) bridge.getPlugin("App").getInstance();
+        app.dispatchFontScale(getResources().getConfiguration().fontScale);
     }
 
     /**
      * Send the system Back gesture to the SPA's topmost back handler.
      *
-     * The narrow App plugin exposes only the back event and minimization. The
-     * SPA handler stack closes overlays before routes and preserves in-route
-     * stages that do not create browser history entries. With no listener,
-     * the task moves to the background instead of destroying the flow.
+     * The narrow App plugin exposes the back event, minimization and the
+     * font-scale bridge. The SPA handler stack closes overlays before routes
+     * and preserves in-route stages that do not create browser history
+     * entries. The SPA also owns the Home-root decision, so a missing listener
+     * swallows Back instead of guessing that an unfinished flow is safe to
+     * leave.
      */
     private void routeBackKeyToTheSpa() {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -103,8 +117,7 @@ public class MainActivity extends BridgeActivity {
                     app = (XChainAppPlugin) bridge.getPlugin("App").getInstance();
                 }
                 boolean canGoBack = webView != null && webView.canGoBack();
-                if (app != null && app.dispatchBackButton(canGoBack)) return;
-                moveTaskToBack(true);
+                if (app != null) app.dispatchBackButton(canGoBack);
             }
         });
     }

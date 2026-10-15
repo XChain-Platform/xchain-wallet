@@ -46,7 +46,7 @@ import {
     classifyVersionRecord, credentialsFromEnv, bundleIdFromProject, shippedCapabilities,
     ascToken, EXIT, CANONICAL_PRIVACY_URL, SEED_PLACEHOLDER, REQUIRED_SCREENSHOT_TYPES,
     SCREENSHOT_DIR_BY_TYPE, pinnedListingDigests, tagDerivations, selectVersionRecord, fetchVersionRecord,
-    checkAppStoreVersion,
+    checkAppStoreVersion, redactReviewDetail,
 } from '../../../tools/release/verify-appstore-version.mjs';
 
 const SHIPS_BOTH = { messaging: true, betting: true };
@@ -605,6 +605,130 @@ async function fetchWith(listed, marketing) {
     assert.equal(gated.checks[0].id, 'version-record', 'and the failure is printed as a FAIL line');
     const tagless = await checkAppStoreVersion({ env, fetchImpl });
     assert.equal(tagless.exit, EXIT.INCONCLUSIVE, 'only a live version and no tag is inconclusive, never READY');
+}
+
+// --- a read that failed is not an answer -----------------------------------
+// Every follow-up read after the version list is routed here by name, so one
+// can fail while the rest answer as a healthy record would.
+
+const FOLLOW_UPS = [
+    ['build', /\/v1\/appStoreVersions\/[^/]+\/build$/],
+    ['build detail', /\/v1\/builds\/[^/]+$/],
+    ['review detail', /\/appStoreReviewDetail$/],
+    ['localizations', /\/v1\/appStoreVersions\/[^/]+\/appStoreVersionLocalizations$/],
+    ['screenshot sets', /\/appScreenshotSets$/],
+    ['screenshots', /\/appScreenshots$/],
+    ['app infos', /\/v1\/apps\/[^/]+\/appInfos$/],
+    ['age rating', /\/ageRatingDeclaration$/],
+    ['app info localizations', /\/appInfoLocalizations$/],
+];
+
+// Answer every App Store Connect read as a healthy record would, except the one named to fail
+function appleWith({ versions = [NEXT], fail = null, status = 500, reviewDetail = null, overrides = {} } = {}) {
+    const answers = {
+        build: { data: { id: 'build-1' } },
+        'build detail': { data: { attributes: { version: '3360050', processingState: 'VALID', expired: false } } },
+        'review detail': { data: { attributes: reviewDetail ?? healthyRecord().reviewDetail } },
+        localizations: { data: [{ id: 'loc-1' }] },
+        'screenshot sets': { data: [{ id: 'set-1', attributes: { screenshotDisplayType: REQUIRED_SCREENSHOT_TYPES[0] } }] },
+        screenshots: { data: [] },
+        'app infos': { data: [{ id: 'info-1', attributes: { appStoreAgeRating: 'FOUR_PLUS' } }] },
+        'age rating': { data: { attributes: { gambling: false } } },
+        'app info localizations': { data: [{ attributes: { locale: 'en-US', privacyPolicyUrl: CANONICAL_PRIVACY_URL } }] },
+        ...overrides,
+    };
+    return async (url) => {
+        const path = new URL(url).pathname;
+        if (url.includes('/v1/apps?filter[bundleId]=')) {
+            return { status: 200, json: async () => ({ data: [{ id: 'app-1', attributes: { name: 'XChain Wallet', bundleId: 'io.xchain.wallet' } }] }) };
+        }
+        if (url.includes('/appStoreVersions?')) return { status: 200, json: async () => ({ data: versions }) };
+        const [name] = FOLLOW_UPS.find(([, re]) => re.test(path)) ?? [null];
+        assert.ok(name, `the fixture has no route for ${path}`);
+        if (name === fail && status === 'unparsable') {
+            return { status: 200, json: async () => { throw new SyntaxError('Unexpected token < in JSON'); } };
+        }
+        if (name === fail) return { status, json: async () => ({ errors: [{ status: String(status) }] }) };
+        return { status: 200, json: async () => answers[name] };
+    };
+}
+
+const GATE_ENV = { APPLE_API_KEY: KEY_PEM, APPLE_API_KEY_ID: 'TESTKEYID', APPLE_API_ISSUER: 'test-issuer' };
+{
+    // The control: with every read answering, each follow-up route is reached.
+    const reached = new Set();
+    const healthyApple = appleWith();
+    await fetchVersionRecord({
+        token: 'TOK', bundleId: 'io.xchain.wallet',
+        fetchImpl: async (url) => {
+            const hit = FOLLOW_UPS.find(([, re]) => re.test(new URL(url).pathname));
+            if (hit) reached.add(hit[0]);
+            return healthyApple(url);
+        },
+    });
+    assert.deepEqual([...reached].sort(), FOLLOW_UPS.map(([name]) => name).sort(),
+        'every follow-up read must be reached by the healthy fixture, or a failure case below proves nothing');
+
+    const misread = [];
+    for (const [name] of FOLLOW_UPS) {
+        for (const status of [500, 429, 'unparsable']) {
+            const fetched = await fetchVersionRecord({ token: 'TOK', bundleId: 'io.xchain.wallet', fetchImpl: appleWith({ fail: name, status }) });
+            const gated = await checkAppStoreVersion({ env: GATE_ENV, fetchImpl: appleWith({ fail: name, status }) });
+            if (fetched.verdict !== 'inconclusive' || gated.exit !== EXIT.INCONCLUSIVE) {
+                misread.push(`${name} ${status}: verdict ${fetched.verdict}, exit ${gated.exit}${gated.reason ? '' : ` (${gated.checks.filter((c) => c.state === 'failure').map((c) => c.id).join(', ')})`}`);
+            }
+        }
+    }
+    assert.deepEqual(misread, [],
+        'a follow-up read that failed must be INCONCLUSIVE (exit 3), never a FAILURE with a reason Apple never gave');
+
+    // A failed read names what could not be read, so the operator is not sent to repair a record that is fine.
+    const buildDown = await checkAppStoreVersion({ env: GATE_ENV, fetchImpl: appleWith({ fail: 'build', status: 503 }) });
+    assert.match(buildDown.reason, /HTTP 503 reading the attached build/);
+
+    // The version id carries 0.401.0, which the credential pattern would read as a 401.
+    const v401 = verRec('0.401.0', 'PREPARE_FOR_SUBMISSION');
+    const tagged401 = await checkAppStoreVersion({ env: GATE_ENV, tag: 'v0.401.0', fetchImpl: appleWith({ versions: [v401], fail: 'build' }) });
+    assert.equal(tagged401.exit, EXIT.INCONCLUSIVE, 'a failed read on version 0.401.0 is inconclusive, not a credential problem');
+
+    // Apple's own "no build attached" is a 200 carrying null, and it stays a FAILURE.
+    const detached = await checkAppStoreVersion({ env: GATE_ENV, fetchImpl: appleWith({ overrides: { build: { data: null } } }) });
+    assert.equal(detached.exit, EXIT.FAILURE, 'a 200 with no build attached is still DO NOT SUBMIT');
+    assert.deepEqual(state(detached, 'build-attached'), ['failure']);
+}
+
+// --- the outcome never carries what App Review holds -----------------------
+// After Phase 7 the notes hold a funded demo seed, and the same object holds
+// the demo password and the contact's details; --json prints the outcome whole.
+
+const SENTINELS = ['sentinel-seed-alpha', 'sentinel-user', 'sentinel-pass-7781', '555 0199', 'sentinel@example.invalid', 'SentinelFirst', 'SentinelLast'];
+const SENTINEL_DETAIL = {
+    contactFirstName: 'SentinelFirst', contactLastName: 'SentinelLast',
+    contactPhone: '+1 555 0199', contactEmail: 'sentinel@example.invalid',
+    demoAccountName: 'sentinel-user', demoAccountPassword: 'sentinel-pass-7781', demoAccountRequired: true,
+    notes: '1. Import the phrase below.\n2. Open Settings and set Network to "Testnet".\nDEMO SEED: sentinel-seed-alpha bravo',
+};
+{
+    const out = await checkAppStoreVersion({ env: GATE_ENV, fetchImpl: appleWith({ reviewDetail: SENTINEL_DETAIL }) });
+    assert.ok(out.record, 'the outcome still carries the record');
+    const printed = JSON.stringify(out, null, 2);
+    assert.deepEqual(SENTINELS.filter((s) => printed.includes(s)), [],
+        'the serialized outcome must carry no review-detail value: not the seed, the demo login, nor the contact');
+    assert.deepEqual(state(out, 'review-contact'), ['ok'], 'the classifier still judged the real contact fields');
+    assert.deepEqual(state(out, 'review-notes-seed'), ['ok'], 'the classifier still judged the real notes');
+    assert.deepEqual(out.record.reviewDetail.notes, { present: true, length: SENTINEL_DETAIL.notes.length });
+    assert.equal(out.record.reviewDetail.seedFilled, true);
+    assert.equal(out.record.reviewDetail.demoAccountRequired, true, 'a boolean carries no secret and passes through');
+}
+{
+    const placeholder = redactReviewDetail({ notes: `DEMO SEED: ${SEED_PLACEHOLDER}`, contactPhone: '   ', contactEmail: null });
+    assert.equal(placeholder.seedFilled, false, 'the unfilled placeholder is not a filled seed');
+    assert.equal(placeholder.contactPhone.present, false, 'a blank field is not present');
+    assert.deepEqual(placeholder.contactEmail, { present: false, length: 0 });
+    const later = redactReviewDetail({ someFieldAppleAddsLater: 'sentinel-pass-7781', nested: { secret: 'sentinel-user' } });
+    assert.deepEqual(SENTINELS.filter((s) => JSON.stringify(later).includes(s)), [],
+        'a field the redaction has never heard of is reduced too, never echoed');
+    assert.deepEqual(redactReviewDetail(undefined), { seedFilled: false });
 }
 
 console.log('appstore-version-check.smoke.js: OK');

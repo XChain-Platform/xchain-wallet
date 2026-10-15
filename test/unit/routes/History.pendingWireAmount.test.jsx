@@ -93,6 +93,19 @@ afterEach(() => {
     try { window.localStorage.clear(); } catch { /* jsdom without storage */ }
 });
 
+
+/**
+ * The decoded output line reading "<amount> to <address>". The address keeps
+ * both ends on screen and the whole value in its title.
+ */
+function outputLine(container, amount, address) {
+    const short = `${address.slice(0, 6)}…${address.slice(-6)}`;
+    return within(container).getAllByRole('listitem').find((li) => (
+        li.textContent.startsWith(`${amount} to ${short}`)
+        && li.querySelector(`[title="${address}"]`)
+    )) || null;
+}
+
 describe('History refuses a pending SEND whose amount is not an amount', () => {
     it('prints no figure for a non-numeric amount and shows the raw segments instead', async () => {
         const { view } = mountHistory({ mempool: [sendRow('abc')] });
@@ -157,7 +170,7 @@ describe('History still shows a well-formed pending amount exactly', () => {
         expect(annotation(view).textContent).toBe('receiving +100 XCHAIN');
 
         const panel = await openPendingPanel(view);
-        expect(within(panel).getByText(`+100 XCHAIN to ${OURS}`)).toBeTruthy();
+        expect(outputLine(panel, `+100 XCHAIN`, OURS)).toBeTruthy();
     });
 
     it('groups a decimal past float precision without changing its digits', async () => {
@@ -170,7 +183,7 @@ describe('History still shows a well-formed pending amount exactly', () => {
         expect(annotation(view).textContent).toBe(`receiving +${displayed} XCHAIN`);
 
         const panel = await openPendingPanel(view);
-        expect(within(panel).getByText(`+${displayed} XCHAIN to ${OURS}`)).toBeTruthy();
+        expect(outputLine(panel, `+${displayed} XCHAIN`, OURS)).toBeTruthy();
     });
 
     it('keeps a small amount whose float round-trip becomes exponent notation', async () => {

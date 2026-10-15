@@ -29,8 +29,13 @@ const laneFeeds = parseLaneFeeds(lanesText);
 const FILE = 'xchain-wallet-0.333.1-x86_64.AppImage';
 const HASH = 'a'.repeat(64);
 
-/** A manifest body with optional header lines, covering FILE. */
+/** A gated manifest body with optional header lines, covering FILE. */
 function manifest(...header) {
+    return ungated('# dev-mock-gate: enforced', ...header);
+}
+
+/** The same body with no gate line unless the caller writes one. */
+function ungated(...header) {
     return ['# XChain Wallet release manifest', '# tag: v0.333.1', ...header, `${HASH}  ${FILE}`, ''].join('\n');
 }
 
@@ -97,5 +102,19 @@ assert.match(checkPointers({ pointers: [], manifestText: manifest('# lanes:'), t
     .join('\n'), /names no lane/, 'an empty lanes header is a refusal');
 assert.match(checkPointers({ pointers: [], manifestText: manifest(), tag: 'v0.333.1', channel: 'stable', lanesText: '# nothing\n' })
     .join('\n'), /declares no lanes/, 'an empty lane list is a refusal');
+
+// The dev-mock gate, read the way updateVerify.js reads it: only `enforced` passes.
+const linuxPair = [{ name: 'stable-linux.yml', text: yml('0.333.1') }, { name: 'stable-linux-arm64.yml', text: yml('0.333.1') }];
+const gateCheck = (text) => checkPointers({ pointers: linuxPair, manifestText: text, tag: 'v0.333.1', channel: 'stable', lanesText });
+assert.match(gateCheck(ungated('# dev-mock-gate: SKIPPED', '# coverage: partial', '# lanes: linux')).join('\n'),
+    /dev-mock gate as 'SKIPPED', not 'enforced'/, 'a linux partial signed with the gate skipped is refused before upload');
+assert.match(gateCheck(ungated('# coverage: partial', '# lanes: linux')).join('\n'),
+    /dev-mock gate as 'unrecorded', not 'enforced'/, 'a manifest that records no gate is refused as unrecorded');
+assert.match(gateCheck(ungated('# dev-mock-gate:enforced', '# coverage: partial', '# lanes: linux')).join('\n'),
+    /dev-mock gate as 'unrecorded'/, 'a gate line the client cannot split (no space after the colon) does not pass');
+assert.deepEqual(checkPointers({
+    pointers: [], manifestText: ungated('# dev-mock-gate: SKIPPED', '# coverage: partial', '# lanes: android'),
+    tag: 'v0.333.1', channel: 'stable', lanesText,
+}), [], 'a store-only partial with no pointer is not judged on the updater gate');
 
 console.log('pointer-gate.smoke.js: ok');

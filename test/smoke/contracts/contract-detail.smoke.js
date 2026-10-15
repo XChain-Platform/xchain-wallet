@@ -85,9 +85,10 @@ for (const label of [
 
 // Owner "(you)" flag when address matches.
 assert.ok(/\(you\)/.test(detailSrc), 'ContractDetail flags owner-matches-wallet as "(you)"');
-// Pagination Prev/Next.
-assert.ok(/← Prev/.test(detailSrc) && /Next →/.test(detailSrc),
-    'ContractDetail paginates execution history');
+// Pagination uses the shared directional icons so RTL mirrors both controls.
+assert.ok(/<Icon\.BackIcon\s*\/>\s*Prev/.test(detailSrc)
+    && /Next\s*<Icon\.ForwardIcon\s*\/>/.test(detailSrc),
+    'ContractDetail paginates execution history with RTL-aware icons');
 // Action buttons.
 for (const label of ['Call method', 'Deposit', 'Withdraw']) {
     assert.ok(detailSrc.includes(label), `ContractDetail renders "${label}" button`);

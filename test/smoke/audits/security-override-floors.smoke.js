@@ -10,9 +10,9 @@
 
 // A security override that is SET is not a security override that WORKS.
 //
-// pnpm-config-parity.smoke.js already proves the override set is identical in
-// its three homes. That check is blind to the two ways a pin still leaves the
-// advisory open:
+// pnpm-config-parity.smoke.js already proves the workspace override set
+// matches the lockfile. That check is blind to the two ways a pin still leaves
+// the advisory open:
 //
 //   1. The pin names a version BELOW the patched one. `brace-expansion@5:
 //      ^5.0.6` reads like a security pin and resolved 5.0.6, which is
@@ -23,9 +23,8 @@
 //      alerts had been declared closed by.
 //
 //   2. The pin is raised and the lockfile is not regenerated. `pnpm install`
-//      resolves overrides at install time, so package.json and the workspace
-//      file can agree on a floor that no installed tree has ever seen. What
-//      ships is the lockfile.
+//      resolves overrides at install time, so the workspace can name a floor
+//      that no installed tree has ever seen. What ships is the lockfile.
 //
 // So this file records, separately from the pins, the version each advisory
 // was actually patched in, and asserts BOTH the pin and the resolved version
@@ -40,6 +39,22 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
+
+/** Read a top-level YAML mapping without depending on the install it guards. */
+function parseTopLevelMap(text, topKey) {
+    const out = {};
+    let inBlock = false;
+    for (const raw of text.split('\n')) {
+        if (/^[A-Za-z]/.test(raw)) {
+            inBlock = new RegExp(`^${topKey}:\\s*$`).test(raw);
+            continue;
+        }
+        if (!inBlock || !raw.trim() || raw.trimStart().startsWith('#')) continue;
+        const pair = /^\s+'?([^'\s:][^:]*?)'?:\s*'?(.+?)'?\s*$/.exec(raw);
+        if (pair) out[pair[1]] = pair[2];
+    }
+    return out;
+}
 
 /**
  * The version each advisory was patched in, keyed by the override that closes
@@ -123,9 +138,8 @@ function resolvedVersions(lockText) {
     return out;
 }
 
-const pkg = JSON.parse(read('package.json'));
 const lockText = read('pnpm-lock.yaml');
-const overrides = pkg.pnpm?.overrides ?? {};
+const overrides = parseTopLevelMap(read('pnpm-workspace.yaml'), 'overrides');
 const installed = resolvedVersions(lockText);
 
 assert.ok(Object.keys(installed).length > 100,
@@ -138,7 +152,7 @@ assert.ok(Object.keys(installed).length > 100,
 for (const [key, { floor, advisories }] of Object.entries(ADVISORY_FLOORS)) {
     const spec = overrides[key];
     assert.ok(spec,
-        `override "${key}" is gone from package.json, but ${advisories.join(', ')} still needs a floor at `
+        `override "${key}" is gone from pnpm-workspace.yaml, but ${advisories.join(', ')} still needs a floor at `
         + `${floor}. Removing a security pin is a decision; make it here too, with the reason.`);
 
     const pinned = lowestAdmitted(spec);
@@ -168,7 +182,7 @@ for (const [key, { floor, advisories }] of Object.entries(ADVISORY_FLOORS)) {
     for (const version of inScope) {
         assert.ok(compare(version, floor) >= 0,
             `pnpm-lock.yaml resolved "${name}" at ${version}, below the ${floor} that patched `
-            + `${advisories.join(', ')}. This is what installs, whatever package.json says: `
+            + `${advisories.join(', ')}. This is what installs, whatever the workspace says: `
             + 'run pnpm install to regenerate the lockfile against the raised pin.');
     }
 }

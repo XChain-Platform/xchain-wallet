@@ -32,6 +32,7 @@ const {
     writeTokenInfoCache,
     tokenInfoCacheKey,
     clearTokenInfoCache,
+    subscribeTokenInfoInvalidation,
 } = await import('../../../packages/core/src/shared/utils/tokenInfoCache.js');
 
 const CHAIN = 'bitcoin-regtest';
@@ -106,6 +107,35 @@ describe('submitAction tick-metadata invalidation', () => {
         });
 
         expect(readTokenInfoCache(tokenInfoCacheKey(CHAIN, TICK)).hit).toBe(false);
+    });
+
+    it('drops it for permanent lock flags so detail refetches the locked state', async () => {
+        seedCache();
+        const h = harness();
+        const invalidated = vi.fn();
+        const unsubscribe = subscribeTokenInfoInvalidation(invalidated);
+
+        try {
+            await submitAction({
+                vault: h.vault,
+                walletId: 'w1',
+                chainRegistry: h.chainRegistry,
+                sdkRegistry: h.sdkRegistry,
+                chainId: CHAIN,
+                actionData: {
+                    action: 'ISSUE',
+                    params: { TICK, VERSION: '3', LOCK_MAX_SUPPLY: '1', LOCK_DESCRIPTION: '1' },
+                },
+                encoderOpts: { pubkey: 'ab' },
+                signingPaths: [{ inputIndex: 0, path: "m/84'/1'/0'/0/0" }],
+                signer: h.signer,
+            });
+        } finally {
+            unsubscribe();
+        }
+
+        expect(readTokenInfoCache(tokenInfoCacheKey(CHAIN, TICK)).hit).toBe(false);
+        expect(invalidated).toHaveBeenCalledWith({ chainId: CHAIN, tick: TICK });
     });
 
     it('keeps the record when the broadcast never succeeded', async () => {

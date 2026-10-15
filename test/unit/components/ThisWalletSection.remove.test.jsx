@@ -83,7 +83,7 @@ describe('ThisWalletSection removal completion', () => {
 
         expect(screen.getByRole('heading', { name: `Remove ${ACTIVE_WALLET.name}?` })).toBeTruthy();
         expect(screen.getByText(/Make sure you have a backup before continuing/)).toBeTruthy();
-        expect(screen.getByText(/encrypted seed is destroyed and cannot be recovered/)).toBeTruthy();
+        expect(screen.getByText(/encrypted seed is destroyed and can't be recovered/)).toBeTruthy();
     });
 
     it('submits an exact wallet-name confirmation with Enter', async () => {
@@ -92,8 +92,9 @@ describe('ThisWalletSection removal completion', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
         const confirmation = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         expect(screen.getByText('Remove Active Wallet?')).toBeTruthy();
-        expect(screen.getByText(/Removing this wallet deletes its accounts, addresses, signers, and pending transactions/)).toBeTruthy();
-        expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
+        expect(screen.getByText(/Its accounts, addresses, signers, and pending transactions will be deleted/)).toBeTruthy();
+        expect(screen.queryByText(/Removing this wallet/)).toBeNull();
+        expect(screen.getByText(/This can't be undone/)).toBeTruthy();
         expect(confirmation).toHaveAttribute('enterkeyhint', 'done');
         fireEvent.change(confirmation, { target: { value: ACTIVE_WALLET.name } });
         fireEvent.keyDown(confirmation, { key: 'Enter' });
@@ -179,7 +180,7 @@ describe('ThisWalletSection removal completion', () => {
 
         await removeActiveWallet();
 
-        expect(await screen.findByText(/could not finish switching wallets: List failed/)).toBeTruthy();
+        expect(await screen.findByText(/couldn't finish switching wallets: List failed/)).toBeTruthy();
         expect(globalThis.localStorage.getItem('xc:activeWallet')).toBeNull();
         expect(reload).toHaveBeenCalledOnce();
         expect(wipeWalletStorage).not.toHaveBeenCalled();

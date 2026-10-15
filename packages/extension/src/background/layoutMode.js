@@ -38,11 +38,16 @@
 
 const STORAGE_KEY = 'xchain.layoutMode';
 const POPUP_PATH = 'popup.html';
+let appliedMode = 'popup';
 
 export const LAYOUT_MODES = /** @type {const} */ (['popup', 'sidepanel']);
 
 export function isSidePanelSupported() {
     return typeof chrome !== 'undefined' && !!chrome.sidePanel;
+}
+
+export function currentLayoutMode() {
+    return appliedMode;
 }
 
 export async function readLayoutMode() {
@@ -73,6 +78,7 @@ export async function writeLayoutMode(mode) {
 export async function applyLayoutMode(mode) {
     if (typeof chrome === 'undefined') return;
     const wantSide = mode === 'sidepanel' && isSidePanelSupported();
+    appliedMode = wantSide ? 'sidepanel' : 'popup';
     try {
         if (wantSide) {
             // Empty popup string = action click falls through to the

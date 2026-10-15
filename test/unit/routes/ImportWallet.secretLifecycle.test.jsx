@@ -42,7 +42,9 @@ describe('ImportWallet secret lifecycle', () => {
     it('clears hidden inputs whenever the import type changes', () => {
         renderImport();
         fillPhraseImport();
-        fireEvent.click(screen.getByLabelText(/This wallet uses a BIP39 passphrase/));
+        fireEvent.click(screen.getByRole('switch', {
+            name: /This wallet uses a BIP39 passphrase/,
+        }));
         fireEvent.change(screen.getByLabelText('BIP39 passphrase'), {
             target: { value: 'phrase-password' },
         });
@@ -61,7 +63,9 @@ describe('ImportWallet secret lifecycle', () => {
         expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
-        expect(screen.getByLabelText(/This wallet uses a BIP39 passphrase/)).not.toBeChecked();
+        expect(screen.getByRole('switch', {
+            name: /This wallet uses a BIP39 passphrase/,
+        })).not.toBeChecked();
 
         fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
         expect(screen.getByLabelText('WIF private key')).toHaveValue('');

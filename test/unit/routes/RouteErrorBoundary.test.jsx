@@ -12,17 +12,20 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RouteErrorBoundary } from '../../../packages/core/src/shared/components/RouteErrorBoundary.jsx';
+import { logConsole } from '../../../packages/core/src/shared/utils/logConsole.js';
 
 let consoleError;
 const preventExpectedError = (event) => event.preventDefault();
 
 beforeEach(() => {
+    logConsole.clear();
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('error', preventExpectedError);
 });
 
 afterEach(() => {
     cleanup();
+    logConsole.clear();
     window.removeEventListener('error', preventExpectedError);
     consoleError.mockRestore();
 });
@@ -51,17 +54,17 @@ describe('RouteErrorBoundary', () => {
     it('replaces a throwing route and returns Home without unmounting the session', async () => {
         render(<TestRouter />);
 
-        expect(screen.getByRole('heading', { name: 'This screen could not be shown' })).toBeTruthy();
-        expect(screen.getByText(/without locking your wallet/i)).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'This screen couldn\'t be shown' })).toBeTruthy();
+        expect(screen.getByText('Something went wrong while showing this screen. Try again or go to Home.')).toBeTruthy();
         expect(screen.getByTestId('session-provider')).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back to Home' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Go to Home' }));
 
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Wallet Home' })).toBeTruthy());
         expect(screen.getByTestId('session-provider')).toBeTruthy();
     });
 
-    it('offers reload when there is no Home route', () => {
+    it('uses the application entry point when there is no Home route', () => {
         const onReload = vi.fn();
         render(
             <RouteErrorBoundary onReload={onReload}>
@@ -69,9 +72,31 @@ describe('RouteErrorBoundary', () => {
             </RouteErrorBoundary>,
         );
 
-        expect(screen.queryByRole('button', { name: 'Back to Home' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Go to Home' }));
         expect(onReload).toHaveBeenCalledOnce();
+    });
+
+    it('logs one safe diagnostic without error details', () => {
+        const secret = 'correct horse battery staple';
+
+        function SecretThrowingRoute() {
+            throw new Error(secret);
+        }
+
+        render(
+            <RouteErrorBoundary>
+                <SecretThrowingRoute />
+            </RouteErrorBoundary>,
+        );
+
+        const entries = logConsole.entries();
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({
+            level: 'error',
+            source: 'ui:route',
+            message: 'Route render failed',
+        });
+        expect(JSON.stringify(entries)).not.toContain(secret);
     });
 
     it('retries a render without exposing the error or stack trace', async () => {
@@ -105,9 +130,9 @@ describe('RouteErrorBoundary', () => {
             </RouteErrorBoundary>,
         );
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
-        expect(screen.queryByRole('heading', { name: 'This screen could not be shown' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Go to Home' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'This screen couldn\'t be shown' })).toBeNull();
     });
 });

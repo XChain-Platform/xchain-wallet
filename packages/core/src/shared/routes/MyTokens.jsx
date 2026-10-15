@@ -298,10 +298,12 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                             {/* A bridged copy reads as its bare
                                                 name plus an origin badge; the
                                                 rooted wire name is on hover. */}
-                                            <BridgeOriginTick
-                                                tick={row.tick}
-                                                localCoin={coinFromChainId(row.chainId)}
-                                            />
+                                            <span className={styles.rowTickName} title={row.tick}>
+                                                <BridgeOriginTick
+                                                    tick={row.tick}
+                                                    localCoin={coinFromChainId(row.chainId)}
+                                                />
+                                            </span>
                                             {row.locked ? (
                                                 <span className={styles.lockedBadge} title="Supply locked">
                                                     <Icon.LockIcon />

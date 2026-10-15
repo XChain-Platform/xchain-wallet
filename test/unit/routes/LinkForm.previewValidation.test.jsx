@@ -44,11 +44,12 @@ describe('LinkForm action preview validation', () => {
         );
 
         const inputs = await screen.findAllByLabelText('Action to reference');
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
 
         expect(await screen.findByRole('button', { name: 'Looking up actions…' })).toBeDisabled();
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify the action on chain A'));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify the action on the network A'));
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -78,5 +79,35 @@ describe('LinkForm action preview validation', () => {
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Cannot link an action to itself');
         expect(client.getActionByIndex).not.toHaveBeenCalled();
+    });
+
+    it('returns from review without resubmitting and preserves both action indices', async () => {
+        const btc = address('btc-1', BTC);
+        const ltc = address('ltc-1', LTC);
+        const client = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+            getActionByIndex: vi.fn().mockResolvedValue({ action: 'SEND', tick: 'TOKEN', amount: '1' }),
+        };
+
+        render(
+            <MessagingProvider shell="web" messaging={client}>
+                <LinkForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const inputs = await screen.findAllByLabelText('Action to reference');
+        fireEvent.change(inputs[0], { target: { value: '10' } });
+        fireEvent.change(inputs[1], { target: { value: '20' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
+        const restored = await screen.findAllByLabelText('Action to reference');
+        expect(restored[0]).toHaveValue('10');
+        expect(restored[1]).toHaveValue('20');
+        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     });
 });

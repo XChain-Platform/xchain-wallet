@@ -8,17 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// EmptyStateNudge (§27.7 / §27.8 / §28 / G077). Replaces bare
-// "No X yet" text placeholders with a content-shaped empty state that
-// includes an optional primary action button. Used by Balance, History,
-// and AddressList when the underlying dataset is empty.
-//
-// Optional `actionLabel` + `onAction` render a primary button (typically
-// the Receive CTA) so the user has a one-tap nudge toward populating
-// the view.
-
-import { Button } from '@xchain-wallet/core/ui';
-import styles from './EmptyStateNudge.module.css';
+import { EmptyState } from '../../ui/EmptyState.jsx';
 
 /**
  * @param {object} props
@@ -37,22 +27,16 @@ export function EmptyStateNudge({
     icon,
     role,
 }) {
+    const hasAction = actionLabel && onAction;
+
     return (
-        <div className={styles.wrap} role={role}>
-            <div className={styles.title}>{title}</div>
-            {body ? <p className={styles.body}>{body}</p> : null}
-            {actionLabel && onAction ? (
-                <div className={styles.actions}>
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={onAction}
-                        icon={icon}
-                    >
-                        {actionLabel}
-                    </Button>
-                </div>
-            ) : null}
-        </div>
+        <EmptyState
+            title={title}
+            body={body}
+            actionLabel={hasAction ? actionLabel : undefined}
+            onAction={hasAction ? onAction : undefined}
+            actionIcon={icon}
+            role={role ?? null}
+        />
     );
 }

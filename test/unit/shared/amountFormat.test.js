@@ -283,9 +283,24 @@ describe('shared/amountFormat token precision validation', () => {
 describe('shared/amountFormat exact rendering', () => {
     it('converts validated decimal input to base units without a Number round trip', () => {
         expect(decimalToBaseUnits('90071992.54740993', 8)).toBe(9007199254740993n);
+        expect(decimalToBaseUnits('1.230000000000000000', 8)).toBe(123000000n);
         expect(decimalToBaseUnits('1.000000001', 8)).toBeNull();
         expect(decimalToBaseUnits('.', 8)).toBeNull();
         expect(decimalToBaseUnits('1e-8', 8)).toBeNull();
+    });
+
+    it('converts every supported asset divisibility and very large supplies exactly', () => {
+        for (let divisibility = 0; divisibility <= 18; divisibility += 1) {
+            const fraction = divisibility === 0 ? '' : `.${'0'.repeat(divisibility - 1)}1`;
+            expect(decimalToBaseUnits(`1${fraction}`, divisibility))
+                .toBe((10n ** BigInt(divisibility)) + (divisibility === 0 ? 0n : 1n));
+        }
+        expect(decimalToBaseUnits('123456789012345678901234567890.123456789012345678', 18))
+            .toBe(123456789012345678901234567890123456789012345678n);
+    });
+
+    it.each([-1, 1.5, Number.NaN, 101])('rejects invalid divisibility %s without throwing', (divisibility) => {
+        expect(decimalToBaseUnits('1', divisibility)).toBeNull();
     });
 
     it.each([

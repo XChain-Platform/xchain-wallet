@@ -81,6 +81,7 @@ export const FINDINGS = {
     'POINTER-HASH': "a pointer's sha512 does not match the bytes it names",
     'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
+    'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced, which every desktop client refuses",
     'MANIFEST-UNSIGNED': 'a manifest with no detached signature beside it',
     'MANIFEST-BAD-SIG': 'a manifest whose signature did not verify',
 };
@@ -222,11 +223,13 @@ export function directFeedRejection(text) {
  *
  * @param {string} text
  * @param {string} name  the manifest's file name, for the tag fallback
- * @returns {{tag: string, entries: Map<string,string>}}
+ * @returns {{tag: string, gate: string, entries: Map<string,string>}}
+ *   `gate` is the signed `# dev-mock-gate:` value, '' when the header is absent
  */
 export function parseManifestText(text, name) {
     const entries = new Map();
     let tag = '';
+    let gate = '';
 
     for (const rawLine of text.split('\n')) {
         // STRIP THE CARRIAGE RETURN, as every other reader of these files
@@ -242,12 +245,18 @@ export function parseManifestText(text, name) {
         const line = rawLine.replace(/\r$/, '');
         const header = /^# tag:\s*(.+)$/.exec(line);
         if (header) { tag = header[1].trim(); continue; }
+        // Read the gate key exactly as updateVerify.js parseManifest splits it.
+        const split = line.startsWith('#') ? line.indexOf(': ') : -1;
+        if (split > 1 && line.slice(2, split).trim() === 'dev-mock-gate') {
+            gate = line.slice(split + 2).trim();
+            continue;
+        }
         if (line.startsWith('#') || line.trim() === '') continue;
         const m = /^([0-9a-fA-F]{64})\s\s(.+)$/.exec(line);
         if (!m) continue;
         entries.set(basename(m[2].trim()), m[1].toLowerCase());
     }
-    return { tag: tag || name.replace(/\.txt$/, ''), entries };
+    return { tag: tag || name.replace(/\.txt$/, ''), gate, entries };
 }
 
 export function parseManifest(path) {
@@ -411,6 +420,7 @@ export function sweep(root, options = {}) {
     const manifestDir = join(root, MANIFEST_DIR);
     const union = new Map();        // basename -> Set<sha256>
     const byRelease = new Map();    // releaseTagOf(tag) -> Set<basename>
+    const gateByFile = new Map();   // manifest file name -> its dev-mock-gate value
     const tagsSeen = new Set();
     let manifestCount = 0;
     let signaturesChecked = 0;
@@ -447,7 +457,9 @@ export function sweep(root, options = {}) {
             }
 
             manifestCount += 1;
-            const { tag, entries } = parseManifestText(bytes.toString('utf8'), name);
+            const { tag, gate, entries } = parseManifestText(bytes.toString('utf8'), name);
+            // Key the gate by file name: the client fetches v<version>.txt, re-sign included.
+            gateByFile.set(name, gate);
             // The RELEASE, not the signature. A re-sign tag
             // (`v0.336.0-resign1`) is the release tag's tree with the release
             // tooling corrected and nothing else, cut because the dev-mock gate
@@ -592,6 +604,13 @@ export function sweep(root, options = {}) {
         if (!tagsSeen.has(`v${info.version}`)) {
             add('POINTER-NO-MANIFEST', rel,
                 `names version ${info.version}, no RELEASE_HASHES/v${info.version}.txt`);
+        }
+        // Flag a pointer whose own manifest the client refuses for its gate
+        // (updateVerify.js: anything but `enforced`, an absent header included).
+        const ownGate = gateByFile.get(`v${info.version}.txt`);
+        if (ownGate !== undefined && ownGate !== 'enforced') {
+            add('POINTER-UNGATED', rel,
+                `the v${info.version} manifest records the dev-mock gate as '${ownGate || 'unrecorded'}', not 'enforced'`);
         }
 
         // The payload a yml names sits beside the yml. This was a literal

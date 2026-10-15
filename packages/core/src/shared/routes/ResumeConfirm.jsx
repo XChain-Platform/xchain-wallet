@@ -95,7 +95,10 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         }
         setCopyError(null);
         setCopied(label);
-        announce('Copied');
+        const copiedLabel = label === 'from' ? 'From address copied.'
+            : label === 'to' ? 'To address copied.'
+            : 'Transaction ID copied.';
+        announce(copiedLabel);
         setTimeout(() => setCopied((current) => current === label ? '' : current), 1500);
     }, [announce]);
 
@@ -307,7 +310,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                             onClick={() => copyValue('from', sourceAddress)}
                                             aria-label="Copy from address"
                                         >
-                                            {copied === 'from' ? 'Copied' : 'Copy'}
+                                            {copied === 'from' ? 'From address copied' : 'Copy'}
                                         </Button>
                                     </dd>
                                 </div>
@@ -325,7 +328,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                             onClick={() => copyValue('to', destinationAddress)}
                                             aria-label="Copy to address"
                                         >
-                                            {copied === 'to' ? 'Copied' : 'Copy'}
+                                            {copied === 'to' ? 'To address copied' : 'Copy'}
                                         </Button>
                                     </dd>
                                 </div>
@@ -343,7 +346,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                             onClick={() => copyValue('txid', txid)}
                                             aria-label="Copy transaction ID"
                                         >
-                                            {copied === 'txid' ? 'Copied' : 'Copy'}
+                                            {copied === 'txid' ? 'Transaction ID copied' : 'Copy'}
                                         </Button>
                                     </dd>
                                 </div>

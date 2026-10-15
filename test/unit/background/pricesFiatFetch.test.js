@@ -71,7 +71,10 @@ function makeHost({ priceDataEnabled } = {}) {
     });
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+});
 
 describe('prices.fiatFetch host handler', () => {
     it('fetches an allowed URL and returns its JSON', async () => {
@@ -104,5 +107,21 @@ describe('prices.fiatFetch host handler', () => {
         vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 429, json: async () => ({}) })));
         const res = await makeHost().handle({ type: 'prices.fiatFetch', request: { url: ORACLE } });
         expect(res.result).toEqual({ ok: false, status: 429 });
+    });
+
+    it('aborts a stalled request after eight seconds', async () => {
+        vi.useFakeTimers();
+        let requestSignal;
+        vi.stubGlobal('fetch', vi.fn((_url, init) => new Promise((_resolve, reject) => {
+            requestSignal = init.signal;
+            requestSignal.addEventListener('abort', () => reject(new Error('request timed out')));
+        })));
+
+        const pending = makeHost().handle({ type: 'prices.fiatFetch', request: { url: ORACLE } });
+        await vi.advanceTimersByTimeAsync(8000);
+        const res = await pending;
+
+        expect(requestSignal.aborted).toBe(true);
+        expect(res.result).toEqual({ ok: false, status: 0, error: 'request timed out' });
     });
 });
