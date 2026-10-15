@@ -714,8 +714,10 @@ describe('desktop main entry point', () => {
         expect(quitEvent.preventDefault).toHaveBeenCalledOnce();
         expect(runtime.tearDownHost).not.toHaveBeenCalled();
         await vi.waitFor(() => expect(win.show).toHaveBeenCalledOnce());
+        expect(electron.app.quit).not.toHaveBeenCalled();
         finishDownload({ ok: true });
         await downloading;
+        expect(electron.app.quit).toHaveBeenCalledOnce();
     });
 
     it('defers quit while a wallet send request is in flight', async () => {
@@ -739,8 +741,53 @@ describe('desktop main entry point', () => {
 
         expect(quitEvent.preventDefault).toHaveBeenCalledOnce();
         expect(runtime.tearDownHost).not.toHaveBeenCalled();
+        expect(electron.app.quit).not.toHaveBeenCalled();
         finishSend({ ok: true });
         await sending;
+
+        // The settled send re-issues the quit, and that quit goes through.
+        expect(electron.app.quit).toHaveBeenCalledOnce();
+        const retried = { preventDefault: vi.fn() };
+        electron.appListeners.get('before-quit')(retried);
+        expect(retried.preventDefault).not.toHaveBeenCalled();
+        expect(runtime.tearDownHost).toHaveBeenCalledOnce();
+    });
+
+    it('quits at the deadline when a send never settles, whatever further quits arrive', async () => {
+        runtime.handleIpcMessage.mockImplementationOnce(() => new Promise(() => {}));
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain-wallet:message')).toBe(true));
+        const win = electron.BrowserWindow.instances[0];
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            void electron.ipcHandlers.get('xchain-wallet:message')({
+                senderFrame: { url: appIndex },
+                sender: win.webContents,
+            }, { type: 'action.send', request: {} });
+            const first = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(first);
+            expect(first.preventDefault).toHaveBeenCalledOnce();
+
+            // A second quit (another Cmd+Q, or SIGTERM) waits on the same
+            // clock instead of starting a new one.
+            vi.advanceTimersByTime(10_000);
+            const second = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(second);
+            expect(second.preventDefault).toHaveBeenCalledOnce();
+            expect(electron.app.quit).not.toHaveBeenCalled();
+
+            vi.advanceTimersByTime(5_000);
+            expect(electron.app.quit).toHaveBeenCalledOnce();
+            const forced = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(forced);
+            expect(forced.preventDefault).not.toHaveBeenCalled();
+            expect(runtime.tearDownHost).toHaveBeenCalledOnce();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it.each(['balances.wallet', 'history.address', 'settings.get', 'action.composeForConfirm'])(

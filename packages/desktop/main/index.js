@@ -88,7 +88,7 @@ import {
     runMainTask,
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
-import { isQuitDeferringMessage } from './quitGuard.js';
+import { createQuitDeferral, isQuitDeferringMessage } from './quitGuard.js';
 import {
     FileWindowBoundsStore,
     MIN_WINDOW_BOUNDS,
@@ -698,6 +698,10 @@ let updateCheckVisible = false;
 // Sends that sign and then broadcast or persist; reads are never counted.
 let activeSendOperations = 0;
 let activeUpdateDownloads = 0;
+const quitDeferral = createQuitDeferral({
+    isBusy: () => activeSendOperations > 0 || activeUpdateDownloads > 0,
+    quit: () => app.quit(),
+});
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
@@ -1129,6 +1133,7 @@ void runMainTask(async () => {
                 return await downloadAndInstall();
             } finally {
                 activeUpdateDownloads -= 1;
+                quitDeferral.settle();
             }
         } catch (error) {
             reportMainFailure('updater IPC action', error);
@@ -1171,7 +1176,10 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: message handling failed' },
             };
         } finally {
-            if (holdsQuit) activeSendOperations -= 1;
+            if (holdsQuit) {
+                activeSendOperations -= 1;
+                quitDeferral.settle();
+            }
         }
     });
 
@@ -1317,12 +1325,14 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
     // A send can be between signing and persistence, and an update download
-    // can be between its network fetch and signature verdict. Keep the app
-    // reachable until the in-flight operation settles, then let the user
-    // retry quit explicitly.
-    if (activeSendOperations > 0 || activeUpdateDownloads > 0) {
+    // can be between its network fetch and signature verdict. Hold the quit
+    // until that work settles or the deadline passes, then quit on our own;
+    // a repeated quit request or SIGTERM during the wait rides the same
+    // clock, so quit always completes.
+    const deferral = quitDeferral.request();
+    if (deferral) {
         event?.preventDefault();
-        void restoreWindowAfterIdleCheck();
+        if (deferral === 'defer') void restoreWindowAfterIdleCheck();
         return;
     }
     // Zero the master key + close the encrypted doc. The OS already

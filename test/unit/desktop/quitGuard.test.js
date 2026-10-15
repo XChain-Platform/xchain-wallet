@@ -7,13 +7,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
     QUIT_DEFERRING_MESSAGE_TYPES,
+    QUIT_DEFER_DEADLINE_MS,
+    createQuitDeferral,
     isQuitDeferringMessage,
 } from '../../../packages/desktop/main/quitGuard.js';
 
@@ -93,5 +95,69 @@ describe('desktop quit deferral message set', () => {
         for (const type of QUIT_DEFERRING_MESSAGE_TYPES) {
             expect(registered, type).toContain(type);
         }
+    });
+});
+
+describe('desktop quit deferral clock', () => {
+    function harness({ busy = true } = {}) {
+        const state = { busy, timers: [], cleared: [] };
+        const quit = vi.fn();
+        const deferral = createQuitDeferral({
+            isBusy: () => state.busy,
+            quit,
+            deadlineMs: 1000,
+            setTimer: (fn, ms) => {
+                const handle = { fn, ms };
+                state.timers.push(handle);
+                return handle;
+            },
+            clearTimer: (handle) => { state.cleared.push(handle); },
+        });
+        return { state, quit, deferral };
+    }
+
+    it('lets quit through at once when nothing counted is in flight', () => {
+        const { state, quit, deferral } = harness({ busy: false });
+        expect(deferral.request()).toBeNull();
+        expect(state.timers).toHaveLength(0);
+        expect(quit).not.toHaveBeenCalled();
+    });
+
+    it('defers the first quit, then quits once the work settles', () => {
+        const { state, quit, deferral } = harness();
+        expect(deferral.request()).toBe('defer');
+        expect(state.timers).toHaveLength(1);
+        deferral.settle();
+        expect(quit).not.toHaveBeenCalled();
+        state.busy = false;
+        deferral.settle();
+        expect(quit).toHaveBeenCalledOnce();
+        expect(state.cleared).toEqual([state.timers[0]]);
+        state.busy = true;
+        expect(deferral.request()).toBeNull();
+    });
+
+    it('holds later quits on the same clock and quits at the deadline while work is stuck', () => {
+        const { state, quit, deferral } = harness();
+        expect(deferral.request()).toBe('defer');
+        expect(deferral.request()).toBe('wait');
+        expect(state.timers).toHaveLength(1);
+        expect(state.timers[0].ms).toBe(1000);
+        state.timers[0].fn();
+        expect(quit).toHaveBeenCalledOnce();
+        expect(deferral.request()).toBeNull();
+        deferral.settle();
+        state.timers[0].fn();
+        expect(quit).toHaveBeenCalledOnce();
+    });
+
+    it('ignores settles when no quit is waiting', () => {
+        const { quit, deferral } = harness({ busy: false });
+        deferral.settle();
+        expect(quit).not.toHaveBeenCalled();
+    });
+
+    it('waits fifteen seconds by default', () => {
+        expect(QUIT_DEFER_DEADLINE_MS).toBe(15_000);
     });
 });

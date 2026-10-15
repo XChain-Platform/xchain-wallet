@@ -89,3 +89,67 @@ export function isQuitDeferringMessage(message) {
     const type = /** @type {{ type?: unknown }} */ (message)?.type;
     return typeof type === 'string' && QUIT_DEFERRING_MESSAGE_TYPES.has(type);
 }
+
+// How long quit waits for counted operations. Long enough for a broadcast
+// and its persistence on a slow link, short enough that a stuck network call
+// or a dead connection can never keep the app from quitting.
+export const QUIT_DEFER_DEADLINE_MS = 15 * 1000;
+
+/**
+ * Bound how long quit waits on counted operations.
+ *
+ * `request()` runs inside before-quit. It returns 'defer' for the first quit
+ * that finds work in flight (the caller prevents it and may show a window),
+ * 'wait' for a later quit request during the same wait (prevented as well,
+ * but it neither restarts nor extends the clock), and null when quit should
+ * go ahead. The wait ends at whichever comes first: `settle()` seeing no
+ * counted work left, or the deadline. Either way `quit` is invoked once and
+ * the before-quit it raises goes through, even if work is still running.
+ *
+ * @param {object} opts
+ * @param {() => boolean} opts.isBusy  whether counted work is still in flight
+ * @param {() => void} opts.quit  re-issue the quit (app.quit in main)
+ * @param {number} [opts.deadlineMs]
+ * @param {(fn: () => void, ms: number) => unknown} [opts.setTimer]
+ * @param {(handle: unknown) => void} [opts.clearTimer]
+ */
+export function createQuitDeferral({
+    isBusy,
+    quit,
+    deadlineMs = QUIT_DEFER_DEADLINE_MS,
+    setTimer = (fn, ms) => setTimeout(fn, ms),
+    clearTimer = (handle) => clearTimeout(/** @type {any} */ (handle)),
+}) {
+    let timer = /** @type {unknown} */ (null);
+    let released = false;
+
+    function stopTimer() {
+        if (timer === null) return;
+        clearTimer(timer);
+        timer = null;
+    }
+
+    function release() {
+        if (released) return;
+        released = true;
+        stopTimer();
+        quit();
+    }
+
+    return {
+        /** @returns {'defer' | 'wait' | null} */
+        request() {
+            if (released || !isBusy()) {
+                stopTimer();
+                return null;
+            }
+            if (timer !== null) return 'wait';
+            timer = setTimer(release, deadlineMs);
+            return 'defer';
+        },
+        /** Call after a counted operation finishes. */
+        settle() {
+            if (timer !== null && !isBusy()) release();
+        },
+    };
+}
