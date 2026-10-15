@@ -131,10 +131,6 @@
             "count": 2,
             "reason": "Monospace license and diagnostic dumps, read like value boxes."
         },
-        "packages/core/src/shared/components/settings/AdsSection.jsx": {
-            "count": 1,
-            "reason": "A monospace address value box."
-        },
         "packages/core/src/shared/components/settings/BackupSection.jsx": {
             "count": 2,
             "reason": "Reveal buttons that hold the recovery phrase and passphrase."

@@ -1,0 +1,63 @@
+/* One card per chain: the shared card surface (ui/Card.module.css) holding
+   shared Input fields at the full content width, with no tiles inside it. */
+
+.chain {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.chainName {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
+.hintRow {
+    display: block;
+    margin-block-start: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.3;
+}
+
+/* A read-only address is a field like the others: the shared Input draws its
+   border and height, this only picks the mono face and the muted notice look. */
+.address {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+}
+
+.unavailable {
+    font-family: inherit;
+    font-style: italic;
+    color: var(--xc-text-muted);
+}
+
+.stat {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+}
+
+.statLabel {
+    color: var(--xc-text-muted);
+}
+
+.statValue {
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+}
+
+.thanks {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-style: italic;
+    text-align: end;
+}

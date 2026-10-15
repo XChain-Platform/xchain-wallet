@@ -40,7 +40,7 @@ assert.match(
 
 // Per-chain numeric edits
 for (const field of ['perTxAmountSats', 'triggerAmountSats']) {
-    const re = new RegExp(`onChainPatch\\(chainId,\\s*\\{\\s*${field}:\\s*n\\s*\\}\\)`);
+    const re = new RegExp(`onChainPatch\\(chainId,\\s*\\{\\s*${field}:\\s*value\\s*\\}\\)`);
     assert.match(src, re, `chain patch carries ${field}`);
 }
 assert.match(
