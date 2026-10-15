@@ -181,7 +181,7 @@ describe('SignApproval PSBT failure branches', () => {
         mount('signPsbt', { payload: { psbtHex: '70736274ff' } });
 
         expect(await screen.findByTestId('psbt-undecodable')).toHaveTextContent(
-            'This transaction could not be decoded',
+            'This transaction couldn\'t be decoded',
         );
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
@@ -196,7 +196,7 @@ describe('SignApproval PSBT failure branches', () => {
         });
 
         expect(await screen.findByTestId('psbt-undecodable')).toHaveTextContent(
-            'This transaction could not be decoded',
+            'This transaction couldn\'t be decoded',
         );
         expect(mocks.parsePsbt).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',

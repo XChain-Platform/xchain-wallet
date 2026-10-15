@@ -13,6 +13,7 @@ import { EyeIcon, EyeOffIcon } from './icons/index.jsx';
 import styles from './Input.module.css';
 import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
+import { t } from '../i18n/index.js';
 
 const PHONE_PLACEHOLDER_QUERY = '(max-width: 480px)';
 const LONG_PLACEHOLDER_LENGTH = 30;
@@ -194,7 +195,10 @@ export const Input = forwardRef(function Input(
     // The button is tied to its field by aria-controls, so its own name stays
     // short: repeating the field label would make a lookup by that label find
     // the button as well as the field.
-    const revealName = /passphrase/i.test(fieldName || '') ? 'passphrase' : 'password';
+    const revealsPassphrase = /passphrase/i.test(fieldName || '');
+    const revealLabel = revealsPassphrase
+        ? (revealed ? t('common.hidePassphrase') : t('common.showPassphrase'))
+        : (revealed ? t('common.hidePassword') : t('common.showPassword'));
     const [capsLockOn, setCapsLockOn] = useState(false);
     const [focused, setFocused] = useState(false);
     const showCapsLock = isPassword && focused && capsLockOn;
@@ -345,10 +349,10 @@ export const Input = forwardRef(function Input(
                         type="button"
                         className={styles.revealToggle}
                         onClick={() => setRevealed((shown) => !shown)}
-                        aria-label={`${revealed ? 'Hide' : 'Show'} ${revealName}`}
+                        aria-label={revealLabel}
                         aria-pressed={revealed}
                         aria-controls={inputId}
-                        title={`${revealed ? 'Hide' : 'Show'} ${revealName}`}
+                        title={revealLabel}
                     >
                         {revealed ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
@@ -378,7 +382,7 @@ export const Input = forwardRef(function Input(
                     role="status"
                     aria-live="polite"
                 >
-                    Caps Lock is on
+                    {t('ui.input.capsLockIsOn')}
                 </div>
             ) : null}
         </div>

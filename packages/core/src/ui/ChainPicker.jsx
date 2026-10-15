@@ -14,6 +14,7 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
 import { useBackHandler } from './backStack.js';
 import styles from './ChainPicker.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * Single-select chain picker. Replaces native `<select>` in any
@@ -42,7 +43,7 @@ export function ChainPicker({
     chainIds,
     chainRegistry,
     label,
-    placeholder = 'Select a network',
+    placeholder = t('ui.chainPicker.selectANetwork'),
     disabled,
     size = 'md',
 }) {
@@ -194,7 +195,7 @@ export function ChainPicker({
                     id={listboxId}
                     className={styles.popover}
                     role="listbox"
-                    aria-label={label || 'Networks'}
+                    aria-label={label || t('extension.connect.chains')}
                     onKeyDown={onPopoverKeyDown}
                 >
                     {entries.length > 6 ? (
@@ -203,8 +204,8 @@ export function ChainPicker({
                                 ref={searchRef}
                                 type="text"
                                 className={styles.search}
-                                placeholder="Search networks…"
-                                aria-label="Search networks"
+                                placeholder={t('components.networkFilter.searchNetworks')}
+                                aria-label={t('components.networkFilter.searchNetworks2')}
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                             />
@@ -232,7 +233,7 @@ export function ChainPicker({
                             </li>
                         ))}
                         {filtered.length === 0 ? (
-                            <li className={styles.empty}>No matching networks.</li>
+                            <li className={styles.empty}>{t('components.networkFilter.noMatchingNetworks')}</li>
                         ) : null}
                     </ul>
                 </div>

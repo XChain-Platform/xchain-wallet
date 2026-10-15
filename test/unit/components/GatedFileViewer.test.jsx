@@ -130,7 +130,7 @@ describe('GatedFileViewer render decisions', () => {
     it('announces invalid unlocked data as a failure and disables Download', () => {
         const { getByRole } = show({ declaredType: null, plaintextBase64: '%%%' });
 
-        expect(getByRole('alert')).toHaveTextContent('Could not decode the unlocked file');
+        expect(getByRole('alert')).toHaveTextContent('Couldn\'t decode the unlocked file');
         expect(getByRole('button', { name: 'Download' })).toBeDisabled();
     });
 

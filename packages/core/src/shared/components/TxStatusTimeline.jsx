@@ -176,7 +176,7 @@ export function TxStatusTimeline({
             : 'The service is still catching up to this block')
         : indexed
             ? (watermark > 0
-                ? `Fully processed · the service has reached block ${watermark.toLocaleString()}`
+                ? t('txTimeline.fullyProcessedAtBlock', { block: watermark })
                 : 'Fully processed and searchable')
             : (confirmed
                 ? 'The service is still catching up to this block'
@@ -217,7 +217,7 @@ export function TxStatusTimeline({
         },
         {
             key: 'confirmed',
-            label: confirmed && blockIndex > 0 ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
+            label: confirmed && blockIndex > 0 ? t('txTimeline.confirmedAtBlock', { block: blockIndex }) : 'Confirmed',
             done: confirmed,
             sub: confirmedSub,
         },
@@ -235,9 +235,9 @@ export function TxStatusTimeline({
     return (
         <>
             <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-                {confirmed ? 'Transaction confirmed.' : ''}
+                {confirmed ? t('txTimeline.transactionConfirmed') : ''}
             </span>
-            <ol className={styles.timeline} aria-label="Transaction status">
+            <ol className={styles.timeline} aria-label={t('txTimeline.transactionStatus')}>
                 {stages.map((s, i) => {
                     const current = i === currentStageIndex;
                     const stateLabel = s.done

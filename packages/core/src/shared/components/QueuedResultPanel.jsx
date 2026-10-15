@@ -38,6 +38,7 @@ import {
     SIGNED_NOT_BROADCAST_UNSAVED_WARNING,
 } from '../utils/submitFailureMessage.js';
 import styles from './QueuedResultPanel.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -59,7 +60,7 @@ export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, 
         <>
             <div className={styles.queuedCard} role="status" aria-live="polite">
                 <div className={styles.queuedIcon} aria-hidden="true">⏳</div>
-                <p className={styles.queuedStage}>Current stage: Waiting to broadcast</p>
+                <p className={styles.queuedStage}>{t('components.queuedResultPanel.currentStageWaitingToBroadcast')}</p>
                 <h2 className={styles.queuedTitle}>{title}</h2>
                 {showUnsaved ? (
                     <p className={styles.unsavedWarning} role="alert">
@@ -67,14 +68,11 @@ export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, 
                     </p>
                 ) : null}
                 <p className={styles.queuedHint}>
-                    {noun} is signed but couldn&apos;t reach the network just now. It&apos;s
-                    waiting in the queued-transactions banner and only goes out when you
-                    broadcast it from there; the wallet reminds you when the network is
-                    back. Don&apos;t submit this again.
+                    {noun} {t('components.queuedResultPanel.isSignedButCouldnT')}
                 </p>
             </div>
             <div className={styles.actions}>
-                <Button variant="primary" onClick={handleDone}>Done</Button>
+                <Button variant="primary" onClick={handleDone}>{t('common.done')}</Button>
             </div>
         </>
     );

@@ -35,6 +35,7 @@ import {
     STACK,
     Status,
 } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 const CONTACT_ACTIONS = {
     display: 'flex',
@@ -220,9 +221,9 @@ export function ContactsSection() {
         <div style={STACK}>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Contacts in this wallet</span>
+                    <span style={ROW_VALUE}>{t('settings.contacts.contactsInThisWallet')}</span>
                     <span style={ROW_HINT}>
-                        {count === null ? 'Loading…' : `${count} contact${count === 1 ? '' : 's'} stored`}
+                        {count === null ? t('common.loading') : t('settings.contacts.storedCount', { count })}
                     </span>
                 </div>
             </div>
@@ -235,10 +236,9 @@ export function ContactsSection() {
                 }}
             >
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Export and import</span>
+                    <span style={ROW_VALUE}>{t('settings.contacts.exportAndImport')}</span>
                     <span style={ROW_HINT}>
-                        Saves or reads plain JSON and spreadsheet-compatible CSV. Neither format is encrypted.
-                        Choose a file or drop one here to import it. Existing contacts with the same id are overwritten.
+                        {t('settings.contacts.savesOrReadsPlainJson')}
                     </span>
                 </div>
                 <input
@@ -246,7 +246,7 @@ export function ContactsSection() {
                     type="file"
                     accept="application/json,text/csv,.json,.csv"
                     onChange={(e) => onImportFile(e.target.files?.[0])}
-                    aria-label="Import contacts JSON"
+                    aria-label={t('settings.contacts.importContactsJson')}
                     style={{ display: 'none' }}
                 />
                 <div style={CONTACT_ACTIONS}>
@@ -258,7 +258,7 @@ export function ContactsSection() {
                         onClick={onExport}
                         disabled={count === 0}
                     >
-                        Export…
+                        {t('history.export.open')}
                     </Button>
                     <Button
                         type="button"
@@ -268,7 +268,7 @@ export function ContactsSection() {
                         onClick={onExportCsv}
                         disabled={count === 0}
                     >
-                        Export CSV…
+                        {t('settings.contacts.exportCsv')}
                     </Button>
                     <Button
                         type="button"
@@ -277,17 +277,21 @@ export function ContactsSection() {
                         variant="secondary"
                         style={CONTACT_ACTION_BUTTON}
                     >
-                        Import…
+                        {t('settings.contacts.import')}
                     </Button>
                 </div>
             </div>
             {importResult ? (
                 <>
                     <Status
-                        text={`Imported ${importResult.imported} contact${importResult.imported === 1 ? '' : 's'}${importResult.failures.length > 0 ? `; ${importResult.failures.length} skipped` : ''}${importResult.duplicates > 0 ? `; ${importResult.duplicates} duplicate${importResult.duplicates === 1 ? '' : 's'}` : ''}.`}
+                        text={t('settings.contacts.importedSummary', {
+                            imported: importResult.imported,
+                            skipped: importResult.failures.length,
+                            duplicates: importResult.duplicates,
+                        })}
                     />
                     <DiagnosticDetails
-                        summary={`Skipped contacts (${importResult.failures.length})`}
+                        summary={t('settings.contacts.skippedContacts', { length: importResult.failures.length })}
                         items={importResult.failures}
                     />
                 </>

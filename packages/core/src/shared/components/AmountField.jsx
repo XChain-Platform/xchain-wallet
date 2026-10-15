@@ -26,6 +26,7 @@ import {
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
+import { t } from '../../i18n/index.js';
 
 // The space kept between typed digits and the first action: the same 4px
 // (--xc-space-1) the actions keep from the field border.
@@ -85,7 +86,7 @@ export function syncAmountActionsRoom(wrap, input, actions) {
  */
 export function AmountField({
     id,
-    label = 'Amount',
+    label = t('send.fields.amount'),
     amount,
     size = 'md',
     fiatAmount = '',
@@ -168,6 +169,24 @@ export function AmountField({
         const usesDotDecimal = formatWithThousands('1.1').includes('.');
         onAmountFieldChange(normalized, usesDotDecimal ? normalizedCursor : null);
     };
+    // The Paste and Max buttons sit over the field at fixed lanes sized for the
+    // English labels. A longer translation widens a button past its lane and the
+    // two overlap, so each lane grows to the measured button. English measures
+    // narrower than the default lane, so its layout is unchanged.
+    const [measured, setMeasured] = useState({ max: 0, paste: 0 });
+    useLayoutEffect(() => {
+        const root = wrapRef.current;
+        if (!root) return;
+        const widthOf = (selector) => Math.ceil(root.querySelector(selector)?.getBoundingClientRect().width || 0);
+        const next = { max: widthOf(`.${styles.maxAction}`), paste: widthOf(`.${styles.pasteAction} button`) };
+        setMeasured((prev) => (prev.max === next.max && prev.paste === next.paste ? prev : next));
+    });
+    const lane = (px) => (px > 0
+        ? `max(calc(var(--amount-control-height) + var(--xc-space-8)), calc(${px}px + var(--xc-space-2)))`
+        : undefined);
+    const maxLane = lane(measured.max);
+    const pasteLane = lane(measured.paste);
+
     const showSwap = Boolean(fiatRate && toggleAmountInputMode);
     const hasFooter = showSwap || hasBalanceText;
     const priceSourceLabel = fiatRate?.source === 'market' ? ' · DEX price' : '';
@@ -186,11 +205,15 @@ export function AmountField({
 
     return (
         <div className={styles.amountBlock}>
-            <div ref={wrapRef} className={[
-                styles.amountFieldWrap,
-                styles[size] || '',
-                onMax ? styles.hasMax : '',
-            ].filter(Boolean).join(' ')}>
+            <div
+                ref={wrapRef}
+                className={[
+                    styles.amountFieldWrap,
+                    styles[size] || '',
+                    onMax ? styles.hasMax : '',
+                ].filter(Boolean).join(' ')}
+                style={(onMax ? maxLane : pasteLane) ? { '--amount-action-width': onMax ? maxLane : pasteLane } : undefined}
+            >
                 <Input
                     ref={inputRef}
                     size={size}
@@ -209,7 +232,9 @@ export function AmountField({
                     // room (syncAmountActionsRoom) then holds the digits clear.
                     style={{
                         paddingInlineEnd: onMax
-                            ? 'max(calc(var(--amount-action-width) * 2), var(--amount-actions-room, 0px))'
+                            ? (pasteLane
+                                ? `max(calc(var(--amount-action-width) + ${pasteLane}), var(--amount-actions-room, 0px))`
+                                : 'max(calc(var(--amount-action-width) * 2), var(--amount-actions-room, 0px))')
                             : 'max(calc(var(--amount-action-width) + var(--xc-space-2)), var(--amount-actions-room, 0px))',
                     }}
                 />
@@ -245,9 +270,9 @@ export function AmountField({
                         }}
                         disabled={maxDisabled || maxBusy}
                         aria-busy={maxBusy || undefined}
-                        aria-label="Use max available amount"
+                        aria-label={t('components.amountField.useMaxAvailableAmount')}
                     >
-                        Max
+                        {t('components.amountField.max')}
                     </Button>
                 ) : null}
             </div>
@@ -267,8 +292,8 @@ export function AmountField({
                             }}
                             aria-pressed={isFiat}
                             aria-label={isFiat
-                                ? `Switch input to ${tickUpper || 'coin'}`
-                                : `Switch input to ${fiatCcy}`}
+                                ? t('components.amountField.switchInputTo', { value: tickUpper || 'coin' })
+                                : t('components.amountField.switchInputTo2', { fiatCcy })}
                         >
                             <span className={styles.amountSwapValue}>{derivedText}</span>
                         </Button>

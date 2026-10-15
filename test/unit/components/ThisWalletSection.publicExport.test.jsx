@@ -72,7 +72,7 @@ describe('ThisWalletSection password change', () => {
         expect(screen.getByText(/unique, longer password is stronger/i)).toBeInTheDocument();
         fill({ confirm: 'different-password' });
 
-        expect(screen.getByText('Passwords do not match.')).toBeInTheDocument();
+        expect(screen.getByText('Passwords don\'t match.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
         expect(messaging.changePassword).not.toHaveBeenCalled();
     });
@@ -132,7 +132,7 @@ describe('ThisWalletSection extended public key export', () => {
         mount(messaging);
 
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        expect(screen.getByText(/cannot spend funds/i)).toBeInTheDocument();
+        expect(screen.getByText(/can't spend funds/i)).toBeInTheDocument();
         expect(screen.getByText(/including future addresses/i)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Show public keys' }));
         expect(screen.getByText('Enter your wallet password.')).toBeInTheDocument();

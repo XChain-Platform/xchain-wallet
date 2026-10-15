@@ -34,6 +34,7 @@ import {
     getPanicRemainingMs,
 } from '../../../flows/panicMode.js';
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 export function PanicModeRow() {
     const [state, setState] = useState(getPanicModeState);
@@ -75,17 +76,17 @@ export function PanicModeRow() {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Panic mode is active</span>
+                    <span style={labelStyle}>{t('settings.panic.panicModeIsActive')}</span>
                     <span style={ROW_HINT}>
-                        Signing is frozen until the timer expires.{' '}
+                        {t('settings.panic.signingIsFrozenUntilThe')}{' '}
                         <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                             {formatPanicCountdown(remainingMs)}
                         </span>{' '}
-                        remaining.
+                        {t('settings.panic.remaining')}
                     </span>
                 </div>
                 <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDeactivate}>
-                    Deactivate
+                    {t('settings.panic.deactivate')}
                 </Button>
             </div>
         );
@@ -95,18 +96,17 @@ export function PanicModeRow() {
         return (
             <div style={{ ...ROW, alignItems: 'flex-start' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Confirm panic mode</span>
+                    <span style={labelStyle}>{t('settings.panic.confirmPanicMode')}</span>
                     <span style={ROW_HINT}>
-                        Freeze all signing for 24 hours? Balances and history remain readable, and
-                        you can deactivate the freeze from this setting.
+                        {t('settings.panic.freezeAllSigningFor24')}
                     </span>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setConfirming(false)}>
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                     <Button type="button" size="sm" variant="danger" icon={null} onClick={handleActivate}>
-                        Confirm 24-hour freeze
+                        {t('settings.panic.confirm24HourFreeze')}
                     </Button>
                 </div>
             </div>
@@ -116,15 +116,13 @@ export function PanicModeRow() {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={labelStyle}>Panic mode</span>
+                <span style={labelStyle}>{t('settings.panic.panicMode')}</span>
                 <span style={ROW_HINT}>
-                    Activate to freeze ALL signing for 24 hours. Balances and history stay readable; new
-                    sends, multisig contributions, and message signatures will refuse until the timer
-                    expires or you deactivate.
+                    {t('settings.panic.activateToFreezeAllSigning')}
                 </span>
             </div>
             <Button type="button" size="sm" variant="danger" icon={null} onClick={() => setConfirming(true)}>
-                Activate
+                {t('settings.developer.activate2')}
             </Button>
         </div>
     );

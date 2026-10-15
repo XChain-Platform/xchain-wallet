@@ -729,13 +729,13 @@ export function AddressList({
                             resetAdvancedGenerate();
                             setShowAdvancedGenerate(false);
                         }}
-                        title="Generate at index"
+                        title={t('routes.addressList.generateAtIndex')}
                         titleIcon={<Icon.PlusIcon />}
                     />
                 )}
             >
                 <FormPage
-                    label="Generate address at index"
+                    label={t('routes.addressList.generateAddressAtIndex')}
                     onSubmit={handleAdvancedGenerate}
                     status={advancedError ? (
                         <StatusMessage variant="error" className={styles.error}>
@@ -751,12 +751,12 @@ export function AddressList({
                             disabled={advancedBusy || !effectiveAdvancedChainId}
                             data-testid="advanced-address-generate"
                         >
-                            Generate
+                            {t('routes.addressList.generate')}
                         </Button>
                     )}
                 >
                     <ChainPicker
-                        label="Coin"
+                        label={t('routes.addressList.coin')}
                         value={effectiveAdvancedChainId}
                         onChange={(nextChainId) => {
                             setAdvancedChainId(nextChainId);
@@ -770,7 +770,7 @@ export function AddressList({
                     />
                     {advancedDescriptor ? (
                         <Select
-                            label="Address type"
+                            label={t('receive.addressType')}
                             value={effectiveAdvancedAddressType}
                             onChange={(e) => {
                                 setAdvancedAddressType(e.target.value);
@@ -783,14 +783,14 @@ export function AddressList({
                                 const hint = addressTypeHint(advancedDescriptor, type);
                                 return (
                                     <option key={type} value={type}>
-                                        {type.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                        {type.toUpperCase()}{hint ? t('routes.addressList.startsWith', { hint }) : ''}
                                     </option>
                                 );
                             })}
                         </Select>
                     ) : null}
                     <Input
-                        label="Derivation index"
+                        label={t('routes.addressList.derivationIndex')}
                         type="number"
                         inputMode="numeric"
                         enterKeyHint="go"
@@ -804,7 +804,7 @@ export function AddressList({
                             setAdvancedError(null);
                         }}
                         onWheel={blurNumberInputOnWheel}
-                        hint="Use the exact external index of the receive address you want to recover or recreate. It must not already be held by this account."
+                        hint={t('routes.addressList.useTheExactExternalIndex')}
                         disabled={advancedBusy}
                         autoFocus
                     />
@@ -823,13 +823,13 @@ export function AddressList({
                 header={(
                     <PageHeader
                         onBack={() => { setShowWifForm(false); resetWifForm(); }}
-                        title="Import address"
+                        title={t('routes.addressList.importAddress')}
                         titleIcon={<Icon.DownloadIcon />}
                     />
                 )}
             >
                 <FormPage
-                    label="Import address"
+                    label={t('routes.addressList.importAddress')}
                     onSubmit={handleImportWif}
                     status={wifError ? (
                         <StatusMessage variant="error" className={wifStyles.wifErrorBox}>{wifError}</StatusMessage>
@@ -842,12 +842,12 @@ export function AddressList({
                             loading={wifBusy}
                             disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
                         >
-                            Import
+                            {t('importWallet.import')}
                         </Button>
                     )}
                 >
                         <ChainPicker
-                            label="Network"
+                            label={t('send.fields.chain')}
                             value={wifChainId}
                             onChange={(cid) => {
                                 setWifChainId(cid);
@@ -865,24 +865,24 @@ export function AddressList({
                         />
                         {wifChainId ? (
                             <Select
-                                label="Address type"
+                                label={t('receive.addressType')}
                                 value={effectiveWifAddressType}
                                 onChange={(e) => setWifAddressType(e.target.value)}
                                 disabled={wifBusy}
                             >
                                 {/* Select uses native options because the kit has no option primitive. */}
-                                {(wifDescriptor?.addressTypes || []).map((t) => {
-                                    const hint = addressTypeHint(wifDescriptor, t);
+                                {(wifDescriptor?.addressTypes || []).map((type) => {
+                                    const hint = addressTypeHint(wifDescriptor, type);
                                     return (
-                                        <option key={t} value={t}>
-                                            {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                        <option key={type} value={type}>
+                                            {type.toUpperCase()}{hint ? t('routes.addressList.startsWith', { hint }) : ''}
                                         </option>
                                     );
                                 })}
                             </Select>
                         ) : null}
                         <Input
-                            label="WIF private key"
+                            label={t('importWallet.wif.key')}
                             type={wifRevealed ? 'text' : 'password'}
                             value={wifInput}
                             onChange={(e) => {
@@ -890,8 +890,8 @@ export function AddressList({
                                 if (wifError) setWifError(null);
                             }}
                             placeholder={wifPrefixHint(wifDescriptor)
-                                ? `Starts with ${wifPrefixHint(wifDescriptor)}`
-                                : 'Paste your WIF private key'}
+                                ? t('routes.addressList.startsWith2', { wifPrefixHintValue: wifPrefixHint(wifDescriptor) })
+                                : t('routes.addressList.pasteYourWifPrivateKey')}
                             autoComplete="off"
                             spellCheck={false}
                             disabled={wifBusy}
@@ -904,21 +904,21 @@ export function AddressList({
                             onClick={() => setWifRevealed((s) => !s)}
                             aria-pressed={wifRevealed}
                         >
-                            {wifRevealed ? 'Hide private key' : 'Show private key'}
+                            {wifRevealed ? t('routes.addressList.hidePrivateKey') : t('routes.addressList.showPrivateKey')}
                         </Button>
                         <Input
-                            label="Label (optional)"
+                            label={t('routes.addressList.labelOptional')}
                             value={wifLabel}
                             onChange={(e) => setWifLabel(e.target.value)}
-                            placeholder="e.g. Cold storage 2024"
+                            placeholder={t('routes.addressList.eGColdStorage2024')}
                             autoComplete="off"
                             disabled={wifBusy}
                         />
                         {signerReady ? null : (
                         <Input
                             type="password"
-                            label="Wallet password"
-                            hint="Required even while unlocked: your password derives the vault's encryption key, which is never kept in memory, and the imported key must be encrypted with it."
+                            label={t('send.gated.passwordLabel')}
+                            hint={t('routes.addressList.requiredEvenWhileUnlockedYour')}
                             value={wifPassword}
                             onChange={(e) => {
                                 setWifPassword(e.target.value);
@@ -929,12 +929,12 @@ export function AddressList({
                         />
                         )}
                         <p className={wifStyles.wifWarning}>
-                            <strong>Not covered by your recovery phrase.</strong>{' '}
-                            Keep a copy of the WIF, or a current backup file (Settings &gt; Backup).
+                            <strong>{t('routes.addressList.notCoveredByYourRecovery')}</strong>{' '}
+                            {t('routes.addressList.keepACopyOfThe')}
                         </p>
                         <Checkbox
                             className={wifStyles.wifAck}
-                            label="I understand this key is not backed up by my recovery phrase."
+                            label={t('routes.addressList.iUnderstandThisKeyIs')}
                             checked={wifWarningAck}
                             onChange={(e) => {
                                 setWifWarningAck(e.target.checked);
@@ -950,7 +950,7 @@ export function AddressList({
     const header = (
         <PageHeader
             onBack={onBack}
-            title={title || (pickerMode ? 'Choose address' : 'Addresses')}
+            title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
             titleIcon={<Icon.ScanIcon />}
             trailing={(
                 <div className={local.addMenuWrap} ref={addMenuRef}>
@@ -961,8 +961,8 @@ export function AddressList({
                         onClick={() => setAddMenuOpen((o) => !o)}
                         aria-haspopup="menu"
                         aria-expanded={addMenuOpen}
-                        aria-label="Add or import address"
-                        title="Add address"
+                        aria-label={t('routes.addressList.addOrImportAddress')}
+                        title={t('routes.addressList.addAddress')}
                         data-testid="address-add-menu"
                     />
                     {addMenuOpen ? (
@@ -977,7 +977,7 @@ export function AddressList({
                                     data-testid="address-add-address"
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                                    Add address
+                                    {t('routes.addressList.addAddress')}
                                 </Button>
                             </li>
                             <li>
@@ -993,7 +993,7 @@ export function AddressList({
                                     data-testid="address-add-at-index"
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                                    Generate at index (advanced)
+                                    {t('routes.addressList.generateAtIndexAdvanced')}
                                 </Button>
                             </li>
                             <li>
@@ -1014,7 +1014,7 @@ export function AddressList({
                                     }}
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
-                                    Import address
+                                    {t('routes.addressList.importAddress')}
                                 </Button>
                             </li>
                         </ul>
@@ -1039,7 +1039,7 @@ export function AddressList({
 
     if (!addressesByChain) {
         return wrap(
-            <div role="status" aria-label="Loading addresses">
+            <div role="status" aria-label={t('routes.addressList.loadingAddresses')}>
                 <Skeleton.List rows={5} />
             </div>,
         );
@@ -1241,21 +1241,21 @@ export function AddressList({
             }
         };
         return (
-            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title="View address" titleIcon={<Icon.ScanIcon />} />}>
+            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title={t('routes.addressList.viewAddress')} titleIcon={<Icon.ScanIcon />} />}>
                 <ListPage>
                     <div className={local.detailTop}>
                     <div className={local.detailLabelRow}>
-                        <span className={local.detailLabel}>Address</span>
+                        <span className={local.detailLabel}>{t('verifySignature.address')}</span>
                         {isActiveRow(selected) ? (
-                            <span className={local.addrActive}>Active</span>
+                            <span className={local.addrActive}>{t('settings.developer.active')}</span>
                         ) : null}
                     </div>
                     <div className={local.detailAddr}>
                         <AddressText address={selected.address} truncate={false} />
-                        <span title={addrCopied ? 'Copied' : 'Copy address'}>
+                        <span title={addrCopied ? t('history.copy.copied') : t('history.copy.walletAddress')}>
                             <CopyButton
                                 value={selected.address}
-                                label={addrCopied ? 'Copied' : 'Copy address'}
+                                label={addrCopied ? t('history.copy.copied') : t('history.copy.walletAddress')}
                                 onCopied={() => {
                                     setAddrCopied(true);
                                     setTimeout(() => setAddrCopied(false), 1200);
@@ -1263,15 +1263,15 @@ export function AddressList({
                             />
                         </span>
                     </div>
-                    <div className={local.detailLabel} style={{ marginTop: 'var(--xc-space-3)' }}>Label</div>
+                    <div className={local.detailLabel} style={{ marginTop: 'var(--xc-space-3)' }}>{t('routes.addressList.label')}</div>
                     {selected.record?.id ? (
                         <div className={local.labelRow}>
                             <Input
                                 label=""
                                 value={labelDraft}
                                 onChange={(e) => setLabelDraft(e.target.value)}
-                                placeholder="Add a label"
-                                aria-label="Address label"
+                                placeholder={t('receive.addALabel')}
+                                aria-label={t('receive.addressLabel')}
                                 autoComplete="off"
                             />
                             <Button
@@ -1281,17 +1281,17 @@ export function AddressList({
                                 disabled={labelDraft.trim() === (selected.label || '')}
                                 onClick={saveLabel}
                             >
-                                Save
+                                {t('history.contact.save')}
                             </Button>
                         </div>
                     ) : (
                         <div className={`${local.detailName} ${selected.label ? '' : local.detailNameEmpty}`}>
-                            {selected.label || 'No label'}
+                            {selected.label || t('routes.addressList.noLabel')}
                         </div>
                     )}
                     </div>
 
-                    <div className={local.quickActions} role="group" aria-label="Address actions">
+                    <div className={local.quickActions} role="group" aria-label={t('routes.addressList.addressActions')}>
                     {selected.record?.id && !isActiveRow(selected) ? (
                         <Button
                             type="button"
@@ -1299,10 +1299,10 @@ export function AddressList({
                             onClick={setAsActive}
                             disabled={detailAction !== null}
                             aria-busy={detailAction === 'use'}
-                            title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
+                            title={isActiveRow(selected) ? t('routes.addressList.thisIsTheActiveAddress') : t('routes.addressList.makeThisTheActiveAddress')}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                            <span>{detailAction === 'use' ? 'Switching…' : 'Use'}</span>
+                            <span>{detailAction === 'use' ? t('routes.addressList.switching') : t('settings.biometric.use')}</span>
                         </Button>
                     ) : null}
                     {selected.record?.id && typeof messaging.setAddressHidden === 'function' ? (
@@ -1315,7 +1315,7 @@ export function AddressList({
                             <span className={local.quickActionIcon} aria-hidden="true">
                                 {selected.record.hidden ? <Icon.EyeIcon /> : <Icon.EyeOffIcon />}
                             </span>
-                            <span>{selected.record.hidden ? 'Unhide' : 'Hide'}</span>
+                            <span>{selected.record.hidden ? t('settings.display.unhide2') : t('settings.developer.hide')}</span>
                         </Button>
                     ) : null}
                     {canSecret ? (
@@ -1325,7 +1325,7 @@ export function AddressList({
                             onClick={() => onShowPrivateKey?.(selected.record)}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                            <span>Secret</span>
+                            <span>{t('routes.addressList.secret')}</span>
                         </Button>
                     ) : null}
                     {explorerUrl ? (
@@ -1337,7 +1337,7 @@ export function AddressList({
                             }}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                            <span>XChain</span>
+                            <span>{t('routes.addressList.xchain')}</span>
                         </Button>
                     ) : null}
                     {canDelete ? (
@@ -1349,13 +1349,13 @@ export function AddressList({
                             aria-busy={detailAction === 'delete'}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                            <span>{detailAction === 'delete' ? 'Deleting…' : 'Delete'}</span>
+                            <span>{detailAction === 'delete' ? t('routes.addressList.deleting') : t('settings.notifications.delete')}</span>
                         </Button>
                     ) : null}
                     </div>
 
                     <div className={local.tabPanel}>
-                    <FormSection title="About" headingLevel="h3" className={local.detailCard}>
+                    <FormSection title={t('routes.addressList.about')} headingLevel="h3" className={local.detailCard}>
                         {/* The testid is derived from the label so every detail field is
                             addressable without hand-maintaining a list. Before it, a spec
                             reading a field had to find the label text and walk to its
@@ -1365,7 +1365,7 @@ export function AddressList({
                             <div key={f.label} className={local.detailField}>
                                 <div className={local.detailLabel}>
                                     {f.label}
-                                    {f.hint ? <InfoTip aria={`${f.label} help`} label={f.hint} /> : null}
+                                    {f.hint ? <InfoTip aria={t('routes.addressList.help', { label: f.label })} label={f.hint} /> : null}
                                 </div>
                                 <div
                                     className={local.detailValue}
@@ -1378,7 +1378,7 @@ export function AddressList({
                     </FormSection>
                     {/* PC-32: on-chain ADDRESS v0 preferences for this address. */}
                     <FormSection
-                        title="On-chain preferences"
+                        title={t('routes.addressList.onChainPreferences')}
                         headingLevel="h3"
                         className={`${local.detailCard} ${local.detailCardSpaced}`}
                     >
@@ -1386,21 +1386,21 @@ export function AddressList({
                             {chainPrefsError
                                 ? chainPrefsError
                                 : (chainPrefs
-                                    ? (chainPrefs.onChain ? 'Custom preferences set' : 'Protocol defaults')
-                                    : 'Loading…')}
+                                    ? (chainPrefs.onChain ? t('routes.addressList.customPreferencesSet') : t('routes.addressList.protocolDefaults'))
+                                    : t('common.loading'))}
                         </div>
                         {chainPrefs ? (
                             <>
                                 <div className={local.detailField}>
-                                    <div className={local.detailLabel}>Protocol fee</div>
+                                    <div className={local.detailLabel}>{t('execute.protocolFee')}</div>
                                     <div className={local.detailValue}>{feePreferenceLabel(chainPrefs.feePreference)}</div>
                                 </div>
                                 <div className={local.detailField}>
-                                    <div className={local.detailLabel}>Incoming sends</div>
+                                    <div className={local.detailLabel}>{t('routes.addressList.incomingSends')}</div>
                                     <div className={local.detailValue}>{requireMemoLabel(chainPrefs.requireMemo)}</div>
                                 </div>
                                 <div className={local.detailField}>
-                                    <div className={local.detailLabel}>Dispensers</div>
+                                    <div className={local.detailLabel}>{t('routes.addressList.dispensers')}</div>
                                     <div className={local.detailValue}>{dispenserPreferenceLabel(chainPrefs.dispenserPreference)}</div>
                                 </div>
                             </>
@@ -1412,7 +1412,7 @@ export function AddressList({
                                     variant="secondary"
                                     onClick={() => onEditPreferences({ chainId: selected.chainId, address: selected.address })}
                                 >
-                                    Edit on-chain preferences
+                                    {t('routes.addressList.editOnChainPreferences')}
                                 </Button>
                             </div>
                         ) : null}
@@ -1438,9 +1438,9 @@ export function AddressList({
         return wrap(
             <ListPage>
                 <EmptyState
-                    title="No addresses yet"
-                    body="Generate a receive address to populate this list."
-                    actionLabel={onReceive ? 'Receive' : undefined}
+                    title={t('history.empty.noAddressesTitle')}
+                    body={t('routes.addressList.generateAReceiveAddressTo')}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
                     onAction={onReceive}
                     actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
                 />
@@ -1457,19 +1457,19 @@ export function AddressList({
                         enterKeyHint="search"
                         autoCapitalize="off"
                         role="textbox"
-                        placeholder="Search"
+                        placeholder={t('routes.addressList.search')}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         autoComplete="off"
                         autoCorrect="off"
                         spellCheck={false}
-                        aria-label="Search addresses"
+                        aria-label={t('routes.addressList.searchAddresses')}
                     />
                 </div>
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </>
         )}>
-            <div className={local.segmented} role="tablist" aria-label="Filter by address type">
+            <div className={local.segmented} role="tablist" aria-label={t('routes.addressList.filterByAddressType')}>
                 {[
                     { id: 'all', label: 'All' },
                     { id: 'normal', label: 'Normal' },
@@ -1498,7 +1498,7 @@ export function AddressList({
 
             {pickerMode && pickerActions.length > 0 ? (
                 /* The kit has no list container, so native list semantics group picker actions. */
-                <ul className={`${local.addrList} ${local.pickerActionsList}`} aria-label="Picker options">
+                <ul className={`${local.addrList} ${local.pickerActionsList}`} aria-label={t('routes.addressList.pickerOptions')}>
                     {pickerActions.map((act) => (
                         <li key={act.key}>
                             <ListRow
@@ -1514,15 +1514,15 @@ export function AddressList({
             ) : null}
             {listedRows.length === 0 ? (
                 <EmptyState
-                    title={hiddenRows.length > 0 ? "All matching addresses are hidden" : "No matching addresses"}
+                    title={hiddenRows.length > 0 ? t('routes.addressList.allMatchingAddressesAreHidden') : t('routes.addressList.noMatchingAddresses')}
                     body={hiddenRows.length > 0
-                        ? "Show hidden addresses to see them again."
-                        : "Try a different search or network filter."}
+                        ? t('routes.addressList.showHiddenAddressesToSee')
+                        : t('routes.addressList.tryADifferentSearchOr')}
                 />
             ) : (
             <>
             {/* The kit has no list container, so native list semantics expose the address rows. */}
-            <ul className={local.addrList} aria-label="Addresses">
+            <ul className={local.addrList} aria-label={t('home.addresses')}>
                 {renderedAddressRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     return (
@@ -1534,7 +1534,7 @@ export function AddressList({
                                     setSelected(row);
                                     setLabelDraft(row.label || '');
                                 }}
-                                aria-label={`View address ${row.address}`}
+                                aria-label={t('routes.addressList.viewAddress2', { address: row.address })}
                                 aria-busy="false"
                                 title={(
                                     <span className={local.addrRowMain}>
@@ -1543,10 +1543,10 @@ export function AddressList({
                                                 <span className={local.addrLabel}>{row.label || ''}</span>
                                                 <span className={local.addrBadges}>
                                                     {isActiveRow(row) ? (
-                                                        <span className={local.addrActive}>Active</span>
+                                                        <span className={local.addrActive}>{t('settings.developer.active')}</span>
                                                     ) : null}
                                                     {row.record?.hidden ? (
-                                                        <span className={local.addrHidden}>Hidden</span>
+                                                        <span className={local.addrHidden}>{t('routes.addressList.hidden')}</span>
                                                     ) : null}
                                                 </span>
                                             </span>
@@ -1587,7 +1587,7 @@ export function AddressList({
                         })}
                     </span>
                     <Button type="button" variant="secondary" icon={null} onClick={showMoreAddresses}>
-                        Show more addresses
+                        {t('routes.addressList.showMoreAddresses')}
                     </Button>
                 </div>
             ) : null}

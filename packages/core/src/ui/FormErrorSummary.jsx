@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import styles from './FormErrorSummary.module.css';
 import statusStyles from './StatusMessage.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * True when the field label adds something to the message. A message that
@@ -61,14 +62,14 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
             ref={summaryRef}
             role="alert"
             tabIndex={-1}
-            aria-label="Form errors"
+            aria-label={t('ui.formErrorSummary.formErrors')}
             className={`${statusStyles.row} ${statusStyles.error}`}
             data-variant="error"
         >
             <span className={statusStyles.icon} aria-hidden="true">✕</span>
             <div className={statusStyles.text}>
                 <p className={styles.heading}>
-                    {errors.length === 1 ? 'Fix this field:' : `Fix these ${errors.length} fields:`}
+                    {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
                 </p>
                 <ul className={styles.list}>
                     {errors.map((error, index) => (

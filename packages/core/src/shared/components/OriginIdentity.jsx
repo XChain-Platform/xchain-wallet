@@ -10,6 +10,7 @@
 
 import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './OriginIdentity.module.css';
+import { t } from '../../i18n/index.js';
 
 const STRUCTURED_SECOND_LEVEL_SUFFIXES = new Set([
     'ac', 'co', 'com', 'edu', 'go', 'gov', 'mil', 'ne', 'net', 'nom', 'or', 'org',
@@ -81,7 +82,7 @@ function originIdentityDetails(origin) {
  */
 export function OriginIdentity({
     origin,
-    label = 'Requesting site',
+    label = t('extension.approval.requestingSite'),
     testId,
     headingClassName = '',
     originClassName = '',
@@ -104,7 +105,7 @@ export function OriginIdentity({
             <p className={`${styles.heading} ${headingClassName}`.trim()}>{label}</p>
             {hostEnding ? (
                 <div className={styles.line}>
-                    <span className={styles.lineLabel}>Host ending</span>
+                    <span className={styles.lineLabel}>{t('components.originIdentity.hostEnding')}</span>
                     <code className={styles.hostEnding} data-testid="request-origin-host-ending" dir="ltr">
                         {hostEnding}
                     </code>
@@ -112,7 +113,7 @@ export function OriginIdentity({
             ) : null}
             {details.registrableDomain ? (
                 <div className={styles.line}>
-                    <span className={styles.lineLabel}>Site domain</span>
+                    <span className={styles.lineLabel}>{t('components.originIdentity.siteDomain')}</span>
                     <code
                         className={styles.registrableDomain}
                         data-testid="request-origin-registrable-domain"
@@ -123,7 +124,7 @@ export function OriginIdentity({
                 </div>
             ) : null}
             <div className={styles.line}>
-                <span className={styles.lineLabel}>Full origin</span>
+                <span className={styles.lineLabel}>{t('components.originIdentity.fullOrigin')}</span>
                 <code
                     className={`${styles.fullOrigin} ${originClassName}`.trim()}
                     data-testid="request-origin-full"
@@ -134,12 +135,12 @@ export function OriginIdentity({
             </div>
             {details.hasPunycode ? (
                 <p className={styles.warning} role="alert">
-                    Punycode domain. Verify the site address carefully before approving.
+                    {t('components.originIdentity.punycodeDomainVerifyTheSite')}
                 </p>
             ) : null}
             {details.possibleLookalike ? (
                 <p className={styles.warning} role="alert">
-                    Possible lookalike domain. Confirm that the highlighted site domain is the one you expect.
+                    {t('components.originIdentity.possibleLookalikeDomainConfirmThat')}
                 </p>
             ) : null}
             {children}
