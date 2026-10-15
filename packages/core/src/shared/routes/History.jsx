@@ -1941,7 +1941,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{
                         label: t('common.tryAgain'),
                         onAction: () => {

@@ -236,7 +236,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                     onSubmit={handleGenerate}
                     status={(error || busy) ? (
                         <>
-                            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+                            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                             {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
                         </>
                     ) : null}
