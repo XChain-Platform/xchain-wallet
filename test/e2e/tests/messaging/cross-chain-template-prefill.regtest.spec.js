@@ -134,7 +134,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveValue(/<ISSUE action_index from row 1>/);
 
             for (const row of rows) {
-                await rowField(row, 'combobox', 'Chain').selectOption(REGTEST_CHAIN_ID);
+                await rowField(row, 'combobox', 'Network').selectOption(REGTEST_CHAIN_ID);
                 expect(await rowField(row, 'combobox', 'From address')
                     .evaluate((el) => el.options[el.selectedIndex]?.text || ''))
                     .toBe(shortAddress(source));
@@ -169,7 +169,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('sign each prefilled row and verify all three explorer records', async () => {
             const main = page.getByRole('main');
             await main.getByRole('button', { name: 'Review', exact: true }).click();
-            await expect(main.getByText('3 actions across 1 chain')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByText('3 actions across 1 network')).toBeVisible({ timeout: 30_000 });
             await main.getByRole('checkbox', {
                 name: 'I understand successful actions cannot be rolled back if a later action fails.',
             }).check();

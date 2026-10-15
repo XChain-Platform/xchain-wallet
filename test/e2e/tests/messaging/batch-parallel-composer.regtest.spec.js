@@ -147,7 +147,7 @@ async function gotoBatchComposer(page) {
     const menu = page.getByRole('main');
     await menu.getByRole('button', { name: /^Batch/ }).click();
     const main = page.getByRole('main');
-    await expect(picker(main, 'Chain'), 'the Batch composer never rendered').toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^Network:/ }), 'the Batch composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
 }
 
@@ -156,7 +156,7 @@ async function gotoParallelComposer(page) {
     const menu = page.getByRole('main');
     await menu.getByRole('button', { name: /^Parallel cross-chain actions/ }).click();
     const main = page.getByRole('main');
-    await expect(picker(main, 'Chain').first(), 'the Parallel composer never rendered').toBeVisible({ timeout: 30_000 });
+    await expect(picker(main, 'Network').first(), 'the Parallel composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
 }
 
@@ -259,7 +259,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('queue two BROADCASTs and sign them as one batch', async () => {
             const main = await gotoBatchComposer(page);
-            await picker(main, 'Chain').selectOption(REGTEST_CHAIN_ID);
+            await selectVenueChain(main, 'Network');
             expect(await picker(main, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'the batch composer defaulted to a different address than the one this run funded')
                 .toBe(shortAddress(owner));
@@ -333,7 +333,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('queue two independent BROADCASTs and sign them one at a time', async () => {
             const main = await gotoParallelComposer(page);
             const firstRow = parallelRow(main, 1);
-            await picker(firstRow, 'Chain').selectOption(REGTEST_CHAIN_ID);
+            await picker(firstRow, 'Network').selectOption(REGTEST_CHAIN_ID);
             expect(await picker(firstRow, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 1 defaulted to a different address than the one this run funded')
                 .toBe(shortAddress(owner));
@@ -344,7 +344,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: '+ Add action', exact: true }).click();
             const secondRow = parallelRow(main, 2);
             await expect(secondRow).toBeVisible();
-            await picker(secondRow, 'Chain').selectOption(REGTEST_CHAIN_ID);
+            await picker(secondRow, 'Network').selectOption(REGTEST_CHAIN_ID);
             expect(await picker(secondRow, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 2 defaulted to a different address than the one this run funded')
                 .toBe(shortAddress(owner));
