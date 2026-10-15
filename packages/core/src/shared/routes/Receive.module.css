@@ -30,6 +30,20 @@
     max-width: none;
 }
 
+/* On a wide screen the form is already a card, so the QR frame gives up its
+   border and keeps only the white quiet zone a scanner needs. */
+@media (min-width: 600px) {
+    .qrBox {
+        border-color: transparent;
+    }
+}
+
+/* The multisig address card flattens inside the wide form card like any card. */
+.multisigCard {
+    composes: card from '../../ui/Card.module.css';
+    margin-top: var(--xc-space-3);
+}
+
 .receiveQrDisplay {
     --xc-qr-frame-size: 20rem;
 
