@@ -542,7 +542,7 @@ export function ContractStakeForm({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -552,7 +552,7 @@ export function ContractStakeForm({
     if (!contractMeta.valid) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     Contract #{contractActionIndex} is not stakeable. Its deploy
                     transaction did not set a cooldown duration. Staking is only
                     available on contracts that explicitly opted in at deploy time.
@@ -603,7 +603,7 @@ export function ContractStakeForm({
                 label={`${verb} review`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -782,7 +782,7 @@ export function ContractStakeForm({
             label="Contract stake"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -819,7 +819,7 @@ export function ContractStakeForm({
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain yet. Use Receive to generate one first.
                 </StatusMessage>
             )}

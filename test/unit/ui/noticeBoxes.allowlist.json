@@ -12,7 +12,6 @@
         "packages/core/src/shared/routes/DispenserDetail.module.css | .dispenseInvalidBadge": "An inline Invalid badge on a dispense row, not a message.",
         "packages/core/src/shared/routes/History.module.css | .pendingLabelWarning": "An inline status label on a history row, not a message.",
         "packages/core/src/shared/routes/History.module.css | .pendingPanelWarning": "The pending-transaction panel on a history row, with a headline, steps and actions; a row detail panel, not an inline message.",
-        "packages/core/src/shared/routes/IssueTokenForm.module.css | .error": "Shared by the raw red-text error rows in MessagingInbox, ComposeMessage, PsbtSignForm, SignMessageForm and other forms that import this module, which the inline-error pass converts; every StatusMessage caller only borrows its layout.",
         "packages/core/src/shared/routes/Onboarding.module.css | .licenseParagraphCritical": "An emphasized paragraph inside the license text the user agrees to; part of the legal document, not a message.",
         "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "An inline dust badge on a coin-control row, not a message."
     },

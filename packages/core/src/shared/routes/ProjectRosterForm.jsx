@@ -508,13 +508,13 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
     if (rosterLoadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{rosterLoadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{rosterLoadError}</StatusMessage>);
     }
 
     if (actionConfirm.open) {
@@ -602,7 +602,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 label="Review official token list"
                 onSubmit={handleSignList}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -672,7 +672,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 label="Review official token link"
                 onSubmit={handleSignLink}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -747,7 +747,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             label="Official token list"
             onSubmit={handleReviewList}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

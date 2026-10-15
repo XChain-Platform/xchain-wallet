@@ -430,7 +430,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     if (error) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
+                <StatusMessage variant="error">{error}</StatusMessage>
             </>,
         );
     }
@@ -729,7 +729,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                 nothing at all, unable to tell a wallet that refused from a bet that
                 was broadcast and paid for. By this point the money is spent either
                 way, so the txid is owed whatever the market's status has become. */}
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             {result ? (
                 <div className={styles.listCard} data-testid="bet-result">
                     <p className={styles.summary}>

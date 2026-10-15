@@ -407,7 +407,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -454,7 +454,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -576,7 +576,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             label={verb}
             onSubmit={handleReview}
             status={formError || prefillError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError || prefillError}</StatusMessage>
+                <StatusMessage variant="error">{formError || prefillError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

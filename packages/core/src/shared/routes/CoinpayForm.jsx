@@ -411,7 +411,7 @@ export function CoinpayForm({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -480,7 +480,7 @@ export function CoinpayForm({
                 label="Review matched order payment"
                 onSubmit={handleSubmit}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : stage === 'submitting' ? (
                     <StatusMessage>Preparing payment for confirmation…</StatusMessage>
                 ) : null}
@@ -525,7 +525,7 @@ export function CoinpayForm({
                     <DetailRow label="Network fee" value={feeLabel} />
                 </dl>
 
-                <StatusMessage className={styles.error}>{EXPIRY_LOSS_WARNING}</StatusMessage>
+                <StatusMessage>{EXPIRY_LOSS_WARNING}</StatusMessage>
 
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
@@ -630,7 +630,7 @@ export function CoinpayForm({
                     label="Selected payment obligation"
                     onSubmit={handleReview}
                     status={(submitError || insufficientBalanceMessage) ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {submitError || insufficientBalanceMessage}
                         </StatusMessage>
                     ) : nativeBalance.loading ? (

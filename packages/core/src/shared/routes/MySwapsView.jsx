@@ -663,7 +663,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             label={isCancel ? 'Cancel swap' : 'Edit swap'}
             onSubmit={submit}
             status={validationError || error ? (
-                <StatusMessage variant="error" className={F.error}>{validationError || error}</StatusMessage>
+                <StatusMessage variant="error">{validationError || error}</StatusMessage>
             ) : null}
             actions={(
                 <Button

@@ -537,6 +537,20 @@ export function DeployContractForm({ walletId, onBack }) {
         textarea.setSelectionRange(offset, offset);
     }
 
+    function renderValidationSummary(result) {
+        return (
+            <>
+                {result.msg}
+                {result.errors.length > 0 || result.warnings.length > 0 ? (
+                    <> ({[
+                        result.errors.length > 0 ? countLabel(result.errors.length, 'error') : null,
+                        result.warnings.length > 0 ? countLabel(result.warnings.length, 'warning') : null,
+                    ].filter(Boolean).join(', ')})</>
+                ) : null}
+            </>
+        );
+    }
+
     function renderDiagnostics(entries, kind) {
         if (entries.length === 0) return null;
         return (
@@ -940,7 +954,7 @@ export function DeployContractForm({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </ListPage>,
         );
     }
@@ -996,7 +1010,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 label="Review contract publication"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1196,7 +1210,7 @@ export function DeployContractForm({ walletId, onBack }) {
             label="Publish contract"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1222,7 +1236,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain yet. Use Receive to generate one first.
                 </StatusMessage>
             )}
@@ -1259,7 +1273,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 </p>
             ) : null}
             {metaAbsent ? (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     This contract exports no name or description. The network rejects publication
                     without them, so add a meta block to the source before publishing.
                 </StatusMessage>
@@ -1408,7 +1422,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             {/* PC-38: how many transactions this deploy actually costs. */}
             {planError ? (
-                <StatusMessage variant="error" className={styles.error}>{planError}</StatusMessage>
+                <StatusMessage variant="error">{planError}</StatusMessage>
             ) : plan && plan.single ? (
                 <p className={styles.summary}>Fits in a single transaction.</p>
             ) : plan ? (
@@ -1428,28 +1442,23 @@ export function DeployContractForm({ walletId, onBack }) {
                 record, which is what the resume banner reads. */}
             {validation ? (
                 <div role={validation.ok ? undefined : 'alert'}>
-                    <p className={validation.ok ? styles.summary : styles.error}>
-                        {validation.msg}
-                        {validation.errors.length > 0 || validation.warnings.length > 0 ? (
-                            <> ({[
-                                validation.errors.length > 0
-                                    ? countLabel(validation.errors.length, 'error') : null,
-                                validation.warnings.length > 0
-                                    ? countLabel(validation.warnings.length, 'warning') : null,
-                            ].filter(Boolean).join(', ')})</>
-                        ) : null}
-                    </p>
+                    {validation.ok ? (
+                        <p className={styles.summary}>{renderValidationSummary(validation)}</p>
+                    ) : (
+                        <StatusMessage variant="error" role={null}>{renderValidationSummary(validation)}</StatusMessage>
+                    )}
                     {renderDiagnostics(validation.errors, 'error')}
                     {renderDiagnostics(validation.warnings, 'warning')}
                 </div>
             ) : null}
             {sizeInfo ? (
-                <p
-                    role={sizeInfo.withinLimit ? undefined : 'alert'}
-                    className={sizeInfo.withinLimit ? styles.summary : styles.error}
-                >
-                    {sizeInfo.bytes} bytes{sizeInfo.withinLimit ? ' (within 64KB limit)' : ' (exceeds 64KB limit)'}
-                </p>
+                sizeInfo.withinLimit ? (
+                    <p className={styles.summary}>
+                        {sizeInfo.bytes} bytes (within 64KB limit)
+                    </p>
+                ) : (
+                    <StatusMessage variant="error">{sizeInfo.bytes} bytes (exceeds 64KB limit)</StatusMessage>
+                )
             ) : null}
             {suggestedGas !== null ? (
                 <p className={styles.summary}>

@@ -822,7 +822,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -872,7 +872,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 label="Review dividend"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1066,7 +1066,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             label="Pay dividend"
             onSubmit={handleReview}
             status={(formError || balanceError) ? (
-                <StatusMessage variant="error" className={styles.error}>{formError || balanceError}</StatusMessage>
+                <StatusMessage variant="error">{formError || balanceError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1098,7 +1098,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}

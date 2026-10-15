@@ -712,7 +712,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
@@ -973,7 +973,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     iconLabel={t('send.source.choose')}
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     {t('send.source.noAddress')}
                 </StatusMessage>
             )}

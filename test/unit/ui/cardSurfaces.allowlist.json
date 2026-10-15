@@ -62,7 +62,6 @@
         "packages/core/src/shared/routes/Home.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/Home.module.css | .quickActions .quickAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/ImportWallet.module.css | .scannerBox": "Artwork or a camera or QR frame, not a card.",
-        "packages/core/src/shared/routes/IssueTokenForm.module.css | .error": "A layout class passed to the shared StatusMessage, which draws the notice surface over this fill.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .picker": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/ManageToken.module.css | .manageMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",

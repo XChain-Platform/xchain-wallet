@@ -278,7 +278,7 @@ export function StakeDetail({
     );
 
     if (loading) return wrap(<StatusMessage variant="status">Loading staking position…</StatusMessage>);
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
 
     const tabs = kind === 'validator'
         ? [

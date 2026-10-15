@@ -1290,7 +1290,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -1384,7 +1384,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     Home when you reopen it.
                 </p>
                 {indexReadError ? (
-                    <StatusMessage variant="error" className={styles.error}>{indexReadError}</StatusMessage>
+                    <StatusMessage variant="error">{indexReadError}</StatusMessage>
                 ) : null}
                 {slow ? (
                     <p className={styles.hint}>
@@ -1408,7 +1408,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 label="Review recipient list"
                 onSubmit={handleSignList}
                 status={(hw || singleEncode) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1532,7 +1532,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 label="Review airdrop"
                 onSubmit={handleSignAirdrop}
                 status={(hw || singleEncode) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -1777,7 +1777,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             label="Token airdrop"
             onSubmit={handleComposeSubmit}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1820,7 +1820,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}
@@ -2200,7 +2200,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!rows) return wrap(<p className={styles.hint}>Loading lists…</p>);
     if (rows.length === 0) {
         return wrap(
