@@ -31,4 +31,18 @@ describe('ScanRoute paste box', () => {
         fireEvent.click(button);
         await waitFor(() => expect(field.value).toBe('bitcoin:bc1qexample'));
     });
+
+    it('shows an unreadable paste as the first item of the form, above the scanner and the field', () => {
+        render(<ScanRoute onClassified={() => {}} />);
+        const field = screen.getByRole('textbox');
+        fireEvent.change(field, { target: { value: 'hello not an address' } });
+        fireEvent.click(screen.getByRole('button', { name: /use pasted text/i }));
+        const form = screen.getByTestId('scan-route');
+        const notice = screen.getByText(/doesn't know how to use/i);
+        expect(form.contains(notice)).toBe(true);
+        // Nothing with text or controls sits between the form's start and the notice.
+        const before = [...form.querySelectorAll('button, input, textarea, p')]
+            .filter((el) => el.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(before).toHaveLength(0);
+    });
 });
