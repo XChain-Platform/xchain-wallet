@@ -83,23 +83,16 @@ for (const [width, height] of SIZES) {
         expect(send.row).toBe(privacy.row);
         expect(send.band).toBe(privacy.band);
 
-        // A screen with a trailing action: Payments due. The action matches
-        // Back, so the band does not grow.
-        await gotoSection(page, 'Payments due');
-        const payments = await headerBox(page, 'Payments due');
-        expect(payments.actionHeights.length, 'Payments due has a header action').toBeGreaterThan(0);
-        for (const h of payments.actionHeights) expect(h, 'Payments due action height').toBe(privacy.backHeight);
-        expect(payments.row, 'Payments due row height').toBe(privacy.row);
-        expect(payments.band, 'Payments due band height').toBe(privacy.band);
-
-        // History (Back hidden, it is a nav destination) and Contacts (Back
-        // shown where the tab bar does not link it) hold only the title and
-        // Back, at the same height.
-        await gotoSection(page, 'History');
-        const history = await headerBox(page, 'History');
-        await gotoSection(page, 'Contacts');
-        const contacts = await headerBox(page, 'Contacts');
-        for (const [name, box] of [['History', history], ['Contacts', contacts]]) {
+        // No screen puts an action in the page header: History (Back hidden,
+        // it is a nav destination), Contacts (Back shown where the tab bar
+        // does not link it) and Payments due hold only the title and Back,
+        // at the same height.
+        const boxes = [];
+        for (const name of ['History', 'Contacts', 'Payments due']) {
+            await gotoSection(page, name);
+            boxes.push([name, await headerBox(page, name)]);
+        }
+        for (const [name, box] of boxes) {
             expect(box.actionHeights, `${name} page header holds only the title and Back`).toEqual([]);
             expect(box.row, `${name} row height`).toBe(privacy.row);
             expect(box.band, `${name} band height`).toBe(privacy.band);
