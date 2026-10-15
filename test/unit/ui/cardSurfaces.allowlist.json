@@ -70,7 +70,6 @@
         "packages/core/src/shared/routes/MyLists.module.css | .search": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/OnboardingCarousel.module.css | .stackFrame": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/PairSignerForm.module.css | .code": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
-        "packages/core/src/shared/routes/PairSignerForm.module.css | .error": "A layout class passed to the shared StatusMessage, which draws the notice surface over this fill.",
         "packages/core/src/shared/routes/Receive.module.css | .addressBox": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/Send.module.css | .successCard": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
