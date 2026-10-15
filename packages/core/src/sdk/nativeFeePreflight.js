@@ -95,13 +95,13 @@ export function nativeFeeErrorMessage(
         const amount = quoted ? ` (${quoted} ${coin})` : '';
         return mandatory
             ? `This action's protocol fee${amount} is too small to send as a ${coin} payment, and ${coin} is ` +
-              `the only way to pay a protocol fee on this chain, so it cannot be submitted here.`
+              `the only way to pay a protocol fee on this network, so it cannot be submitted here.`
             : `This action's protocol fee${amount} is too small to send as a ${coin} payment - the network will ` +
               `not relay it. ${untick}${mint}`;
     }
     if (reason === 'unsupported') {
         return mandatory
-            ? `This action cannot be submitted on this chain: its protocol fee has no ${coin} price, ` +
+            ? `This action cannot be submitted on this network: its protocol fee has no ${coin} price, ` +
               `and ${coin} is the only way to pay a protocol fee here.`
             : `Paying the protocol fee in ${coin} is not available for this action. ${untick}${mint}`;
     }

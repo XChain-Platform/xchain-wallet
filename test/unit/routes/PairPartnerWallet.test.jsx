@@ -57,7 +57,7 @@ function mkMessaging(overrides = {}) {
         pairPartnerRequest: vi.fn(async () => ({
             verification: {
                 ok: true,
-                message: 'Paired. Both wallets come from the same recovery phrase and agree on 1 chain.',
+                message: 'Paired. Both wallets come from the same recovery phrase and agree on 1 network.',
                 sharedChainIds: ['bitcoin-mainnet'],
             },
         })),
@@ -328,7 +328,7 @@ describe('PairPartnerWallet: exchange stage', () => {
             }),
         );
         expect(screen.getByRole('status')).toHaveTextContent(/same recovery phrase/i);
-        expect(screen.getByText(/Matching chains: bitcoin-mainnet/)).toBeInTheDocument();
+        expect(screen.getByText(/Matching networks: bitcoin-mainnet/)).toBeInTheDocument();
     });
 
     it('surfaces a seed mismatch from the host and stays on the exchange stage', async () => {

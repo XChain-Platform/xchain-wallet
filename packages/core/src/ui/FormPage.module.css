@@ -3,6 +3,16 @@
    exactly one place. Viewport media query, not a container query: the
    Android WebView 102 the app ships to has no container queries. */
 
+/* A plain form with a notice: the notice leads the page content at the full
+   content width and the form (a card when wide) follows it. */
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    width: 100%;
+    min-width: 0;
+}
+
 /* Narrow: the fields sit bare on the page, inset only by Screen's gutter. */
 .form {
     composes: formCard from './Card.module.css';

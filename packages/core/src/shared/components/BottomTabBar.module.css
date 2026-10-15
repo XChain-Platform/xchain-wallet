@@ -137,7 +137,6 @@
 .sheetTitle {
     min-width: 0;
     margin: 0;
-    padding-inline-start: var(--xc-space-2);
     font-size: var(--xc-text-lg);
     line-height: 1.25;
     overflow-wrap: anywhere;
