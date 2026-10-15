@@ -817,6 +817,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </div>
             }
         >
+            <div className={styles.body}>
             <ListPage>
                 {descriptor ? (
                     <div className={styles.chainLine}>
@@ -1012,6 +1013,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     ) : null}
                 </FormPage>
             ) : null}
+            </div>
         </Screen>
     );
 }

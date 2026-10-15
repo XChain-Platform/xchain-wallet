@@ -1,3 +1,20 @@
+/* The request summary and the password form stack with one section gap, so a
+   notice or card that ends the summary never touches the password label. */
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-gap);
+    min-width: 0;
+}
+
+.body > * {
+    min-width: 0;
+}
+
+.body > :first-child > :last-child {
+    margin-bottom: 0;
+}
+
 .chainLine {
     display: flex;
     justify-content: flex-start;
