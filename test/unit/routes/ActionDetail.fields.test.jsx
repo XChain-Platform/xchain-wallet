@@ -131,9 +131,9 @@ describe('transaction detail field sources', () => {
         expect(field('Network fee')).toHaveTextContent(/0\.000[123] BTC/);
         expect(field('Confirmations')).toHaveTextContent('11');
         expect(field('Block')).toHaveTextContent('100');
-        // The chain is named; the network kind (regtest) is not.
+        // The network is named; the network kind (regtest) is not.
         expect(field('Network')).toHaveTextContent('Bitcoin');
-        expect(within(screen.getByRole('tabpanel')).queryByRole('rowheader', { name: 'Network' })).toBeNull();
+        expect(within(screen.getByRole('tabpanel')).queryByRole('rowheader', { name: 'Network type' })).toBeNull();
         expect(field('Time')).not.toHaveTextContent(/^-$|^$/);
         expect(field('Memo')).not.toHaveTextContent('-');
         expect(within(field('Explorer')).getByRole('link', { name: 'Open in explorer' }))
