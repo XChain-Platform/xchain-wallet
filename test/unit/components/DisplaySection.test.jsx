@@ -56,6 +56,19 @@ function setup(overrides = {}, messagingOverrides = {}) {
 }
 
 describe('DisplaySection', () => {
+    it('uses compact descriptions without repeating section titles', async () => {
+        setup({
+            pinnedTokens: ['bitcoin-mainnet:BTC'],
+            hiddenTokens: ['litecoin-mainnet:LTC'],
+        });
+
+        expect(await screen.findByText('Pinned and escrowed balances stay visible.')).toBeTruthy();
+        expect(screen.getByText('Float to the top; reorder or unpin here.')).toBeTruthy();
+        expect(screen.getByText('Collapse under "Show N hidden"; unhide here.')).toBeTruthy();
+        expect(screen.queryByText(/Pinned tokens float/)).toBeNull();
+        expect(screen.queryByText(/Hidden tokens collapse/)).toBeNull();
+    });
+
     it('uses the shared medium control size across the watched-token row', async () => {
         setup();
 

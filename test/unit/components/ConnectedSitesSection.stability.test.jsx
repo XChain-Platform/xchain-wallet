@@ -54,6 +54,7 @@ beforeEach(() => {
     messaging = {
         listConnectedSites: vi.fn(async () => []),
         listBlockedOrigins: vi.fn(async () => []),
+        listBlocklistAuditLog: vi.fn(async () => []),
         blockOrigin: vi.fn(),
         unblockOrigin: vi.fn(),
     };
@@ -98,6 +99,17 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(blockForm.className).toMatch(/controlRow/);
         expect(controlRowCss).toMatch(/align-items:\s*center/);
         expect(screen.getByRole('button', { name: 'Block' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('keeps section descriptions compact and non-repetitive', async () => {
+        render(<ConnectedSitesSection />);
+
+        expect(await screen.findByText('Latest 50 changes, newest last.')).toBeTruthy();
+        expect(screen.getByText('Rejects excess requests until reset.')).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Blocked sites' }).closest('section')).toHaveTextContent(
+            'Use *.example.com with example.com.',
+        );
+        expect(screen.queryByText(/Blocked sites cannot connect/)).toBeNull();
     });
 
     it('ignores a connected-site load from a replaced messaging source', async () => {

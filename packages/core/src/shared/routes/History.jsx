@@ -1434,7 +1434,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         writeChainSet(historyChainFilterKey(walletId), null);
         if (hadAny) {
             showToast({
-                message: 'Filter cleared',
+                message: 'Filters reset',
                 actionLabel: 'Undo',
                 onAction: () => {
                     setSearchQuery(snapshot.searchQuery);
@@ -1456,7 +1456,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     const updateDateFrom = (value) => {
         if (value && dateTo && value > dateTo) {
-            setDateError('From date must be on or before To date.');
+            setDateError('The from date must be on or before the to date.');
             return;
         }
         setDateFrom(value);
@@ -1465,7 +1465,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     const updateDateTo = (value) => {
         if (value && dateFrom && value < dateFrom) {
-            setDateError('To date must be on or after From date.');
+            setDateError('The to date must be on or after the from date.');
             return;
         }
         setDateTo(value);
@@ -2503,7 +2503,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     const detailTabs = [
         { id: 'status',  label: 'Status'  },
         { id: 'details', label: 'Details' },
-        { id: 'raw',     label: 'Raw'     },
+        { id: 'raw',     label: 'Raw data' },
     ];
 
     // Compute Save-as-contact saveability + assemble the More menu so
@@ -2538,12 +2538,12 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 message: `Old fee: ${quote.originalFee} ${ticker}. `
                     + `New fee: ${quote.replacementFee} ${ticker}. `
                     + `Additional cost: ${quote.feeIncrease} ${ticker}.`,
-                confirmLabel: strategy === 'cancel' ? 'Broadcast cancellation' : 'Broadcast speed up',
+                confirmLabel: strategy === 'cancel' ? 'Broadcast cancellation' : 'Broadcast replacement',
                 danger: strategy === 'cancel',
             });
             if (!confirmed) return;
             const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor: rbfDescriptor });
-            setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
+            setRbfDone(`Replacement sent: ${res?.replacementTxHash || 'Pending'}`);
             // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
             // The undo is a THIRD transaction replacing the cancel and
             // re-issuing the spend, so it is only offered while the
@@ -2559,7 +2559,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             setRbfError(null);
                             try {
                                 const undone = await undoCancel({ messaging, snapshot });
-                                setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'pending'}`);
+                                setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'Pending'}`);
                             } catch (undoErr) {
                                 setRbfError(rbfFailureMessage(undoErr, 'Could not undo the cancellation.'));
                             }
@@ -2596,7 +2596,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     if (isReplaceCallAvailable(messaging) && replaceable.ok && !entry.pending?.replaced) {
         moreOptions.push({
             id: 'rbf-speedup',
-            label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
+            label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up transaction',
             icon: <Icon.ForwardIcon />,
             disabled: rbfBusy !== null || !networkAvailable,
             disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
@@ -3514,7 +3514,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
         } else if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
             display = '•••••';
         } else if (isRemovedAccessListValue(k, v)) {
-            display = 'none';
+            display = 'None';
         } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
             display = '0 (protocol placeholder; price set by oracle)';
         } else if (AMOUNT_KEY_RE.test(k) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v))) {
@@ -4465,7 +4465,7 @@ function redactAmountFields(value) {
 
 /** Render the row's raw fields as pretty-printed JSON for the detail card. */
 function decodeActionToText(row) {
-    if (!row) return '(no data)';
+    if (!row) return '(No data)';
     try {
         return JSON.stringify(row, null, 2);
     } catch (err) {
@@ -4999,6 +4999,14 @@ const MODAL_ACTIONS = {
     gap: 'var(--xc-space-2)',
 };
 
+const EXPORT_DIALOG_COLUMN_LABELS = Object.freeze({
+    actionIndex: 'Action number',
+    txHash: 'Transaction ID',
+    blockIndex: 'Block',
+    iso: 'Date and time (UTC)',
+    source: 'From',
+});
+
 function ExportModal({
     onClose,
     format, setFormat,
@@ -5063,9 +5071,10 @@ function ExportModal({
                         <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
                         {flowsLib.EXPORT_COLUMNS.map((col) => {
                             const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
+                            const dialogLabel = EXPORT_DIALOG_COLUMN_LABELS[col] || detail.label;
                             const label = col === 'fiatCurrency'
-                                ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
-                                : detail.label;
+                                ? `${dialogLabel} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
+                                : dialogLabel;
                             return (
                                 <Checkbox
                                     key={col}

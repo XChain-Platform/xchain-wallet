@@ -62,6 +62,16 @@ afterEach(() => {
 });
 
 describe('notification categories and permission', () => {
+    it('keeps only trigger details that add to category labels', () => {
+        render(<NotificationsSection />);
+
+        expect(screen.getByText('First confirmation of a sent transaction.')).toBeTruthy();
+        expect(screen.getByText('Seen by the network before confirmation.')).toBeTruthy();
+        expect(screen.getByText('Held-token polls; binding polls are flagged.')).toBeTruthy();
+        expect(screen.queryByText(/Notify when a watched address receives a message/)).toBeNull();
+        expect(screen.queryByText(/Notify when a DEX order/)).toBeNull();
+    });
+
     it('requests and revokes the optional Chrome notification permission', async () => {
         const prior = globalThis.chrome;
         const contains = vi.fn(async () => false);

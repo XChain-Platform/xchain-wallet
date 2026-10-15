@@ -136,6 +136,25 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
+    it('uses the same field names in the export dialog and transaction details', async () => {
+        mountHistory({
+            [LTC]: [
+                historyRow({ actionIndex: 1, timestamp: secondsAt(0), tick: 'ALPHA', source: LTC_ADDRESS }),
+            ],
+        });
+
+        const exportButton = await screen.findByRole('button', { name: 'Export…' });
+        await waitFor(() => expect(exportButton).toBeEnabled());
+        fireEvent.click(exportButton);
+
+        const dialog = screen.getByRole('dialog', { name: 'Export history' });
+        expect(dialog).toHaveTextContent('Action number');
+        expect(dialog).toHaveTextContent('Transaction ID');
+        expect(dialog).toHaveTextContent('Block');
+        expect(dialog).toHaveTextContent('Date and time (UTC)');
+        expect(dialog).toHaveTextContent('From');
+    });
+
     it('renders ordinary history controls through the shared field, chip, and button contracts', async () => {
         mountHistory({
             [LTC]: [historyRow({
@@ -292,7 +311,7 @@ describe('History filters', () => {
         fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'alpha' } });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
+        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
         expect(screen.getByRole('button', { name: 'All action types' }))
             .toHaveAttribute('aria-pressed', 'false');
         chooseOption(/^All networks$/, 'Litecoin');
@@ -321,7 +340,7 @@ describe('History filters', () => {
         expect(screen.getByLabelText('Search history')).toHaveValue('alpha');
         expect(screen.getByLabelText('From date')).toHaveValue(today);
         expect(screen.getByLabelText('To date')).toHaveValue(today);
-        expect(screen.getByRole('button', { name: 'Additional details' })).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('button', { name: 'More filters' })).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('button', { name: 'Litecoin' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Confirmed' })).toBeInTheDocument();
@@ -347,7 +366,7 @@ describe('History filters', () => {
         fireEvent.change(screen.getByLabelText('From date'), { target: { value: tomorrow } });
         expect(screen.getByLabelText('From date')).toHaveValue(isoLocal(new Date(2026, 8, 14)));
         expect(screen.getByLabelText('To date')).toHaveValue(today);
-        expect(screen.getByRole('alert')).toHaveTextContent('From date must be on or before To date.');
+        expect(screen.getByRole('alert')).toHaveTextContent('The from date must be on or before the to date.');
 
         fireEvent.change(screen.getByLabelText('From date'), { target: { value: '' } });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
@@ -375,24 +394,24 @@ describe('History filters', () => {
         });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
-        expect(screen.getByText('Day boundaries use local time.')).toBeInTheDocument();
-        expect(screen.getByText('Active range: 09/14/2026 to 10/13/2026')).toBeInTheDocument();
+        expect(screen.getByText('Dates use local time.')).toBeInTheDocument();
+        expect(screen.getByText('Date range: 09/14/2026 to 10/13/2026')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
 
         fireEvent.click(screen.getByRole('button', { name: '7 days' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:30:${LTC_ADDRESS}`]));
         expect(screen.getByLabelText('From date')).toHaveValue('2026-10-07');
-        expect(screen.getByText('Active range: 10/07/2026 to 10/13/2026')).toBeInTheDocument();
+        expect(screen.getByText('Date range: 10/07/2026 to 10/13/2026')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'All' }));
+        fireEvent.click(screen.getByRole('button', { name: 'All dates' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
-        expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.queryByText(/^Active range:/)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'All dates' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByText(/^Date range:/)).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: '30 days' }));
         fireEvent.click(screen.getByRole('button', { name: 'Clear date range' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
-        expect(screen.queryByText(/^Active range:/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Date range:/)).not.toBeInTheDocument();
     });
 
     it('renders pending, local calendar days, future dates, and missing dates in stable sections', async () => {
@@ -405,7 +424,7 @@ describe('History filters', () => {
                 historyRow({ actionIndex: 5, timestamp: undefined, tick: 'UNDATED', source: LTC_ADDRESS }),
             ],
         }, { [LTC]: [{ address: LTC_ADDRESS }] });
-        fireEvent.click(await screen.findByRole('button', { name: 'All' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'All dates' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(5));
 
         const headings = [...view.container.querySelectorAll('[data-xc-section-header] h2')]
@@ -427,7 +446,7 @@ describe('History filters', () => {
         });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
+        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
         chooseOption(/^No special filters$/, 'Cross-chain only');
         chooseOption(/^All networks$/, 'Dogecoin');
 
@@ -487,11 +506,11 @@ describe('History filters', () => {
             expect(filterToggle).toHaveAttribute('aria-expanded', 'true');
             const search = screen.getByRole('searchbox', { name: 'Search history' });
             expect(search).toHaveAttribute('placeholder', 'Search history');
-            expect(search).toHaveAccessibleDescription('Search action, address, token, transaction ID, memo…');
+            expect(search).toHaveAccessibleDescription('Search by action, address, token, transaction ID, or memo…');
             expect(screen.getByLabelText('From date')).toBeInTheDocument();
             expect(screen.getByLabelText('To date')).toBeInTheDocument();
 
-            fireEvent.click(screen.getByRole('button', { name: 'All' }));
+            fireEvent.click(screen.getByRole('button', { name: 'All dates' }));
             expect(screen.getByRole('button', { name: 'Filters (0)' })).toBeInTheDocument();
 
             // Rows show the chain through the asset icon overlay, so the name starts at the action.
