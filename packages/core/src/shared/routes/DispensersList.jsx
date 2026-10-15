@@ -56,6 +56,7 @@ const DISPENSER_REFRESH_MS = 20000;
 export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const isDemo = flowsLib.isDemoWallet(walletId);
     const { settings } = useSettings();
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
@@ -157,7 +158,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
         // Demo wallet: no explorer to query; serve the fabricated dispensers
         // owned by the first address on each chain.
-        if (flowsLib.isDemoWallet(walletId)) {
+        if (isDemo) {
             const demo = {};
             for (const cid of chains) {
                 const first = (addressesByChain[cid] || [])
@@ -241,7 +242,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, chainsWithAddresses, messaging, walletId, dispensersReload]);
+    }, [addressesByChain, chainsWithAddresses, messaging, isDemo, dispensersReload]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -288,7 +289,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     // This list lane serves ORACLE_ADDRESS but no price for a Mode B row, so
     // its price comes from the oracle's own feeds.
-    const oracleEntries = useMemo(() => allRows.map((row) => ({ chainId: row.chainId, row })), [allRows]);
+    const oracleEntries = useMemo(
+        () => isDemo ? [] : allRows.map((row) => ({ chainId: row.chainId, row })),
+        [allRows, isDemo],
+    );
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
     const anyLoading = useMemo(() => {

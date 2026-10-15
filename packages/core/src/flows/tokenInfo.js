@@ -1141,7 +1141,7 @@ export async function tokenInfoFor({
         }
     }
     let tisBundle = null;
-    if (metadataFetchEnabled) {
+    if (metadataFetchEnabled && !demo) {
         const row = Array.isArray(raw) ? raw[0] : raw;
         const description = row?.info?.description;
         const actionRef = typeof description === 'string'
@@ -1160,16 +1160,15 @@ export async function tokenInfoFor({
             });
         }
     }
-    // When a demo entry ships a pre-built `tis` block (offline-friendly
-    // bundle that doesn't need a network round-trip), use it as the
-    // fallback if the live fetch came back empty.
+    // Demo entries use their bundled TIS document without attempting the
+    // public description URL, keeping synthetic wallets offline.
     if (!tisBundle && demo) {
         const fixture = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
         if (fixture?.tis) tisBundle = tisToMediaBundle(fixture.tis);
     }
-    resolveMediaDataRefs(tisBundle, sdk);
+    if (!demo) resolveMediaDataRefs(tisBundle, sdk);
     return normalizeTokenInfo(chainId, tick, raw, tisBundle, {
-        allowRemoteMedia: metadataFetchEnabled,
+        allowRemoteMedia: metadataFetchEnabled && !demo,
     });
 }
 

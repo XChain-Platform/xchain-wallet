@@ -29,7 +29,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -237,6 +237,12 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
     const load = useCallback(async () => {
         const requestId = ++loadRequestId.current;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setByChain({});
+            setItems([]);
+            setLoadError(null);
+            return;
+        }
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getOrdersForAddress !== 'function') {
             setItems([]); return;
@@ -301,6 +307,10 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
     const loadAutopay = useCallback(async () => {
         const requestId = ++autopayRequestId.current;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setAutopayByKey(new Map());
+            return;
+        }
         if (typeof messaging?.listAutopayOrders !== 'function') return;
         try {
             if (typeof messaging.resolveAutopayIndexes === 'function') {

@@ -276,7 +276,8 @@ describe('chaos/background/restart-mid-flow', () => {
             });
             fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
-            expect(await screen.findByText(RESTART_MESSAGE)).toBeInTheDocument();
+            expect(await screen.findByText('Could not export the backup. Try again.')).toBeInTheDocument();
+            expect(screen.queryByText(RESTART_MESSAGE)).not.toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
             expect(URL.createObjectURL).not.toHaveBeenCalled();
 

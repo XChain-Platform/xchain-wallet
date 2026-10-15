@@ -1133,8 +1133,8 @@
     font-style: italic;
     color: var(--xc-text-muted);
     max-width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     -webkit-user-select: text;
     user-select: text;
 }
