@@ -276,20 +276,21 @@ final class ScreenshotTests: XCTestCase {
 
     /// Move the demo wallet onto the MAIN networks before anything is shot.
     ///
-    /// WHY THIS EXISTS (frontier row 63 / dq-7). Demo mode
-    /// registers all nine chains and lands on `activeNetwork: 'regtest'`,
-    /// which was invisible in a screenshot until a shared-UI change started
-    /// rendering a network suffix for any non-mainnet chain. Every coin row
-    /// then reads "BTC - regtest" - a network the STORE build hides behind
-    /// Settings, Developer mode - so the listing would depict a state no
-    /// ordinary user can reach. That is the same accurate-metadata exposure
-    /// (Apple 2.3.3) as a stale screenshot, arriving from the other side.
+    /// WHY THIS EXISTS (frontier row 63 / dq-7). Demo mode used to land on
+    /// `activeNetwork: 'regtest'`, a network the STORE build hides behind
+    /// Settings, Developer mode, so the listing would depict a state no
+    /// ordinary user can reach (the accurate-metadata exposure of Apple
+    /// 2.3.3). Since xchain-wallet#78 demo mode itself lands on mainnet,
+    /// because App Review is sent there first and must see a mainnet
+    /// address, so this step is now a guard: on a mainnet demo the select
+    /// offers only Mainnet and picking it changes nothing. It stays so a
+    /// regression back to a non-mainnet landing is switched (and confirmed)
+    /// before anything is shot, rather than captured.
     ///
-    /// Done in the CAPTURE rather than by changing where demo mode lands,
-    /// because that is where it belongs: a user trying demo mode still gets
-    /// the experience they always got. The mainnet fixtures already exist and
-    /// are the richer set (0.12345678 BTC, EXAMPLE, XCP, RAREPEPE), which is
-    /// also what the Chrome Web Store listing images show.
+    /// The 0.341.4 `02-receive` image shows `bcrt1` because this step
+    /// picked Mainnet but never tapped the "Switch network" confirmation the
+    /// Network setting has asked for since 2026-10-13, so the switch never
+    /// happened. It taps it now, the same way the offline rehearsal does.
     ///
     /// The control is a real `<select aria-label="Active network">` in the
     /// WebView, and WebKit hands a select to UIKit differently per idiom: a
@@ -473,6 +474,12 @@ final class ScreenshotTests: XCTestCase {
             print("MISSED: network switch - neither a picker wheel nor a 'Mainnet' option appeared")
             return
         }
+
+        // "Switch to Mainnet?" confirmation, which appears after the pick
+        // whenever the pick changes the network. A demo that already lands on
+        // mainnet raises none, so its absence is not a miss.
+        let confirm = app.buttons.matching(NSPredicate(format: "label == %@", "Switch network")).firstMatch
+        if confirm.waitForExistence(timeout: 8) { _ = tap(confirm, "Switch network (confirm)") }
 
         // Switching reloads the WebView (NetworkSection calls
         // window.location.reload once the host route has re-derived addresses)

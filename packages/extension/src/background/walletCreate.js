@@ -138,6 +138,7 @@ export async function handleWalletImport(request, deps) {
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
         chainId,
+        activeNetwork,
     } = /** @type {any} */ (request);
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -177,6 +178,10 @@ export async function handleWalletImport(request, deps) {
                     bip39Passphrase,
                     origin,
                     kdfParams,
+                    // The network the caller asked to land on (demo mode asks
+                    // for mainnet). Undefined keeps the flow's own inference
+                    // from the first chain id.
+                    activeNetwork,
                 });
             await vault.save();
             format = result.format ?? result.wallet.format;

@@ -134,11 +134,18 @@ export async function receiveAddress({
     }
 
     let walletFormat;
+    let walletOrigin;
     try {
-        walletFormat = (await vault.wallets?.get(walletId))?.format;
+        const walletRecord = await vault.wallets?.get(walletId);
+        walletFormat = walletRecord?.format;
+        walletOrigin = walletRecord?.origin;
     } catch {
         walletFormat = undefined;
     }
+    // A demo wallet's addresses never go to an explorer: the demo now lands
+    // on mainnet, so the "ever funded?" probe would hand a throwaway address
+    // to a public mainnet explorer. Unknown funding takes the fresh frontier.
+    const probeFunding = walletOrigin !== 'demo';
     if (walletFormat === 'wif-only') {
         throw new Error('receiveAddress: imported-key wallets cannot rotate receive addresses');
     }
@@ -227,7 +234,9 @@ export async function receiveAddress({
                     count: 1,
                     addressType: type,
                 });
-                const funded = await addressEverFunded(sdk, candidate.address);
+                const funded = probeFunding
+                    ? await addressEverFunded(sdk, candidate.address)
+                    : null;
                 // An unreadable explorer cannot prove a deleted interior
                 // gap safe. The first index beyond every held record is
                 // still the normal fresh frontier and remains available
