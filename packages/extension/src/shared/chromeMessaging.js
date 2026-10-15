@@ -60,8 +60,13 @@ function defaultTimeoutMs(type) {
     return TIMED_SHELL_REQUESTS.has(type) ? RUNTIME_REQUEST_TIMEOUT_MS : 0;
 }
 
-function runtimeTransportError(_message, code) {
-    const error = new Error(BACKGROUND_INTERRUPTED_MESSAGE);
+// A dropped port or an empty reply means the worker restarted mid-request,
+// which the user can fix by retrying; a timeout or a missing runtime keeps
+// its own message, since neither is a restart.
+const INTERRUPTED_CODES = new Set(['RUNTIME_DISCONNECTED', 'RUNTIME_NO_RESPONSE']);
+
+function runtimeTransportError(message, code) {
+    const error = new Error(INTERRUPTED_CODES.has(code) ? BACKGROUND_INTERRUPTED_MESSAGE : message);
     error.name = 'RuntimeConnectionError';
     error.code = code;
     return error;
