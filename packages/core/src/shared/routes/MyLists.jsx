@@ -9,10 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
@@ -252,25 +253,9 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
     }
 
     const toolbar = (
-        <>
-            <div className={local.searchField}>
-                <Input
-                    type="search"
-                    size="md"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search lists"
-                />
-            </div>
+        <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search lists">
             <NetworkFilterDropdown value={network} onChange={setNetwork} />
-        </>
+        </ListToolbar>
     );
 
     const notices = loadErrors.length > 0 ? (

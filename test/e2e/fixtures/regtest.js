@@ -1470,7 +1470,7 @@ export async function mintXchain(page, amount) {
     // the balance this helper promises would never appear.
     await selectVenueChain(page);
 
-    await page.getByLabel('Action').selectOption('MINT');
+    await page.getByLabel('Action', { exact: true }).selectOption('MINT');
     await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
     await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
     await page.getByRole('button', { name: 'Sign action' }).click();
@@ -1770,10 +1770,7 @@ export async function unlockAfterReload(page, password) {
 export async function readReceiveAddress(page) {
     await gotoSection(page, 'Receive');
 
-    const field = page.getByRole('textbox', {
-        name: 'Copy payment link for receive address',
-        exact: true,
-    });
+    const field = page.getByTestId('receive-address');
     await expect(field).toBeVisible({ timeout: 30_000 });
 
     if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {

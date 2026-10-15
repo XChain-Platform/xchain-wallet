@@ -8,50 +8,6 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
-/* Search, network picker and sort share one row and wrap on narrow phones
-   instead of clipping the network name. */
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: var(--xc-space-2);
-    flex-wrap: wrap;
-}
-
-/* Search and network picker share the space left beside the sort control. */
-.search {
-    flex: 1 1 0;
-    min-width: 0;
-}
-
-.search > *,
-.sort > * {
-    margin-bottom: 0;
-}
-
-.search input {
-    height: var(--xc-control-h-md);
-    font-size: var(--xc-control-font-md, var(--xc-control-font));
-    border-radius: var(--xc-control-radius);
-}
-
-/* Sort sits beside the two half-width controls at its natural width. */
-.sort {
-    flex: 0 0 auto;
-}
-
-@media (max-width: 420px) {
-    .search {
-        flex: 1 1 100%;
-    }
-
-    .sort {
-        flex: 1 1 100%;
-    }
-}
-
 /* One big card wrapping all contacts, mirroring the Home BalanceList:
    rows are separated by a hairline divider and highlight on hover. */
 .list {

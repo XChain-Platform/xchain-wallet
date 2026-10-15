@@ -117,7 +117,7 @@ describe('PageHeader', () => {
         expect(onBack).not.toHaveBeenCalled();
     });
 
-    it('truncates a long title between mirrored fixed actions at every width', () => {
+    it('wraps a long title to two lines between mirrored fixed actions at every width', () => {
         const header = rule(pageHeaderCss, '.header');
         const back = rule(pageHeaderCss, '.back');
         const title = rule(pageHeaderCss, '.title');
@@ -133,7 +133,7 @@ describe('PageHeader', () => {
         expect(back).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
         expect(title).toMatch(/overflow-wrap:\s*anywhere/);
         expect(title).toMatch(/white-space:\s*normal/);
-        expect(title).toMatch(/-webkit-line-clamp:\s*1/);
+        expect(title).toMatch(/-webkit-line-clamp:\s*2/);
         expect(title).toMatch(/overflow:\s*hidden/);
         expect(trailingButton).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
         expect(trailingButton).toMatch(/height:\s*var\(--xc-control-h-sm\)/);

@@ -15,6 +15,7 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { IdentityAvatar } from '../components/WalletIdentity.jsx';
@@ -999,44 +1000,27 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             )}
             actions={listActions(contacts.length === 0)}
             toolbar={(
-                <div className={picker.toolbar}>
-                    <div className={picker.search}>
-                        <Input
-                            type="search"
-                            size="md"
-                            enterKeyHint="search"
-                            autoCapitalize="off"
-                            placeholder="Search"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            autoComplete="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                            aria-label="Search contacts"
-                        />
-                    </div>
+                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search contacts">
                     <NetworkFilterDropdown
                         value={networkFilter}
                         onChange={setNetworkFilter}
                         announceNetworkCount
                     />
-                    <div className={picker.sort}>
-                        <Select
-                            value={sortBy}
-                            onChange={(e) => {
-                                const value = /** @type {'name' | 'newest'} */ (e.target.value);
-                                setSortBy(value);
-                                persistContactsSort(walletId, value);
-                            }}
-                            aria-label="Sort contacts"
-                        >
-                            {/* Native options remain because Select renders a native listbox. */}
-                            <option value="name">A to Z</option>
-                            {/* Native options remain because Select renders a native listbox. */}
-                            <option value="newest">Newest</option>
-                        </Select>
-                    </div>
-                </div>
+                    <Select
+                        value={sortBy}
+                        onChange={(e) => {
+                            const value = /** @type {'name' | 'newest'} */ (e.target.value);
+                            setSortBy(value);
+                            persistContactsSort(walletId, value);
+                        }}
+                        aria-label="Sort contacts"
+                    >
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="name">A to Z</option>
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="newest">Newest</option>
+                    </Select>
+                </ListToolbar>
             )}
         >
             {contacts.length === 0 ? (

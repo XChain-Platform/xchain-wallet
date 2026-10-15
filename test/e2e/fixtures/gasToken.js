@@ -142,7 +142,7 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
         await combobox.fill('Advanced action');
         await page.keyboard.press('Enter');
         await selectVenueChain(page);
-        await page.getByLabel('Action').selectOption('ISSUE');
+        await page.getByLabel('Action', { exact: true }).selectOption('ISSUE');
         await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(GAS_TICK);
         for (const [field, value] of Object.entries(GAS_ISSUE)) {
             const box = page.getByRole('textbox', { name: field, exact: true });

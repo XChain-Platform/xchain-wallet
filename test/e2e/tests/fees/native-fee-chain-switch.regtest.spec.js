@@ -57,7 +57,7 @@ const CHOICE_LABEL = /^Pay protocol fee in BTC instead of XCHAIN/;
  * render under a comment saying exactly why it must not be seeded. One wrong
  * article, and the failure named a product defect that does not exist.
  */
-const STATEMENT_TEXT = /LTC is the only way to pay a protocol fee on this chain/;
+const STATEMENT_TEXT = /LTC is the only way to pay a protocol fee on this network/;
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');

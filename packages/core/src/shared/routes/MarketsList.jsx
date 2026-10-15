@@ -371,7 +371,7 @@ export function MarketsList({
                                     }}
                                     panelId={`${tabsId}-panel`}
                                     aria-label="Markets view"
-                                    style={{ flexShrink: 0, width: 'auto' }}
+                                    className={marketsStyles.marketTabs}
                                 />
                             </div>
                         ) : null}
