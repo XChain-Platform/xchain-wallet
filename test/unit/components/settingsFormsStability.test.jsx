@@ -147,8 +147,8 @@ describe('settings form validation', () => {
 
         const languageRow = screen.getByLabelText('Language').parentElement;
         expect(languageRow.style.flexWrap).toBe('wrap');
-        expect(screen.getByText(/language used for wallet navigation/)).toBeTruthy();
-        expect(screen.getByText(/Asset balances are unchanged/)).toBeTruthy();
+        expect(screen.queryByText(/language used for wallet navigation/)).toBeNull();
+        expect(screen.getByText('Changes estimates, not asset balances.')).toBeTruthy();
     });
 
     it('offers pseudo-RTL only while developer mode is enabled', () => {

@@ -107,13 +107,13 @@ describe('shared settings row semantics', () => {
         expect(onChange).toHaveBeenCalledWith(false);
     });
 
-    it('gives appearance controls visible labels and linked descriptions', () => {
+    it('gives appearance controls visible labels without repeating them in a description', () => {
         render(<AppearanceSection />);
 
         const theme = screen.getByRole('combobox', { name: 'Theme' });
         const motion = screen.getByRole('combobox', { name: 'Reduced motion' });
-        expect(describedText(theme)).toMatch(/follow your device setting/i);
-        expect(describedText(motion)).toMatch(/device accessibility setting/i);
+        expect(describedText(theme) ?? '').not.toMatch(/follow your device setting/i);
+        expect(describedText(motion) ?? '').not.toMatch(/device accessibility setting/i);
         // The control sits in the row's end slot; the row itself wraps.
         expect(theme.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');
         expect(motion.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');

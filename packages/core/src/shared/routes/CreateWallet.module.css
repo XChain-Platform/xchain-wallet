@@ -129,20 +129,6 @@
     flex: 1;
 }
 
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-on-danger);
-    background: var(--xc-danger);
-    /* 1px keeps the error boundary as a crisp hairline. */
-    border: 1px solid var(--xc-danger);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
-    margin: var(--xc-space-3) 0 0;
-    text-align: center;
-    font-weight: 500;
-    line-height: 1.4;
-}
-
 /* 520px targets short landscape viewports without a matching layout token. */
 @media (max-height: 520px) {
     .headPopup,

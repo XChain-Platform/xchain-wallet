@@ -92,8 +92,8 @@ function mount(history) {
 }
 
 /**
- * Push past one poll interval and let the resulting promises settle. Real
- * timers elsewhere in the file: only the two upgrade tests need the clock.
+ * Push past one poll interval and let the resulting promises settle. Tests
+ * that exercise polling install fake timers before mounting the page.
  */
 async function advancePoll() {
     await act(async () => {
@@ -159,11 +159,11 @@ describe('the standalone detail page upgrades in place when the action confirms'
     it('does NOT upgrade to a row the explorer carries without a block', async () => {
         // The explorer can list a transaction before it has a block. Swapping
         // to that would lose the pending detail and gain nothing.
-        mount(() => [confirmedRow({ block_index: 0, action_index: '1255' })]);
+        const { messaging } = mount(() => [confirmedRow({ block_index: 0, action_index: '1255' })]);
         await waitFor(() => expect(
             screen.getByText(/not yet validated by the service/i),
         ).toBeTruthy());
-        await new Promise((r) => setTimeout(r, 150));
+        await act(async () => { await messaging.getAddressHistory.mock.results[0].value; });
         // "Still pending" is not enough to prove no swap happened: a blockless
         // row renders as pending too. What only survives a NON-swap is the
         // pending METADATA, which a normalized explorer row does not carry, so
@@ -173,15 +173,16 @@ describe('the standalone detail page upgrades in place when the action confirms'
     });
 
     it('ignores an unrelated transaction on the same address', async () => {
-        mount(() => [confirmedRow({ tx_hash: 'ffffffffffffffffffffffffffffffff' })]);
+        const { messaging } = mount(() => [confirmedRow({ tx_hash: 'ffffffffffffffffffffffffffffffff' })]);
         await waitFor(() => expect(
             screen.getByText(/not yet validated by the service/i),
         ).toBeTruthy());
-        await new Promise((r) => setTimeout(r, 150));
+        await act(async () => { await messaging.getAddressHistory.mock.results[0].value; });
         expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
     });
 
     it('does not poll at all for an already-confirmed entry', async () => {
+        vi.useFakeTimers();
         const messaging = {
             getAddressHistory: vi.fn().mockResolvedValue([]),
             getActionByIndex: vi.fn().mockResolvedValue(null),
@@ -200,7 +201,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
                 }),
             ),
         );
-        await new Promise((r) => setTimeout(r, 150));
+        await advancePoll();
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();
     });
 
@@ -223,5 +224,22 @@ describe('the standalone detail page upgrades in place when the action confirms'
         );
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
         expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
+    });
+
+    it('never polls the explorer for a demo wallet pending row (issue #82)', async () => {
+        // The demo History carries a pending sample row on the wallet's real
+        // address; on mainnet a poll would hand that address to a public
+        // explorer, and the sample row never confirms anyway.
+        globalThis.localStorage.setItem('xc:demoWalletId', 'w1');
+        try {
+            const { messaging } = mount(() => []);
+            await waitFor(() => expect(
+                screen.getByText(/not yet validated by the service/i),
+            ).toBeTruthy());
+            await new Promise((r) => setTimeout(r, 150));
+            expect(messaging.getAddressHistory).not.toHaveBeenCalled();
+        } finally {
+            globalThis.localStorage.removeItem('xc:demoWalletId');
+        }
     });
 });

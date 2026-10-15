@@ -52,6 +52,8 @@ import {
 /**
  * @typedef {Object} TrezorFactoryDeps
  * @property {() => Promise<import('../signers/TrezorSigner.js').TrezorConnect>} getConnect
+ * @property {import('../sdk/index.js').SDKRegistry} [sdkRegistry]   required for signPsbt
+ * @property {() => Promise<import('../sdk/index.js').SDKRegistry>} [getSdkRegistry]   lazy shell binding for signPsbt
  */
 
 /**
@@ -73,7 +75,7 @@ import {
  *   },
  * }>}
  */
-export function makeTrezorFactory({ getConnect }) {
+export function makeTrezorFactory({ getConnect, sdkRegistry, getSdkRegistry }) {
     if (typeof getConnect !== 'function') {
         throw new Error('makeTrezorFactory: getConnect must be a function');
     }
@@ -100,12 +102,17 @@ export function makeTrezorFactory({ getConnect }) {
             throw new Error('pairTrezorSigner: device did not report a model');
         }
         const label = features.label || 'Trezor';
+        let resolvedSdkRegistry = sdkRegistry;
+        if (!resolvedSdkRegistry && typeof getSdkRegistry === 'function') {
+            resolvedSdkRegistry = await getSdkRegistry();
+        }
         const signer = new TrezorSigner({
             id: `trezor-${deviceIdentifier}`,
             displayName: `${label} (${model})`,
             model,
             deviceIdentifier,
             connect,
+            sdkRegistry: resolvedSdkRegistry,
         });
         return {
             signer,

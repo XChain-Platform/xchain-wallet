@@ -124,15 +124,6 @@
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
 
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
-}
-
 /* Four equal secondary buttons in two columns: one height, one-line labels,
    both outer edges on the form's edges. */
 .qrActions {

@@ -568,7 +568,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading wallet…</p>);
 
     // Confirm page, rendered in place of the review stage; the queued rows
@@ -639,12 +639,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 status={buildError || (submitError && (hw || isWatcherMode)) ? (
                     <>
                         {buildError ? (
-                            <StatusMessage variant="error" className={styles.error} details={buildErrorDetails || undefined}>
+                            <StatusMessage variant="error" details={buildErrorDetails || undefined}>
                                 {buildError}
                             </StatusMessage>
                         ) : null}
                         {submitError && (hw || isWatcherMode) ? (
-                            <StatusMessage variant="error" className={styles.error} details={submitErrorDetails || undefined}>
+                            <StatusMessage variant="error" details={submitErrorDetails || undefined}>
                                 {submitError}
                             </StatusMessage>
                         ) : null}
@@ -746,7 +746,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             label="Batch composer"
             sectioned
             status={preReviewError || constraintError ? (
-                <StatusMessage variant="error" className={styles.error}>{preReviewError || constraintError}</StatusMessage>
+                <StatusMessage variant="error">{preReviewError || constraintError}</StatusMessage>
             ) : null}
             actions={(
                 <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={shownRowErrors.some(Boolean) || Boolean(constraintError) || validatingRows}>
@@ -809,7 +809,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         spellCheck={false}
                     />
                     {shownRowErrors[i] ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {shownRowErrors[i]}
                         </StatusMessage>
                     ) : null}

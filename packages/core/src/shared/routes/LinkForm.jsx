@@ -506,7 +506,7 @@ export function LinkForm({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -595,7 +595,7 @@ export function LinkForm({ walletId, onBack }) {
                 label="Review link"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -714,12 +714,12 @@ export function LinkForm({ walletId, onBack }) {
             status={validationError || formError ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {validationError}
                         </StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}

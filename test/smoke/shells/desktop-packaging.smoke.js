@@ -436,7 +436,8 @@ assert.equal(classifyDeepLink('not a url at all'), null, 'non-URI → null');
     assert.ok(e.parsed && e.parsed.kind, 'xchain: URIs surface a structured intent');
     assert.equal(e.parsed.kind, 'send');
     assert.equal(e.parsed.address, 'broadcast');
-    assert.equal(e.parsed.params.data, 'abc');
+    // Unknown optional parameters are ignored, never carried into the intent.
+    assert.equal(e.parsed.params.data, undefined);
 }
 
 {

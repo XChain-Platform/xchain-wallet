@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { contractDisplayLabel, contractMetaOf } from './contractResponseShape.js';
@@ -137,12 +138,16 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return vmChainsWithAddresses.includes(chainFilter) ? [chainFilter] : [];
     }, [chainFilter, vmChainsWithAddresses]);
 
+    // A demo wallet lists no contracts of its own: a demo wallet's addresses
+    // never go to an explorer (issue #82).
+    const isDemo = isDemoWallet(walletId);
+
     // Phase 2: "My contracts" (deployed by one of my addresses on the
     // chain). Fan out one sdk.getContracts(addr, 'source') per address
     // per chain, merge, de-dupe.
     useEffect(() => {
         if (!addressesByChain) return;
-        if (activeChains.length === 0) {
+        if (activeChains.length === 0 || isDemo) {
             setMyByChain({});
             return;
         }
@@ -187,7 +192,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo]);
 
     // Phase 3: "My interactions": union of deposits + withdrawals
     // scoped to the user's addresses. Returns the set of distinct
@@ -196,7 +201,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     // latestBlock, kinds: Set<'deposit'|'withdraw'> } for rendering.
     useEffect(() => {
         if (!addressesByChain) return;
-        if (activeChains.length === 0) {
+        if (activeChains.length === 0 || isDemo) {
             setInteractionsByChain({});
             return;
         }
@@ -282,7 +287,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo]);
 
     useEffect(() => {
         if (activeChains.length === 0) {

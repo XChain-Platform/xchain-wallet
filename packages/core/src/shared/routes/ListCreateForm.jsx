@@ -506,7 +506,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -581,7 +581,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 label="Review list"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -720,7 +720,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             label="Create list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"
@@ -751,7 +751,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             <Select
@@ -993,7 +993,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
         return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this network appear here." />);

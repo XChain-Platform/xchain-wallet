@@ -28,6 +28,7 @@
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { synthesizeDemoBalances } from './demoFixtures.js';
 import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
 
 const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
@@ -347,6 +348,50 @@ function nativeAnswerUnreadable(addrResp) {
     return addrResp.balances?.confirmed == null;
 }
 
+// Demo wallets (issue #82). A demo wallet lands on mainnet, so every balance
+// read for it would hand its addresses to the public mainnet explorer. It is
+// recognised here by its vault record's `origin`, not by `isDemoWallet()`:
+// that helper reads `localStorage`, which the extension's background worker
+// does not have, and these flows run in the host. receiveAddress.js and
+// getActiveAddresses.js key on the same field for the same reason.
+async function isDemoOriginWallet(vault, walletId) {
+    try {
+        return (await vault.wallets.get(walletId))?.origin === 'demo';
+    } catch {
+        return false;
+    }
+}
+
+// The demo wallet that owns `address` on `chainId`, or null. Reads the wallet
+// list first and stops there when no demo wallet exists, so a real wallet's
+// read pays one in-memory list and nothing else. Any vault that cannot answer
+// (a stand-in without the collections) counts as "not a demo".
+async function demoWalletOwning({ vault, chainRegistry, chainId, address }) {
+    if (!chainRegistry) return null;
+    try {
+        const wallets = await vault.wallets.list();
+        const demoWallets = wallets.filter((w) => w && w.origin === 'demo');
+        if (demoWallets.length === 0) return null;
+        const [records, accounts] = await Promise.all([
+            vault.addresses.list(),
+            vault.accounts.list(),
+        ]);
+        const walletIdByAccount = new Map(accounts.map((a) => [a.id, a.walletId]));
+        for (const rec of records) {
+            if (!rec || rec.address !== address) continue;
+            if (chainRegistry.chainIdFor(rec.chain, rec.network) !== chainId) continue;
+            const owner = demoWallets.find((w) => (rec.accountId
+                ? walletIdByAccount.get(rec.accountId) === w.id
+                : Array.isArray(w.importedKeys)
+                    && w.importedKeys.some((k) => k && k.addressId === rec.id)));
+            if (owner) return owner.id;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
 /**
  * @typedef {Object} AddressBalancesEntry
  * @property {string} address
@@ -367,6 +412,7 @@ function nativeAnswerUnreadable(addrResp) {
  * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]  resolves the chain's native ticker; when absent the native side degrades to null
  * @property {string} chainId
  * @property {string} address
+ * @property {import('../storage/Vault.js').Vault} [vault]  lets the read recognise a demo wallet's address and answer from its fixture instead of the explorer; callers without a vault read the explorer as before
  * @property {object} [opts]                  passed through to `sdk.getBalances`
  */
 
@@ -380,10 +426,25 @@ function nativeAnswerUnreadable(addrResp) {
  * @param {AddressBalancesOpts} params
  * @returns {Promise<unknown>}
  */
-export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, opts }) {
+export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, vault, opts }) {
     if (!sdkRegistry) throw new Error('addressBalances: sdkRegistry is required');
     if (!chainId) throw new Error('addressBalances: chainId is required');
     if (!address) throw new Error('addressBalances: address is required');
+    if (vault) {
+        const demoWalletId = await demoWalletOwning({ vault, chainRegistry, chainId, address });
+        if (demoWalletId) {
+            // Answered by the wallet aggregator, which short-circuits a demo
+            // wallet to its fixture, so this address reads exactly the row
+            // Home shows for it (the first address on a chain holds the
+            // fixture, the rest hold zero) and no request leaves the wallet.
+            const byChain = await walletBalances({
+                vault, walletId: demoWalletId, chainRegistry, sdkRegistry, chainId,
+            });
+            const entry = (byChain[chainId] || []).find((e) => e.address === address);
+            if (entry && entry.balances) return entry.balances;
+            return { native: null, tokens: [] };
+        }
+    }
     const sdk = sdkRegistry.get(chainId);
     const descriptor = chainRegistry ? chainRegistry.descriptorFor(chainId) : null;
     const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
@@ -809,6 +870,15 @@ export async function walletBalances({
         }
         if (!byChain[cid]) byChain[cid] = [];
         byChain[cid].push(a);
+    }
+
+    // A demo wallet answers from its fixture: the same synthesized entries
+    // Home shows, built from the same grouped addresses, and no explorer
+    // request. Pending deltas are skipped because a demo wallet cannot
+    // broadcast, so it has none, and skipping them keeps this byte-identical
+    // to what Home renders.
+    if (await isDemoOriginWallet(vault, walletId)) {
+        return synthesizeDemoBalances(byChain);
     }
 
     // 3. Fetch balances per chain. Per-address failures are captured as entries

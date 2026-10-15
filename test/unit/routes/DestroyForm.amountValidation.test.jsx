@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DestroyForm } from '../../../packages/core/src/shared/routes/DestroyForm.jsx';
@@ -61,8 +61,13 @@ function mountDestroy({ balance = '2', divisibility = 0 } = {}) {
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     __clearTokenInfoCache();
 });
+
+async function advanceBalanceLookup(ms) {
+    await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+}
 
 describe('DestroyForm amount validation', () => {
     it('rejects decimals for an indivisible token before review', async () => {
@@ -76,14 +81,17 @@ describe('DestroyForm amount validation', () => {
     });
 
     it('names the available balance and refuses an over-burn', async () => {
+        vi.useFakeTimers();
         const composeForConfirm = mountDestroy();
-        await waitFor(() => expect(document.body.textContent).toContain('2 ART available'), {
-            timeout: 3000,
-        });
+        await advanceBalanceLookup(0);
+        await advanceBalanceLookup(399);
+        expect(document.body.textContent).not.toContain('2 ART available');
+        await advanceBalanceLookup(1);
+        expect(document.body.textContent).toContain('2 ART available');
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '3' } });
         fireEvent.click(screen.getByRole('button', { name: /^Destroy$/ }));
 
-        expect(await screen.findByText(
+        expect(screen.getByText(
             'This address holds only 2 ART. Enter an amount at or below that balance.',
         )).toBeInTheDocument();
         expect(composeForConfirm).not.toHaveBeenCalled();

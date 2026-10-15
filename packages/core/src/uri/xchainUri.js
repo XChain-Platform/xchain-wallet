@@ -33,7 +33,13 @@
 // rather than throwing; the caller already had a string from a QR scan
 // or paste, so we don't want to abort their flow over a typo.
 
-import { parseBip21Uri, InvalidBip21Error } from './bip21.js';
+import {
+    parseBip21Uri,
+    InvalidBip21Error,
+    URI_MAX_LENGTH,
+    URI_PARAMETER_LIMITS,
+    isSafeUriParameter,
+} from './bip21.js';
 import { chainIdForCoinCode, coinCodeForChainId, isKnownCoinCode } from './coinCodes.js';
 import { neutralizeControlText } from '../shared/utils/textHardening.js';
 
@@ -137,7 +143,7 @@ function normalizeFeePriority(raw) {
  * @property {'low' | 'normal' | 'fast'} [feePriority]   receiver's preferred fee tier; scanners may pre-select but users can override
  * @property {string} [label]
  * @property {string} [message]
- * @property {Record<string, string>} [params]      remaining query params (includes the named ones for caller convenience)
+ * @property {Record<string, string>} [params]      recognized query params (includes the named ones for caller convenience)
  * @property {string[]} [required]                  names of `req-*` params; if non-empty the caller MUST decide whether to honor each or reject the URI per BIP21
  */
 
@@ -153,6 +159,7 @@ export function parseXchainUri(uri, deps) {
     if (typeof uri !== 'string') return { kind: 'unknown' };
     const raw = uri.trim();
     if (raw.length === 0) return { kind: 'unknown' };
+    if (raw.length > URI_MAX_LENGTH) return { kind: 'unknown' };
     const lower = raw.toLowerCase();
 
     // Checked before the scheme branches because a web link IS an https URL and
@@ -418,7 +425,15 @@ function parseQuery(queryPart) {
             required.push(key.slice(4));
             params[key] = value;
         } else {
-            params[key] = value;
+            try {
+                // Preserve custom xchain: amount text because action paths
+                // validate it before review and valid links must not be rewritten.
+                if (key === 'amount' && value.length <= URI_PARAMETER_LIMITS.amount) {
+                    params[key] = value;
+                } else if (isSafeUriParameter(key, value)) params[key] = value;
+            } catch (err) {
+                errors.push(err?.message || `invalid parameter "${key}"`);
+            }
         }
     }
     return { params, required, errors };

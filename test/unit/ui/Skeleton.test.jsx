@@ -81,4 +81,13 @@ describe('<Spinner>', () => {
         expect(screen.getByRole('status', { name: 'Checking' }).querySelector(`.${buttonStyles.spinner}`))
             .toHaveClass(buttonStyles.spinner_md);
     });
+
+    it('paints placeholders with a token every palette defines, not the raised surface that is white in light themes', () => {
+        const css = readFileSync('packages/core/src/ui/Skeleton.module.css', 'utf8');
+        const tokens = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+        expect(css).toMatch(/background-color:\s*var\(--xc-skeleton,/);
+        const raised = tokens.match(/--xc-surface-raised:/g).length;
+        const skeleton = tokens.match(/--xc-skeleton:/g).length;
+        expect(skeleton).toBe(raised);
+    });
 });

@@ -68,6 +68,7 @@ export const INPUT = {
     color: 'var(--xc-text)',
     border: '1px solid var(--xc-control-border)',
     borderRadius: 'var(--xc-control-radius)',
+    boxSizing: 'border-box',
     height: 'var(--xc-control-h-md)',
     padding: '0 var(--xc-control-pad-x-md)',
     fontSize: 'var(--xc-control-font-md)',

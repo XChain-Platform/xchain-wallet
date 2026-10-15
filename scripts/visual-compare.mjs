@@ -38,6 +38,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import pngjs from 'pngjs';
 import {
@@ -48,7 +49,7 @@ const { PNG } = pngjs;
 
 // ---------------------------------------------------------------- arguments
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
     const out = {};
     for (let i = 0; i < argv.length; i += 1) {
         const a = argv[i];
@@ -62,12 +63,13 @@ function parseArgs(argv) {
     return out;
 }
 
+const IS_MAIN = Boolean(process.argv[1]) && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 const args = parseArgs(process.argv.slice(2));
-if (!args.baseline || !args.candidate || !args.out) {
+if (IS_MAIN && (!args.baseline || !args.candidate || !args.out)) {
     console.error('usage: visual-compare.mjs --baseline <tree> --candidate <tree> --out <dir> [--port-base N] [--sizes a,b] [--screens a,b] [--keep-threshold N] [--keep-all]');
     process.exit(2);
 }
-const OUT = resolve(args.out);
+const OUT = args.out ? resolve(args.out) : null;
 const PORT = Number(args['port-base'] || args.port) || 5391;
 const TOLERANCE = Number(args.tolerance) || 24;
 const MAX_SETTINGS = Number(args['max-settings']) || 40;
@@ -75,7 +77,7 @@ const KEEP_ALL = args['keep-all'] === true;
 const KEEP_THRESHOLD = args['keep-threshold'] === undefined
     ? 0.5
     : Number(args['keep-threshold'] === true ? Number.NaN : args['keep-threshold']);
-if (!Number.isFinite(KEEP_THRESHOLD) || KEEP_THRESHOLD < 0) {
+if (IS_MAIN && (!Number.isFinite(KEEP_THRESHOLD) || KEEP_THRESHOLD < 0)) {
     console.error('--keep-threshold must be a non-negative number');
     process.exit(2);
 }
@@ -90,7 +92,7 @@ if (!Number.isFinite(KEEP_THRESHOLD) || KEEP_THRESHOLD < 0) {
 // which is how the web build simulates the 360x600 popup. The desktop app
 // marks nothing on <html> (its renderer differs only in MessagingProvider
 // wiring), so the desktop sizes are the web layout at those widths.
-const SIZES = [
+export const SIZES = [
     { name: 'k51-360x800', width: 360, height: 800, touch: true },
     { name: 'phone-412x869', width: 412, height: 869, touch: true },
     { name: 'landscape-844x390', width: 844, height: 390, touch: true },
@@ -102,27 +104,30 @@ const SIZES = [
 
 // Destinations reached through the command palette, which every width and
 // the popup variant offer; the nav rail, bottom bar and More sheet do not.
-const SCREENS = [
+export const SCREENS = [
     { key: 'home', title: 'Home' },
     { key: 'history', title: 'History' },
     { key: 'send', title: 'Send' },
     { key: 'receive', title: 'Receive' },
-    { key: 'swap', title: 'Swap' },
-    { key: 'create-token', title: 'Create a token' },
-    { key: 'markets', title: 'Open DEX' },
+    { key: 'swap', title: 'Swap', heading: 'Swap tokens' },
+    { key: 'create-token', title: 'Create a token', heading: 'Issue a token' },
+    { key: 'markets', title: 'Open DEX', heading: 'Decentralized exchange' },
     { key: 'contacts', title: 'Contacts' },
     { key: 'addresses', title: 'Addresses' },
     { key: 'settings', title: 'Settings' },
 ];
 
-const pick = (list, csv) => {
+export const pick = (list, csv) => {
     if (!csv || csv === true) return list;
     const wanted = String(csv).split(',').map((s) => s.trim()).filter(Boolean);
     return list.filter((x) => wanted.some((w) => (x.name || x.key).startsWith(w)));
 };
 const sizes = pick(SIZES, args.sizes);
-const screenKeys = args.screens && args.screens !== true ? String(args.screens).split(',').map((s) => s.trim()) : null;
-const wantScreen = (key) => !screenKeys || screenKeys.some((k) => key.startsWith(k));
+export const screenSelected = (key, csv) => {
+    const screenKeys = csv && csv !== true ? String(csv).split(',').map((s) => s.trim()) : null;
+    return !screenKeys || screenKeys.some((wanted) => key.startsWith(wanted));
+};
+const wantScreen = (key) => screenSelected(key, args.screens);
 
 /** Names never clicked in Settings: they lock, delete, reset, or leave the wallet. */
 const DESTRUCTIVE = /lock|remove|delete|reset|wipe|erase|sign ?out|log ?out|forget|revoke|uninstall|export|backup|reveal|show (seed|recovery)|recovery phrase|private key|clear (all|data)|factory/i;
@@ -140,8 +145,10 @@ function stopServers() {
         try { process.kill(-s.pid, 'SIGTERM'); } catch { /* already gone */ }
     }
 }
-process.on('exit', stopServers);
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopServers(); process.exit(130); });
+if (IS_MAIN) {
+    process.on('exit', stopServers);
+    for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopServers(); process.exit(130); });
+}
 
 function viteBin(tree) {
     for (const p of [join(tree, 'packages/web/node_modules/vite/bin/vite.js'), join(tree, 'node_modules/vite/bin/vite.js')]) {
@@ -247,8 +254,9 @@ async function settle(page) {
 function makeShooter(page, side, size, entries) {
     const dir = join(OUT, 'shots', side, size.name);
     mkdirSync(dir, { recursive: true });
-    return async function shoot(key) {
+    return async function shoot(key, expectedHeading = null) {
         await settle(page);
+        if (expectedHeading) await assertScreenHeading(page, expectedHeading);
         for (const phase of ['top', 'bottom']) {
             let metrics = null;
             try { metrics = await page.evaluate(scrollAll, phase); } catch (err) { metrics = { error: String(err.message || err) }; }
@@ -263,6 +271,30 @@ function makeShooter(page, side, size, entries) {
         }
         await page.evaluate(scrollAll, 'top').catch(() => {});
     };
+}
+
+async function assertScreenHeading(page, expected) {
+    const actual = await page.evaluate(() => {
+        const visible = (element) => {
+            if (!element) return false;
+            const style = getComputedStyle(element);
+            return style.display !== 'none' && style.visibility !== 'hidden'
+                && element.getClientRects().length > 0;
+        };
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].find(visible);
+        if (dialog) {
+            const label = dialog.getAttribute('aria-label');
+            if (label) return label.trim();
+            const labelledBy = dialog.getAttribute('aria-labelledby');
+            const labelled = labelledBy && document.getElementById(labelledBy);
+            if (labelled?.textContent) return labelled.textContent.trim();
+        }
+        const headings = [...document.querySelectorAll('h1, [role="heading"][aria-level="1"]')].filter(visible);
+        return headings.at(-1)?.textContent?.trim() || null;
+    });
+    if (actual !== expected) {
+        throw new Error(`heading mismatch: expected "${expected}", found ${actual ? `"${actual}"` : 'none'}`);
+    }
 }
 
 async function newContext(browser, size, opts) {
@@ -341,6 +373,32 @@ async function clickSettingsRow(page, label) {
     await rows.nth(index).click({ timeout: 5_000 });
 }
 
+async function gotoSettingsScreen(page, label) {
+    await gotoByPalette(page, 'Settings');
+    await settle(page);
+    const back = page.getByRole('button', { name: 'Back to settings' });
+    if (await back.count() > 0 && await back.first().isVisible().catch(() => false)) {
+        await back.first().click();
+        await page.waitForTimeout(250);
+    }
+    if (label === 'Keyboard') {
+        await gotoByPalette(page, 'Settings → Keyboard');
+        return 'Keyboard';
+    }
+    if (label === 'Import…') {
+        await page.getByLabel('Import contacts JSON').setInputFiles({
+            name: 'contacts.json',
+            mimeType: 'application/json',
+            buffer: Buffer.from('[]'),
+        });
+        await page.getByRole('dialog', { name: 'Import contacts?' })
+            .waitFor({ state: 'visible', timeout: 5_000 });
+        return 'Import contacts?';
+    }
+    await clickSettingsRow(page, label);
+    return label === 'Accounts & addresses' ? 'Accounts' : label;
+}
+
 async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
     const license = (/LICENSE_VERSION\s*=\s*'([^']+)'/.exec(readFileSync(join(tree, 'packages/core/src/buildInfo.js'), 'utf8')) || [])[1] || '2';
     const popupCssPath = join(tree, 'packages/extension/src/popup/popup.css');
@@ -382,7 +440,7 @@ async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
         if (!wantScreen(screen.key)) continue;
         try {
             await gotoByPalette(page, screen.title);
-            await shoot(screen.key);
+            await shoot(screen.key, screen.heading || screen.title);
         } catch (err) { skip(screen.key, err); continue; }
         if (screen.key !== 'settings') continue;
         let labels = [];
@@ -390,15 +448,8 @@ async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
         for (const label of labels) {
             const key = `settings - ${label}`;
             try {
-                await gotoByPalette(page, 'Settings');
-                await settle(page);
-                const back = page.getByRole('button', { name: 'Back to settings' });
-                if (await back.count() > 0 && await back.first().isVisible().catch(() => false)) {
-                    await back.first().click();
-                    await page.waitForTimeout(250);
-                }
-                await clickSettingsRow(page, label);
-                await shoot(key);
+                const expectedHeading = await gotoSettingsScreen(page, label);
+                await shoot(key, expectedHeading);
             } catch (err) { skip(key, err); }
         }
     }
@@ -419,19 +470,15 @@ async function captureSide(browser, side, tree, baseUrl, entries, skips) {
 
 // ---------------------------------------------------------------- diff
 
-function readPng(file) {
-    return PNG.sync.read(readFileSync(file));
-}
-
 /**
  * Fraction of pixels that differ by more than the tolerance on any channel,
  * plus a diff image: the baseline faded to grey with changed pixels in red.
  * Images of different sizes are compared over their union, the part one
  * lacks counting as changed.
  */
-function diffPngs(aFile, bFile, outFile) {
-    const a = readPng(aFile);
-    const b = readPng(bFile);
+export function diffPngBuffers(aBuffer, bBuffer, tolerance = 24) {
+    const a = PNG.sync.read(aBuffer);
+    const b = PNG.sync.read(bBuffer);
     const w = Math.max(a.width, b.width);
     const h = Math.max(a.height, b.height);
     const out = new PNG({ width: w, height: h });
@@ -446,7 +493,7 @@ function diffPngs(aFile, bFile, outFile) {
             let diff = !(inA && inB);
             if (!diff) {
                 for (let c = 0; c < 3; c += 1) {
-                    if (Math.abs(a.data[ia + c] - b.data[ib + c]) > TOLERANCE) { diff = true; break; }
+                    if (Math.abs(a.data[ia + c] - b.data[ib + c]) > tolerance) { diff = true; break; }
                 }
             }
             if (diff) {
@@ -459,8 +506,17 @@ function diffPngs(aFile, bFile, outFile) {
             }
         }
     }
-    writeFileSync(outFile, PNG.sync.write(out));
-    return { percent: Number(((changed / (w * h)) * 100).toFixed(3)), sizeMismatch: a.width !== b.width || a.height !== b.height };
+    return {
+        percent: Number(((changed / (w * h)) * 100).toFixed(3)),
+        sizeMismatch: a.width !== b.width || a.height !== b.height,
+        image: PNG.sync.write(out),
+    };
+}
+
+function diffPngs(aFile, bFile, outFile) {
+    const result = diffPngBuffers(readFileSync(aFile), readFileSync(bFile), TOLERANCE);
+    writeFileSync(outFile, result.image);
+    return { percent: result.percent, sizeMismatch: result.sizeMismatch };
 }
 
 // ---------------------------------------------------------------- report
@@ -477,12 +533,12 @@ function fmtMetrics(m) {
     return parts.join('; ');
 }
 
-function writeReport(rows, skips, meta) {
-    const rel = (p) => (p ? relative(OUT, p) : null);
-    const index = {
+export function buildReportIndex(rows, skips, meta, { outDir, tolerance, sizeNames }) {
+    const rel = (p) => (p ? relative(outDir, p) : null);
+    return {
         ...meta,
-        tolerance: TOLERANCE,
-        sizes: sizes.map((s) => s.name),
+        tolerance,
+        sizes: sizeNames,
         rows: rows.map((r) => ({
             screen: r.screen, size: r.size, phase: r.phase, percent: r.percent, status: r.status,
             pruned: Boolean(r.pruned),
@@ -491,6 +547,15 @@ function writeReport(rows, skips, meta) {
         })),
         skipped: skips,
     };
+}
+
+function writeReport(rows, skips, meta) {
+    const rel = (p) => (p ? relative(OUT, p) : null);
+    const index = buildReportIndex(rows, skips, meta, {
+        outDir: OUT,
+        tolerance: TOLERANCE,
+        sizeNames: sizes.map((s) => s.name),
+    });
     writeFileSync(join(OUT, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
 
     const img = (p, alt, pruned) => {
@@ -626,8 +691,10 @@ async function main() {
     console.log(`${rows.length} shots, ${rows.filter((r) => r.percent >= KEEP_THRESHOLD).length} at ${KEEP_THRESHOLD}% or more, ${pruning.pruned} pruned, ${rows.filter((r) => r.percent === null).length} unpaired, ${skips.length} skipped`);
 }
 
-main().catch((err) => {
-    console.error(err);
-    stopServers();
-    process.exit(1);
-});
+if (IS_MAIN) {
+    main().catch((err) => {
+        console.error(err);
+        stopServers();
+        process.exit(1);
+    });
+}

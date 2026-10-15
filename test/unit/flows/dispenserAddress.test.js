@@ -243,6 +243,36 @@ describe('dispenserAddress (§16)', () => {
         expect(rec.derivationPath).toBe("m/84'/0'/0'/0/3");
     });
 
+    it('never probes a demo wallet gap on the explorer, and grows past it (issue #82)', async () => {
+        // A demo wallet lands on mainnet, so the gap probe would hand a
+        // throwaway address to a public explorer. Without the probe the gap
+        // counts as used, the answer a failed probe gives.
+        const seeded = [0, 2].map((i) => createAddress({
+            accountId: 'acct-a',
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: `m/84'/0'/0'/0/${i}`,
+            address: `seed_${i}`,
+            publicKey: `seedpub_${i}`,
+            role: 'dispenser',
+        }));
+        const vault = {
+            ...makeVault({ accounts: [ACCOUNT_A], addresses: seeded }),
+            wallets: memCollection([{ id: 'w1', origin: 'demo' }]),
+        };
+        let probes = 0;
+        const spySdkRegistry = {
+            get: () => ({ explorer: { getHistory: async () => { probes += 1; return []; } } }),
+        };
+        const rec = await dispenserAddress(
+            base(vault, signer, { sdkRegistry: spySdkRegistry }),
+        );
+        expect(probes).toBe(0);
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/3");
+    });
+
     it('persists the record so it is retrievable from the vault', async () => {
         const vault = makeVault({ accounts: [ACCOUNT_A] });
         const rec = await dispenserAddress(base(vault, signer));

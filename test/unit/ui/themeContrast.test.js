@@ -239,3 +239,10 @@ describe('theme token contrast', () => {
         expect(addressComboboxCss).toContain('color: var(--xc-text-muted)');
     });
 });
+
+describe('disabled controls with a hidden native input', () => {
+    it.each(['Switch', 'Checkbox'])('keeps the %s input invisible when disabled despite the global !important', (name) => {
+        const css = readFileSync(`packages/core/src/ui/${name}.module.css`, 'utf8');
+        expect(css).toMatch(/\.input:disabled\s*\{[^}]*opacity:\s*0\s*!important/s);
+    });
+});

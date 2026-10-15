@@ -128,6 +128,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // override to revoke an older key.
     useEffect(() => {
         if (isDelegate) return;
+        // A demo wallet cannot revoke, and a demo wallet's addresses never go to
+        // an explorer (issue #82).
+        if (demoGuard.blocked) return;
         if (!fromAddressId || !addressesByChain) return;
         const addr = (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId);
         if (!addr) return;
@@ -165,7 +168,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 );
             });
         return () => { cancelled = true; };
-    }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging]);
+    }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging, demoGuard.blocked]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -407,7 +410,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -454,7 +457,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -576,7 +579,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             label={verb}
             onSubmit={handleReview}
             status={formError || prefillError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError || prefillError}</StatusMessage>
+                <StatusMessage variant="error">{formError || prefillError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
