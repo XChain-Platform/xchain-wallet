@@ -36,7 +36,7 @@ assert.match(cmp, /onClick=\{onOpenPicker\}/, 'click opens the picker via the ho
 assert.match(cmp, /type="button"/, 'control is a button');
 
 // empty state + labels
-assert.match(cmp, /placeholder = t\('components\.tokenField\.selectAToken'\)/, 'default empty-state placeholder');
+assert.match(cmp, /placeholder = 'Select a token'/, 'default empty-state placeholder');
 assert.match(cmp, /const hasValue = Boolean\(chainId && tick\)/, 'renders the empty state when no value');
 assert.match(cmp, /aria-label=\{accessibleName\}/, 'button carries an accessible name with the selection');
 
