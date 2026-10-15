@@ -56,6 +56,14 @@
     transform: scaleX(-1);
 }
 
+/* The activity sections stack at the same section gap as the page's own
+   children, since this region sits between them and the page column. */
+.activity {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-gap);
+}
+
 .count {
     color: var(--xc-text);
     font-weight: 700;

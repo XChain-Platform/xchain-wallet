@@ -32,8 +32,9 @@
 
 /* A screen that wraps each group in its own section keeps the same rhythm:
    the sections stack at the section gap of this column, and each heading
-   sits the header gap above its content. */
-.page section > [data-xc-section-header] + * {
+   sits the header gap above its content. A FormSection names itself with
+   aria-labelledby and already spaces its own header and body. */
+.page section:not([aria-labelledby]) > [data-xc-section-header] + * {
     margin-block-start: var(--xc-section-header-gap);
 }
 

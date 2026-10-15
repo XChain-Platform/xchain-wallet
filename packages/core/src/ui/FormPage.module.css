@@ -153,7 +153,9 @@
 .section {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-form-gap);
+    /* A section is its header and its body: the header gap, as on list
+       screens, rather than the gap between fields. */
+    gap: var(--xc-section-header-gap);
     min-width: 0;
     margin: 0;
 }

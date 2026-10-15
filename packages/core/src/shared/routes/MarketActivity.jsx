@@ -300,7 +300,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 ) : null}
                 toolbar={marketSelector}
             >
-                <div role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
+                <div className={styles.activity} role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
                     {loading && offers === null ? (
                         <div className={styles.list} role="status" aria-label="Loading marketplace activity">
                             <Skeleton height={56} />
