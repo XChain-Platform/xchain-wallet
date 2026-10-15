@@ -98,6 +98,14 @@
     margin: 0;
 }
 
+/* Several notices (the form's own plus ones raised from inside the body) stack
+   with the form's gap between them instead of touching. */
+.status {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+}
+
 /* A status message (StatusMessage or the error summary built on its row) sits
    in a form stack on the stack's gap alone. Its row carries an 8px block
    margin for use outside forms, and route modules pass their own margined
