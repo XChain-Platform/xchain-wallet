@@ -118,7 +118,7 @@ describe('Receive QR height fit', () => {
         );
         // The landscape-phone cap keeps its own viewport term alongside.
         expect(css).toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?max-width: min\(var\(--xc-qr-frame-size\), var\(--xc-qr-fit-size, var\(--xc-qr-frame-size\)\), calc\(var\(--xc-viewport-h, 100vh\) - 11rem\)\);/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\) \{[\s\S]*?max-width: min\(var\(--xc-qr-frame-size\), var\(--xc-qr-fit-size, var\(--xc-qr-frame-size\)\), calc\(var\(--xc-viewport-h, 100vh\) - 11rem\)\);/,
         );
     });
 });

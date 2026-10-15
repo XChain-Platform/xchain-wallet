@@ -11,7 +11,7 @@ function read(relativePath) {
     return readFileSync(join(process.cwd(), relativePath), 'utf8');
 }
 
-const landscapeQuery = '@media (orientation: landscape) and (max-height: 480px)';
+const landscapeQuery = '@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2)';
 const appHeader = read('packages/core/src/shared/components/AppHeader.module.css');
 const pageHeader = read('packages/core/src/ui/PageHeader.module.css');
 const routeError = read('packages/core/src/shared/components/RouteErrorBoundary.module.css');
@@ -47,8 +47,8 @@ describe('phone landscape layout', () => {
         expect(bottomBar).toContain(landscapeQuery);
         expect(bottomBar).toMatch(/\.bar\s*\{\s*min-height: 2\.75rem;/);
         expect(bottomBar).toMatch(/\.tab\s*\{[\s\S]*?min-height: var\(--xc-tap-min\);/);
-        expect(leftNav).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?padding-bottom: calc\(44px/);
-        expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.header\s*\{[^}]*padding-block:\s*0;/);
+        expect(leftNav).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\)[\s\S]*?padding-bottom: calc\(44px/);
+        expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\)[\s\S]*?\.header\s*\{[^}]*padding-block:\s*0;/);
     });
 
     it('gives an 844 by 390 phone at least 220px of scrollable route content', () => {

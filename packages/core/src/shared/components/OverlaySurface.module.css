@@ -185,7 +185,7 @@
     }
 }
 
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .dialogOverlay {
         padding: var(--xc-space-2);
     }

@@ -254,7 +254,7 @@
 
 /* The active explanation scrolls within its lane when translated text is
    taller than a short landscape screen. Navigation remains outside it. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .rootPopup,
     .centeredFull {
         gap: var(--xc-space-2);

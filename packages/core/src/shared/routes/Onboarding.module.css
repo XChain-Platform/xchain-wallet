@@ -169,7 +169,7 @@
 
 /* Short landscape screens retain every onboarding action while trimming
    decorative height around the brand and license gate. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .logoPopup,
     .logoFull {
         /* Preserve the compact landscape artwork width, which has no size token. */

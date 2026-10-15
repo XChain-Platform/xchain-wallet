@@ -121,7 +121,7 @@
 }
 
 /* Route chrome and camera previews yield vertical space on landscape phones. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .screen {
         /* The screen scrolls just far enough to move the title row away and
            expose the content floor; longer route content still scrolls in body. */
