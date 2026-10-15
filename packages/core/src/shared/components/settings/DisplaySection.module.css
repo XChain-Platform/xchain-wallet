@@ -7,6 +7,14 @@
     padding: var(--xc-space-1) 0;
 }
 
+/* ROW_COPY carries an inline min-width of min(100%, 280px). WebKit resolves
+   that percentage against the grid container rather than the cell, so in a
+   side-rail window the copy column overflows its cell and the select paints
+   over the description. The grid column already sizes the copy; let it shrink. */
+.fieldRow > :first-child {
+    min-width: 0 !important;
+}
+
 .watchControls {
     display: grid;
     grid-template-columns: minmax(6rem, 1fr) minmax(5rem, 0.6fr) auto;
