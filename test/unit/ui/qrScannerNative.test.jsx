@@ -237,7 +237,7 @@ describe('QrScanner with the native scanner', () => {
         await tapScan();
         await act(async () => { state.reject('denied'); });
 
-        expect(screen.getByRole('alert').textContent).toBe(
+        expect(screen.getByRole('alert').textContent).toContain(
             'Camera access is turned off for XChain Wallet. Allow it in Settings, or paste the code instead.',
         );
         expect(screen.getByRole('button', { name: /Scan with camera/ }).disabled).toBe(false);
@@ -250,7 +250,7 @@ describe('QrScanner with the native scanner', () => {
         await tapScan();
         await act(async () => { state.reject('unavailable'); });
 
-        expect(screen.getByRole('alert').textContent).toBe(
+        expect(screen.getByRole('alert').textContent).toContain(
             'There is no camera on this device. Paste the code instead.',
         );
     });

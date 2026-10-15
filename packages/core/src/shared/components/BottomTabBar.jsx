@@ -36,8 +36,9 @@ import { t } from '../../i18n/index.js';
  * of the wallet.
  *
  * Visibility: this component renders itself unconditionally; the
- * parent (`<FullLayoutWithNav>`) hides it via CSS above 600px so
- * tablets and desktops keep the left-nav layout. Below 600px the
+ * parent (`<FullLayoutWithNav>`) mounts it only in the compact tier
+ * (container under 640px), so tablets and desktops keep the left-nav
+ * layout. In the compact tier the
  * sheet floats above main content and the route gets enough
  * bottom-padding to clear the bar.
  *
@@ -147,7 +148,7 @@ export function BottomTabBar({
     );
     // The Wallet Mode screen tells a signer-mode user "Send / receive
     // screens are hidden; this wallet does not broadcast". The bottom bar is
-    // the whole navigation below 600px, so leaving Send in the thumb row would
+    // the whole navigation in the compact tier, so leaving Send in the thumb row would
     // break that promise on exactly the device most likely to be the signer.
     const primaryTabs = PRIMARY_TABS.filter((tab) => !tab.spendable || !isSignerMode);
     // Messaging lives behind "More", so any unread inside the sheet also needs a
