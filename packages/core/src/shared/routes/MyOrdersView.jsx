@@ -347,21 +347,23 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <PageHeader
             onBack={onBack}
             title="My orders"
-            trailing={onCreateOrder ? (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Icon.PlusIcon />}
-                    onClick={onCreateOrder}
-                    aria-label="New order"
-                    title="New order"
-                />
-            ) : undefined}
         />
     );
-    const wrap = (children) => (
+    // The page header holds only the title and Back, so New order sits in
+    // the content's actions row. An empty list offers it from its
+    // EmptyState instead, so the screen never shows it twice.
+    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage
+                notices={notices}
+                actions={onCreateOrder && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateOrder}>
+                        New order
+                    </Button>
+                ) : null}
+            >
+                {children}
+            </ListPage>
         </Screen>
     );
 
@@ -393,15 +395,17 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         );
     }
     if (loadError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={L.hint}
-                recovery={{ label: 'Try again', onAction: load }}
-            >
-                {loadError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={L.hint}
+                    recovery={{ label: 'Try again', onAction: load }}
+                >
+                    {loadError}
+                </StatusMessage>
+            ),
+        });
     }
     if (items.length === 0) {
         return wrap(
@@ -411,6 +415,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                 actionLabel={onCreateOrder ? 'Create an order' : undefined}
                 onAction={onCreateOrder}
             />,
+            { emptyOffersCreate: true },
         );
     }
 

@@ -98,7 +98,7 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(routes['PsbtSignForm.jsx']).toMatch(/<Select[\s\S]*label="Signing address"/);
         expect(routes['PsbtSignForm.jsx']).toMatch(/<Textarea[\s\S]*label="Unsigned transaction/);
         expect(routes['StakingList.jsx']).toMatch(/<Input[\s\S]*aria-label="Search staking positions"/);
-        expect(routes['StakingList.jsx']).toMatch(/<Button[\s\S]*aria-label="New stake"/);
+        expect(routes['StakingList.jsx']).toMatch(/<Button[\s\S]*>\s*New stake\s*<\/Button>/);
     });
 
     it('documents the shared Input size prop instead of inline big-field values', () => {

@@ -380,44 +380,46 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             backLabel="Back to home"
             titleIcon={<Icon.StakeIcon />}
             title="Staking"
-            trailing={onNewStake ? (
-                <Button
-                    type="button"
-                    className={local.addBtn}
-                    onClick={() => onNewStake()}
-                    aria-label="New stake"
-                    title="New stake"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : undefined}
         />
     );
-    const wrap = (children, toolbar) => (
+    // The page header holds only the title and Back, so New stake sits in the
+    // content's actions row. An empty list offers it from its EmptyState
+    // instead, so the screen never shows it twice.
+    const wrap = (children, { toolbar, notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
+            <ListPage
+                notices={notices}
+                actions={onNewStake && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onNewStake()}>
+                        New stake
+                    </Button>
+                ) : null}
+                toolbar={toolbar}
+            >
                 {children}
             </ListPage>
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.entryDescription}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setAddressesError(null);
-                        setAddressesByChain(null);
-                        setAddressesReload((value) => value + 1);
-                    },
-                }}
-            >
-                {addressesError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setAddressesError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {addressesError}
+                </StatusMessage>
+            ),
+        });
     }
     if (!addressesByChain) {
         return wrap(
@@ -457,6 +459,23 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         </div>
     );
 
+    const loadErrorNotice = loadErrors.length > 0 ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{
+                label: 'Try again',
+                onAction: () => {
+                    setStateByChain({});
+                    setStakingReload((value) => value + 1);
+                },
+            }}
+        >
+            Couldn't load some staking data. {loadErrors.join('; ')}
+        </StatusMessage>
+    ) : null;
+    const emptyOffersCreate = !anyLoading && allRows.length === 0 && loadErrors.length === 0 && Boolean(onNewStake);
+
     return wrap(
         <>
             {Number(claimable.unclaimed) > 0 ? (
@@ -476,21 +495,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         <Button variant="primary" onClick={() => onOpenStake(firstValidatorRef)}>Claim</Button>
                     ) : null}
                 </div>
-            ) : null}
-            {loadErrors.length > 0 ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setStateByChain({});
-                            setStakingReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    Couldn't load some staking data. {loadErrors.join('; ')}
-                </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading staking positions">
@@ -537,7 +541,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 </div>
             )}
         </>,
-        toolbar,
+        { toolbar, notices: loadErrorNotice, emptyOffersCreate },
     );
 }
 

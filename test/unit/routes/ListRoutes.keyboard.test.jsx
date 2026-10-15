@@ -120,38 +120,38 @@ describe('list route keyboard flows', () => {
         });
     });
 
-    it('reaches New order and leaves My orders with Back', async () => {
+    it('reaches Create an order and leaves My orders with Back', async () => {
         await exerciseRoute({
             Component: MyOrdersView,
             messaging: {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
                 getOrdersForAddress: vi.fn().mockResolvedValue([]),
             },
-            primaryName: 'New order',
+            primaryName: 'Create an order',
             props: (onPrimary) => ({ onCreateOrder: onPrimary }),
         });
     });
 
-    it('reaches New swap and leaves My swaps with Back', async () => {
+    it('reaches Create a swap and leaves My swaps with Back', async () => {
         await exerciseRoute({
             Component: MySwapsView,
             messaging: {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
                 getSwapsForAddress: vi.fn().mockResolvedValue([]),
             },
-            primaryName: 'New swap',
+            primaryName: 'Create a swap',
             props: (onPrimary) => ({ onCreateSwap: onPrimary }),
         });
     });
 
-    it('reaches Issue new token and leaves My tokens with Back', async () => {
+    it('reaches Issue token and leaves My tokens with Back', async () => {
         await exerciseRoute({
             Component: MyTokens,
             messaging: {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
                 getOwnedTokens: vi.fn().mockResolvedValue([]),
             },
-            primaryName: 'Issue new token',
+            primaryName: 'Issue token',
             props: (onPrimary) => ({ onIssue: onPrimary, onSelectTick: vi.fn() }),
         });
     });

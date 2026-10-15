@@ -124,47 +124,42 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
         <PageHeader
             onBack={onBack}
             title="Payments due"
-            // Icon only: the header's trailing slot draws every button as a
-            // small square icon control, and the word "Refresh" ran off the
-            // screen edge.
-            trailing={(
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={null}
-                    onClick={refresh}
-                    disabled={scanning}
-                    aria-label="Refresh payments"
-                    title="Refresh payments"
-                >
-                    <Icon.RefreshIcon />
-                </Button>
-            )}
         />
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage>
-                {autopayArmed ? (
-                    <p className={styles.hint}>
-                        CoinPay auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
-                        confirmed matches are paid automatically while the wallet stays unlocked.
-                    </p>
-                ) : null}
-                {autopayDisarmed ? (
-                    <StatusMessage variant="error" className={styles.hint}>
-                        Auto-pay is disarmed: this wallet has auto-pay orders but cannot sign
-                        right now. Unlock the wallet with your password to re-arm it, or pay
-                        matches manually from this queue.
-                    </StatusMessage>
-                ) : null}
+            {/* The page header holds only the title and Back, so Refresh sits in
+                the content's actions row, below the notices. */}
+            <ListPage
+                notices={(
+                    <>
+                        {autopayArmed ? (
+                            <p className={styles.hint}>
+                                CoinPay auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
+                                confirmed matches are paid automatically while the wallet stays unlocked.
+                            </p>
+                        ) : null}
+                        {autopayDisarmed ? (
+                            <StatusMessage variant="error" className={styles.hint}>
+                                Auto-pay is disarmed: this wallet has auto-pay orders but cannot sign
+                                right now. Unlock the wallet with your password to re-arm it, or pay
+                                matches manually from this queue.
+                            </StatusMessage>
+                        ) : null}
+                        {scanError ? (
+                            <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
+                        ) : null}
+                    </>
+                )}
+                actions={(
+                    <Button variant="secondary" icon={<Icon.RefreshIcon />} onClick={refresh} disabled={scanning}>
+                        Refresh payments
+                    </Button>
+                )}
+            >
                 {scanning && obligations.length === 0 ? (
                     <p className={styles.hint}>Scanning for payments due…</p>
-                ) : null}
-
-                {scanError ? (
-                    <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
                 ) : null}
 
                 {!scanning && !scanError && classified.length === 0 ? (

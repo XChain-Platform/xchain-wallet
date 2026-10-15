@@ -2,7 +2,6 @@
 // the shared control scale. New entries require a selector-specific reason.
 export const CONTROL_SIZE_LITERAL_ALLOWLIST = [
     { file: 'shared/components/HomeTabs.module.css', selector: '.tokenIconSquare', property: 'height', value: '48px', reason: 'Token artwork geometry is not a control height.' },
-    { file: 'shared/routes/AddressList.module.css', selector: '.addBtn', property: 'height', value: '38px', reason: 'Legacy add action pending shared Button adoption.' },
     { file: 'shared/routes/AddressList.module.css', selector: '.quickActionIcon', property: 'height', value: '32px', reason: 'Quick-action artwork geometry is not a control height.' },
     { file: 'shared/routes/ContactsList.module.css', selector: '.addAddressBtn', property: 'height', value: '30px', reason: 'Legacy address action pending shared Button adoption.' },
     { file: 'shared/routes/ContactsList.module.css', selector: '.quickActionIcon', property: 'height', value: '32px', reason: 'Quick-action artwork geometry is not a control height.' },
@@ -14,7 +13,6 @@ export const CONTROL_SIZE_LITERAL_ALLOWLIST = [
     { file: 'shared/routes/History.module.css', selector: '.detailActionIcon', property: 'height', value: '32px', reason: 'History action artwork geometry is not a control height.' },
     { file: 'shared/routes/History.module.css', selector: '.detailActionFavicon', property: 'height', value: '32px', reason: 'History favicon geometry is not a control height.' },
     { file: 'shared/routes/MyLists.module.css', selector: '.iconWrap', property: 'height', value: '48px', reason: 'List artwork geometry is not a control height.' },
-    { file: 'shared/routes/MyTokens.module.css', selector: '.issueButton', property: 'height', value: '32px', reason: 'Legacy issue action pending shared Button adoption.' },
     { file: 'shared/routes/MyTokens.module.css', selector: '.chipGroup', property: 'min-height', value: '36px', reason: 'Chip-group layout geometry is not a single control height.' },
     { file: 'shared/routes/Receive.module.css', selector: '.assetCard', property: 'height', value: '48px', reason: 'Receive asset artwork geometry is not a control height.' },
     { file: 'shared/routes/Send.module.css', selector: '.heroChainOverlay', property: 'height', value: '32px', reason: 'Send hero badge artwork is not a control height.' },
