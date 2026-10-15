@@ -171,6 +171,34 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         expect(submit.args).toMatchObject({ destination: COUNTERPARTY, version: 1 });
     });
 
+    it('gives the inbox key-share confirmation the whole screen, then returns to the list', async () => {
+        const { messaging } = recordingMessaging();
+        let utils;
+        await domAct(async () => {
+            utils = mount(MessagingInbox, messaging);
+            await drainMicrotasks(24);
+        });
+        expect(utils.getByLabelText('Search conversations')).toBeTruthy();
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Share my key' }));
+            await drainMicrotasks();
+        });
+
+        // The review is its own screen: no inbox toolbar, request list or
+        // inbox title sits around it.
+        expect(utils.getByTestId('confirm-modal')).toBeTruthy();
+        expect(utils.queryByLabelText('Search conversations')).toBeNull();
+        expect(utils.queryByRole('region', { name: 'Encrypted-session requests' })).toBeNull();
+        expect(utils.queryByRole('heading', { name: 'Messaging' })).toBeNull();
+
+        await approve(utils);
+
+        expect(utils.queryByTestId('confirm-modal')).toBeNull();
+        expect(utils.getByLabelText('Search conversations')).toBeTruthy();
+        expect(utils.getByText(/Key shared/)).toBeTruthy();
+    });
+
     it('shows an unsigned inbox key-share without claiming it was sent in watcher mode', async () => {
         const buildActionPsbtRequest = vi.fn(() =>
             Promise.resolve({ psbtHex: 'aa00', encoding: 'psbt' }));

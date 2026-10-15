@@ -88,7 +88,7 @@ export function FeesSection() {
     if (chainIds.length === 0) {
         return (
             <Status
-                text="No chain fee profiles yet. They're seeded automatically when a chain is activated."
+                text="No network fee profiles yet. They're seeded automatically when a network is activated."
             />
         );
     }
@@ -212,7 +212,7 @@ export function FeesSection() {
                             label="Allow fee bump (Replace-by-Fee)"
                             accessibleLabel={`${displayName} allow fee bump (Replace-by-Fee)`}
                             hint={descriptor?.feeStrategy?.rbfSupported
-                                ? 'Keep this on so you can raise the fee later to speed up a stuck send on this chain.'
+                                ? 'Keep this on so you can raise the fee later to speed up a stuck send on this network.'
                                 : `Fee bumping is not supported on ${displayName}.`}
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {

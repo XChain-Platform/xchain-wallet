@@ -363,7 +363,7 @@ function jsonRecordProblem(record) {
         const chain = String(entry.chain || '').trim().toLowerCase();
         const address = String(entry.address || '').trim();
         if (!SUPPORTED_CHAINS.has(chain)) {
-            return `address chain must be bitcoin, litecoin, or dogecoin, not "${chain || 'empty'}".`;
+            return `address network must be bitcoin, litecoin, or dogecoin, not "${chain || 'empty'}".`;
         }
         if (!isValidAddressAnyNetwork(address)) return `"${address}" is not a valid supported address.`;
         const addressCoin = detectAddressCoin(address);

@@ -28,15 +28,15 @@ const rowStyle = {
 
 export function ChainBadgeSection() {
     return (
-        <Section id="chain-badge" title="Chain badge" tag="PRIMITIVE" kicker="Compact, read-only chain identity for summaries, lists, and review rows.">
+        <Section id="chain-badge" title="Network badge" tag="PRIMITIVE" kicker="Compact, read-only network identity for summaries, lists, and review rows.">
             <Guidance
-                what={<>The chain icon alone by default, with the canonical display name exposed to assistive technology.</>}
-                when={<>Use where the chain is fixed and the user is reviewing or scanning data.</>}
+                what={<>The network icon alone by default, with the canonical display name exposed to assistive technology.</>}
+                when={<>Use where the network is fixed and the user is reviewing or scanning data.</>}
                 whenNot={<>Use <code>ChainPicker</code> or <code>NetworkField</code> when the user can change the network.</>}
                 sizing={<><code>sm</code> fits list rows; <code>md</code> fits details and review summaries.</>}
-                variants={<>Use <code>showName</code> only where the chain name must appear beside the icon. Network-kind text is never rendered.</>}
+                variants={<>Use <code>showName</code> only where the network name must appear beside the icon. Network-kind text is never rendered.</>}
                 doRule={<>Pass the registry descriptor so color, icon, and network naming stay canonical.</>}
-                dontRule={<>Do not substitute a badge for an editable chain field or pass the removed <code>{'showNetworkKind={false}'}</code> option.</>}
+                dontRule={<>Do not substitute a badge for an editable network field or pass the removed <code>{'showNetworkKind={false}'}</code> option.</>}
             />
             <Markup>
 {`import { ChainBadge } from '@xchain-wallet/core/ui';

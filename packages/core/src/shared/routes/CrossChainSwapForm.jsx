@@ -162,13 +162,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate addresses on at least two chains before composing a cross-chain swap.',
+                        'No addresses on any network yet. Use Receive to generate addresses on at least two networks before composing a cross-chain swap.',
                     );
                     return;
                 }
                 if (chains.length === 1) {
                     setLoadError(
-                        'A cross-chain swap needs addresses on two different chains. Use Receive on a second chain (e.g. DOGE or LTC) and try again.',
+                        'A cross-chain swap needs addresses on two different networks. Use Receive on a second network (e.g. DOGE or LTC) and try again.',
                     );
                     return;
                 }
@@ -267,7 +267,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const validationError = useMemo(() => {
         if (!giveCoinTicker || !getCoinTicker) return null;
         if (giveCoinTicker === getCoinTicker) {
-            return 'Give and get chains must differ. For same-chain swaps use Swap tokens.';
+            return 'Give and get networks must differ. For same-chain swaps use Swap tokens.';
         }
         if (giveTick.trim() && giveTick.trim().toUpperCase() === giveCoinTicker) {
             return `${actionDisplayLabel('SWAP')} cannot give ${giveCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
@@ -488,7 +488,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         if (!getAddress.trim()) {
-            setFormError('Enter a receive address on the get chain.');
+            setFormError('Enter a receive address on the get network.');
             return;
         }
         if (validationError || feeError) return;
@@ -724,7 +724,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     {giveDescriptor ? (
                         <DetailRow
-                            label="Give chain"
+                            label="Give network"
                             value={<ChainBadge descriptor={giveDescriptor} size="sm" />}
                         />
                     ) : null}
@@ -738,7 +738,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     />
                     {getDescriptor ? (
                         <DetailRow
-                            label="Get chain"
+                            label="Get network"
                             value={<ChainBadge descriptor={getDescriptor} size="sm" />}
                         />
                     ) : null}
@@ -919,7 +919,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         >
             <FormSection title="You give">
                     <ChainPicker
-                        label="Give chain"
+                        label="Give network"
                         value={giveChainId || ''}
                         onChange={(cid) => {
                             if (cid === giveChainId) return;
@@ -976,7 +976,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
 
             <FormSection title="You get">
                     <ChainPicker
-                        label="Get chain"
+                        label="Get network"
                         value={getChainId || ''}
                         onChange={(cid) => {
                             if (cid === getChainId) return;
@@ -998,7 +998,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                             setGetAddress(e.target.value);
                             setGetAddressTouched(true);
                         }}
-                        placeholder="Automatically filled from your wallet on the get chain"
+                        placeholder="Automatically filled from your wallet on the get network"
                         autoComplete="off"
                     />
                     <TokenField

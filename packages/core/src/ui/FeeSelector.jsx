@@ -132,7 +132,7 @@ export function FeeSelector({
             <div className={styles.wrap}>
                 {headerRow()}
                 {showEstimateNotice ? (
-                    <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
+                    <p className={styles.placeholder}>Fee estimate unavailable for this network.</p>
                 ) : null}
             </div>
         );

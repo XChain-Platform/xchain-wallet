@@ -56,7 +56,7 @@ describe('NetworkStatusIndicator', () => {
         expect(onOpenNetworkSettings).not.toHaveBeenCalled();
     });
 
-    it('names every affected chain in a degraded state', () => {
+    it('names every affected network in a degraded state', () => {
         reachability.value = {
             overall: 'degraded',
             perChain: [
@@ -75,7 +75,7 @@ describe('NetworkStatusIndicator', () => {
         expect(screen.queryByText(/Bitcoin:/)).toBeNull();
     });
 
-    it('keeps repeated chain rows uniquely keyed', () => {
+    it('keeps repeated network rows uniquely keyed', () => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
         reachability.value = {
             overall: 'degraded',
@@ -99,11 +99,11 @@ describe('NetworkStatusIndicator', () => {
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
 
         const trigger = screen.getByRole('button', {
-            name: 'Mainnet. Network offline: no selected chain is reachable',
+            name: 'Mainnet. Network offline: no selected network is reachable',
         });
         expect(trigger.closest('[data-state]')).toHaveAttribute('data-state', 'offline');
         fireEvent.click(trigger);
-        expect(screen.getByText('No selected chain is reachable.')).toBeTruthy();
+        expect(screen.getByText('No selected network is reachable.')).toBeTruthy();
     });
 
     it('keeps the popover inside a 360px viewport beside either edge', () => {

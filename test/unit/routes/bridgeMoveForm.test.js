@@ -153,7 +153,7 @@ async function advanceFeeQuote() {
 }
 
 describe('BridgeMoveForm: the destination is resolved from the user\'s own account', () => {
-    it('fills the receiving address from the wallet\'s own address on the destination chain', async () => {
+    it('fills the receiving address from the wallet\'s own address on the destination network', async () => {
         const messaging = mount();
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
@@ -162,7 +162,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         expect(messaging.getNewestAddress).toHaveBeenCalledWith('w', DOGE, undefined);
     });
 
-    it('clears source-scoped input and ignores an old fee quote after the chain pair changes', async () => {
+    it('clears source-scoped input and ignores an old fee quote after the network pair changes', async () => {
         let resolveQuote;
         const quote = new Promise((resolve) => { resolveQuote = resolve; });
         const requoteNativeFee = vi.fn(() => quote);
@@ -236,7 +236,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
     it('states the direction and that the credit cannot be undone or redirected', async () => {
         mount();
         await waitFor(
-            () => expect(screen.getByText(/This locks XCHAIN on the source chain and credits it on the destination chain/i))
+            () => expect(screen.getByText(/This locks XCHAIN on the source network and credits it on the destination network/i))
                 .toBeInTheDocument(),
             WAIT,
         );
@@ -310,7 +310,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
 describe('BridgeMoveForm: unhappy path - no destination account', () => {
     it('refuses to offer a destination and says how to create one', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS] } });
-        const msg = await screen.findByText(/You have no address on another chain yet/i, {}, WAIT);
+        const msg = await screen.findByText(/You have no address on another network yet/i, {}, WAIT);
         expect(msg.textContent).toContain('Use Receive to create one first');
         expect(msg.textContent).toContain('cannot be redirected once it applies');
         expect(screen.queryByLabelText('Receive at')).toBeNull();
@@ -319,7 +319,7 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 
     it('does not treat an empty address group as a usable destination', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [] } });
-        expect(await screen.findByText(/You have no address on another chain yet/i, {}, WAIT))
+        expect(await screen.findByText(/You have no address on another network yet/i, {}, WAIT))
             .toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
         expect(moveButton()).toBeDisabled();
@@ -327,19 +327,19 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 });
 
 describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', () => {
-    it('refuses a destination the issuer never opted in to without repeating chain names', async () => {
+    it('refuses a destination the issuer never opted in to without repeating network names', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] },
             initialTick: 'FUFU',
             balances: { FUFU: '100' },
             tokenInfo: { chainId: DOGE, tick: 'FUFU', bridgeChains: 'LTC' },
         });
-        const msg = await screen.findByText(/cannot move to the selected destination chain/i, {}, WAIT);
+        const msg = await screen.findByText(/cannot move to the selected destination network/i, {}, WAIT);
         expect(msg.textContent).not.toMatch(/Bitcoin|Litecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(moveButton()).toBeDisabled();
     });
 
-    it('offers only the origin chain for a bridged copy, so a burn cannot be aimed anywhere else', async () => {
+    it('offers only the origin network for a bridged copy, so a burn cannot be aimed anywhere else', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], [LTC]: [LTC_ADDRESS] },
             initialTick: 'BTC.PEPECASH',
@@ -361,7 +361,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         expect(moveButton('Review move back')).toBeInTheDocument();
     });
 
-    it('explains when the wallet has another chain but no address on the only supported destination', async () => {
+    it('explains when the wallet has another network but no address on the only supported destination', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [LTC]: [LTC_ADDRESS] },
             initialTick: 'BTC.PEPECASH',
