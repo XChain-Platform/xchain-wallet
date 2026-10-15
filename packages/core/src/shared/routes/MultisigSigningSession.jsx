@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Button, EmptyState, Input, ListPage, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Button, EmptyState, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -580,36 +580,36 @@ export function MultisigSigningSession({ walletId, onBack }) {
             );
         }
         return wrap(
-            <ul className={styles.list} aria-label="Multisig sessions">
-                    {/* Session entries stay native buttons because each control is the complete clickable row. */}
-                    {sessions.map((s) => {
-                        const summary = signingProgressSummary(s);
-                        return (
-                            <li key={s.id}>
-                                <button
-                                    type="button"
-                                    className={styles.row}
-                                    onClick={() => setActiveId(s.id)}
-                                >
-                                    <span className={styles.rowTitle}>
-                                        <MultisigBadge
-                                            threshold={s.threshold}
-                                            cosignerCount={s.cosignerPubkeys.length}
-                                            scheme={s.scheme}
-                                            size="sm"
-                                        />
-                                    </span>
-                                    <span className={styles.rowMeta}>
+            <ul
+                aria-label="Multisig sessions"
+                style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}
+            >
+                {sessions.map((s) => {
+                    const summary = signingProgressSummary(s);
+                    return (
+                        <li key={s.id}>
+                            <ListRow
+                                onClick={() => setActiveId(s.id)}
+                                chevron
+                                title={(
+                                    <MultisigBadge
+                                        threshold={s.threshold}
+                                        cosignerCount={s.cosignerPubkeys.length}
+                                        scheme={s.scheme}
+                                        size="sm"
+                                    />
+                                )}
+                                subtitle={(
+                                    <>
                                         {summary?.label}: {summary?.current} of {summary?.threshold}
                                         {' · '}{statusLabel(s.status)}
-                                    </span>
-                                    {s.actionSummary
-                                        ? <span className={styles.rowSubtle}>{s.actionSummary}</span>
-                                        : null}
-                                </button>
-                            </li>
-                        );
-                    })}
+                                        {s.actionSummary ? <><br />{s.actionSummary}</> : null}
+                                    </>
+                                )}
+                            />
+                        </li>
+                    );
+                })}
             </ul>,
         );
     }

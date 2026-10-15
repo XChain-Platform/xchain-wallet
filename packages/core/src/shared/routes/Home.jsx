@@ -1300,7 +1300,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     if (isSignerMode) {
         return (
             <Screen variant={variant}>
-                <ListPage className={isFull ? styles.bodyFull : undefined}>
+                <ListPage>
                     <h1 className="sr-only">{t('home.title')}</h1>
                     {balanceStatusText ? (
                         <StatusMessage
@@ -1325,7 +1325,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     if (!hasChains) {
         return (
             <Screen variant={variant}>
-                <ListPage className={isFull ? styles.bodyFull : undefined}>
+                <ListPage>
                     <h1 className="sr-only">{t('home.title')}</h1>
                     <EmptyState
                         title={NO_CHAINS_TITLE}
@@ -1341,7 +1341,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
     return (
         <Screen variant={variant}>
-            <ListPage className={isFull ? styles.bodyFull : undefined}>
+            <ListPage>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
                 <h1 className="sr-only">{t('home.title')}</h1>
                 {interruptedAction ? (

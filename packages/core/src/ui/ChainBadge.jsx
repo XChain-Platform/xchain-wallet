@@ -47,7 +47,7 @@ export function ChainBadge({ descriptor, size = 'sm', showName = false }) {
                     {descriptor.coin.slice(0, 1).toUpperCase()}
                 </span>
             )}
-            {showName ? <span className={styles.name}>{descriptor.displayName}</span> : null}
+            {showName ? <span>{descriptor.displayName}</span> : null}
         </span>
     );
 }
