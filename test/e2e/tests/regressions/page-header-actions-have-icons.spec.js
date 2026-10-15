@@ -16,16 +16,20 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 
-const ROUTES = [
-    { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
+// The page header holds only the title and Back on these screens: their
+// create or refresh action sits in the content, in the ListPage actions row,
+// or in the EmptyState when the list is empty (the demo wallet has no lists).
+const CONTENT_ACTION_ROUTES = [
     { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
     { paletteName: 'My lists', heading: 'My lists', actionName: 'Create list' },
     { paletteName: 'Dispensers', heading: 'My dispensers', actionName: 'Create dispenser' },
-    { paletteName: 'Staking', heading: 'Staking', actionName: 'New stake' },
     { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New conversation' },
     { paletteName: 'History', heading: 'History', actionName: 'Refresh history' },
-    { paletteName: 'My orders', heading: 'My orders', actionName: 'New order' },
-    { paletteName: 'My swaps', heading: 'My swaps', actionName: 'New swap' },
+    { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
+    { paletteName: 'Staking', heading: 'Staking', actionName: 'New stake' },
+    // An empty list offers Create from its empty state and a list with rows offers New from the actions row.
+    { paletteName: 'My orders', heading: 'My orders', actionName: /^(Create an order|New order)$/ },
+    { paletteName: 'My swaps', heading: 'My swaps', actionName: /^(Create a swap|New swap)$/ },
     { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Issue new token' },
     { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh payments' },
     { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Save' },
@@ -69,7 +73,7 @@ async function openRoute(page, route) {
     await openPaletteRoute(page, route);
 }
 
-async function expectHeaderActionIcon(page, route, viewport) {
+async function expectContentActionIcon(page, route, viewport) {
     const heading = page.getByRole('heading', {
         level: 1,
         name: route.heading,
@@ -78,12 +82,11 @@ async function expectHeaderActionIcon(page, route, viewport) {
     await expect(heading).toBeVisible();
 
     const pageHeader = heading.locator('..').locator('..');
-    const actions = pageHeader.locator(':scope > span:last-child button');
-    await expect(actions).toHaveCount(1);
+    await expect(pageHeader.locator(':scope > span:last-child button')).toHaveCount(0);
 
-    const action = actions.first();
+    const action = page.getByRole('main').getByRole('button', { name: route.actionName, exact: true });
+    await expect(action).toHaveCount(1);
     await expect(action).toBeVisible();
-    await expect(action).toHaveAccessibleName(route.actionName);
 
     const iconSizes = await action.locator('svg').evaluateAll((icons) => icons.map((icon) => {
         const box = icon.getBoundingClientRect();
@@ -91,11 +94,11 @@ async function expectHeaderActionIcon(page, route, viewport) {
     }));
     expect(
         iconSizes.some(({ width, height }) => width >= 14 && height >= 14),
-        `${viewport.name} / ${route.heading}: header action needs an SVG at least 14px square`,
+        `${viewport.name} / ${route.heading}: content action needs an SVG at least 14px square`,
     ).toBe(true);
 }
 
-test('page header actions have visible icons and accessible names', async ({ page }) => {
+test('content actions have visible icons and accessible names and the page header holds none', async ({ page }) => {
     test.slow();
     await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
@@ -103,10 +106,10 @@ test('page header actions have visible icons and accessible names', async ({ pag
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
-        for (const route of ROUTES) {
-            await test.step(`${viewport.name} / ${route.heading}`, async () => {
+        for (const route of CONTENT_ACTION_ROUTES) {
+            await test.step(`${viewport.name} / ${route.heading} (content action)`, async () => {
                 await openRoute(page, route);
-                await expectHeaderActionIcon(page, route, viewport);
+                await expectContentActionIcon(page, route, viewport);
             });
         }
     }

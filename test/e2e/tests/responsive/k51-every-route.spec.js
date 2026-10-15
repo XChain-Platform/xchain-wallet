@@ -147,18 +147,7 @@ async function layoutAudit(page) {
     return page.evaluate(({ interactiveSelector, minHeight, slack }) => {
         const viewportWidth = document.documentElement.clientWidth;
 
-        // Recent Chromium still reports a box for the contents of a closed
-        // <details>, though nothing is drawn or reachable there: a control in
-        // Send's collapsed Advanced section would "overlap" the Send button.
-        const inClosedDetails = (element) => {
-            for (let node = element.parentElement; node; node = node.parentElement) {
-                if (node.tagName === 'DETAILS' && !node.open && !element.closest('summary')) return true;
-            }
-            return false;
-        };
-
         const isRendered = (element) => {
-            if (inClosedDetails(element)) return false;
             const style = getComputedStyle(element);
             const rect = element.getBoundingClientRect();
             return style.display !== 'none'
@@ -166,6 +155,11 @@ async function layoutAudit(page) {
                 && element.getAttribute('aria-hidden') !== 'true'
                 && rect.width > 0
                 && rect.height > 0
+                // Content of a closed <details> keeps a layout box below the
+                // summary but is never painted or hit; checkVisibility()
+                // reports that skipped subtree. Default options only: the
+                // styled switches and checkboxes are opacity 0 on purpose.
+                && element.checkVisibility?.() !== false
                 // A 1px clipped box is the visually hidden pattern (the skip
                 // link): it becomes a target only once it takes focus.
                 && !(rect.width <= 1 && rect.height <= 1);
@@ -289,9 +283,7 @@ async function bottomClearance(page) {
             const style = getComputedStyle(element);
             if (style.display === 'none' || style.visibility === 'hidden') return false;
             if (rect.width === 0 || rect.height === 0 || element.disabled) return false;
-            for (let node = element.parentElement; node; node = node.parentElement) {
-                if (node.tagName === 'DETAILS' && !node.open && !element.closest('summary')) return false;
-            }
+            if (element.checkVisibility?.() === false) return false;
             if (element.getAttribute('aria-hidden') === 'true') return false;
             if (element.getAttribute('tabindex') === '-1') return false;
             return element.matches(

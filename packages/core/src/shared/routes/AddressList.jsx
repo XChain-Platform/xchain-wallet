@@ -958,76 +958,78 @@ export function AddressList({
             onBack={onBack}
             title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
             titleIcon={<Icon.ScanIcon />}
-            trailing={(
-                <div className={local.addMenuWrap} ref={addMenuRef}>
-                    <Button
-                        type="button"
-                        className={local.addBtn}
-                        icon={<Icon.PlusIcon />}
-                        onClick={() => setAddMenuOpen((o) => !o)}
-                        aria-haspopup="menu"
-                        aria-expanded={addMenuOpen}
-                        aria-label={t('routes.addressList.addOrImportAddress')}
-                        title={t('routes.addressList.addAddress')}
-                        data-testid="address-add-menu"
-                    />
-                    {addMenuOpen ? (
-                        /* The kit has no menu-list container, so native list semantics group its menu items. */
-                        <ul className={local.addMenu} role="menu">
-                            <li>
-                                <Button
-                                    type="button"
-                                    role="menuitem"
-                                    className={local.addMenuItem}
-                                    onClick={() => { setAddMenuOpen(false); setShowAddModal(true); }}
-                                    data-testid="address-add-address"
-                                >
-                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                                    {t('routes.addressList.addAddress')}
-                                </Button>
-                            </li>
-                            <li>
-                                <Button
-                                    type="button"
-                                    role="menuitem"
-                                    className={local.addMenuItem}
-                                    onClick={() => {
-                                        setAddMenuOpen(false);
-                                        setAdvancedError(null);
-                                        setShowAdvancedGenerate(true);
-                                    }}
-                                    data-testid="address-add-at-index"
-                                >
-                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                                    {t('routes.addressList.generateAtIndexAdvanced')}
-                                </Button>
-                            </li>
-                            <li>
-                                <Button
-                                    type="button"
-                                    role="menuitem"
-                                    className={local.addMenuItem}
-                                    onClick={() => {
-                                        setAddMenuOpen(false);
-                                        setWifNotice(null);
-                                        const first = wifChainIds[0] || '';
-                                        // Only the chain is seeded; the
-                                        // address type stays '' so
-                                        // `effectiveWifAddressType` resolves
-                                        // it against this wallet's format.
-                                        if (!wifChainId && first) setWifChainId(first);
-                                        setShowWifForm(true);
-                                    }}
-                                >
-                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
-                                    {t('routes.addressList.importAddress')}
-                                </Button>
-                            </li>
-                        </ul>
-                    ) : null}
-                </div>
-            )}
         />
+    );
+    // The page header holds only the title and Back, so the add and import
+    // menu sits in the content actions row, the first item below any notice.
+    const addMenu = (
+        <div className={local.addMenuWrap} ref={addMenuRef}>
+            <Button
+                type="button"
+                variant="secondary"
+                icon={<Icon.PlusIcon />}
+                onClick={() => setAddMenuOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={addMenuOpen}
+                data-testid="address-add-menu"
+            >
+                {t('routes.addressList.addOrImportAddress')}
+            </Button>
+            {addMenuOpen ? (
+                /* The kit has no menu-list container, so native list semantics group its menu items. */
+                <ul className={local.addMenu} role="menu">
+                    <li>
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            className={local.addMenuItem}
+                            onClick={() => { setAddMenuOpen(false); setShowAddModal(true); }}
+                            data-testid="address-add-address"
+                        >
+                            <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                            {t('routes.addressList.addAddress')}
+                        </Button>
+                    </li>
+                    <li>
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            className={local.addMenuItem}
+                            onClick={() => {
+                                setAddMenuOpen(false);
+                                setAdvancedError(null);
+                                setShowAdvancedGenerate(true);
+                            }}
+                            data-testid="address-add-at-index"
+                        >
+                            <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                            {t('routes.addressList.generateAtIndexAdvanced')}
+                        </Button>
+                    </li>
+                    <li>
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            className={local.addMenuItem}
+                            onClick={() => {
+                                setAddMenuOpen(false);
+                                setWifNotice(null);
+                                const first = wifChainIds[0] || '';
+                                // Only the chain is seeded; the
+                                // address type stays '' so
+                                // `effectiveWifAddressType` resolves
+                                // it against this wallet's format.
+                                if (!wifChainId && first) setWifChainId(first);
+                                setShowWifForm(true);
+                            }}
+                        >
+                            <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
+                            {t('routes.addressList.importAddress')}
+                        </Button>
+                    </li>
+                </ul>
+            ) : null}
+        </div>
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
@@ -1035,19 +1037,20 @@ export function AddressList({
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <ListPage
+                notices={<StatusMessage variant="error">{loadError}</StatusMessage>}
+                actions={addMenu}
+            />,
         );
     }
 
     if (!addressesByChain) {
         return wrap(
-            <div role="status" aria-label={t('routes.addressList.loadingAddresses')}>
-                <Skeleton.List rows={5} />
-            </div>,
+            <ListPage actions={addMenu}>
+                <div role="status" aria-label={t('routes.addressList.loadingAddresses')}>
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
         );
     }
 
@@ -1442,7 +1445,7 @@ export function AddressList({
 
     if (activeChainIds.length === 0 && multisigs.length === 0) {
         return wrap(
-            <ListPage>
+            <ListPage actions={addMenu}>
                 <EmptyState
                     title={t('history.empty.noAddressesTitle')}
                     body={t('routes.addressList.generateAReceiveAddressTo')}
@@ -1455,7 +1458,7 @@ export function AddressList({
     }
 
     return wrap(
-        <ListPage toolbar={(
+        <ListPage actions={addMenu} toolbar={(
             <>
                 <div className={local.searchField}>
                     <Input

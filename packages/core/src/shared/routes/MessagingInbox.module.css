@@ -165,7 +165,7 @@
 /* Short landscape screens already shrink the footer to space-1 block padding
    (Screen.module.css), so the pull would put the bar flush against the
    footer border and the bottom edge. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .composer {
         margin-block: 0;
     }

@@ -155,7 +155,7 @@
 
 /* Short landscape screens keep the persistent controls reachable while
    returning vertical space to the active route. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .bar {
         gap: var(--xc-space-2);
         padding: var(--xc-space-1) var(--xc-space-2);

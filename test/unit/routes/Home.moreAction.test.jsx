@@ -177,12 +177,10 @@ describe('Home quick-action policy', () => {
         fireEvent.click(within(row).getByRole('button', { name: 'Send' }));
 
         expect(handlers.onSend).not.toHaveBeenCalled();
-        expect(screen.getByText("Demo wallets can't send. Create a real wallet to send."))
-            .toBeVisible();
-        // The notice is the first item of page content, ahead of the quick actions.
         const notice = screen.getByText("Demo wallets can't send. Create a real wallet to send.");
-        expect(notice.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING)
-            .toBeTruthy();
+        expect(notice).toBeVisible();
+        // The notice is the first item of the page content, above the controls that raised it.
+        expect(notice.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
         expect(screen.getByRole('dialog', { name: 'Exit demo and delete its data?' }))
             .toBeTruthy();

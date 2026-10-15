@@ -61,7 +61,9 @@
     margin: 0;
     /* Opacity 0 also hides the global focus ring on the input; the track
        draws the visible ring below. */
-    opacity: 0;
+    /* Important: the global disabled rule in tokens.css sets opacity with !important,
+       which would otherwise paint a disabled switch's native checkbox over the track. */
+    opacity: 0 !important;
     cursor: inherit;
 }
 

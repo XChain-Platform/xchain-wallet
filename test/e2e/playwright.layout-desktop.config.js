@@ -19,7 +19,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
     testDir: './layout',
-    testMatch: /(?:layout-sweep|network-guard)\.electron\.spec\.js$/,
+    testMatch: /(?:layout-sweep|network-guard|lifecycle)\.electron\.spec\.js$/,
     outputDir: './test-results-layout-desktop',
     fullyParallel: false,
     workers: 1,

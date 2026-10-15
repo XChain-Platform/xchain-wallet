@@ -58,7 +58,7 @@
 
 :global(:root[data-xc-reduced-motion='reduce']) .panel { animation: none; }
 
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .panel {
         max-height: calc(100% - var(--xc-space-2) - var(--xc-space-2));
         padding: var(--xc-space-3);

@@ -178,7 +178,7 @@
 
 /* Match the short-landscape tab row so an invisible 12px spacer does not
    remain below the route after the visible bar becomes shorter. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .layoutWithBottomBar > .main {
         padding-bottom: calc(44px + env(safe-area-inset-bottom, 0));
     }
@@ -301,6 +301,11 @@
 
 /* Unread/attention count pill pinned to the right of a nav row. */
 .badge {
+    /* Centre the count in the pill; as a plain block its line box sat at
+       the top of the taller pill. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
     box-sizing: border-box;
     min-width: var(--xc-badge-height-sm);
@@ -418,7 +423,7 @@
     margin-inline: var(--xc-space-2);
 }
 
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .layout[data-xc-tier] {
         --xc-page-top: var(--xc-space-2);
     }

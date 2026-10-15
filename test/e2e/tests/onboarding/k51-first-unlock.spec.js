@@ -50,6 +50,21 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
             if (message.type() === 'error') consoleErrors.push(message.text());
         });
         page.on('pageerror', (error) => consoleErrors.push(String(error)));
+        // A created wallet lands on mainnet and reads fiat rates from
+        // CoinGecko. A rate-limited reply carries no CORS header, so the
+        // browser logs it as an error and the clean-console check below
+        // would fail on network weather. Answer the rate reads locally.
+        await page.route('https://api.coingecko.com/api/v3/**', async (route) => {
+            const isChart = route.request().url().includes('/market_chart');
+            const body = isChart
+                ? { prices: [[Date.now(), 65000]] }
+                : {
+                    bitcoin: { usd: 65000, usd_market_cap: 1, usd_24h_change: 0 },
+                    litecoin: { usd: 80, usd_market_cap: 1, usd_24h_change: 0 },
+                    dogecoin: { usd: 0.1, usd_market_cap: 1, usd_24h_change: 0 },
+                };
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+        });
 
         expect(page.viewportSize()).toEqual(LG_K51.viewport);
         const device = await page.evaluate(() => ({

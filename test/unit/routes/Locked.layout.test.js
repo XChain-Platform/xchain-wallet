@@ -53,13 +53,13 @@ function renderLocked({ width, height }) {
 describe('Locked compact-height layout', () => {
     it('removes decorative height and tightens secondary content on landscape phones', () => {
         expect(css).toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.hero\s*\{[\s\S]*?flex-direction: row;[\s\S]*?\.logo\s*\{[\s\S]*?width: 40px;[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\) \{[\s\S]*?\.hero\s*\{[\s\S]*?flex-direction: row;[\s\S]*?\.logo\s*\{[\s\S]*?width: 40px;[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
         );
         expect(css).not.toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{\s*@media[^\{]*min-width: 600px/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\) \{\s*@media[^\{]*min-width: 600px/,
         );
         expect(css).not.toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.unlockingNote\s*\{[\s\S]*?display: none;/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\) \{[\s\S]*?\.unlockingNote\s*\{[\s\S]*?display: none;/,
         );
     });
 

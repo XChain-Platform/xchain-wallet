@@ -52,37 +52,6 @@
     }
 }
 
-/* Circular plus button in the header trailing slot, matching the
-   My Tokens "Issue" affordance so the add-contact entry point reads the
-   same across the wallet. */
-/* Matches the main AppHeader icon buttons (.menuBtn): strong border,
-   38x38, transparent fill, muted-background hover. The only deviation is
-   the fully round shape, since these live in the sub-header. */
-.addButton {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    padding: 0;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-
-.addButton:hover {
-    background: var(--xc-bg-muted);
-}
-
-.addButton:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
 /* One big card wrapping all contacts, mirroring the Home BalanceList:
    rows are separated by a hairline divider and highlight on hover. */
 .list {

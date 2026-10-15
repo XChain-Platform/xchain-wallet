@@ -135,6 +135,16 @@
     outline-offset: 0;
 }
 
+/* A disabled field draws the shared disabled colours, like a disabled Button. */
+.input:disabled {
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    opacity: var(--xc-disabled-opacity);
+    cursor: not-allowed;
+    -webkit-text-fill-color: var(--xc-control-disabled-text);
+}
+
 .input:focus {
     outline: none;
     border-color: var(--xc-accent-primary);

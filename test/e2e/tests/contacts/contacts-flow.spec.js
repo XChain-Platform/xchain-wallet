@@ -57,7 +57,7 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('add and edit a Bitcoin contact', async () => {
             await gotoSection(page, 'Contacts');
-            await page.getByRole('button', { name: 'Add contact' }).click();
+            await page.getByRole('button', { name: 'Create first contact' }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
             await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
             await page.getByRole('button', { name: 'Save', exact: true }).click();

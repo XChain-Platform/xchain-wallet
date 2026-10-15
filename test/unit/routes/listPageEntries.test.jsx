@@ -71,7 +71,7 @@ describe('ListDetail entries', () => {
 describe('MyLists entries', () => {
     it('renders neither extra entry when no handler is passed', async () => {
         renderMyLists({ onCreateList: () => {} });
-        await waitFor(() => expect(screen.getByLabelText('Create list')).toBeTruthy());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create list' })).toBeTruthy());
         expect(screen.queryByText('Create union list')).toBeNull();
         expect(screen.queryByText('Shared lists')).toBeNull();
     });

@@ -56,7 +56,10 @@
 }
 
 .control:disabled {
-    opacity: 0.55;
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    opacity: var(--xc-disabled-opacity);
     cursor: not-allowed;
 }
 

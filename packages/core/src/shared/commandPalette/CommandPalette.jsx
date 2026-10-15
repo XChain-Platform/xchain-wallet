@@ -25,6 +25,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Icon } from '../../ui/index.js';
+import { categoryLabel } from './commandRegistry.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -239,7 +240,7 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                             // and duplicate keys make React leave stale rows behind.
                             <li key={`${group.category}-${group.rows[0].index}`} role="presentation">
                                 <div className={styles.groupHead} role="presentation">
-                                    {group.category}
+                                    {categoryLabel(group.category)}
                                 </div>
                                 <ul className={styles.groupList} role="presentation">
                                     {group.rows.map(({ command, index }) => {
