@@ -120,6 +120,14 @@ describe('Settings field rows', () => {
         expect(phone).toMatch(/\.page \[data-settings-control\]\s*\{\s*flex:\s*1 1 100%/);
     });
 
+    it('lets the fiat currency box fill the line on a phone like the dropdowns', () => {
+        const src = readFileSync(join(SETTINGS_DIR, 'components/settings/LanguageRegionSection.jsx'), 'utf8');
+        expect(src).toMatch(/data-settings-fill="" style=\{CONTROLS\}/);
+        const css = readFileSync(join(SETTINGS_DIR, 'routes/Settings.module.css'), 'utf8');
+        const phone = css.slice(css.indexOf('@media (max-width: 480px)'));
+        expect(phone).toMatch(/\.page \[data-settings-fill\]\s*\{\s*width:\s*100% !important/);
+    });
+
     it('draws Developer mode rows as bordered rows, like every other subpage', () => {
         const src = readFileSync(join(SETTINGS_DIR, 'components/settings/DeveloperModeSection.jsx'), 'utf8');
         expect(src).not.toMatch(/^\s*embedded\s*$/m);
