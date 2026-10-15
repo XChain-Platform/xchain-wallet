@@ -43,6 +43,7 @@ export const en = {
     'common.backToHome': 'Back to home',
     'common.cancel': 'Cancel',
     'common.clear': 'Clear',
+    'common.copy': 'Copy',
     'common.copyTransactionId': 'Copy transaction ID',
     'common.tryAgain': 'Try again',
     'balances.unchecked.title': "Balances couldn't be checked",
@@ -569,7 +570,6 @@ export const en = {
     'send.success.broadcastPending': 'Broadcast pending',
     'send.success.broadcastPendingBody':
         "The network accepted your transaction. It's waiting for confirmation, which usually takes a few blocks. You can leave this screen.",
-    'send.success.copy': 'Copy',
     'send.success.viewOnExplorer': 'View in block explorer',
     'send.success.sendAnother': 'Send another',
     'send.fields.amount': 'Amount',
