@@ -24,7 +24,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, _electron as electron } from '@playwright/test';
-import { FIRST_WINDOW_TEXT, GUARD_ON_TEXT, launchGuardedElectron, readNetworkGuard } from '../fixtures/electron.js';
+import {
+    FIRST_WINDOW_TEXT, GUARD_ON_TEXT, closeElectron, launchGuardedElectron, readNetworkGuard,
+} from '../fixtures/electron.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -94,7 +96,7 @@ test('close, reopen, a second window, and a quit with nothing pending', async ()
         exited = await quitAndWait(app, 20_000);
         expect(exited, 'quit with nothing pending exits').toBe(true);
     } finally {
-        if (!exited) await app.close().catch(() => {});
+        if (!exited) await closeElectron(app);
     }
 });
 
@@ -139,6 +141,6 @@ test('quit waits for a wallet message in flight, then exits on the next request'
         exited = await quitAndWait(app, 20_000);
         expect(exited, 'a second quit exits once nothing is pending').toBe(true);
     } finally {
-        if (!exited) await app.close().catch(() => {});
+        if (!exited) await closeElectron(app);
     }
 });
