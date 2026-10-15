@@ -429,7 +429,9 @@ function prepareDiagnosticDump(dump, shell) {
         wallet: {
             ...wallet,
             version: wallet.version || WALLET_VERSION,
-            platform: wallet.platform || platform,
+            // The web host reports "web" for a Capacitor build too, so the
+            // native OS name takes precedence over the host's own label.
+            platform: nativePlatformName() || wallet.platform || platform,
         },
         build: Object.keys(build).length > 0 || buildId
             ? { ...build, ...(buildId ? { buildId } : {}) }

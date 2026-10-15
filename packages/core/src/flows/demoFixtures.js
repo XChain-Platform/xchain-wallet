@@ -686,15 +686,32 @@ export function synthesizeDemoDefiPositions(opts = {}) {
 // surfaces (StakingList rows + the validator StakeDetail). The live
 // path fans out messaging.getStakes / getDelegations / getRewards per
 // address and merges them into one { stakes, delegations, rewards }
-// aggregate; the demo path drops this in instead. Only bitcoin-regtest
-// is populated: staking is BTC-only and the demo wallet holds BTC
-// addresses on regtest. The narrative matches the DeFi-tab
+// aggregate; the demo path drops this in instead. Only Bitcoin is
+// populated (staking is BTC-only), keyed under bitcoin-mainnet because the
+// demo wallet lands on mainnet; demoStakingFixture() resolves the regtest
+// and testnet ids to the same entry so a Developer Mode network switch
+// still shows the positions. The narrative matches the DeFi-tab
 // "XCHAIN stake delegated to demo-validator-7" position above.
 // Contract-flavored positions live in DEMO_CONTRACT_STAKES_BY_CHAIN
 // below; keeping them out of this lane avoids duplicate rows in the
 // unified staking list.
+/**
+ * The staking fixture entry for `chainId`. Regtest and testnet ids reuse
+ * the mainnet entry, as demoDispenserRows() does, so the demo shows the same
+ * positions on whichever network it is viewing.
+ *
+ * @template T
+ * @param {Record<string, T>} table
+ * @param {string} chainId
+ * @returns {T | undefined}
+ */
+function demoStakingFixture(table, chainId) {
+    return table[chainId]
+        || table[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')];
+}
+
 const DEMO_STAKING_BY_CHAIN = {
-    'bitcoin-regtest': {
+    'bitcoin-mainnet': {
         stakes: [
             // The validator position: XCHAIN staked toward the cross-chain
             // operator capability. This is stakes[0], so it drives the
@@ -739,7 +756,7 @@ const DEMO_STAKING_BY_CHAIN = {
  * @returns {{ stakes: any[], delegations: any[], rewards: any[] }}
  */
 export function synthesizeDemoStaking(chainId) {
-    const fixture = DEMO_STAKING_BY_CHAIN[chainId];
+    const fixture = demoStakingFixture(DEMO_STAKING_BY_CHAIN, chainId);
     if (!fixture) return { stakes: [], delegations: [], rewards: [] };
     return {
         stakes: fixture.stakes.map((s) => ({ ...s })),
@@ -751,11 +768,11 @@ export function synthesizeDemoStaking(chainId) {
 // Contract-targeted staking positions for the contract rows in
 // StakingList / StakeDetail. Distinct from the capability staking
 // above: here a token is locked into a specific contract, with a cooldown
-// on unstake and a slash destination. Only bitcoin-regtest is populated
-// (staking is BTC-only). The 1,000 EXAMPLE in contract #1024 matches the
+// on unstake and a slash destination. Only Bitcoin is populated (staking
+// is BTC-only), keyed and resolved like the validator fixture above. The 1,000 EXAMPLE in contract #1024 matches the
 // DeFi-tab narrative, so the surfaces tell one story.
 const DEMO_CONTRACT_STAKES_BY_CHAIN = {
-    'bitcoin-regtest': {
+    'bitcoin-mainnet': {
         stakes: [
             {
                 action_index: 'demo-cstake-1024',
@@ -789,7 +806,7 @@ const DEMO_CONTRACT_STAKES_BY_CHAIN = {
                 tick: 'PEPECASH',
                 amount: '250',
                 block_index: 12_500,
-                destination_address: 'bcrt1qdemoslashdest0xchain0treasury0demo0addr',
+                destination_address: 'bc1qdemoslashdest0xchain0treasury0demo0addr',
             },
         ],
     },
@@ -806,7 +823,7 @@ const DEMO_CONTRACT_STAKES_BY_CHAIN = {
  * @returns {{ stakes: any[], unstakes: any[], slashEvents: any[] }}
  */
 export function synthesizeDemoContractStakes(chainId) {
-    const fixture = DEMO_CONTRACT_STAKES_BY_CHAIN[chainId];
+    const fixture = demoStakingFixture(DEMO_CONTRACT_STAKES_BY_CHAIN, chainId);
     if (!fixture) return { stakes: [], unstakes: [], slashEvents: [] };
     return {
         stakes: fixture.stakes.map((s) => ({ ...s })),
@@ -823,16 +840,16 @@ export function synthesizeDemoContractStakes(chainId) {
 // slash destination matches the slash-event fixture so the #2048 story
 // stays coherent.
 const DEMO_CONTRACT_META_BY_CHAIN = {
-    'bitcoin-regtest': {
+    'bitcoin-mainnet': {
         1024: {
             contract_action_index: '1024',
             cooldown_blocks: 144,
-            slash_destination: 'bcrt1qdemoslashdest0xchain0treasury0demo0addr',
+            slash_destination: 'bc1qdemoslashdest0xchain0treasury0demo0addr',
         },
         2048: {
             contract_action_index: '2048',
             cooldown_blocks: 240,
-            slash_destination: 'bcrt1qdemoslashdest0xchain0treasury0demo0addr',
+            slash_destination: 'bc1qdemoslashdest0xchain0treasury0demo0addr',
         },
     },
 };
@@ -847,7 +864,7 @@ const DEMO_CONTRACT_META_BY_CHAIN = {
  * @returns {{ contract_action_index: string, cooldown_blocks: number, slash_destination: string } | null}
  */
 export function synthesizeDemoContractMeta(chainId, contractActionIndex) {
-    const meta = DEMO_CONTRACT_META_BY_CHAIN[chainId]?.[String(contractActionIndex)];
+    const meta = demoStakingFixture(DEMO_CONTRACT_META_BY_CHAIN, chainId)?.[String(contractActionIndex)];
     return meta ? { ...meta } : null;
 }
 

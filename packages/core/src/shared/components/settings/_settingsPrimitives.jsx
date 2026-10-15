@@ -61,18 +61,28 @@ export const ROW_HINT = {
 export const SELECT = {
     maxWidth: '100%',
 };
+// Settings inputs take the shared field metrics (border colour, radius, height,
+// padding and type size) so a number box in a row matches the dropdown beside it.
 export const INPUT = {
-    background: 'var(--xc-bg)',
+    background: 'var(--xc-surface)',
     color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    // The same height the settings dropdowns take, so a number field beside or
-    // under a select is not a 29px sliver on a phone.
+    border: '1px solid var(--xc-control-border)',
+    borderRadius: 'var(--xc-control-radius)',
     boxSizing: 'border-box',
+    height: 'var(--xc-control-h-md)',
     minHeight: 'var(--xc-control-h-md)',
-    fontSize: 'var(--xc-text-sm)',
+    padding: '0 var(--xc-control-pad-x-md)',
+    fontSize: 'var(--xc-control-font-md)',
+    lineHeight: 'var(--xc-control-line)',
     fontFamily: 'inherit',
+};
+// What a disabled settings input adds: the shared disabled colours, as a disabled Button.
+export const INPUT_DISABLED = {
+    background: 'var(--xc-control-disabled-bg)',
+    borderColor: 'var(--xc-control-disabled-border)',
+    color: 'var(--xc-control-disabled-text)',
+    WebkitTextFillColor: 'var(--xc-control-disabled-text)',
+    cursor: 'not-allowed',
 };
 
 export const ROW_COPY = {

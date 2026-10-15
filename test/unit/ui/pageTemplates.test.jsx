@@ -503,7 +503,7 @@ describe('page gutter ownership', () => {
         expect(shell).not.toMatch(/--xc-page-gutter:/);
         expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
         expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
-        expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
+        expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
     });
 
     it('keeps scrolling, an end-edge scrollbar lane, and page padding on Screen body', () => {

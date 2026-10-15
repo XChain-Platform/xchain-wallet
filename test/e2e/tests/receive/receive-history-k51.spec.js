@@ -24,7 +24,7 @@ import {
 } from '../../fixtures/responsive.js';
 
 const REQUEST_AMOUNT = '0.025';
-const HISTORY_TX_ID = 'demo-bitcoin-regtest-nft-recv-1';
+const HISTORY_TX_ID = 'demo-bitcoin-mainnet-nft-recv-1';
 const HISTORY_SOURCE = 'demo-collector-1xchainpubnftsender';
 
 async function expectNoHorizontalOverflow(page, label) {
@@ -109,7 +109,7 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             const addressField = page.getByRole('textbox', { name: /address/i }).and(page.locator('input[readonly]'));
             await expect(addressField).toBeVisible();
             const address = await addressField.inputValue();
-            expect(address).toMatch(/^bcrt1/);
+            expect(address).toMatch(/^bc1/);
 
             const qr = page.getByRole('img', { name: `QR code for ${address}` });
             await expect(qr).toBeVisible();
@@ -142,7 +142,7 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             expect(match[1]).toBe(receiveAddress);
             const params = new URLSearchParams(match[2]);
             expect(params.get('amount')).toBe(REQUEST_AMOUNT);
-            expect(params.get('chain')).toBe('bitcoin-regtest');
+            expect(params.get('chain')).toBe('bitcoin-mainnet');
             await expectNoHorizontalOverflow(page, 'Receive amount request');
         });
 

@@ -242,6 +242,14 @@ describe('MultisigCreate key validation', () => {
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
 
+    it('opens without an error message and keeps Review disabled', async () => {
+        await mount(mkMessaging());
+
+        expect(screen.queryByText(/public key must be a 33-byte compressed key/i)).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
     it('rejects a compressed-looking value that is not a secp256k1 point', async () => {
         await mount(mkMessaging());
         await pickLocalAddress();
