@@ -341,9 +341,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         [active, filteredRows, sortBy, nativePriceMap],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
+    // Off for a demo wallet: its rows carry the wallet's real addresses, and
+    // a demo wallet's addresses never go to an explorer (issue #82).
     const ownedTokens = useOwnedTokens(
         balances,
-        active === 'tokens' || settings?.hideUnknownTokens === true,
+        !isDemo && (active === 'tokens' || settings?.hideUnknownTokens === true),
     );
     const automaticHiddenKeys = useMemo(
         () => settings?.hideUnknownTokens === true

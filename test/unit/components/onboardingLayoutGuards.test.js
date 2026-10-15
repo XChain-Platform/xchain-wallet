@@ -91,7 +91,7 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingCss).toMatch(/\.licenseScroll\s*\{[^}]*flex:\s*1 1 auto/s);
         expect(onboardingSource).toContain('label="Wallet setup"');
         expect(onboardingSource).toContain('title="License agreement"');
-        expect(onboardingSource).toContain('title={branding.PRODUCT_NAME}');
+        expect(onboardingSource).toContain('title={header ? undefined : branding.PRODUCT_NAME}');
         expect(onboardingSource.match(/stackedActions/g)).toHaveLength(3);
         expect(createWalletSource).not.toContain('<header className={headClass}>');
         expect(createWalletSource.match(/aria-current="step">Step [123] of 3/g)).toHaveLength(4);

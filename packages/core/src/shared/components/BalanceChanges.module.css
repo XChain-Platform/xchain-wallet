@@ -21,13 +21,6 @@
     font-size: var(--xc-text-sm);
 }
 
-.error {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    font-style: italic;
-}
-
 .deltas {
     display: flex;
     flex-direction: column;

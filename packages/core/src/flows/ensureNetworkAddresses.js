@@ -125,6 +125,13 @@ export async function ensureNetworkAddresses({
                 chainId,
                 accountId: target.id,
                 signer,
+                // A chain with no address yet starts at index 0. Naming it skips
+                // receiveAddress's history probe, which asks the network whether
+                // the address was ever funded: against an unreachable regtest or
+                // testnet endpoint each chain sat through the request layer's
+                // retries one after another, so a network switch hung for about
+                // 40 seconds before it could reload.
+                derivationIndex: 0,
             });
             result.created.push(chainId);
         } catch (err) {

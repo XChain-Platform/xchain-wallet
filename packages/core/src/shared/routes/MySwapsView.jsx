@@ -281,21 +281,23 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         <PageHeader
             onBack={onBack}
             title="My swaps"
-            trailing={onCreateSwap ? (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Icon.PlusIcon />}
-                    onClick={onCreateSwap}
-                    aria-label="New swap"
-                    title="New swap"
-                />
-            ) : undefined}
         />
     );
-    const wrap = (children) => (
+    // The page header holds only the title and Back, so New swap sits in
+    // the content's actions row. An empty list offers it from its
+    // EmptyState instead, so the screen never shows it twice.
+    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage
+                notices={notices}
+                actions={onCreateSwap && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateSwap}>
+                        New swap
+                    </Button>
+                ) : null}
+            >
+                {children}
+            </ListPage>
         </Screen>
     );
 
@@ -322,15 +324,17 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         );
     }
     if (loadError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={L.hint}
-                recovery={{ label: 'Try again', onAction: load }}
-            >
-                {loadError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={L.hint}
+                    recovery={{ label: 'Try again', onAction: load }}
+                >
+                    {loadError}
+                </StatusMessage>
+            ),
+        });
     }
     if (items.length === 0) {
         return wrap(
@@ -340,6 +344,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 actionLabel={onCreateSwap ? 'Create a swap' : undefined}
                 onAction={onCreateSwap}
             />,
+            { emptyOffersCreate: true },
         );
     }
 
@@ -669,7 +674,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             label={isCancel ? 'Cancel swap' : 'Edit swap'}
             onSubmit={submit}
             status={validationError || error ? (
-                <StatusMessage variant="error" className={F.error}>{validationError || error}</StatusMessage>
+                <StatusMessage variant="error">{validationError || error}</StatusMessage>
             ) : null}
             actions={(
                 <Button

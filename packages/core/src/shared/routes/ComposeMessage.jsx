@@ -829,7 +829,7 @@ function ComposeMessageForm({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -887,7 +887,7 @@ function ComposeMessageForm({
                 label="Review message"
                 onSubmit={handleSubmit}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1029,7 +1029,7 @@ function ComposeMessageForm({
             label="New message"
             onSubmit={handleReview}
             status={submitError ? (
-                <StatusMessage variant="error" className={styles.error} details={submitErrorDetails}>
+                <StatusMessage variant="error" details={submitErrorDetails}>
                     {submitError}
                 </StatusMessage>
             ) : null}
@@ -1188,7 +1188,7 @@ function ComposeMessageForm({
                 </div>
             ) : null}
             {pubkeyState === 'error' && encryptionValue !== 'plaintext' ? (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     {pubkeyError}
                 </StatusMessage>
             ) : null}

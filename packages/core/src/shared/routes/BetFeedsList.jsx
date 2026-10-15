@@ -196,7 +196,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
@@ -241,7 +240,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             {error ? (
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
                 >
                     {error}

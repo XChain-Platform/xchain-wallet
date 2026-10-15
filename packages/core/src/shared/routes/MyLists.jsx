@@ -177,67 +177,62 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
             title="My lists"
-            // Only the + belongs in the header: PageHeader styles every
-            // trailing button as a small square icon control, and the two text
-            // actions squeezed into those boxes spilled across the title at
-            // phone width.
-            // They live in the body's action row instead.
-            trailing={onCreateList ? (
-                <>
-                    {onCreateList ? (
-                        <Button
-                            type="button"
-                            className={local.addBtn}
-                            onClick={() => onCreateList()}
-                            aria-label="Create list"
-                            title="Create list"
-                        >
-                            <Icon.PlusIcon />
-                        </Button>
-                    ) : null}
-                </>
-            ) : undefined}
         />
     );
-    const secondaryActions = (onOpenSharedLists || onCreateUnionList) ? (
-        <div className={local.actions}>
-            {onOpenSharedLists ? (
-                <Button variant="secondary" size="sm" onClick={() => onOpenSharedLists()}>Shared lists</Button>
-            ) : null}
-            {onCreateUnionList ? (
-                <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create union list</Button>
-            ) : null}
-        </div>
-    ) : null;
+    // The page header holds only the title and Back, so every action of the
+    // screen sits in the content's actions row, in every state. An empty
+    // list offers Create list from its EmptyState instead, so the screen
+    // never shows it twice.
+    const actionsFor = (emptyOffersCreate) => (
+        (onCreateList && !emptyOffersCreate) || onOpenSharedLists || onCreateUnionList ? (
+            <>
+                {onCreateList && !emptyOffersCreate ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={<Icon.PlusIcon />}
+                        onClick={() => onCreateList()}
+                    >
+                        Create list
+                    </Button>
+                ) : null}
+                {onOpenSharedLists ? (
+                    <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
+                ) : null}
+                {onCreateUnionList ? (
+                    <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
+                ) : null}
+            </>
+        ) : null
+    );
 
-    // Every state of the screen carries the secondary actions, as the
-    // header did before they moved out of it.
-    const wrap = (children, toolbar) => (
+    const wrap = (children, toolbar, { notices = null, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
-                {secondaryActions}
+            <ListPage notices={notices} actions={actionsFor(emptyOffersCreate)} toolbar={toolbar}>
                 {children}
             </ListPage>
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.entryDescription}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setAddressesError(null);
-                        setAddressesByChain(null);
-                        setAddressesReload((value) => value + 1);
-                    },
-                }}
-            >
-                {addressesError}
-            </StatusMessage>,
-        );
+        return wrap(null, undefined, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setAddressesError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {addressesError}
+                </StatusMessage>
+            ),
+        });
     }
     if (!addressesByChain) {
         return wrap(
@@ -278,25 +273,27 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         </>
     );
 
+    const notices = loadErrors.length > 0 ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{
+                label: 'Try again',
+                onAction: () => {
+                    setListsByChain({});
+                    setListsReload((value) => value + 1);
+                },
+            }}
+        >
+            {/* Names the chains only: the raw fetch error carries API paths and
+                HTTP codes that mean nothing to the user. */}
+            Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
+        </StatusMessage>
+    ) : null;
+    const emptyOffersCreate = !anyLoading && loadErrors.length === 0 && allRows.length === 0;
+
     return wrap(
         <>
-            {loadErrors.length > 0 ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setListsByChain({});
-                            setListsReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    {/* Names the chains only: the raw fetch error carries API paths and
-                        HTTP codes that mean nothing to the user. */}
-                    Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
-                </StatusMessage>
-            ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading lists">
                     <Skeleton.List rows={5} />
@@ -331,6 +328,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             )}
         </>,
         toolbar,
+        { notices, emptyOffersCreate },
     );
 }
 

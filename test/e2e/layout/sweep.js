@@ -825,6 +825,30 @@ export function createSweep(page, {
         }
         await home();
 
+        // Every screen the primary navigation opens (the sidebar on a wide
+        // window, the bottom bar on a narrow one), so each top-level screen
+        // is measured as the navigation shows it.
+        const navButtons = () => nav(page).locator('button:visible:not([disabled])');
+        if (await nav(page).count() > 0) {
+            const labelsNow = () => navButtons().evaluateAll((els) => els.map((e) => (
+                (e.getAttribute('title') || e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()
+            )));
+            const navLabels = (await labelsNow())
+                .filter((label) => label && !/^(search|more|open command palette)$/i.test(label) && !DESTRUCTIVE.test(label));
+            for (const label of [...new Set(navLabels)]) {
+                try {
+                    await home();
+                    const index = (await labelsNow()).indexOf(label);
+                    if (index < 0) continue;
+                    await navButtons().nth(index).click({ timeout: 5_000 });
+                    await measure(`nav: ${label}`);
+                } catch (err) {
+                    appendFileSync(linesPath, `${JSON.stringify({ venue, label: `nav: ${label}`, skipped: String(err?.message || err).slice(0, 120) })}\n`);
+                }
+            }
+            await home();
+        }
+
         // Header popovers.
         for (const name of ['Settings', 'Scan and addresses', 'XChain platform sites']) {
             const b = page.getByRole('button', { name, exact: true }).first();
@@ -913,4 +937,193 @@ export function createSweep(page, {
     }
 
     return { measure, home, onboarding, unlocked };
+}
+
+/**
+ * Runs inside the page. The operator's layout rulings that the geometry
+ * above does not measure: the app header on one row, fields that draw a
+ * border, Paste and Max inside their field, no dotted or dashed borders,
+ * every card drawn with the card tokens, notices kept out of headers, no
+ * title repeated on one screen, and no Back button beside a sidebar entry
+ * for the screen it shows. Findings are for a person to judge.
+ */
+export function measureRulings() {
+    const visible = (el) => {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) !== 0
+            && r.width >= 1.5 && r.height >= 1.5;
+    };
+    const desc = (el) => {
+        let s = el.tagName.toLowerCase();
+        const cls = [...el.classList].slice(0, 2).join('.');
+        if (cls) s += `.${cls}`;
+        const label = el.getAttribute('aria-label')
+            || (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        if (label) s += ` "${label}"`;
+        return s;
+    };
+    const text = (el) => (el.getAttribute('aria-label') || el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+    const out = {
+        headerRows: [], borderlessFields: [], fieldButtonsOutside: [], dashedBorders: [],
+        offTokenCards: [], noticesInHeader: [], repeatedText: [], backBesideSidebar: [], noticePlacement: [],
+    };
+    const cap = (list, item) => { if (list.length < 12) list.push(item); };
+
+    // Header rows: the controls of each visible header share one row.
+    const CONTROL = 'button, a[href], img, svg, h1, h2, input, select, [role="button"]';
+    for (const header of document.querySelectorAll('header')) {
+        if (!visible(header)) continue;
+        const items = [...header.querySelectorAll(CONTROL)]
+            .filter((el) => visible(el) && !el.parentElement?.closest(CONTROL));
+        const rects = items.map((el) => ({ el, r: el.getBoundingClientRect() }));
+        let rows = 1;
+        const sorted = rects.sort((a, b) => a.r.top - b.r.top);
+        let rowBottom = sorted[0]?.r.bottom ?? 0;
+        for (const { r } of sorted.slice(1)) {
+            if (r.top >= rowBottom - 1) { rows += 1; rowBottom = r.bottom; } else rowBottom = Math.max(rowBottom, r.bottom);
+        }
+        if (rows > 1) cap(out.headerRows, { header: desc(header).slice(0, 60), rows, h: Math.round(header.getBoundingClientRect().height) });
+    }
+
+    // Fields draw a border (on themselves or on the wrapper that frames them).
+    const edged = (el) => {
+        const cs = getComputedStyle(el);
+        const sides = ['Top', 'Right', 'Bottom', 'Left'];
+        return sides.some((s) => parseFloat(cs[`border${s}Width`]) >= 1 && cs[`border${s}Style`] !== 'none')
+            || (cs.boxShadow && cs.boxShadow !== 'none');
+    };
+    const fields = [...document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), textarea, select')]
+        .filter(visible);
+    const frameOf = (field) => {
+        if (edged(field)) return field;
+        const fr = field.getBoundingClientRect();
+        for (let a = field.parentElement, i = 0; a && i < 3; a = a.parentElement, i += 1) {
+            const ar = a.getBoundingClientRect();
+            // A wrapper that frames the field hugs it, not a whole card.
+            if (ar.height > fr.height + 24) break;
+            if (edged(a)) return a;
+        }
+        return null;
+    };
+    for (const field of fields) {
+        if (field.closest('[role="dialog"][aria-label="Command palette"]')) continue;
+        if (!frameOf(field)) cap(out.borderlessFields, desc(field));
+    }
+
+    // Paste and Max sit inside the field they act on.
+    for (const btn of document.querySelectorAll('button')) {
+        if (!visible(btn)) continue;
+        const name = text(btn);
+        if (!/^(paste|max)\b/i.test(name)) continue;
+        let field = null;
+        for (let a = btn.parentElement, i = 0; a && i < 4 && !field; a = a.parentElement, i += 1) {
+            field = [...a.querySelectorAll('input, textarea')].find(visible) || null;
+        }
+        if (!field) { cap(out.fieldButtonsOutside, { button: name, field: null }); continue; }
+        const frame = frameOf(field) || field;
+        const fr = frame.getBoundingClientRect();
+        const br = btn.getBoundingClientRect();
+        const inside = br.left >= fr.left - 1 && br.right <= fr.right + 1 && br.top >= fr.top - 1 && br.bottom <= fr.bottom + 1;
+        if (!inside) cap(out.fieldButtonsOutside, { button: name, field: desc(field) });
+    }
+
+    // Dotted or dashed borders anywhere, and boxes drawn off the card tokens.
+    const root = getComputedStyle(document.documentElement);
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;border:var(--xc-card-border);border-radius:var(--xc-card-radius)';
+    document.body.appendChild(probe);
+    const tok = getComputedStyle(probe);
+    const token = { w: tok.borderTopWidth, c: tok.borderTopColor, r: tok.borderTopLeftRadius };
+    probe.remove();
+    void root;
+    const NOT_CARD = 'button, input, select, textarea, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="dialog"], [role="menu"], [role="listbox"], header, nav, img, svg';
+    for (const el of document.querySelectorAll('body *')) {
+        if (!visible(el)) continue;
+        const cs = getComputedStyle(el);
+        const sides = ['Top', 'Right', 'Bottom', 'Left'];
+        const styled = sides.filter((s) => parseFloat(cs[`border${s}Width`]) > 0);
+        if (styled.some((s) => /dotted|dashed/.test(cs[`border${s}Style`]))) {
+            cap(out.dashedBorders, { el: desc(el), style: cs.borderTopStyle });
+        }
+        if (styled.length !== 4 || el.matches(NOT_CARD) || el.closest('header, nav, [role="dialog"], [role="menu"]')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.height < 44 || r.width < 120) continue;
+        if (parseFloat(cs.borderTopLeftRadius) === 0) continue;
+        // A card is a rounded box with a solid edge all round and content inside.
+        if (el.querySelector('input, textarea, select') && r.height < 70) continue; // a field frame
+        const off = cs.borderTopWidth !== token.w || cs.borderTopStyle !== 'solid'
+            || cs.borderTopColor !== token.c || cs.borderTopLeftRadius !== token.r;
+        if (off) {
+            cap(out.offTokenCards, {
+                el: desc(el), border: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`, radius: cs.borderTopLeftRadius,
+                token: `${token.w} solid ${token.c} / ${token.r}`,
+            });
+        }
+    }
+
+    // Notices are page content, never in a header.
+    for (const el of document.querySelectorAll('[role="alert"], [role="status"], [class*="notice" i], [class*="banner" i]')) {
+        if (!visible(el) || !text(el)) continue;
+        if (el.closest('header')) cap(out.noticesInHeader, desc(el));
+    }
+
+    // One title and one copy of each help line per screen.
+    const seen = new Map();
+    for (const el of document.querySelectorAll('h1, h2, h3, h4, p, [class*="title" i], [class*="help" i], [class*="hint" i]')) {
+        if (!visible(el) || el.closest('[aria-hidden="true"], nav, [role="dialog"][aria-label="Command palette"]')) continue;
+        if (el.querySelector('h1, h2, h3, h4, p')) continue;
+        const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
+        if (t.length < 4) continue;
+        const key = t.toLowerCase();
+        if (!seen.has(key)) seen.set(key, []);
+        if (!seen.get(key).includes(el)) seen.get(key).push(el);
+    }
+    for (const [t, els] of seen) {
+        if (els.length > 1 && !els.some((a, i) => els.some((b, j) => i !== j && (a.contains(b) || b.contains(a))))) {
+            cap(out.repeatedText, { text: t.slice(0, 60), count: els.length, els: els.slice(0, 3).map(desc) });
+        }
+    }
+
+    // The screen a sidebar entry opens needs no Back while the sidebar shows:
+    // flagged when the page title names the entry marked current. A screen
+    // below that entry (an order list under DEX) keeps its Back.
+    const sidebar = document.querySelector('nav[aria-label="Primary navigation"]');
+    if (sidebar && visible(sidebar)) {
+        const current = sidebar.querySelector('[aria-current="page"], [aria-current="true"]');
+        const back = [...document.querySelectorAll('header button, header a')]
+            .find((b) => visible(b) && /^back\b/i.test(text(b)));
+        const pageTitle = [...document.querySelectorAll('header h1, header h2')].find(visible);
+        const label = current ? (current.innerText || '').trim().split('\n')[0].trim().toLowerCase() : '';
+        const titleText = pageTitle ? (pageTitle.innerText || '').trim().toLowerCase() : '';
+        if (current && back && label && titleText === label) {
+            cap(out.backBesideSidebar, { current: label, back: text(back) });
+        }
+    }
+
+    // Notices sit first in the page content, at its full width.
+    const main = document.getElementById('xc-main');
+    if (main) {
+        const mr = main.getBoundingClientRect();
+        const mcs = getComputedStyle(main);
+        const left = mr.left + main.clientLeft + (parseFloat(mcs.paddingLeft) || 0);
+        const right = mr.left + main.clientLeft + main.clientWidth - (parseFloat(mcs.paddingRight) || 0);
+        const NOTICE = '[data-xc-notice], [role="alert"], [role="status"]';
+        const notices = [...main.querySelectorAll(NOTICE)]
+            .filter((el) => visible(el) && text(el).length > 0 && !el.parentElement.closest(NOTICE));
+        for (const el of notices) {
+            if (el.closest('form, [role="dialog"], [role="group"]')) continue; // a form's own status line
+            const r = el.getBoundingClientRect();
+            const contentAbove = [...main.querySelectorAll('h2, h3, p, li, button, input, table')]
+                .some((other) => visible(other) && !el.contains(other) && !other.closest(NOTICE)
+                    && other.getBoundingClientRect().bottom <= r.top + 1);
+            const narrow = right - left - r.width > 2;
+            if (contentAbove || narrow) {
+                cap(out.noticePlacement, { el: desc(el), contentAbove, width: Math.round(r.width), content: Math.round(right - left) });
+            }
+        }
+    }
+
+    for (const k of Object.keys(out)) if (out[k].length === 0) delete out[k];
+    return out;
 }

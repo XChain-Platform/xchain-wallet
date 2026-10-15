@@ -62,6 +62,16 @@ afterEach(() => {
 });
 
 describe('notification categories and permission', () => {
+    it('keeps only trigger details that add to category labels', () => {
+        render(<NotificationsSection />);
+
+        expect(screen.getByText('First confirmation of a sent transaction.')).toBeTruthy();
+        expect(screen.getByText('Seen by the network before confirmation.')).toBeTruthy();
+        expect(screen.getByText('Held-token polls; binding polls are flagged.')).toBeTruthy();
+        expect(screen.queryByText(/Notify when a watched address receives a message/)).toBeNull();
+        expect(screen.queryByText(/Notify when a DEX order/)).toBeNull();
+    });
+
     it('requests and revokes the optional Chrome notification permission', async () => {
         const prior = globalThis.chrome;
         const contains = vi.fn(async () => false);
@@ -224,7 +234,15 @@ describe('price alert manager', () => {
         expect(screen.queryByText(/No price alerts yet/)).toBeNull();
     });
 
+    it('says one thing, not two, while price alerts are switched off', () => {
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        expect(screen.getByText('Turn on Price alerts above to start receiving these.')).toBeTruthy();
+        expect(screen.queryByText('No price alerts yet')).toBeNull();
+    });
+
     it('creates a price alert from the empty state', async () => {
+        settings.notifications.priceAlerts = true;
         render(<NotificationsSection walletId="wallet-1" />);
         expect(screen.getAllByRole('status').some(
             (region) => region.textContent === 'No price alerts yetAdd one below.',

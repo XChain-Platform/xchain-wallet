@@ -28,11 +28,19 @@
     flex: 0 0 auto;
 }
 
+/* Skip reads as quiet text but keeps a kit control's target: the small
+   control height (above the --xc-tap-min floor at every width) and, on a
+   touch screen, the --xc-control-hit-min area a kit Button adds. At 24px tall
+   with no hit area it was the smallest target on the first onboarding
+   screen. */
 .skipBtn {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: var(--xc-tap-min);
+    min-block-size: var(--xc-tap-min);
+    min-height: max(var(--xc-tap-min), var(--xc-control-h-sm));
+    min-width: max(var(--xc-tap-min), var(--xc-control-h-sm));
     padding: var(--xc-space-1) var(--xc-space-2);
     border: none;
     border-radius: var(--xc-radius-sm);
@@ -41,6 +49,18 @@
     font: inherit;
     font-size: var(--xc-text-sm);
     cursor: pointer;
+}
+
+/* Centred on the box in both writing directions, as Button.sm does. */
+@media (pointer: coarse), (hover: none) {
+    .skipBtn::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .skipBtn:hover {

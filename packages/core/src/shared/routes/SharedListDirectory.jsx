@@ -172,7 +172,6 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         return wrap(
             <StatusMessage
                 variant="error"
-                className={styles.error}
                 recovery={{ label: 'Try again', onAction: () => setDirectoryReload((value) => value + 1) }}
             >
                 {loadError}

@@ -17,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import { normalizeBip21Amount, parseBip21Uri } from '../../core/src/uri/bip21.js';
 import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUri.js';
+import { tickerReferenceError } from '../../core/src/shared/utils/tickerGrammar.js';
 
 const COIN_SCHEMES = Object.freeze({
     bitcoin: { coin: 'bitcoin', tick: 'BTC' },
@@ -49,7 +50,7 @@ function unwrapProtocolHandler(raw) {
  *
  * @param {unknown} raw
  * @param {any} chainRegistry
- * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | { view: 'deep-link-error', message: string } | null}
+ * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | { view: 'deep-link-error', message: string } | null}
  */
 export function deepLinkRoute(raw, chainRegistry) {
     if (typeof raw !== 'string' || !raw) return null;
@@ -99,6 +100,9 @@ export function deepLinkRoute(raw, chainRegistry) {
     // review action, so a typo or future privileged action fails closed here.
     if (intent?.action && !ROUTABLE_XCHAIN_ACTIONS.has(intent.action)) return invalidRoute();
     if (intent?.kind === 'send') {
+        if (intent.tick && tickerReferenceError(intent.tick, { allowRef: true })) {
+            return invalidRoute();
+        }
         let amount = intent.amount;
         try {
             amount = normalizeBip21Amount(amount);
@@ -113,6 +117,7 @@ export function deepLinkRoute(raw, chainRegistry) {
                 tick: intent.tick,
                 chainId: intent.chainId,
                 memo: intent.memo,
+                requestMessage: intent.message ?? intent.label,
             },
         };
     }

@@ -2287,6 +2287,8 @@ function AppInner() {
                         divisibility={tokenDetailRef.divisibility}
                         fiatRate={tokenDetailRef.fiatRate}
                         fiatRateSource={tokenDetailRef.fiatRateSource}
+                        fiatRateStale={tokenDetailRef.fiatRateStale === true}
+                        fiatRateFetchedAt={tokenDetailRef.fiatRateFetchedAt || null}
                         quantity={tokenDetailRef.quantity}
                         imageUrl={tokenDetailRef.imageUrl}
                         onBack={() => setUnlockedView('home')}
@@ -2849,6 +2851,7 @@ function AppInner() {
                 >
                     <ShellRouteOutlet
                         routeKey={unlockedView}
+                        walletId={activeWalletId}
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                     >

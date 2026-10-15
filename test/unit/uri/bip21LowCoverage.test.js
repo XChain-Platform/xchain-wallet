@@ -20,10 +20,10 @@ describe('BIP21 low-coverage branches', () => {
         expect(() => parseBip21Uri(uri)).toThrow(message);
     });
 
-    it('accepts empty, valueless, and repeated query separators', () => {
+    it('accepts empty, valueless, and repeated query separators and ignores the unknown valueless key', () => {
         expect(parseBip21Uri('bitcoin:bc1qexample?flag&&label=')).toMatchObject({
             address: 'bc1qexample',
-            params: { flag: '', label: '' },
+            params: { label: '' },
             label: '',
         });
         expect(parseBip21Uri('bitcoin:bc1qexample?')).toMatchObject({

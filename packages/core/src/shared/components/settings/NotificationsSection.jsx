@@ -195,7 +195,6 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'messages',
         get label() { return t('settings.notifications.incomingMessages'); },
-        get hint() { return t('settings.notifications.notifyWhenAWatchedAddress2'); },
     },
     {
         key: 'governancePolls',
@@ -216,24 +215,20 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'dispenserEscrow',
         get label() { return t('settings.notifications.dispenserRunningLow'); },
-        get hint() { return t('settings.notifications.notifyWhenADispenserYou'); },
         // v2-tolerant default, like the sibling watcher flags.
         defaultOn: true,
     },
     {
         key: 'dispenserFills',
         get label() { return t('settings.notifications.dispenserFills'); },
-        get hint() { return t('settings.notifications.notifyWhenADispenserYou2'); },
     },
     {
         key: 'orderFills',
         get label() { return t('settings.notifications.orderFills'); },
-        get hint() { return t('settings.notifications.notifyWhenADexOrder'); },
     },
     {
         key: 'priceAlerts',
         get label() { return t('settings.notifications.priceAlerts'); },
-        get hint() { return t('settings.notifications.notifyWhenACoinHits'); },
     },
 ]);
 
@@ -588,7 +583,11 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                     {t('settings.notifications.couldNotLoadPriceAlerts')}
                 </StatusMessage>
             ) : alerts.length === 0 ? (
-                <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
+                // The hint above already says why nothing fires while alerts are off, so
+                // "No price alerts yet" would be a second message for the same state.
+                enabled && !priceDataOff
+                    ? <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
+                    : null
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>

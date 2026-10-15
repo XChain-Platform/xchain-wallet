@@ -704,7 +704,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         <Screen variant={variant} header={header} restoreScroll={stage !== 'review-1' && stage !== 'review-2'}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || owner === undefined) return wrap(<p className={styles.hint}>Loading…</p>);
     if (ownershipReason) return wrap(<StatusMessage variant="warning">{ownershipReason}</StatusMessage>);
 
@@ -854,7 +854,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 onSubmit={handleSignSecond}
                 noValidate
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -942,7 +942,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 onSubmit={handleSignFirst}
                 noValidate
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -1067,7 +1067,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             noValidate
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button type="submit" variant="primary">
                     Review

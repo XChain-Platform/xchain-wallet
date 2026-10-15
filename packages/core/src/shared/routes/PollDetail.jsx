@@ -502,7 +502,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -682,7 +682,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 label="Review vote"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
-                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
                     <>
@@ -738,7 +738,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
-                    status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+                    status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                     actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
                 >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>

@@ -22,6 +22,7 @@ import {
     ListRow,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
@@ -93,6 +94,12 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         if (!addressesByChain) return undefined;
         setTokens(null);
         setTokensError(null);
+        // A demo wallet issued nothing, and a demo wallet's addresses never go
+        // to an explorer (issue #82).
+        if (isDemoWallet(walletId)) {
+            setTokens([]);
+            return undefined;
+        }
         if (typeof messaging?.getOwnedTokens !== 'function') {
             setTokensError('Token ownership lookup is not available in this shell.');
             setTokens([]);
@@ -149,7 +156,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             setTokens(merged);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, tokensReload]);
+    }, [walletId, addressesByChain, messaging, tokensReload]);
 
     const filteredTokens = useMemo(() => {
         if (!tokens) return null;
@@ -175,26 +182,20 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             backLabel="Back to home"
             title="My tokens"
             titleIcon={<Icon.TokenIcon />}
-            trailing={
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    icon={null}
-                    className={styles.issueButton}
-                    onClick={onIssue}
-                    aria-label="Issue new token"
-                    title="Issue new token"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            }
         />
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={(
+            {/* The page header holds only the title and Back, so Issue new token
+                sits in the content's actions row. An empty list offers Issue
+                token from its EmptyState instead, so the screen never shows
+                it twice. */}
+            <ListPage actions={isEmpty ? null : (
+                <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onIssue}>
+                    Issue new token
+                </Button>
+            )} toolbar={(
                 <>
                     <div className={styles.search}>
                         <Input

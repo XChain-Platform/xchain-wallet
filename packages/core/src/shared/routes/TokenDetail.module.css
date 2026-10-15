@@ -231,6 +231,14 @@
     font-weight: 500;
 }
 
+/* The age of a kept price sits on the accent hero, so it takes the hero's
+   own text color rather than the muted one. */
+.balanceHeroNote .balanceHeroStaleness {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: inherit;
+}
+
 .balanceHeroNoteLeft {
     flex: 1 1 auto;
     min-width: 0;

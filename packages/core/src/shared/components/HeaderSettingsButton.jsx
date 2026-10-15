@@ -10,7 +10,7 @@
 
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon, Spinner } from '@xchain-wallet/core/ui';
 import { ConfirmModal } from './ConfirmModal.jsx';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
@@ -289,6 +289,9 @@ export function HeaderSettingsButton({
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                 ))}
                             </select>
+                            {switchingNetwork ? (
+                                <Spinner size="sm" label={t('settings.network.switching')} />
+                            ) : null}
                         </Section>
                     ) : null}
 

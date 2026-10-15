@@ -88,6 +88,7 @@ import {
     runMainTask,
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
+import { createQuitDeferral, isQuitDeferringMessage } from './quitGuard.js';
 import {
     FileWindowBoundsStore,
     MIN_WINDOW_BOUNDS,
@@ -166,6 +167,10 @@ const deepLinkSlot = createDeepLinkSlot();
 let deepLinkRecipient = null;
 // Windows opened on a pinned view (open-window), which never take a deep link.
 const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
+// Windows whose close is under way. Electron tears a closing window down
+// after its 'close' event, and showing it in that gap (a renderer load the
+// close aborted reports failure there) crashes the main process.
+const closingWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
 // §9.7 / G007: boot-time chain-registry sync promise. Main owns the
 // network fetch (the renderer CSP pins connect-src 'self'); the verified
@@ -365,17 +370,24 @@ function hasVisibleWindow() {
 
 /**
  * Apply the native close-button convention without interfering with an
- * explicit application quit.
+ * explicit application quit. Only the last visible primary window hides,
+ * which keeps the app in the dock or tray; any other window closes for
+ * real, because a hidden one would stay alive with its renderer running
+ * until quit and could later be revealed after the user dismissed it.
  *
  * @param {BrowserWindow} win
  * @param {{ preventDefault: () => void }} event
- * @param {{ platform?: string, quitting?: boolean }} [options]
+ * @param {{ platform?: string, quitting?: boolean, otherVisible?: boolean, detached?: boolean }} [options]
  * @returns {boolean} true when the close becomes a hide
  */
 export function applyWindowCloseConvention(win, event, options = {}) {
     const platform = options.platform ?? process.platform;
     const quitting = options.quitting ?? isQuitting;
     if (!['darwin', 'win32', 'linux'].includes(platform) || quitting) return false;
+    const otherVisible = options.otherVisible
+        ?? liveWindows().some((other) => other !== win && other.isVisible());
+    const detached = options.detached ?? detachedWindows.has(win);
+    if (otherVisible || detached) return false;
     event.preventDefault();
     win.hide();
     return true;
@@ -600,10 +612,10 @@ export function createWindow(opts = {}) {
     void runMainTask(
         () => win.loadFile(join(APP_ROOT, 'index.html'), loadOpts),
         'renderer load',
-        { recover: () => { if (!win.isDestroyed()) win.show(); } },
+        { recover: () => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); } },
     );
     win.once('ready-to-show', () => {
-        runMainCallback(() => { if (!win.isDestroyed()) win.show(); }, 'renderer reveal');
+        runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); }, 'renderer reveal');
     });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
@@ -613,7 +625,11 @@ export function createWindow(opts = {}) {
             // Synchronous: on quit the process can exit before an async write
             // lands, which left window-bounds.json holding stale values.
             flushWindowBoundsSync();
-            if (applyWindowCloseConvention(win, event) && !hasVisibleWindow()) {
+            if (!applyWindowCloseConvention(win, event)) closingWindows.add(win);
+            // Hidden or closing, this window no longer counts as one in use.
+            // A hidden window elsewhere keeps window-all-closed from firing,
+            // so the windowless idle check starts here.
+            if (!isQuitting && !liveWindows().some((other) => other !== win && other.isVisible())) {
                 startWindowlessIdleLock();
             }
         }, 'window close');
@@ -694,8 +710,13 @@ let reopenInFlight = /** @type {Promise<void> | null} */ (null);
 let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
-let activeWalletOperations = 0;
+// Sends that sign and then broadcast or persist; reads are never counted.
+let activeSendOperations = 0;
 let activeUpdateDownloads = 0;
+const quitDeferral = createQuitDeferral({
+    isBusy: () => activeSendOperations > 0 || activeUpdateDownloads > 0,
+    quit: () => app.quit(),
+});
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
@@ -1078,7 +1099,7 @@ void runMainTask(async () => {
                 lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
-            canRestart: () => activeWalletOperations === 0,
+            canRestart: () => activeSendOperations === 0,
         });
         downloadAndInstall = downloadUpdate;
         restartAndInstall = restart;
@@ -1127,6 +1148,7 @@ void runMainTask(async () => {
                 return await downloadAndInstall();
             } finally {
                 activeUpdateDownloads -= 1;
+                quitDeferral.settle();
             }
         } catch (error) {
             reportMainFailure('updater IPC action', error);
@@ -1155,7 +1177,8 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: runtime not initialized' },
             };
         }
-        activeWalletOperations += 1;
+        const holdsQuit = isQuitDeferringMessage(message);
+        if (holdsQuit) activeSendOperations += 1;
         try {
             const response = await handleIpcMessage(runtime, message);
             const change = stateChangeForMessage(message, response);
@@ -1168,7 +1191,10 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: message handling failed' },
             };
         } finally {
-            activeWalletOperations -= 1;
+            if (holdsQuit) {
+                activeSendOperations -= 1;
+                quitDeferral.settle();
+            }
         }
     });
 
@@ -1314,12 +1340,14 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
     // A send can be between signing and persistence, and an update download
-    // can be between its network fetch and signature verdict. Keep the app
-    // reachable until the in-flight operation settles, then let the user
-    // retry quit explicitly.
-    if (activeWalletOperations > 0 || activeUpdateDownloads > 0) {
+    // can be between its network fetch and signature verdict. Hold the quit
+    // until that work settles or the deadline passes, then quit on our own;
+    // a repeated quit request or SIGTERM during the wait rides the same
+    // clock, so quit always completes.
+    const deferral = quitDeferral.request();
+    if (deferral) {
         event?.preventDefault();
-        void restoreWindowAfterIdleCheck();
+        if (deferral === 'defer') void restoreWindowAfterIdleCheck();
         return;
     }
     // Zero the master key + close the encrypted doc. The OS already

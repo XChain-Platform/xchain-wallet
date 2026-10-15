@@ -16,6 +16,8 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
 import { ActionIntentSummary } from '../../../packages/core/src/shared/components/ActionIntentSummary.jsx';
 
@@ -79,5 +81,49 @@ describe('protocol-fee row rendering', () => {
         };
         const { container } = render(<ActionIntentSummary decoded={DECODED} simulation={paired} />);
         expect(container.querySelectorAll('[data-testid="action-intent-deltas"] > div')).toHaveLength(1);
+    });
+
+    it('renders memos and broadcast messages containing markup as text in review', () => {
+        const broadcastMessage = '<img src=x onerror="globalThis.broadcastExecuted = true">';
+        const memo = '<script>globalThis.memoExecuted = true</script>';
+        const { container } = render(
+            <ActionIntentSummary
+                decoded={{
+                    summary: broadcastMessage,
+                    details: [{ label: 'Memo', value: memo }],
+                    warnings: [],
+                }}
+                simulation={null}
+            />,
+        );
+
+        expect(screen.getByText(broadcastMessage)).toBeInTheDocument();
+        expect(screen.getByText(memo)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('img')).toBeNull();
+        expect(globalThis.broadcastExecuted).toBeUndefined();
+        expect(globalThis.memoExecuted).toBeUndefined();
+    });
+
+    it('keeps production JSX free of dangerouslySetInnerHTML', () => {
+        const roots = [
+            join(process.cwd(), 'packages/core/src/shared'),
+            join(process.cwd(), 'packages/extension/src/approval'),
+        ];
+        const pending = [...roots];
+        const violations = [];
+        while (pending.length > 0) {
+            const directory = pending.pop();
+            for (const entry of readdirSync(directory, { withFileTypes: true })) {
+                const path = join(directory, entry.name);
+                if (entry.isDirectory()) pending.push(path);
+                else if (entry.name.endsWith('.jsx')
+                    && readFileSync(path, 'utf8').includes('dangerouslySetInnerHTML')) {
+                    violations.push(path);
+                }
+            }
+        }
+
+        expect(violations).toEqual([]);
     });
 });

@@ -256,7 +256,7 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     const byAddress = page.getByRole('radio', { name: 'By address' });
     await expect(byAddress).toBeVisible({ timeout: 30_000 });
 
-    // Pin the chain filter. Left at its "All chains" default this form fans
+    // Pin the network filter. Left at its "All networks" default this form fans
     // the query out over EVERY registered chain in parallel, mainnet Bitcoin,
     // Litecoin and Dogecoin included - which is both slower and a live
     // mainnet call from a regtest test. Narrowing it keeps the run entirely
@@ -266,11 +266,12 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     // bcrt1 address nor an "on Bitcoin" string, so grepping for those found
     // nothing here while the browse filter still asked Bitcoin for a dispenser
     // this run had just created on Litecoin.
-    // Scoped to main: getByLabel substring-matches, and the app header has a
-    // "XChain platform sites" button whose label contains "Chain", so an
-    // unscoped lookup is a strict-mode violation. Only reachable once the
+    // Scoped to main and matched by exact role name: getByLabel substring-matches, and
+    // the app header carries controls whose labels contain "network", so an
+    // unscoped or partial lookup is a strict-mode violation. Only reachable once the
     // earlier chain fixes let the spec get this far.
-    await page.getByRole('main').getByLabel('Chain').selectOption(REGTEST_CHAIN_ID);
+    await page.getByRole('main').getByRole('combobox', { name: 'Network', exact: true })
+        .selectOption(REGTEST_CHAIN_ID);
 
     // Search by the SELLER's address rather than by ticker: the ticker lane
     // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag

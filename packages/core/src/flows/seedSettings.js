@@ -81,8 +81,9 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
  * wallet, an existing `activeNetwork` is preserved. Activating an
  * additional chain via Settings must not silently switch the user's
  * network mode. Pass `activeNetwork` from wallet-creation entry points
- * so a demo wallet (regtest chains) lands with `activeNetwork:'regtest'`
- * and a mainnet wallet lands with `'mainnet'` (the default).
+ * so a wallet created on regtest chains lands with `activeNetwork:'regtest'`
+ * and a mainnet wallet (the demo wallet included) lands with `'mainnet'`
+ * (the default).
  *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {import('../registry/index.js').ChainRegistry} chainRegistry

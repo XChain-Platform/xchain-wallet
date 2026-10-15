@@ -721,7 +721,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -768,7 +768,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -956,7 +956,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             onSubmit={handleReview}
             noValidate
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

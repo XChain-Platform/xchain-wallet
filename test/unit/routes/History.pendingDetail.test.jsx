@@ -120,7 +120,7 @@ function rowFor(view, state) {
 async function openRow(view, state) {
     await waitFor(() => expect(rowFor(view, state)).toBeTruthy());
     fireEvent.click(rowFor(view, state));
-    return screen.getByRole('region', { name: 'Action detail' });
+    return screen.getByRole('region', { name: 'Transaction details' });
 }
 
 /**
@@ -280,7 +280,7 @@ describe('History pending detail branch', () => {
             expect(screen.queryByText('Pending, not yet validated by the service.')).toBeNull();
         });
         // Same view, still open, now showing the confirmed form.
-        const upgraded = screen.getByRole('region', { name: 'Action detail' });
+        const upgraded = screen.getByRole('region', { name: 'Transaction details' });
         expect(within(upgraded).getAllByText('Confirmed').length).toBeGreaterThan(0);
         expect(view.container.querySelector('[data-pending-state]')).toBeNull();
     });
@@ -297,7 +297,7 @@ describe('History offers replacement only where it can still work', () => {
         // but it must not offer a replacement this shell cannot run.
         fireEvent.click(within(region).getByText('More'));
         expect(within(region).getByText('Copy receipt')).toBeTruthy();
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 
@@ -308,7 +308,7 @@ describe('History offers replacement only where it can still work', () => {
         });
         const region = await openRow(view, 'not-seen');
         fireEvent.click(within(region).getByText('More'));
-        expect(within(region).getByText('Speed up')).toBeTruthy();
+        expect(within(region).getByText('Speed up transaction')).toBeTruthy();
         expect(within(region).getByText('Cancel transaction')).toBeTruthy();
     });
 
@@ -320,7 +320,7 @@ describe('History offers replacement only where it can still work', () => {
         });
         const region = await openRow(view, 'seen');
         fireEvent.click(within(region).getByText('More'));
-        expect(within(region).getByText('Speed up')).toBeTruthy();
+        expect(within(region).getByText('Speed up transaction')).toBeTruthy();
     });
 
     it.each([false, null])('withholds replacement when the recorded RBF flag is %s', async (rbf) => {
@@ -331,7 +331,7 @@ describe('History offers replacement only where it can still work', () => {
         const region = await openRow(view, 'not-seen');
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 
@@ -344,7 +344,7 @@ describe('History offers replacement only where it can still work', () => {
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
         const region = await openRow(view, 'not-seen');
         fireEvent.click(within(region).getByText('More'));
-        fireEvent.click(within(region).getByText('Speed up'));
+        fireEvent.click(within(region).getByText('Speed up transaction'));
 
         const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
         expect(within(dialog).getByText(
@@ -353,7 +353,7 @@ describe('History offers replacement only where it can still work', () => {
         expect(replaceTx).toHaveBeenCalledTimes(1);
         expect(replaceTx.mock.calls[0][0]).toMatchObject({ strategy: 'speedup', preview: true });
 
-        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+        fireEvent.click(within(dialog).getByText('Broadcast replacement'));
         await waitFor(() => expect(replaceTx).toHaveBeenCalledTimes(2));
         expect(replaceTx.mock.calls[1][0]).not.toHaveProperty('preview');
     });
@@ -369,10 +369,10 @@ describe('History offers replacement only where it can still work', () => {
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
         const region = await openRow(view, 'not-seen');
         fireEvent.click(within(region).getByText('More'));
-        fireEvent.click(within(region).getByText('Speed up'));
+        fireEvent.click(within(region).getByText('Speed up transaction'));
 
         const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
-        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+        fireEvent.click(within(dialog).getByText('Broadcast replacement'));
 
         expect(await within(region).findByText('This transaction is already confirmed.')).toBeTruthy();
     });
@@ -391,7 +391,7 @@ describe('History offers replacement only where it can still work', () => {
         // button comes back carrying exactly the option under test.
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 });
@@ -433,7 +433,7 @@ describe('History shows a transaction this wallet proved into a block as confirm
         // And a mined transaction is not offered a fee bump.
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 

@@ -199,6 +199,11 @@
 
 /* Unread count pill on a sheet row (e.g. Messaging). */
 .sheetBadge {
+    /* Centre the count in the pill; as a plain block its line box sat at
+       the top of the taller pill. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
     box-sizing: border-box;
     min-width: var(--xc-badge-height-sm);

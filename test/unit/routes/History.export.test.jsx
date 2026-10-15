@@ -151,7 +151,7 @@ describe('History export button', () => {
         try {
             mountHistory([historyRow()]);
             const trigger = await screen.findByRole('button', { name: 'Export…' });
-            const additionalDetails = screen.getByRole('button', { name: 'Additional details' });
+            const additionalDetails = screen.getByRole('button', { name: 'More filters' });
             const showFiat = screen.getByRole('button', { name: 'Show fiat: Off' });
             const grouping = screen.getByRole('radiogroup', { name: 'Grouping mode' });
             const toolbar = additionalDetails.parentElement;
@@ -162,9 +162,11 @@ describe('History export button', () => {
             expect(additionalDetails.parentElement).toBe(toolbar);
             expect(showFiat.parentElement).toBe(toolbar);
             expect(grouping.parentElement).toBe(toolbar);
-            // Export sits in the always-visible top row, outside the foldable
-            // filter card, so it stays reachable while the filters are folded.
-            expect(trigger.parentElement).toHaveClass(historyStyles.toolbarTop);
+            // Export sits in the page actions row beside Refresh, outside the
+            // foldable filter card, so it stays reachable while the filters
+            // are folded.
+            expect(trigger.parentElement).toHaveAttribute('data-xc-page-actions');
+            expect(trigger.closest('#history-filter-panel')).toBeNull();
             expect(trigger.closest(`.${historyStyles.filterFooter}`)).toBeNull();
             for (const control of [additionalDetails, showFiat, grouping, trigger]) {
                 expect(control).toHaveClass(historyStyles.toolbarControl);

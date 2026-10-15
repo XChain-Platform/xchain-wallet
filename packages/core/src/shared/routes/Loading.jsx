@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Button, Screen } from '@xchain-wallet/core/ui';
+import { Button, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Loading.module.css';
@@ -32,9 +32,9 @@ export function Loading({ error, onRetry }) {
         <Screen variant={variant}>
             <div className={centerClass}>
                 {error ? (
-                    <div role="alert" className={styles.errorPanel}>
+                    <div className={styles.errorPanel}>
                         <h1 className={styles.title}>{t('loading.error.title')}</h1>
-                        <p className={styles.error}>{t('loading.error.body')}</p>
+                        <StatusMessage variant="error">{t('loading.error.body')}</StatusMessage>
                         <p className={styles.nextStep}>{t('loading.error.recovery')}</p>
                         <Button type="button" variant="primary" block onClick={handleRetry}>
                             {t('common.tryAgain')}
