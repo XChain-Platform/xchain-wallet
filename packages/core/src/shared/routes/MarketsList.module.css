@@ -150,16 +150,20 @@
    room. On a phone it takes its own full-width row and each tab shares it, so
    the strip's underline and the selected tab's underline span the row. */
 .marketTabs {
-    flex: 0 0 auto;
-    width: auto;
+    flex: 1 1 100%;
 }
 
-@media (max-width: 599px) {
+.marketTabs > * {
+    flex: 1 1 0;
+}
+
+@media (min-width: 600px) {
     .marketTabs {
-        flex: 1 1 100%;
+        flex: 0 0 auto;
+        width: auto;
     }
 
     .marketTabs > * {
-        flex: 1 1 0;
+        flex: 0 1 auto;
     }
 }
