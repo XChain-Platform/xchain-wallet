@@ -150,12 +150,17 @@
 }
 
 /* Keep the complete action set even on phone layouts, then use one row once
-   every label has enough room at the shared page width. */
+   every label has enough room. The room is the width of the content beside
+   the sidebar, not the window, so the wrapper is the query container. */
+.actionsFullWrap {
+    container-type: inline-size;
+    margin-top: var(--xc-space-4);
+}
+
 .actionsFull {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--xc-space-2);
-    margin-top: var(--xc-space-4);
 }
 
 /* Labels wrap only between whole words; a narrower inline padding leaves
@@ -176,29 +181,30 @@
    whole tile width and never runs into the next tile; a long label wraps
    between whole words. Tiles start at the top so a two-line label leaves
    every icon in the row on one line. */
-@media not all and (min-width: 1024px) {
-    .actionsFull > button {
-        flex-direction: column;
-        justify-content: flex-start;
-        gap: var(--xc-space-1);
-        padding-block: var(--xc-space-2);
-        white-space: normal;
-        text-align: center;
-    }
+.actionsFull > button {
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--xc-space-1);
+    padding-block: var(--xc-space-2);
+    white-space: normal;
+    text-align: center;
 }
 
-/* Wide screens: tiles size to their label and share the row, wrapping to a
-   second row of whole tiles instead of breaking a label across two lines. */
-@media (min-width: 1024px) {
+/* When the content is wide enough for every label beside its icon, all tiles
+   share one row at equal width. Narrower content keeps the equal-tile grid
+   above, so a second row never stretches. */
+@container (min-width: 1180px) {
     .actionsFull {
-        display: flex;
-        flex-wrap: wrap;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(max-content, 1fr);
     }
 
     .actionsFull > button {
-        flex: 1 1 auto;
-        width: auto;
-        padding-inline: var(--xc-space-3);
+        flex-direction: row;
+        justify-content: center;
+        gap: var(--xc-space-2);
+        padding-inline: var(--xc-space-2);
         white-space: nowrap;
     }
 }

@@ -1525,6 +1525,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     the actions live in the pancake menu, freeing the body for
                     the balance list. */}
                 {isFull ? (
+                <div className={styles.actionsFullWrap}>
                 <div className={styles.actionsFull}>
                     <Button
                         variant="secondary"
@@ -1621,6 +1622,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     >
                         {t('actionsMenu.more')}
                     </Button>
+                </div>
                 </div>
                 ) : null}
             </ListPage>
