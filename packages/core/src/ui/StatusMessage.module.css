@@ -43,7 +43,7 @@
 .recovery {
     flex: 0 0 auto;
     margin-inline-start: auto;
-    background: rgba(255, 255, 255, 0.18);
+    background: transparent;
     color: inherit;
     border: 1px solid currentColor;
     border-radius: var(--xc-radius-sm);
@@ -61,9 +61,11 @@
     justify-content: center;
 }
 
+/* A light overlay on a dark notice drags the label below 4.5:1, so the
+   hover tint is a faint share of the label's own colour instead. */
 .recovery:hover,
 .recovery:focus-visible {
-    background: rgba(255, 255, 255, 0.3);
+    background: color-mix(in srgb, currentColor 8%, transparent);
     outline: 2px solid currentColor;
     outline-offset: 1px;
 }
