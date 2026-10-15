@@ -280,9 +280,27 @@ export function MarketsList({
             ? (selectedAsset.displayName || selectorTickUpper)
             : (selectorDescriptor?.displayName || selectorNativeTicker || selectorTickUpper))
         : 'Select coin or token';
+    // The load error is a page notice, shown first; the results region below
+    // renders nothing in its place.
+    const showLoadError = !!selectedAsset && !(marketsLoading && !hasCachedMarkets) && !!loadError;
     return (
         <Screen variant={variant} header={header}>
             <ListPage
+                notices={showLoadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setSettledAssetKey(null);
+                                setLoading(true);
+                                setMarketsReload((value) => value + 1);
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                ) : null}
                 toolbar={(
                     <div style={{ width: '100%' }}>
                         <Button
@@ -379,21 +397,7 @@ export function MarketsList({
                             <div role="status" aria-label="Loading markets">
                                 <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
                             </div>
-                        ) : loadError ? (
-                            <StatusMessage
-                                variant="error"
-                                className={styles.hint}
-                                recovery={{
-                                    label: 'Try again',
-                                    onAction: () => {
-                                        setSettledAssetKey(null);
-                                        setLoading(true);
-                                        setMarketsReload((value) => value + 1);
-                                    },
-                                }}
-                            >
-                                {loadError}
-                            </StatusMessage>
+                        ) : loadError ? null
                         ) : displayMarkets.length === 0 ? (
                             <EmptyState
                                 title={filtersHideAllMarkets
