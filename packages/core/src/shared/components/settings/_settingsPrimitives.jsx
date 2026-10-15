@@ -61,13 +61,17 @@ export const ROW_HINT = {
 export const SELECT = {
     maxWidth: '100%',
 };
+// Settings inputs take the shared field metrics (border colour, radius, height,
+// padding and type size) so a number box in a row matches the dropdown beside it.
 export const INPUT = {
-    background: 'var(--xc-bg)',
+    background: 'var(--xc-surface)',
     color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
+    border: '1px solid var(--xc-control-border)',
+    borderRadius: 'var(--xc-control-radius)',
+    height: 'var(--xc-control-h-md)',
+    padding: '0 var(--xc-control-pad-x-md)',
+    fontSize: 'var(--xc-control-font-md)',
+    lineHeight: 'var(--xc-control-line)',
     fontFamily: 'inherit',
 };
 
