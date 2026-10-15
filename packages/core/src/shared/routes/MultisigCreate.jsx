@@ -602,6 +602,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Select
                 label="Origin"
+                hint={ORIGIN_HINTS[row.origin]}
                 value={row.origin}
                 onChange={(e) => onChange({
                     origin: e.target.value,
@@ -615,9 +616,9 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     ...(row.origin === 'local' ? { pubkey: '', fingerprint: '', derivationPath: '' } : {}),
                 })}
             >
-                <option value="local">Local (software account or paired HW signer)</option>
-                <option value="external-xpub">External xpub (paste from another wallet)</option>
-                <option value="external-hardware">External hardware (sign via file transfer)</option>
+                <option value="local">Local signer</option>
+                <option value="external-xpub">External xpub</option>
+                <option value="external-hardware">External hardware</option>
             </Select>
 
             {row.origin === 'local' ? (
@@ -723,6 +724,14 @@ function schemeLabel(value) {
     const found = SCHEMES.find((s) => s.value === value);
     return found ? found.label : value;
 }
+
+// The option labels stay short enough to show whole in a narrow select; what each
+// origin means sits under the field instead.
+const ORIGIN_HINTS = {
+    local: 'A software account or paired hardware signer in this wallet.',
+    'external-xpub': 'Paste the xpub from another wallet.',
+    'external-hardware': 'Sign through file transfer.',
+};
 
 function originLabel(origin) {
     if (origin === 'local') return 'Local signer';
