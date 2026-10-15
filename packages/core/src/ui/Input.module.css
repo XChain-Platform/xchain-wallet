@@ -60,7 +60,8 @@
 
 /* The browser's own file button is a grey default-styled box; it takes the
    outlined secondary button look so a file field reads like every other
-   control. The button fills the field's height less its inset. */
+   control. The button takes the small control height, which fits inside the
+   field's inset. */
 .input[type='file'] {
     padding-block: var(--xc-space-1);
     padding-inline: var(--xc-space-1);
@@ -69,7 +70,7 @@
 
 .input[type='file']::file-selector-button {
     box-sizing: border-box;
-    height: calc(var(--xc-control-height) - 2 * var(--xc-space-1) - 2px);
+    height: var(--xc-control-h-sm);
     margin-inline-end: var(--xc-space-2);
     padding-inline: var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
