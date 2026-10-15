@@ -67,15 +67,17 @@ assert.ok(/window\.removeEventListener\('resize', onResize\)/.test(tipSrc),
 assert.ok(/visualViewport\?\.addEventListener\('scroll', onResize\)/.test(tipSrc),
     'InfoTip recomputes when the visible mobile viewport pans');
 
-// 6. CSS uses the same physical coordinate system as the measured correction,
-//    so RTL direction does not reverse the anchor edge.
-assert.ok(/\.bubble\s*\{[^}]*left:\s*50%/.test(cssSrc),
-    'CSS physically anchors the bubble at the trigger center');
-assert.ok(!/\.bubble\s*\{[^}]*inset-inline-start:/.test(cssSrc),
-    'CSS does not reverse the measured anchor in RTL layouts');
+// 6. CSS anchors the bubble's start edge at the trigger center and flips the
+//    half-width pull back for RTL, so the bubble stays centered both ways.
+assert.ok(/\.bubble\s*\{[^}]*inset-inline-start:\s*50%/.test(cssSrc),
+    'CSS anchors the bubble at the trigger center');
+assert.ok(/\[dir='rtl'\]\)\s*\.bubble\s*\{[^}]*--xc-tip-center:\s*50%/.test(cssSrc),
+    'CSS flips the centering pull for RTL layouts');
+assert.ok(/translateX\(var\(--xc-tip-center/.test(tipSrc),
+    'InfoTip centers through the direction-aware pull');
 
 // 7. The bubble applies its exact horizontal correction inline.
-assert.ok(/transform:\s*`translateX\(-50%\) translateX\(\$\{horizontalOffset\}px\)`/.test(tipSrc),
+assert.ok(/transform:\s*`translateX\(var\(--xc-tip-center, -50%\)\) translateX\(\$\{horizontalOffset\}px\)`/.test(tipSrc),
     'InfoTip applies the measured horizontal correction');
 
 assert.ok(/max-width:\s*min\(260px, calc\(100vw - 2 \* var\(--xc-space-2\)\)\)/.test(cssSrc),

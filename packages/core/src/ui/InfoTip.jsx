@@ -179,7 +179,7 @@ export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 't
                     maxHeight: maxHeight === null ? undefined : `${maxHeight}px`,
                     minWidth: maxWidth === null ? undefined : `${Math.min(180, maxWidth)}px`,
                     maxWidth: maxWidth === null ? undefined : `${maxWidth}px`,
-                    transform: `translateX(-50%) translateX(${horizontalOffset}px)`,
+                    transform: `translateX(var(--xc-tip-center, -50%)) translateX(${horizontalOffset}px)`,
                 }}
             >
                 {label}

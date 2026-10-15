@@ -122,7 +122,7 @@ describe('InfoTip target (slice 2)', () => {
 
         fireEvent.focus(trigger);
 
-        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(-51px)');
+        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(-51px)');
         expect(screen.getByRole('tooltip').classList.contains(infoTipStyles.placementBottom)).toBe(true);
         expect(screen.getByRole('tooltip').style.maxHeight).toBe('200px');
         expect(screen.getByRole('tooltip').style.maxWidth).toBe('260px');
@@ -140,7 +140,7 @@ describe('InfoTip target (slice 2)', () => {
 
         fireEvent.click(trigger);
 
-        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(60px)');
+        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(60px)');
     });
 
     it('clamps to the visible viewport when a touch viewport is zoomed and panned', () => {
@@ -167,7 +167,7 @@ describe('InfoTip target (slice 2)', () => {
 
             fireEvent.click(trigger);
 
-            expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(-53px)');
+            expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(-53px)');
             expect(screen.getByRole('tooltip').style.minWidth).toBe('180px');
             expect(screen.getByRole('tooltip').style.maxWidth).toBe('184px');
         } finally {
@@ -185,9 +185,9 @@ describe('InfoTip target (slice 2)', () => {
         expect(infoTipCss).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it('uses a physical center anchor for viewport correction in RTL layouts', () => {
-        expect(infoTipCss).toMatch(/\.bubble\s*\{[^}]*\bleft:\s*50%/s);
-        expect(infoTipCss).not.toMatch(/\.bubble\s*\{[^}]*inset-inline-start:/s);
+    it('centers the bubble in RTL layouts without physical CSS', () => {
+        expect(infoTipCss).toMatch(/\.bubble\s*\{[^}]*inset-inline-start:\s*50%/s);
+        expect(infoTipCss).toMatch(/\[dir='rtl'\]\)\s*\.bubble\s*\{[^}]*--xc-tip-center:\s*50%/s);
     });
 });
 

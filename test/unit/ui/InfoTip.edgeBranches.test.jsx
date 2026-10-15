@@ -94,11 +94,11 @@ describe('<InfoTip> edge branches', () => {
         tooltip.getBoundingClientRect = () => ({ width: 100, height: 40 });
 
         fireEvent.click(trigger);
-        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(0px)');
+        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(0px)');
 
         left = 280;
         act(() => listeners.get('resize')());
-        expect(screen.getByRole('tooltip').style.transform).not.toBe('translateX(-50%) translateX(0px)');
+        expect(screen.getByRole('tooltip').style.transform).not.toBe('translateX(var(--xc-tip-center, -50%)) translateX(0px)');
 
         view.unmount();
         expect(viewport.removeEventListener).toHaveBeenCalled();
