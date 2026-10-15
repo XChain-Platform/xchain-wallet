@@ -689,7 +689,7 @@ export function CreateBetFeedForm({
                 autoComplete="off"
             />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
                 <span className={styles.fromLabel}>Possible outcomes</span>
                 {outcomes.map((o, i) => (
                     <div key={i} className={styles.betOutcomeRow}>
@@ -812,7 +812,7 @@ export function CreateBetFeedForm({
                         autoComplete="off"
                     />
                     {cleanOutcomes.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
                             <span className={styles.fromLabel}>Notes per outcome (optional)</span>
                             {cleanOutcomes.map((o, i) => (
                                 <Input

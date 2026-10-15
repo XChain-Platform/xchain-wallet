@@ -1914,7 +1914,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     {/* The browser's own file control sat in a grey box of
                         its own; it now opens from an outlined button, the
                         same pattern Publish file uses. */}
-                    <div style={{ marginBottom: 'var(--xc-space-3)' }}>
+                    <div>
                         <Input
                             ref={fileInputRef}
                             type="file"
