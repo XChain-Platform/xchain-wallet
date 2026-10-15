@@ -92,9 +92,11 @@ function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
  * @param {() => void} [props.onBack]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
  * @param {boolean} [props.embedded]
+ * @param {boolean} [props.nested] the scanner opens inside another screen (a
+ *   contact form), so its Back stays even under a nav-linked route
  * @param {string} [props.titleId]
  */
-export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, titleId }) {
+export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, nested = false, titleId }) {
     const generatedHeadingId = useId();
     const headingId = titleId || generatedHeadingId;
     const [paste, setPaste] = useState('');
@@ -282,13 +284,14 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
 
     const header = useMemo(() => (
         <PageHeader
+            nested={nested || embedded}
             onBack={onBack}
             backLabel={t('common.back')}
             title={t('scan.title')}
             titleId={headingId}
             titleIcon={<Icon.CameraIcon />}
         />
-    ), [headingId, onBack]);
+    ), [headingId, onBack, nested, embedded]);
 
     return (
         <Screen
@@ -307,7 +310,6 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 actions={(
                     <Button
                         type="submit"
-                        size="sm"
                         variant="secondary"
                         disabled={!paste.trim() || stopped}
                     >

@@ -8,6 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import {
+    REDACTED_DIAGNOSTIC_VALUE,
+    redactDiagnosticText,
+} from './diagnosticText.js';
+
 // logConsole (§48.5 / G150). Process-wide ring buffer that captures
 // console.* output (and any explicit `record(...)` calls) so a
 // Developer Mode panel can surface recent logs without users having
@@ -70,6 +75,38 @@
 // without keeping a megabyte of stringified payloads in memory.
 
 const DEFAULT_CAPACITY = 500;
+const REDACTED = REDACTED_DIAGNOSTIC_VALUE;
+const SECRET_FIELDS = new Set([
+    'bip39passphrase',
+    'decryptedvault',
+    'masterkey',
+    'mnemonic',
+    'mnemonicphrase',
+    'passphrase',
+    'password',
+    'passwd',
+    'plaintextvault',
+    'privatekey',
+    'privkey',
+    'psbt',
+    'psbthex',
+    'recoveryphrase',
+    'recoverywords',
+    'seed',
+    'seedphrase',
+    'seedwords',
+    'signedpsbt',
+    'unsignedpsbt',
+    'vaultdata',
+    'vaultpayload',
+    'wif',
+]);
+const SECRET_FIELD_PART_RE = /(?:password|passphrase|privatekey|privkey|secretkey|signingkey|masterkey|mnemonic|seedphrase|seedwords|recoveryphrase|recoverywords|backupphrase|wif|psbt)/;
+const TESTNET_WIF_RE = /\b(?:c[1-9A-HJ-NP-Za-km-z]{51}|9[1-9A-HJ-NP-Za-km-z]{50})\b/g;
+const PSBT_BASE64_RE = /\bcHNidP[A-Za-z0-9+/_=-]*\b/g;
+const PSBT_HEX_RE = /\b70736274ff[a-f0-9]*\b/gi;
+const PEM_PRIVATE_KEY_RE = /-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----[\s\S]*?-----END(?: [A-Z0-9]+)? PRIVATE KEY-----/g;
+const DECRYPTED_VAULT_RE = /(\b(?:decrypted[ _-]?vault|plain(?:text)?[ _-]?vault|vault[ _-]?(?:data|payload))\b["']?\s*[:=]\s*)[^,;\r\n}]+/gi;
 
 let capacity = DEFAULT_CAPACITY;
 /** @type {Array<LogEntry>} */
@@ -91,13 +128,70 @@ let originals = null;
  * @property {string} message       stringified args
  */
 
+function isSecretField(key) {
+    const normalized = String(key).replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return SECRET_FIELDS.has(normalized)
+        || SECRET_FIELD_PART_RE.test(normalized)
+        || normalized.startsWith('decryptedvault');
+}
+
+function redactString(value) {
+    const patternsRedacted = String(value)
+        .replace(PEM_PRIVATE_KEY_RE, REDACTED)
+        .replace(PSBT_BASE64_RE, REDACTED)
+        .replace(PSBT_HEX_RE, REDACTED)
+        .replace(TESTNET_WIF_RE, REDACTED)
+        .replace(DECRYPTED_VAULT_RE, `$1${REDACTED}`);
+    return redactDiagnosticText(patternsRedacted, {
+        keepAddresses: true,
+        limit: Number.MAX_SAFE_INTEGER,
+    });
+}
+
+function redactValue(value, seen = new WeakSet()) {
+    if (typeof value === 'string') return redactString(value);
+    if (value === null || value === undefined || typeof value !== 'object') return value;
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+
+    if (value instanceof Error) {
+        const safe = new Error(redactString(value.message));
+        safe.name = redactString(value.name);
+        if (typeof value.stack === 'string') safe.stack = redactString(value.stack);
+        return safe;
+    }
+    if (Array.isArray(value)) return value.map((item) => redactValue(item, seen));
+    if (value instanceof Date) return value;
+    if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return '[binary data]';
+
+    const safe = {};
+    for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+        if (!descriptor.enumerable) continue;
+        safe[key] = isSecretField(key)
+            ? REDACTED
+            : ('value' in descriptor ? redactValue(descriptor.value, seen) : '[unavailable]');
+    }
+    return safe;
+}
+
+function redactArgs(args) {
+    const values = Array.isArray(args) ? args : [args];
+    return values.map((arg) => {
+        try {
+            return redactValue(arg);
+        } catch {
+            return '[unavailable]';
+        }
+    });
+}
+
 function stringifyArgs(args) {
-    if (!Array.isArray(args)) return String(args);
+    if (!Array.isArray(args)) return redactString(args);
     return args.map((arg) => {
         if (arg === null || arg === undefined) return String(arg);
-        if (typeof arg === 'string') return arg;
+        if (typeof arg === 'string') return redactString(arg);
         if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
-        if (arg instanceof Error) return arg.stack || arg.message || String(arg);
+        if (arg instanceof Error) return redactString(arg.stack || arg.message || String(arg));
         try {
             return JSON.stringify(arg);
         } catch {
@@ -127,16 +221,17 @@ function attach() {
     };
     for (const level of /** @type {const} */ (['log', 'info', 'warn', 'error'])) {
         console[level] = (...args) => {
+            const safeArgs = redactArgs(args);
             try {
                 push({
                     id: nextId++,
                     timestamp: Date.now(),
                     level,
                     source: 'console',
-                    message: stringifyArgs(args),
+                    message: stringifyArgs(safeArgs),
                 });
             } catch { /* swallow */ }
-            originals[level](...args);
+            originals[level](...safeArgs);
         };
     }
     attached = true;
@@ -155,14 +250,15 @@ function detach() {
 }
 
 function record({ level = 'log', source = 'app', message = '', data } = {}) {
+    const safeMessage = redactString(message);
     const composed = data !== undefined
-        ? `${message} ${stringifyArgs([data])}`.trim()
-        : String(message);
+        ? `${safeMessage} ${stringifyArgs(redactArgs([data]))}`.trim()
+        : safeMessage;
     push({
         id: nextId++,
         timestamp: Date.now(),
         level: /** @type {LogEntry['level']} */ (level),
-        source,
+        source: redactString(source),
         message: composed,
     });
 }
@@ -271,8 +367,8 @@ function restore(persisted) {
             id,
             timestamp: Number.isFinite(raw.timestamp) ? raw.timestamp : Date.now(),
             level: ['log', 'info', 'warn', 'error'].includes(raw.level) ? raw.level : 'log',
-            source: typeof raw.source === 'string' ? raw.source : 'restore',
-            message: typeof raw.message === 'string' ? raw.message : String(raw.message ?? ''),
+            source: typeof raw.source === 'string' ? redactString(raw.source) : 'restore',
+            message: redactString(raw.message ?? ''),
         };
         additions.push(entry);
         if (entry.id >= nextId) nextId = entry.id + 1;

@@ -22,7 +22,7 @@
 import {
     createContext, createElement, useCallback, useContext, useEffect, useRef, useState,
 } from 'react';
-import { flows as flowsLib } from '@xchain-wallet/core';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -181,7 +181,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         }
         // No wallet, or the demo wallet: nothing to owe, and the demo
         // wallet's fabricated addresses must not spam the explorer.
-        if (!walletId || flowsLib.isDemoWallet(walletId)) {
+        if (!walletId || isDemoWallet(walletId)) {
             setObligations([]);
             setScanning(false);
             runRef.current = null;

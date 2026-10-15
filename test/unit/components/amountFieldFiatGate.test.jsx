@@ -18,13 +18,19 @@
 import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import {
     registerLocale,
     setLocale,
 } from '../../../packages/core/src/i18n/index.js';
 
 const RATE = { rate: 67000, fiatCurrency: 'USD' };
+const amountFieldStyles = readFileSync(
+    'packages/core/src/shared/components/AmountField.module.css',
+    'utf8',
+);
 
 beforeAll(() => {
     registerLocale('de-DE', {});
@@ -53,6 +59,15 @@ describe('AmountField fiat gate', () => {
         const u = mount({ fiatRate: RATE });
         expect(u.getByRole('button', { name: /switch input to usd/i })).toBeTruthy();
         expect(u.container.textContent).toMatch(/≈\s*\$134,000\.00 USD/);
+    });
+
+    it('uses the shared small control size for the fiat toggle and Paste', () => {
+        const u = mount({ fiatRate: RATE });
+        const toggle = u.getByRole('button', { name: /switch input to usd/i });
+        const paste = u.getByRole('button', { name: 'Paste from clipboard' });
+
+        expect(toggle).toHaveClass(buttonStyles.btn, buttonStyles.sm);
+        expect(paste).toHaveClass(buttonStyles.btn, buttonStyles.sm);
     });
 
     it('formats the preview in the selected fiat currency', () => {
@@ -101,6 +116,36 @@ describe('AmountField fiat gate', () => {
 });
 
 describe('AmountField input contract', () => {
+    it.each([320, 360])('keeps Paste and Max on one line in a %ipx field', (width) => {
+        const u = render(
+            <div style={{ width }}>
+                <AmountField
+                    amount="1"
+                    tick="BTC"
+                    onAmountFieldChange={() => {}}
+                    onMax={() => {}}
+                />
+            </div>,
+        );
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+        const actions = [
+            u.getByRole('button', { name: 'Paste from clipboard' }),
+            u.getByRole('button', { name: 'Use max available amount' }),
+        ];
+
+        expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
+        expect(amountFieldStyles).toMatch(
+            /--amount-action-width:\s*calc\(var\(--amount-control-height\) \+ var\(--xc-space-8\)\)/,
+        );
+        expect(amountFieldStyles).toMatch(/\.amountFieldWrap input\s*\{[^}]*min-width:\s*0/s);
+        expect(amountFieldStyles).toMatch(
+            /\.pasteAction button > span,\s*\.maxAction > span\s*\{[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+        );
+        for (const action of actions) {
+            expect(action.textContent).not.toMatch(/\s/);
+        }
+    });
+
     it('switches display modes without replacing the canonical coin value', () => {
         const toggleAmountInputMode = vi.fn();
         const props = {

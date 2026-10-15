@@ -214,9 +214,10 @@ assert.ok(
 
 // --- 10. CSS ------------------------------------------------------------
 
+// Lock hints render as the kit Checkbox description, so no .lockFlagHint hook remains.
 for (const cls of [
     'advanced', 'advancedBody',
-    'lockFlagRow', 'lockFlagHint', 'listRow',
+    'lockFlagRow', 'listRow',
 ]) {
     assert.ok(
         new RegExp(`\\.${cls}[\\s,{:]`).test(css),

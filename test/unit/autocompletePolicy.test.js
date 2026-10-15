@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest';
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
 
+import { en } from '../../packages/core/src/i18n/locales/en/index.js';
+
 const traverse = _traverse.default || _traverse;
 const sources = import.meta.glob(
     ['../../packages/**/*.jsx', '!../../packages/**/node_modules/**'],
@@ -23,6 +25,12 @@ function attributeValue(attribute, source) {
     if (!attribute.value) return 'true';
     if (attribute.value.type === 'StringLiteral') return attribute.value.value;
     if (attribute.value.type === 'JSXExpressionContainer') {
+        // A label written as t('key') is judged by the English copy it renders.
+        const expression = attribute.value.expression;
+        if (expression.type === 'CallExpression' && expression.callee.name === 't'
+            && expression.arguments[0]?.type === 'StringLiteral' && expression.arguments[0].value in en) {
+            return en[expression.arguments[0].value];
+        }
         return source.slice(attribute.value.expression.start, attribute.value.expression.end);
     }
     return '';
@@ -146,10 +154,10 @@ describe('browser autocomplete policy', () => {
     it('keeps recovery-word verification fields free of text transformations', () => {
         const recoveryWordFields = [
             ...fileEnding('CreateWallet.jsx').controls.filter(
-                (entry) => /^`Word \$\{p\}`$/.test(entry.attributes.label),
+                (entry) => /^(`Word \$\{\w+\}`|Word \{\w+\})$/.test(entry.attributes.label),
             ),
             ...fileEnding('MigrateToBip39.jsx').controls.filter(
-                (entry) => /^`Word \$\{position\}`$/.test(entry.attributes.label),
+                (entry) => /^(`Word \$\{\w+\}`|Word \{\w+\})$/.test(entry.attributes.label),
             ),
         ];
 

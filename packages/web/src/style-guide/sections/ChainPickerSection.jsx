@@ -25,18 +25,18 @@ export function ChainPickerSection() {
     return (
         <Section
             id="chain-picker"
-            title="Chain picker"
+            title="Network picker"
             tag="CANONICAL network selector"
-            kicker="The standard Chain field, sibling of the To / From / Token / Amount fields: an Input-sized field showing the selected chain's icon + name (testnet/regtest cue included) that opens a popover of icon rows, searchable past 6 options. Use it for EVERY chain choice on a form; never a native select (it cannot render the chain icons)."
+            kicker="The standard Network field, sibling of the To / From / Token / Amount fields: an Input-sized field showing the selected network's icon + name (testnet/regtest cue included) that opens a popover of icon rows, searchable past 6 options. Use it for EVERY network choice on a form; never a native select (it cannot render the network icons)."
         >
             <Guidance
-                what={<>A custom single-select popover (not a native <code>&lt;select&gt;</code>) whose trigger matches the shared <code>Input</code> chrome and size: one line of chain icon + display name + an optional <code>· testnet</code> / <code>· regtest</code> suffix + a caret. The dropdown lists each chain's icon, name, ticker, and network kind, and adds a search box past 6 options. Icons come from <code>branding.chainIconSmallUrl</code>, so it stays decoupled from the registry's image wiring.</>}
-                when={<>Any form field that answers "which network are we operating on": Send, Swap, Issue, Add address, Compose message, market filters. Use it instead of a native <code>Select</code> so the chain icon and the mainnet-vs-testnet cue are consistent everywhere.</>}
-                whenNot={<>Picking a token/asset (that's the Token field, which opens the balance-list picker). Showing a fixed, non-editable chain (use <code>ChainBadge</code>). A yes/no or small enum with no icons (a plain <code>Select</code> is lighter).</>}
-                sizing={<>Matches the Input size contract: <code>md</code> (36px, default, 20px icon) sits inline with a form's other inputs; <code>size="lg"</code> (48px, 24px icon) for hero screens. Previously the trigger was a two-line stack that rendered ~48px and towered over sibling inputs; it's now one line at the standard height.</>}
-                variants={<><code>size="md" | "lg"</code>. <code>hideNetworkKind</code> drops the <code>· testnet</code> suffix (Receive, already scoped to the user's addresses). <code>placeholder</code> for the unselected state. Search appears automatically past 6 chains.</>}
+                what={<>A custom single-select popover (not a native <code>&lt;select&gt;</code>) whose trigger matches the shared <code>Input</code> chrome and size: one line of network icon + display name + an optional <code>· testnet</code> / <code>· regtest</code> suffix + a caret. The dropdown lists each network's icon, name, ticker, and network kind, and adds a search box past 6 options. Icons come from <code>branding.chainIconSmallUrl</code>, so it stays decoupled from the registry's image wiring.</>}
+                when={<>Any form field that answers "which network are we operating on": Send, Swap, Issue, Add address, Compose message, market filters. Use it instead of a native <code>Select</code> so the network icon and the mainnet-vs-testnet cue are consistent everywhere.</>}
+                whenNot={<>Picking a token/asset (that's the Token field, which opens the balance-list picker). Showing a fixed, non-editable network (use <code>ChainBadge</code>). A yes/no or small enum with no icons (a plain <code>Select</code> is lighter).</>}
+                sizing={<>Matches the Input size contract: <code>md</code> (36px, default, 20px icon) sits inline with a form's other inputs; <code>size="lg"</code> (44px, 48px on touch, 24px icon) for hero screens. Previously the trigger was a two-line stack that rendered ~48px and towered over sibling inputs; it's now one line at the standard height.</>}
+                variants={<><code>size="md" | "lg"</code>. <code>hideNetworkKind</code> drops the <code>· testnet</code> suffix (Receive, already scoped to the user's addresses). <code>placeholder</code> for the unselected state. Search appears automatically past 6 networks.</>}
                 doRule={<>✓ Pass the shared <code>chainRegistry</code> and the form's allowed <code>chainIds</code> · keep the testnet/regtest cue on money-moving forms · use <code>lg</code> only on hero screens</>}
-                dontRule={<>✗ Fall back to a native <code>&lt;select&gt;</code> that drops the chain icons · use it to pick a token · re-add a two-line trigger (it breaks the field-height alignment)</>}
+                dontRule={<>✗ Fall back to a native <code>&lt;select&gt;</code> that drops the network icons · use it to pick a token · re-add a two-line trigger (it breaks the field-height alignment)</>}
                 supersedes={<>The oversized two-line trigger. The component lives at <code>packages/core/src/ui/ChainPicker.jsx</code>; the size contract is shared with <code>Input</code> (see Field sizes).</>}
             />
 
@@ -44,7 +44,7 @@ export function ChainPickerSection() {
 {`import { ChainPicker } from '@xchain-wallet/core/ui';
 
 <ChainPicker
-    label="Chain"
+    label="Network"
     size="md"                       // lg on hero screens
     value={chainId}
     onChange={setChainId}
@@ -55,7 +55,7 @@ export function ChainPickerSection() {
 
             <LiveExample label="Default (md): sits inline with the form's other 36px inputs.">
                 <ChainPicker
-                    label="Chain"
+                    label="Network"
                     value={mdVal}
                     onChange={setMdVal}
                     chainIds={MAINNET_CHAINS}
@@ -65,7 +65,7 @@ export function ChainPickerSection() {
 
             <LiveExample label="Hero (lg): 48px, for focused single-field screens.">
                 <ChainPicker
-                    label="Chain"
+                    label="Network"
                     size="lg"
                     value={lgVal}
                     onChange={setLgVal}
@@ -74,9 +74,9 @@ export function ChainPickerSection() {
                 />
             </LiveExample>
 
-            <LiveExample label="Testnet cue: non-mainnet chains show a · testnet / · regtest suffix (the 'real money vs play money' signal).">
+            <LiveExample label="Testnet cue: non-mainnet networks show a · testnet / · regtest suffix (the 'real money vs play money' signal).">
                 <ChainPicker
-                    label="Chain"
+                    label="Network"
                     value={kindVal}
                     onChange={setKindVal}
                     chainIds={WITH_TESTNET}
@@ -86,7 +86,7 @@ export function ChainPickerSection() {
 
             <LiveExample label="Scoped context: hide the network-kind suffix only when the surrounding screen already names it.">
                 <ChainPicker
-                    label="Chain"
+                    label="Network"
                     value={kindVal}
                     onChange={setKindVal}
                     chainIds={WITH_TESTNET}

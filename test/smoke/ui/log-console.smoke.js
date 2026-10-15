@@ -36,9 +36,9 @@ for (const method of ['attach', 'detach', 'record', 'entries', 'subscribe', 'cle
 assert.ok(/buffer\.length > capacity/.test(utilSrc),
     'logConsole trims the buffer when it exceeds capacity');
 
-// 3. Original console methods preserved + still invoked after attach.
-assert.ok(/originals\[level\]\(\.\.\.args\)/.test(utilSrc),
-    'logConsole calls the original console method after pushing');
+// 3. Original console methods preserved and receive only redacted arguments.
+assert.ok(/originals\[level\]\(\.\.\.safeArgs\)/.test(utilSrc),
+    'logConsole calls the original console method with redacted arguments');
 assert.ok(/console\.log = originals\.log/.test(utilSrc),
     'logConsole.detach restores the original console.log');
 

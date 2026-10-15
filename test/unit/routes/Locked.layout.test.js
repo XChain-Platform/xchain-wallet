@@ -53,7 +53,7 @@ function renderLocked({ width, height }) {
 describe('Locked compact-height layout', () => {
     it('removes decorative height and tightens secondary content on landscape phones', () => {
         expect(css).toMatch(
-            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.hero\s*\{[\s\S]*?flex-direction: row;[\s\S]*?\.logo\s*\{[\s\S]*?width: 40px;[\s\S]*?\.lockoutBanner\s*\{[\s\S]*?padding: var\(--xc-space-2\);[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.hero\s*\{[\s\S]*?flex-direction: row;[\s\S]*?\.logo\s*\{[\s\S]*?width: 40px;[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
         );
         expect(css).not.toMatch(
             /@media \(orientation: landscape\) and \(max-height: 480px\) \{\s*@media[^\{]*min-width: 600px/,
@@ -72,9 +72,6 @@ describe('Locked compact-height layout', () => {
         );
         expect(css).toMatch(
             /:global\(html\[data-xc-keyboard='open'\]\) \.forgotBlock,[\s\S]*?\.demoExitBlock\s*\{[\s\S]*?order: 3;/,
-        );
-        expect(css).toMatch(
-            /:global\(html\[data-xc-keyboard='open'\]\) \.lockoutBanner\s*\{[\s\S]*padding: var\(--xc-space-2\);/,
         );
         expect(css).not.toMatch(
             /:global\(html\[data-xc-keyboard='open'\]\)[^\{]*(?:\.hero|\.forgotBlock)[^\{]*\{\s*display: none;/,

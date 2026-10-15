@@ -5,6 +5,7 @@
 
 import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const MAX_VISIBLE_ITEMS = 200;
 
@@ -45,8 +46,8 @@ export function DiagnosticDetails({ summary, items, className, keepAddresses = f
             </ul>
             {items.length > visibleItems.length ? (
                 <p>
-                    Showing the first {formatDecimalAmount(visibleItems.length)} of{' '}
-                    {formatDecimalAmount(items.length)} findings.
+                    {t('components.diagnosticDetails.showingTheFirst')} {formatDecimalAmount(visibleItems.length)} {t('components.logConsole.of')}{' '}
+                    {formatDecimalAmount(items.length)} {t('components.diagnosticDetails.findings')}
                 </p>
             ) : null}
         </details>

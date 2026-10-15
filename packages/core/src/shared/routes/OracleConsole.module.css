@@ -26,7 +26,17 @@
 }
 
 .actionRow {
+    align-items: center;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
+}
+
+.outcomeRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    margin: var(--xc-space-2) 0;
 }
 
 .inlineForm {

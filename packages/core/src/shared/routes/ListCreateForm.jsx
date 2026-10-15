@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -87,6 +88,7 @@ function metaFieldError(field, value) {
 export function ListCreateForm({ walletId, chainId: initialChainId, initialType, editResolutionActive = null, onBack }) {
     const [chainId, setChainId] = useState(initialChainId || null);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -161,7 +163,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 // creation order, so its first key is the wallet's OLDEST chain.
                 const picked = pickDefaultChainId(byChain, { explicitChainId: chainId, settings });
                 if (!chainId && picked) setChainId(picked);
-                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any network yet. Use Receive to generate one first.');
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
@@ -400,7 +402,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     }
 
     function validate() {
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
         if (feePick.mode === 'custom' && feePerKb === null) {
             const rate = Number(feePick.customRate);
             setFormError(rate > 0
@@ -498,7 +500,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -532,7 +534,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 {listType === '1' && missingTicks.length > 0 ? (
                     <p className={styles.hint}>
                         {missingTicks.length} of these ({missingTicks.join(', ')}) {missingTicks.length === 1 ? 'was' : 'were'} not
-                        found on {descriptor?.displayName || chainId}; the network leaves an unknown token out of the list.
+                        found on the selected chain; the network leaves an unknown token out of the list.
                         Check the members in My Lists once it's indexed.
                     </p>
                 ) : null}
@@ -553,7 +555,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -575,6 +577,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
@@ -607,8 +610,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Type</dt>
@@ -635,9 +638,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <ul>{items.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (<p key={i} className={styles.warning}>{w}</p>))}
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        {decoded.warnings.map((w, i) => (<p key={i}>{w}</p>))}
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
@@ -713,6 +716,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // stage === 'form'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
@@ -728,11 +732,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 </Button>
             )}
         >
-            <NetworkField
+            <ChainPicker
+                label="Network"
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField
@@ -745,7 +751,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             <Select
@@ -822,22 +828,22 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     {/* A real address for a different chain is not a typo;
                         say which chain this list is being published to. */}
                     {recipients.wrongNetwork.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
-                                This list is published on {descriptor?.displayName || chainId}.
+                                This list is published on the selected chain.
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
                                 keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
-                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                    message: 'Does not belong to the selected network.',
                                 }))}
                             />
-                        </div>
+                        </StatusMessage>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
                         public on-chain data once the list is broadcast. */}
@@ -847,10 +853,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <p className={styles.hint}>
                         These addresses become permanent public on-chain data once the list is published.
                         {editResolutionActive === true
-                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the chain\'s history.'
+                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the network\'s history.'
                             : editResolutionActive === false
                                 ? ' There\'s no way to edit or delete an address out of a list later; forking (Fork & edit) only creates a new list at a new index.'
-                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the chain\'s history.'}
+                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the network\'s history.'}
                     </p>
                     {/* xchain-token-bridge-policy.md section 8, D9/milestone-1 refusal:
                         an address list is the thing IssueTokenForm/TokenAdminForm point
@@ -872,7 +878,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     onChange={(value) => { setTicksText(value); setFormError(null); }}
                     items={tickItems}
                     chainId={chainId}
-                    chainLabel={descriptor?.displayName || chainId}
+                    chainLabel="the selected network"
                     listCoin={coinTicker}
                     coinQualified={tickCoinSupported}
                     messaging={messaging}
@@ -990,7 +996,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
-        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this chain appear here." />);
+        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this network appear here." />);
     }
 
     return wrap(
@@ -998,15 +1004,17 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {rows.map((r) => (
                     <li key={r.key} style={{ padding: 'var(--xc-space-2) 0', borderBottom: '1px solid var(--xc-border)' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                            {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
-                            <input type="checkbox" checked={checked.has(r.key)} onChange={() => toggle(r.key)} />
-                            <span>
-                                <strong>{r.name}</strong>{r.label ? ` (${r.label})` : ''}
-                                <br />
-                                <code>{r.address}</code>
-                            </span>
-                        </label>
+                        <Checkbox
+                            checked={checked.has(r.key)}
+                            onChange={() => toggle(r.key)}
+                            label={(
+                                <span>
+                                    <strong>{r.name}</strong>{r.label ? ` (${r.label})` : ''}
+                                    <br />
+                                    <code>{r.address}</code>
+                                </span>
+                            )}
+                        />
                     </li>
                 ))}
             </ul>

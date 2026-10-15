@@ -647,7 +647,8 @@ if [[ ${#YMLS[@]} -gt 0 ]]; then
     if ! node "$HERE/pointer-gate.mjs" "$INPUT_DIR" --tag "$TAG" --manifest "$MANIFEST" \
             --channel "$EXPECT_CHANNEL" --lanes "$LANES" >&2; then
         echo "publish.sh: refusing to publish $TAG: the channel pointer(s) above are stale," >&2
-        echo "  uncovered, missing or unexpected. Nothing was uploaded. Collect exactly the" >&2
+        echo "  uncovered, missing or unexpected, or the manifest was signed without the" >&2
+        echo "  dev-mock gate. Nothing was uploaded. Collect exactly the" >&2
         echo "  pointers this build emitted for $TAG and sign again if anything else changed." >&2
         exit 1
     fi

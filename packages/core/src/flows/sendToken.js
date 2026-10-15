@@ -155,6 +155,7 @@ export async function sendToken(opts) {
         fromAddress: source.address,
         toAddress: legs[0].to,
         actionSummary: `${summary}${gatedTail}`,
+        balanceDebits: legs.map((leg) => ({ tick: leg.tick, amount: leg.amount })),
     };
 
     // D-9: a native-coin send must pay the recipient a real output; the SEND

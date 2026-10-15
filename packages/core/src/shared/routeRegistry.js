@@ -101,7 +101,6 @@ const GROUPED_ROUTES = {
         ['markets', 'MarketsList'],
         ['market', 'MarketView'],
         ['markets-picker', 'ReceivePicker'],
-        ['market-activity', 'MarketActivity'],
         ['swap', 'SwapForm'],
         ['create-order', 'CreateOrderForm'],
         ['my-orders', 'MyOrdersView'],
@@ -115,6 +114,9 @@ const GROUPED_ROUTES = {
         ['bet-create', 'CreateBetFeedForm'],
         ['my-bets', 'MyBets'],
         ['bet-oracle-console', 'OracleConsole'],
+    ],
+    'market-activity': [
+        ['market-activity', 'MarketActivity'],
     ],
     'dispensers-list': [
         ['dispensers-list', 'DispensersList'],
@@ -197,6 +199,28 @@ export const ROUTE_NAV_GROUPS = Object.freeze(Object.fromEntries(
     ]),
 ));
 
+const ROUTE_NAV_SECTION_OVERRIDES = {
+    addresses: 'addresses',
+    'view-private-key': 'addresses',
+    'address-preferences': 'addresses',
+    wizard: 'create-token',
+    issue: 'create-token',
+    'account-picker': 'accounts',
+    'account-rename': 'accounts',
+    'add-account': 'accounts',
+    'wallet-picker': 'wallets',
+    'wallet-details': 'wallets',
+    'wallet-rename': 'wallets',
+    'add-wallet': 'wallets',
+    'migrate-bip39': 'wallets',
+};
+
+export const ROUTE_NAV_SECTIONS = Object.freeze(Object.fromEntries(
+    Object.entries(GROUPED_ROUTES).flatMap(([defaultSection, routes]) => routes.map(
+        ([id]) => [id, ROUTE_NAV_SECTION_OVERRIDES[id] || defaultSection],
+    )),
+));
+
 export const HIDDEN_ROUTE_IDS = Object.freeze([]);
 
 export const ROUTE_REGISTRY = Object.freeze(Object.fromEntries(
@@ -211,3 +235,55 @@ export const ROUTE_REGISTRY = Object.freeze(Object.fromEntries(
         })],
     )),
 ));
+
+// Top-level destinations per navigation surface: the routes each surface
+// links to directly. LeftNav and BottomTabBar build their rows from these
+// lists, and PageHeader hides its Back control on exactly these routes while
+// that surface is on screen (the surface is already the way out). Any route
+// not listed, including every drilldown a new screen adds, keeps Back.
+// Rows a wallet cannot use (Send in signer mode, Contracts without a VM
+// address) stay listed: those routes are unreachable while the row is gone.
+export const SIDEBAR_PRIMARY_DESTINATIONS = [
+    'home',
+    'history',
+    'send',
+    'receive',
+    'scan',
+    'markets',
+    'market-activity',
+    'dispensers-list',
+    'contracts-list',
+    'messaging',
+];
+
+export const SIDEBAR_SECONDARY_DESTINATIONS = [
+    'contacts',
+    'lists',
+    'obligations',
+];
+
+export const SIDEBAR_FOOTER_DESTINATIONS = ['settings'];
+
+// The More tab opens a sheet rather than a route, so it has no entry here.
+export const TAB_BAR_DESTINATIONS = ['home', 'history', 'send', 'scan'];
+
+export const NAV_SURFACE_DESTINATIONS = {
+    sidebar: [
+        ...SIDEBAR_PRIMARY_DESTINATIONS,
+        ...SIDEBAR_SECONDARY_DESTINATIONS,
+        ...SIDEBAR_FOOTER_DESTINATIONS,
+    ],
+    tabBar: TAB_BAR_DESTINATIONS,
+};
+
+/**
+ * Whether `routeId` is a destination the given navigation surface links to
+ * directly. Membership is by route id, not nav section: a drilldown such as
+ * `token-detail` shares Home's section but is not a sidebar destination.
+ *
+ * @param {string | null | undefined} routeId
+ * @param {'sidebar' | 'tabBar' | null | undefined} surface
+ */
+export function isNavSurfaceDestination(routeId, surface) {
+    return Boolean(NAV_SURFACE_DESTINATIONS[surface]?.includes(routeId));
+}

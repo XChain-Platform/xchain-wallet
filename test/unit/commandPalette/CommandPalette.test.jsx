@@ -167,16 +167,25 @@ describe('CommandPalette', () => {
     it.each([
         ['Tab', false],
         ['Shift+Tab', true],
-    ])('%s closes without selecting a command', (_label, shiftKey) => {
+    ])('%s stays trapped in the modal without selecting a command', (_label, shiftKey) => {
         const commands = makeCommands();
         const onClose = vi.fn();
-        render(<CommandPalette open onClose={onClose} commands={commands} />);
+        render(
+            <>
+                <button type="button">Outside</button>
+                <CommandPalette open onClose={onClose} commands={commands} />
+            </>,
+        );
+        const input = getInput();
+        input.focus();
 
         const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true });
-        fireEvent(getInput(), event);
+        fireEvent(input, event);
 
-        expect(onClose).toHaveBeenCalledOnce();
-        expect(event.defaultPrevented).toBe(false);
+        expect(onClose).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(true);
+        expect(input).toHaveFocus();
+        expect(screen.getByRole('button', { name: 'Outside' })).toHaveAttribute('inert');
         for (const command of commands) expect(command.run).not.toHaveBeenCalled();
     });
 

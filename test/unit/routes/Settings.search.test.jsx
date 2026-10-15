@@ -10,14 +10,20 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
+import {
+    Settings,
+    SETTINGS_SEARCH_ROWS,
+    findMatchingSearchRow,
+} from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
-function mount(props = {}) {
+function mount(props = {}, loadedSettings = null) {
     const messaging = {
-        getSettings: () => new Promise(() => {}),
+        getSettings: () => loadedSettings ? Promise.resolve(loadedSettings) : new Promise(() => {}),
+        updateSettings: vi.fn().mockImplementation(async () => loadedSettings),
         listConnectedSites: vi.fn().mockResolvedValue([]),
     };
     return render(
@@ -37,7 +43,10 @@ function searchFor(value) {
     });
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    delete window.xchainWalletUpdater;
+});
 
 describe('Settings search', () => {
     it('uses action-oriented, one-sentence descriptions for inline sections', () => {
@@ -45,7 +54,7 @@ describe('Settings search', () => {
 
         expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
         expect(screen.getByText('Choose the interface language and fiat currency.')).toBeTruthy();
-        expect(screen.getByText('Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
+        expect(screen.getByText('Choose Mainnet or Testnet to control which networks the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
         expect(screen.getByText('Choose which wallet events trigger notifications, sounds, or price alerts.')).toBeTruthy();
         expect(screen.getByText('Export or import the address book.')).toBeTruthy();
     });
@@ -62,13 +71,16 @@ describe('Settings search', () => {
         ['currency', 'Language & region'],
         ['language', 'Language & region'],
         ['theme', 'Appearance'],
+        ['fee', 'Fees'],
+        ['fees', 'Fees'],
+        ['network fee', 'Fees'],
         ['biometric unlock', 'Safety'],
         ['lock wallet', 'Keyboard'],
         ['wallet mode', 'Wallet mode'],
         ['network endpoint', 'Network & endpoints'],
         ['connected site', 'Connected sites'],
         ['donation', 'Automatic donation system'],
-        ['saved chain filters', 'Display'],
+        ['saved network filters', 'Display'],
         ['quiet hours', 'Notifications'],
         ['localhost auto sign', 'Developer mode'],
         ['Primary Vault', 'This wallet'],
@@ -78,6 +90,14 @@ describe('Settings search', () => {
 
         expect(screen.getByText(sectionTitle)).toBeTruthy();
         expect(screen.queryByText('About')).toBeNull();
+    });
+
+    it('finds every cataloged settings row by its title', () => {
+        for (const [sectionId, rows] of Object.entries(SETTINGS_SEARCH_ROWS)) {
+            for (const { title } of rows) {
+                expect(findMatchingSearchRow(sectionId, title), title).toMatchObject({ title });
+            }
+        }
     });
 
     it.each([
@@ -104,6 +124,21 @@ describe('Settings search', () => {
 
         expect(screen.getByRole('heading', { name: 'Backup' })).toBeTruthy();
         expect(screen.getByText('Export encrypted backup')).toBeTruthy();
+    });
+
+    it('opens the matching subpage and highlights its row', async () => {
+        const settings = createDefaultSettings();
+        settings.fees['bitcoin-mainnet'] = { strategy: 'normal', customRate: null, rbfByDefault: false };
+        mount({}, settings);
+        searchFor('network fee');
+
+        fireEvent.click(screen.getByRole('button', { name: /Fees/ }));
+
+        expect(await screen.findByRole('heading', { name: 'Fees' })).toBeTruthy();
+        const match = await screen.findByText('Fee strategy', {
+            selector: '[data-settings-search-match="true"]',
+        });
+        expect(match.closest('[data-settings-search-highlight="true"]')).toBeTruthy();
     });
 
     it('describes only the controls available in Appearance', () => {
@@ -143,12 +178,14 @@ describe('Settings search', () => {
         mount();
         searchFor('no setting has these words');
 
-        expect(screen.getByRole('status')).toHaveTextContent('No settings match "no setting has these words".');
+        // A section still loading shows its own status row, so find the search one by its words.
+        expect(screen.getAllByRole('status').find((el) => /No settings match/.test(el.textContent)))
+            .toHaveTextContent('No settings match "no setting has these words".');
         expect(screen.queryByText('Backup')).toBeNull();
 
         searchFor('');
 
-        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.queryByText(/No settings match/)).toBeNull();
         expect(screen.getByText('Backup')).toBeTruthy();
         expect(screen.getByText('About')).toBeTruthy();
     });
@@ -157,6 +194,7 @@ describe('Settings search', () => {
         mount({ activeWallet: null, onOpenAccountPicker: undefined });
         searchFor('signer pairing');
 
-        expect(screen.getByRole('status')).toHaveTextContent('No settings match "signer pairing".');
+        expect(screen.getAllByRole('status').find((el) => /No settings match/.test(el.textContent)))
+            .toHaveTextContent('No settings match "signer pairing".');
     });
 });

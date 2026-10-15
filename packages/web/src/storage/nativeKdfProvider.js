@@ -17,8 +17,8 @@
 // it. Core falls back to its JS implementation on any rejection, including
 // an older shell build that has no `argon2id` method.
 
-import { crypto as coreCrypto } from '@xchain-wallet/core';
-import { callNativeVault, hasNativeVault } from './nativeVault.js';
+import { setNativeArgon2id } from '../../../core/src/crypto/kdf.js';
+import { callNativeVault, getNativeVault } from './nativeVault.js';
 
 /**
  * One derivation through the plugin. Resolves the base64 key core expects;
@@ -50,7 +50,11 @@ export async function nativeArgon2id(request) {
  * @returns {boolean} true when the provider was registered
  */
 export function installNativeKdfProvider() {
-    if (!hasNativeVault()) return false;
-    coreCrypto.setNativeArgon2id(nativeArgon2id);
+    const plugin = getNativeVault();
+    if (typeof plugin?.argon2id !== 'function') {
+        setNativeArgon2id(null);
+        return false;
+    }
+    setNativeArgon2id(nativeArgon2id);
     return true;
 }

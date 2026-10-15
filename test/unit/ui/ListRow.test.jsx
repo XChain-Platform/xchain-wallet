@@ -56,12 +56,33 @@ describe('<ListRow>', () => {
         expect(screen.queryByRole('link')).toBeNull();
     });
 
-    it('uses the shared large control height and existing interaction tokens', () => {
+    it('keeps the label and test id on a disabled native button', () => {
+        const onClick = vi.fn();
+        render(
+            <ListRow
+                data-testid="account-row"
+                disabled
+                title="Disabled account"
+                onClick={onClick}
+            />,
+        );
+
+        const row = screen.getByTestId('account-row');
+        expect(row).toHaveAccessibleName('Disabled account');
+        expect(row).toBeDisabled();
+        fireEvent.click(row);
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('uses the shared large control height and semantic interaction tokens', () => {
         const css = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
+        const historyCss = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
 
         expect(css).toMatch(/min-height:\s*var\(--xc-control-h-lg,\s*24px\)/);
-        expect(css).toMatch(/\.interactive:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-bg-muted\)/s);
-        expect(css).toMatch(/\.interactive:focus-visible\s*\{[^}]*var\(--xc-focus-ring\)/s);
+        expect(css).toMatch(/\.interactive:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-control-bg-hover\)/s);
+        expect(css).toMatch(/\.interactive:focus-visible\s*\{[^}]*var\(--xc-control-focus-ring\)/s);
+        expect(css).toMatch(/\.interactive:disabled\s*\{[^}]*var\(--xc-control-disabled-bg\)/s);
+        expect(historyCss).toMatch(/\.rowSelected\s*\{[^}]*var\(--xc-control-selected\)/s);
         expect(css).not.toContain('var(--xc-page-gutter)');
     });
 });

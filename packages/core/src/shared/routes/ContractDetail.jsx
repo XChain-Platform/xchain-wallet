@@ -9,8 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { AddressText, Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
     extractSingle,
@@ -26,8 +25,6 @@ import tableStyles from '../components/DataTable.module.css';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './ActionsMenu.module.css';
-
-const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * Contract detail page (§42.3).
@@ -92,7 +89,6 @@ export function ContractDetail({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const descriptor = chainRegistry.get(chainId);
 
     const [contract, setContract] = useState(/** @type {any} */ (undefined));
     const [contractError, setContractError] = useState(/** @type {string | null} */ (null));
@@ -250,7 +246,6 @@ export function ContractDetail({
                     <SectionHeader
                         title={heading}
                         description={description}
-                        trailing={descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : null}
                     />
                     {/* 512 bytes: this is the one surface wide enough for it, so
                         the list rows carry the name and version alone. */}
@@ -516,7 +511,7 @@ function Pagination({ page, total, pageSize, onChange }) {
                 onClick={() => onChange(page - 1)}
                 disabled={!hasPrev}
             >
-                ← Prev
+                <Icon.BackIcon /> Prev
             </Button>
             <span className={styles.entryDescription}>Page {page}{total !== null ? ` of ${Math.ceil(total / pageSize)}` : ''}</span>
             <Button
@@ -524,7 +519,7 @@ function Pagination({ page, total, pageSize, onChange }) {
                 onClick={() => onChange(page + 1)}
                 disabled={!hasNext}
             >
-                Next →
+                Next <Icon.ForwardIcon />
             </Button>
         </div>
     );

@@ -13,6 +13,7 @@ import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useToast } from './ToastHost.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * Developer-Mode-gated raw view (§21.3 / §48.4) for sign screens.
@@ -112,20 +113,20 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     return (
         <details className={styles.root}>
             <summary className={styles.toggle}>
-                Developer · raw view
+                {t('components.rawPsbtViewer.developerRawView')}
             </summary>
 
             <div className={styles.body}>
                 {hasPsbt ? (
-                    <section className={styles.section} aria-label="Unsigned transaction hex">
-                        <p className={styles.label}>Unsigned transaction hex</p>
+                    <section className={styles.section} aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}>
+                        <p className={styles.label}>{t('components.watcherResultPanel.unsignedTransactionHex2')}</p>
                         <textarea
                             className={styles.hex}
                             readOnly
                             value={psbtHex}
                             rows={4}
                             spellCheck={false}
-                            aria-label="Unsigned transaction hex"
+                            aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}
                         />
                         <button
                             type="button"
@@ -139,8 +140,8 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                 ) : null}
 
                 {hasFields ? (
-                    <section className={styles.section} aria-label="Action fields">
-                        <p className={styles.label}>Action fields</p>
+                    <section className={styles.section} aria-label={t('components.rawPsbtViewer.actionFields')}>
+                        <p className={styles.label}>{t('components.rawPsbtViewer.actionFields')}</p>
                         <pre className={styles.json}>{fieldsJson}</pre>
                         <button
                             type="button"
@@ -153,10 +154,10 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     </section>
                 ) : null}
 
-                <section className={styles.section} aria-label="Parsed inputs / outputs">
-                    <p className={styles.label}>Parsed inputs / outputs</p>
+                <section className={styles.section} aria-label={t('components.rawPsbtViewer.parsedInputsOutputs')}>
+                    <p className={styles.label}>{t('components.rawPsbtViewer.parsedInputsOutputs')}</p>
                     <p className={styles.placeholder}>
-                        (parser not wired yet; see PSBT hex above for the raw bytes)
+                        {t('components.rawPsbtViewer.parserNotWiredYetSee')}
                     </p>
                 </section>
 

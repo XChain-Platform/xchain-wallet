@@ -438,7 +438,10 @@ export function useConfirmAction() {
         // and swapping in a differently-priced transaction under a screen they
         // have already read is the one thing an authorization surface must not
         // do. The message tells them to start the action again.
-        if (typeof args.requoteNativeFee === 'function' && Number(built.quote?.requiredFeeSats) > 0) {
+        // A zero quote still needs this check. A free action can become charged
+        // while the review is open, and the composed transaction has no fee
+        // output with which to satisfy the new requirement.
+        if (typeof args.requoteNativeFee === 'function' && built.quote != null) {
             updateMounted(() => setPhase('rechecking'));
             let fresh = null;
             try {

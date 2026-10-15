@@ -247,4 +247,15 @@ describe('native-coin payment order parity', () => {
         expect(composed).toEqual([PAYEE, NATIVE_FEE, DONATION]);
         expect(bridged).toEqual(composed);
     });
+
+    it('folds the payment ahead of a native protocol fee when the caller supplied none', async () => {
+        const composed = await composedOutputsFor(
+            NATIVE_SEND_WITH_MEMO, nativeOpts({ payFeeInNativeCoin: true }));
+        // The generic advanced route hands over no outputs, so the atomic path folds the payment itself.
+        const advanced = await atomicOutputsFor(
+            NATIVE_SEND_WITH_MEMO, nativeOpts({ payFeeInNativeCoin: true }));
+
+        expect(composed).toEqual([PAYEE, NATIVE_FEE, DONATION]);
+        expect(advanced).toEqual(composed);
+    });
 });

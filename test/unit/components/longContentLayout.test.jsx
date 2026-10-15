@@ -6,6 +6,7 @@ import React from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import balanceStyles from '../../../packages/core/src/shared/components/BalanceList.module.css';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { EntryRow } from '../../../packages/core/src/shared/routes/History.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -15,7 +16,9 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 import { formatAtomicAmount } from '../../../packages/core/src/shared/utils/amountFormat.js';
 
 const balanceCss = readFileSync('packages/core/src/shared/components/BalanceList.module.css', 'utf8');
+const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
 const historyCss = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
+const activityRowCss = readFileSync('packages/core/src/shared/components/ActivityRow.module.css', 'utf8');
 const tokenDetailCss = readFileSync('packages/core/src/shared/routes/TokenDetail.module.css', 'utf8');
 const walletPickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
 const pageHeaderCss = readFileSync('packages/core/src/ui/PageHeader.module.css', 'utf8');
@@ -44,32 +47,53 @@ afterEach(() => {
 });
 
 describe('long content layout', () => {
-    it('ellipsizes balance labels while fitting every digit of a huge amount', () => {
+    it('gives every digit of a 15-digit balance priority at 360px', () => {
         const displayName = 'A token name long enough to occupy every narrow balance-row label lane';
-        const quantity = '12345678901234567890123456789012345678901234567890';
-        const formattedQuantity = formatAtomicAmount(quantity, 0);
+        const quantity = '100000000000000';
+        const formattedQuantity = formatAtomicAmount(quantity, 7);
 
         render(
-            <BalanceList
-                rows={[{
-                    chainId: 'bitcoin-mainnet',
-                    tick: 'EXTRAORDINARILYLONGTICKER',
-                    kind: 'token',
-                    displayName,
-                    quantity,
-                    divisibility: 0,
-                    fiatRate: null,
-                }]}
-                onSelectToken={() => {}}
-            />,
+            <div style={{ width: 360 }}>
+                <BalanceList
+                    rows={[{
+                        chainId: 'bitcoin-mainnet',
+                        tick: 'EXTRAORDINARILYLONGTICKER',
+                        kind: 'token',
+                        displayName,
+                        quantity,
+                        divisibility: 7,
+                        fiatRate: null,
+                    }]}
+                    onSelectToken={() => {}}
+                />
+            </div>,
         );
 
+        expect(formattedQuantity.replace(/\D/g, '')).toHaveLength(15);
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByTitle('EXTRAORDINARILYLONGTICKER')).toBeInTheDocument();
         expect(screen.getByTitle(formattedQuantity)).toHaveTextContent(formattedQuantity);
         expect(rule(balanceCss, '.name')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(balanceCss, '.amountFitInner')).toMatch(/transform-origin:\s*right center/);
-        expect(rule(balanceCss, '.qty')).not.toMatch(/text-overflow:\s*ellipsis/);
+        // The shared row keeps the amount column at its full width and lets the label column yield.
+        expect(rule(listRowCss, '.content')).toMatch(/flex:\s*1 1 auto;[^}]*min-width:\s*0/s);
+        expect(listRowCss).toMatch(/\.trailing,[^{]*\{[^}]*flex:\s*0 0 auto/);
+        expect(rule(balanceCss, '.amounts')).toMatch(/min-width:\s*0/);
+        expect(rule(balanceCss, '.qty')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+        // A figure is never cut: no ellipsis and no clipping on the figure or
+        // its column. When it does not fit beside the name (large text on a
+        // phone) the row wraps and the figures take their own line, ending at
+        // the row's end, while the name column keeps a rem floor and truncates.
+        for (const selector of ['.amountFit', '.qty', '.fiat', '.amounts', '.amountsSlot.amountsSlot']) {
+            expect(rule(balanceCss, selector)).not.toMatch(/text-overflow:\s*ellipsis/);
+            expect(rule(balanceCss, selector)).not.toMatch(/overflow(-x)?:\s*(hidden|clip)/);
+        }
+        expect(rule(balanceCss, '.amountFit')).not.toMatch(/white-space:\s*nowrap/);
+        expect(rule(balanceCss, '.row > .rowContent')).toMatch(/flex-wrap:\s*wrap/);
+        expect(rule(balanceCss, '.rowBody.rowBody')).toMatch(/min-width:\s*\d+(\.\d+)?rem/);
+        expect(rule(balanceCss, '.amountsSlot.amountsSlot')).toMatch(/max-width:\s*100%/);
+        expect(rule(balanceCss, '.amountsSlot.amountsSlot')).toMatch(/margin-inline-start:\s*auto/);
+        const quantityText = screen.getByTitle(formattedQuantity);
+        expect(quantityText.closest(`.${balanceStyles.rowContent}`).querySelector(`.${balanceStyles.rowBody}`)).not.toBeNull();
     });
 
     it('keeps a full history address and pending amount available without digit ellipsis', () => {
@@ -84,10 +108,11 @@ describe('long content layout', () => {
                             action: 'SEND',
                             actionIndex: 'pending-long',
                             chainId: 'bitcoin-mainnet',
-                            source: address,
+                            source: 'bc1qsource',
                             status: 'pending',
                             pending: { direction: 'out' },
-                            raw: { destination: 'bc1qdestination', amount, tick: 'BTC' },
+                            // History rows identify a send by its counterparty, so the long address is the destination.
+                            raw: { destination: address, amount, tick: 'BTC' },
                         }}
                         selected={false}
                         showConnector={false}
@@ -99,12 +124,14 @@ describe('long content layout', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByTitle(address)).toHaveTextContent(address);
+        // The whole address stays in the title; the row shows both ends.
+        expect(screen.getByTitle(address)).toHaveTextContent(`${address.slice(0, 6)}…${address.slice(-6)}`);
         // The amount is shown digit-grouped; every digit must still be there.
         const pendingAmount = document.querySelector('[data-pending-amount]');
         expect(pendingAmount.getAttribute('title').replace(/,/g, '')).toContain(amount);
         expect(pendingAmount.textContent.replace(/,/g, '')).toContain(amount);
-        expect(rule(historyCss, '.rowSourceAddress')).toMatch(/text-overflow:\s*ellipsis/);
+        // The source address sits in the shared row's context cell, which ellipsizes.
+        expect(rule(activityRowCss, '.context')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(historyCss, '.pendingAmount')).toMatch(/overflow-x:\s*auto/);
         expect(rule(historyCss, '.pendingAmount')).not.toMatch(/text-overflow:\s*ellipsis/);
     });
@@ -160,7 +187,7 @@ describe('long content layout', () => {
 
         expect(await screen.findByTitle(walletName)).toHaveTextContent(walletName);
         expect(screen.getByRole('button', { name: new RegExp(walletName) })).toBeInTheDocument();
-        expect(rule(walletPickerCss, '.rowText > span')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(walletPickerCss, '.rowName')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
     it('retains a complete string title on a generic PageHeader', () => {

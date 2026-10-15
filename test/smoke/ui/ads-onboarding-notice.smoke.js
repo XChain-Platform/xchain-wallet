@@ -94,8 +94,13 @@ assert.match(
 const importedCalls = imp.match(/\bonImported\b/g) || [];
 assert.equal(
     importedCalls.length,
-    4,
-    'onImported appears only in the prop contract, the guarded label refresh and notice Continue',
+    5,
+    'onImported appears only in the prop contract, wallet-forwarding wrapper, guarded label refresh and notice Continue',
+);
+assert.match(
+    imp,
+    /function onImported\(\)[\s\S]*?const wallet = importedWalletRef\.current \|\| undefined;[\s\S]*?handleImported\(wallet\)/,
+    'the import completion wrapper forwards the newly imported wallet to App',
 );
 assert.match(
     imp,
@@ -120,9 +125,9 @@ assert.match(
 // every success path scrubs its inputs before the shared helper raises the notice.
 const flips = imp.match(/setAdsNotice\(true\)/g) || [];
 assert.equal(flips.length, 1, 'the shared successful-import helper raises the notice once');
-const finishes = imp.match(/finishWalletImport\(\);/g) || [];
+const finishes = imp.match(/finishWalletImport\(result\);/g) || [];
 assert.equal(finishes.length, 4, 'mnemonic, WIF, fresh-backup and add-backup success paths scrub secrets');
-assert.match(imp, /function finishWalletImport\(\) \{[\s\S]{0,180}clearSensitiveState\(\);[\s\S]{0,180}setAdsNotice\(true\)/,
+assert.match(imp, /function finishWalletImport\(result\) \{[\s\S]{0,360}clearSensitiveState\(\);[\s\S]{0,180}setAdsNotice\(true\)/,
     'the successful-import helper scrubs secrets before raising the notice');
 
 console.log('ads-onboarding-notice smoke OK');

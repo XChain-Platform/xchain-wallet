@@ -166,16 +166,18 @@ describe('Settings keyboard interaction', () => {
 
         const switches = [
             await screen.findByRole('switch', { name: 'Hide small balances' }),
+            screen.getByRole('switch', { name: 'Hide unknown tokens' }),
             screen.getByRole('switch', { name: 'Show pin button on rows' }),
             screen.getByRole('switch', { name: 'Show hide button on rows' }),
         ];
         await expectTabOrder([
             switches[0],
+            switches[1],
             screen.getByRole('combobox', { name: 'Small-balance threshold' }),
             screen.getByRole('combobox', { name: 'Balance number format' }),
-            switches[1],
             switches[2],
-            screen.getByRole('combobox', { name: 'Token chain' }),
+            switches[3],
+            screen.getByRole('combobox', { name: 'Token network' }),
             screen.getByRole('textbox', { name: 'Token ticker' }),
             screen.getByRole('button', { name: 'Watch token' }),
             screen.getByRole('button', { name: 'Reset list preferences' }),
@@ -189,6 +191,7 @@ describe('Settings keyboard interaction', () => {
             await waitFor(() => expect(toggle).toBeChecked());
         }
         expect(messaging.updateSettings).toHaveBeenCalledWith({ privacy: { hideSmallBalances: true } });
+        expect(messaging.updateSettings).toHaveBeenCalledWith({ hideUnknownTokens: true });
         expect(messaging.updateSettings).toHaveBeenCalledWith({ showPinAffordance: true });
         expect(messaging.updateSettings).toHaveBeenCalledWith({ showHideAffordance: true });
     });

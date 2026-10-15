@@ -28,9 +28,13 @@ assert.match(route, /import settingsStyles from '\.\/Settings\.module\.css';/,
     'Settings imports its responsive stylesheet');
 assert.equal(
     route.match(/data-settings-layout="responsive"/g)?.length,
-    2,
-    'list and drilldown Settings pages share the responsive layout scope',
+    1,
+    'the shared Settings template owns the responsive layout scope',
 );
+assert.match(route, /<SettingsPageTemplate view="subpage">/,
+    'drilldown Settings pages use the shared template');
+assert.match(route, /<SettingsPageTemplate\s+view="list"/,
+    'the Settings list uses the shared template');
 assert.match(css, /@media \(max-width: 480px\)/,
     'mobile Settings rules cover font-scaled phone viewports');
 assert.match(css, /input:not\(\[type='checkbox'\]\):not\(\[type='radio'\]\):not\(\[type='range'\]\)/,

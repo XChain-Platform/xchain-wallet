@@ -11,6 +11,7 @@ import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAd
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
+const NEW_OWNER = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
 const SOURCE = {
     id: 'addr-1',
     address: 'bc1qexampleexampleexampleexampleexampleex',
@@ -56,6 +57,91 @@ afterEach(() => {
 });
 
 describe('TokenAdminForm review interaction safety', () => {
+    it('states that an ownership transfer cannot be undone on review', async () => {
+        mountAdmin('transfer', {
+            getTokenInfo: vi.fn().mockResolvedValue({
+                chainId: CHAIN,
+                tick: 'TOKEN',
+                creator: SOURCE.address,
+                locks: {},
+            }),
+        });
+
+        fireEvent.change(await screen.findByLabelText('New owner address'), {
+            target: { value: NEW_OWNER },
+        });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+
+        expect(await screen.findByText(/Transferring ownership cannot be undone/))
+            .toBeInTheDocument();
+    });
+
+    it('refuses an admin action when this wallet is not the token owner', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('transfer', {
+            getTokenInfo: vi.fn().mockResolvedValue({
+                chainId: CHAIN,
+                tick: 'TOKEN',
+                creator: NEW_OWNER,
+                locks: {},
+            }),
+            buildActionPsbtRequest,
+        });
+
+        fireEvent.change(await screen.findByLabelText('New owner address'), {
+            target: { value: NEW_OWNER },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This wallet does not own TOKEN.',
+        );
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses a description update after the description is locked', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('description', {
+            getTokenInfo: vi.fn().mockResolvedValue({
+                chainId: CHAIN,
+                tick: 'TOKEN',
+                creator: SOURCE.address,
+                locks: { description: true },
+            }),
+            buildActionPsbtRequest,
+        });
+
+        const description = await screen.findByLabelText('New description');
+        await waitFor(() => expect(description).toBeDisabled());
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'The description for TOKEN is permanently locked and cannot be updated.',
+        );
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('does not offer already-locked supply and description flags again', async () => {
+        mountAdmin('lock', {
+            getTokenInfo: vi.fn().mockResolvedValue({
+                chainId: CHAIN,
+                tick: 'TOKEN',
+                creator: SOURCE.address,
+                locks: { max_supply: true, description: true },
+            }),
+        });
+
+        await waitFor(() => {
+            const maxSupply = screen.getByLabelText(/^Max supply/);
+            const description = screen.getByLabelText(/^Description/);
+            expect(maxSupply).toBeChecked();
+            expect(maxSupply).toBeDisabled();
+            expect(description).toBeChecked();
+            expect(description).toBeDisabled();
+        });
+    });
+
     it('requires a fresh lock confirmation after going back', async () => {
         mountAdmin('lock');
 

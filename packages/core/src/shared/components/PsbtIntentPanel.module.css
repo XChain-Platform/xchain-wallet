@@ -32,8 +32,8 @@
     align-items: baseline;
     gap: var(--xc-space-2);
     flex-wrap: wrap;
-    padding: var(--xc-space-1) 0;
-    border-bottom: 1px solid var(--xc-border);
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    border-bottom: var(--xc-table-row-divider);
     font-size: var(--xc-text-sm);
 }
 
@@ -62,6 +62,14 @@
     font-size: var(--xc-text-xs);
 }
 
+.addr,
+.value,
+.totalsValue,
+.details code {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .dataOutput {
     color: var(--xc-text-muted);
     font-style: italic;
@@ -75,40 +83,30 @@
 }
 
 .totals {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
-    grid-template-columns: auto 1fr;
-    column-gap: var(--xc-space-3);
-    row-gap: 2px;
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
 }
 
 .totalsLabel {
     color: var(--xc-text-muted);
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .totalsValue {
     margin: 0;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
     text-align: end;
     font-variant-numeric: tabular-nums;
     font-weight: 700;
 }
 
-/* Loud partial/failed decode. Not a soft hint: an undecodable
-   transaction is exactly when the user most needs to be cautious. */
-.undecoded {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-warning);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-warning-bg);
-    color: var(--xc-warning-text);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
+.totalsLabel ~ .totalsLabel,
+.totalsValue ~ .totalsValue {
+    border-top: var(--xc-table-row-divider);
 }
 
 .actionIntent {
@@ -131,4 +129,33 @@
     font-family: var(--xc-font-mono);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+@media not all and (min-width: 400px) {
+    .row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .value {
+        margin-inline-start: 0;
+        text-align: start;
+    }
+
+    .totals {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .totalsLabel {
+        padding-bottom: 0;
+    }
+
+    .totalsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .totalsValue ~ .totalsValue {
+        border-top: 0;
+    }
 }

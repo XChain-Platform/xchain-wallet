@@ -73,8 +73,12 @@ describe('Chrome 102 shared form inputs', () => {
     });
 
     it('classifies native integer, amount, and fee-rate keyboards', () => {
-        const classified = controls.filter(({ tag, attributes }) => (
-            tag === 'input' && ['numeric', 'decimal'].includes(attributes.inputMode)
+        // The Ads settings fields moved to the kit Input, which forwards the
+        // same keyboard attributes, so that file's kit Inputs count as well.
+        const ADS = 'packages/core/src/shared/components/settings/AdsSection.jsx';
+        const classified = controls.filter(({ file, tag, attributes }) => (
+            (tag === 'input' || (tag === 'Input' && file.endsWith(ADS)))
+            && ['numeric', 'decimal'].includes(attributes.inputMode)
         ));
         const modesByFile = Object.groupBy(classified, ({ file }) => file);
         const inputModes = (file) => modesByFile[file]?.map(({ attributes }) => attributes.inputMode);

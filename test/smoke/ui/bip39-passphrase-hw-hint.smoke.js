@@ -50,12 +50,9 @@ assert.ok(/hardware wallets|enter it on the device/i.test(importSrc),
 assert.ok(/Add Account/.test(importSrc),
     'ImportWallet InfoTip points users to the correct HW pairing lane');
 
-// 3. The ImportWallet InfoTip lives inside the existing
-//    `<label className={styles.advancedToggle}>` next to the
-//    "This wallet uses a BIP39 passphrase" copy: sanity check it
-//    sits adjacent to the trigger text rather than floating
-//    elsewhere in the form.
-assert.ok(/<span>This wallet uses a BIP39 passphrase<\/span>[\s\S]{0,400}<InfoTip/.test(importSrc),
+// 3. The ImportWallet InfoTip lives beside the passphrase Switch so it
+//    stays adjacent to the trigger rather than floating elsewhere in the form.
+assert.ok(/<Switch[\s\S]{0,400}label="This wallet uses a BIP39 passphrase"[\s\S]{0,400}<InfoTip/.test(importSrc),
     'ImportWallet places the InfoTip immediately after the toggle label');
 
 console.log('OK: BIP39 passphrase HW-hint sweep (CreateWallet + ImportWallet)');

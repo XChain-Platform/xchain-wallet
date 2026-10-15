@@ -15,10 +15,10 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
@@ -26,11 +26,12 @@ import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
-import { DemoBanner } from '../components/DemoBanner.jsx';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { buildWalletAlerts } from '../walletAlerts.js';
 import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
+import { filterConfirmSessionsForAccount } from '../utils/activeAccountScope.js';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
@@ -42,12 +43,14 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { takeInterruptedView } from '../utils/lastViewMemory.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
+import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './Home.module.css';
-import { useBackHandler } from '../../ui/backStack.js';
+import cardStyles from '../../ui/Card.module.css';
+import { useBackHandler, useNativeBackRoot } from '../../ui/backStack.js';
 import {
     hasAvailableChain,
     NO_CHAINS_BODY,
@@ -190,12 +193,16 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0, demoBannerInHeader = false }) {
+export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
+    useNativeBackRoot();
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const browserOnline = useOnlineStatus();
-    const { overall: reachabilityOverall } = useReachability({});
+    const {
+        overall: reachabilityOverall,
+        refresh: recheckReachability,
+    } = useReachability({});
     // Treat a corroborated service outage as offline even when the device
     // still has a live Wi-Fi or Ethernet interface.
     const offline = !browserOnline || reachabilityOverall === 'offline';
@@ -235,11 +242,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';
     const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
-    const quickActionsReason = isDemoActive
-        ? 'Demo wallets are read-only, so actions that receive or move funds are hidden.'
-        : isWatcherMode
-            ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
-            : null;
+    const quickActionsReason = isWatcherMode
+        ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
+        : null;
+    const [demoSendNoticeOpen, setDemoSendNoticeOpen] = useState(false);
+    const [demoExitConfirmOpen, setDemoExitConfirmOpen] = useState(false);
+    const [demoExitBusy, setDemoExitBusy] = useState(false);
+    const [demoExitError, setDemoExitError] = useState(/** @type {string | null} */ (null));
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     // Local fallback used only when the host doesn't supply
     // `activeAccountIdProp` (e.g. desktop shell pinned to an older
@@ -339,6 +348,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [loadError, setLoadError] = useState(
         /** @type {string | null} */ (null),
     );
+    // Balance reads resolve with per-address error entries, so loadError alone
+    // cannot distinguish a failed balance refresh from another Home error.
+    // This flag keeps failed data out of the loaded-zero presentation and
+    // marks a retained cache as saved data until a clean read lands.
+    const [balanceLoadFailed, setBalanceLoadFailed] = useState(false);
     // A rate limit is the one load failure that comes with an end time, so it
     // is the one the banner can count down instead of leaving the user to
     // guess (rate-limits spec, M4). `rateLimitRetryAt` is the wall-clock ms the
@@ -412,9 +426,32 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         }
         return out;
     }, [isDemoActive, onSwap, runNetworkAction]);
-    const quickActionCount = (isDemoActive ? 0 : 2)
+    const quickActionCount = (isDemoActive ? 1 : 2)
         + (onExchange ? 1 : 0)
         + (homeMoreActions.length > 0 ? 1 : 0);
+    useEffect(() => {
+        setDemoSendNoticeOpen(false);
+        setDemoExitConfirmOpen(false);
+        setDemoExitBusy(false);
+        setDemoExitError(null);
+    }, [activeWalletId]);
+
+    const handleExitDemo = useCallback(async () => {
+        if (demoExitBusy || !activeWalletId) return;
+        setDemoExitBusy(true);
+        setDemoExitError(null);
+        try {
+            const { reloaded } = await exitDemoWallet({ messaging, walletId: activeWalletId });
+            if (reloaded) return;
+            setDemoExitConfirmOpen(false);
+            setDemoSendNoticeOpen(false);
+            if (typeof onLocked === 'function') onLocked();
+        } catch {
+            setDemoExitError('Could not exit demo mode. Please try again.');
+        } finally {
+            setDemoExitBusy(false);
+        }
+    }, [activeWalletId, demoExitBusy, messaging, onLocked]);
     // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -561,7 +598,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         showToast({
             message: `${fresh.length} likely-spam token${fresh.length === 1 ? '' : 's'} detected. Bulk-hide?`,
             actionLabel: `Hide ${fresh.length}`,
-            durationMs: 12000,
             onAction: () => {
                 setHiddenTokens((prev) => {
                     const merged = Array.from(new Set([...prev, ...fresh]));
@@ -652,6 +688,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         setRateLimitNamedSeconds(named);
         setRateLimitTickNow(now);
         setRateLimitRetryAt(now + seconds * 1000);
+        setBalanceLoadFailed(true);
         setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(named ? seconds : null)}`);
     }, []);
 
@@ -686,6 +723,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // up to 60 s) would be joined by the 20 s beat, which is the burst
             // the limiter counted in the first place.
             pollThrottleRef.current.start();
+            setBalanceLoadFailed(false);
             if (!hasCachedBalances) {
                 setBalances(null);
                 setBalancesFetchedAt(null);
@@ -713,26 +751,31 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 // reports a refused address as that entry's `error` string
                 // rather than throwing, so the banner is decided from what
                 // came back, on the poll path as well as the reset one. The
-                // balances that did land stay on screen either way.
+                // last complete balances stay on screen until every requested
+                // address has a usable answer.
                 const wait = rateLimitWaitFromBalances(b);
-                const refreshHasFailure = reportError
-                    && balancesRef.current !== null
-                    && Object.values(b || {}).some((rows) => (
-                        Array.isArray(rows) && rows.some((entry) => entry?.error)
-                    ));
-                if (refreshHasFailure) {
+                const hasBalanceFailure = Object.values(b || {}).some((rows) => (
+                    Array.isArray(rows) && rows.some((entry) => entry?.error)
+                ));
+                if (hasBalanceFailure) {
                     pollThrottleRef.current.fail();
-                    showToast({
-                        message: wait
-                            ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
-                            : "Couldn't refresh balances. Try again.",
-                        variant: 'error',
-                    });
+                    setBalanceLoadFailed(true);
+                    if (wait) beginRateLimitWait(wait.seconds);
+                    else setLoadError("Couldn't load balances. Try again.");
+                    if (reportError && balancesRef.current !== null) {
+                        showToast({
+                            message: wait
+                                ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
+                                : "Couldn't refresh balances. Try again.",
+                            variant: 'error',
+                        });
+                    }
                 } else {
-                    freshBalancesCacheable = !wait;
+                    freshBalancesCacheable = true;
                     // Fresh balances restart the re-poll window, whichever
                     // path asks for them.
                     pollThrottleRef.current.succeed();
+                    setBalanceLoadFailed(false);
                     balancesScopeRef.current = `${walletId}:${accountId || ''}`;
                     setBalances(b);
                     setBalancesFetchedAt(Date.now());
@@ -740,9 +783,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     freshFetchedAt = Date.now();
                 }
                 setCachedBalancesUpdating(false);
-                if (wait && !refreshHasFailure) {
-                    beginRateLimitWait(wait.seconds);
-                } else if (!refreshHasFailure) {
+                if (!hasBalanceFailure) {
                     // Balances landed clean, so whatever the last failure said
                     // is no longer true. Cleared on the poll path too: a wallet
                     // that recovered on its own used to keep the error banner
@@ -756,11 +797,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // Release the window rather than move it: a blip must not pin the
             // screen to stale balances for a whole interval.
             pollThrottleRef.current.fail();
-            // A silent poll that fails (e.g. a transient network blip)
-            // should not stomp a screen the user is already looking at
-            // with an error banner; only surface it on the reset path.
+            // A failed poll leaves the last complete rows in place and marks
+            // them as saved data, so they cannot look freshly synchronized.
             if (!isCancelled()) {
                 setCachedBalancesUpdating(false);
+                setBalanceLoadFailed(true);
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -774,9 +815,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         message: humanizeError(err, 'refresh balances').message,
                         variant: 'error',
                     });
-                } else if (reset && humanized.cause === 'rate_limited') {
+                }
+                if (humanized.cause === 'rate_limited') {
                     beginRateLimitWait(humanized.retryAfterSeconds ?? null);
-                } else if (reset) {
+                } else {
                     setLoadError(humanized.message);
                 }
             }
@@ -844,7 +886,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof messaging.listConfirmSessions === 'function') {
             try {
                 const resp = await messaging.listConfirmSessions();
-                if (!isCancelled()) setConfirmSessions(resp?.sessions || []);
+                if (!isCancelled()) {
+                    setConfirmSessions(filterConfirmSessionsForAccount(
+                        resp?.sessions,
+                        walletId,
+                        accountId,
+                    ));
+                }
             } catch { /* non-fatal */ }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -877,6 +925,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         () => runNetworkAction('Refreshing balances', refreshPortfolio),
         [runNetworkAction, refreshPortfolio],
     );
+    // Try again from the "Balances could not be checked" state.
+    const recheckBalances = useCallback(() => {
+        recheckReachability();
+        refreshPortfolioOnline();
+    }, [recheckReachability, refreshPortfolioOnline]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -1034,9 +1087,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via
     // `verifyProofs` (default on). The map is keyed `chainId:tick` and
-    // fills in progressively; HomeTabs badges the Tokens rows from it.
+    // fills in progressively after the user opens the Tokens tab.
     const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
-    const verifyMap = useProofVerification({ messaging, balances, enabled: verifyProofsEnabled });
 
     // `hideSmallBalances` persisted for fourteen sessions without a
     // single reader. HomeTabs forwards it to the Coins and Tokens lists,
@@ -1089,16 +1141,15 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 aria-label={t('home.quickActions')}
                 aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
             >
-                {!isDemoActive ? (
-                    <SendQuickAction
-                        onSend={onSend}
-                        networkActionsAvailable={networkActionsAvailable}
-                        onOffline={() => runNetworkAction('Sending', onSend)}
-                    />
-                ) : null}
+                <SendQuickAction
+                    onSend={isDemoActive ? () => setDemoSendNoticeOpen(true) : onSend}
+                    networkActionsAvailable={isDemoActive || networkActionsAvailable}
+                    onOffline={() => runNetworkAction('Sending', onSend)}
+                />
                 {!isDemoActive ? (
                     <Button
                         type="button"
+                        variant="secondary"
                         className={styles.quickAction}
                         onClick={onReceive}
                         disabled={!onReceive}
@@ -1110,6 +1161,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {onExchange ? (
                     <Button
                         type="button"
+                        variant="secondary"
                         className={styles.quickAction}
                         onClick={() => runNetworkAction('Exchange', onExchange)}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
@@ -1122,6 +1174,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {homeMoreActions.length === 1 ? (
                     <Button
                         type="button"
+                        variant="secondary"
                         className={styles.quickAction}
                         onClick={homeMoreActions[0].onSelect}
                         aria-label={homeMoreActions[0].label}
@@ -1134,6 +1187,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
                         <Button
                             type="button"
+                            variant="secondary"
                             className={styles.quickAction}
                             aria-haspopup="menu"
                             aria-expanded={homeMoreOpen}
@@ -1165,8 +1219,27 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     </div>
                 ) : null}
             </div>
+            {isDemoActive && demoSendNoticeOpen ? (
+                <StatusMessage
+                    recovery={{
+                        label: t('walletDetails.exitDemo'),
+                        onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
+                    }}
+                >
+                    {t('home.demoSendBlocked')}
+                </StatusMessage>
+            ) : null}
+            {demoExitConfirmOpen ? (
+                <DemoExitConfirm
+                    busy={demoExitBusy}
+                    error={demoExitError}
+                    onConfirm={handleExitDemo}
+                    onCancel={() => { setDemoExitConfirmOpen(false); setDemoExitError(null); }}
+                />
+            ) : null}
         </div>
     ), [
+        demoExitBusy, demoExitConfirmOpen, demoExitError, demoSendNoticeOpen, handleExitDemo,
         homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onExchange,
         onReceive, onSend, quickActionCount, quickActionsReason, runNetworkAction,
     ]);
@@ -1209,6 +1282,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const loadErrorText = rateLimitRetryAt === null
         ? loadError
         : `Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(rateLimitSecondsLeft)}`;
+    const balanceStatusText = balanceLoadFailed && balances && loadErrorText
+        ? `${loadErrorText} Showing saved balances from the last successful sync.`
+        : loadErrorText;
+    const retryBalanceLoad = () => {
+        setRateLimitRetryAt(null);
+        setHomeReloadKey((key) => key + 1);
+    };
 
     // §20 / G041: signer-mode home variant. The wallet only signs PSBTs
     // pasted in from a paired Watcher wallet; balances, history, send,
@@ -1222,19 +1302,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <Screen variant={variant}>
                 <ListPage className={isFull ? styles.bodyFull : undefined}>
                     <h1 className="sr-only">{t('home.title')}</h1>
-                    {loadErrorText ? (
-                        <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
-                    ) : null}
-                    {/* §25.2 / Cluster J FOLLOWUP 2: shells that
-                        mount the banner in their layout header say so with
-                        `demoBannerInHeader`, and Home skips its own copy so
-                        the disclosure never renders twice. Shells without a
-                        header slot (the extension popup) get it here. */}
-                    {activeWalletId && !demoBannerInHeader ? (
-                        <DemoBanner
-                            activeWalletId={activeWalletId}
-                            onExited={onLocked}
-                        />
+                    {balanceStatusText ? (
+                        <StatusMessage
+                            variant="error"
+                            className={styles.error}
+                            recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
+                        >
+                            {balanceStatusText}
+                        </StatusMessage>
                     ) : null}
                     <SignerHomeBody
                         onSignPsbt={onSignPsbt}
@@ -1275,6 +1350,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         {t('home.interruptedAction', { action: interruptedAction })}
                     </StatusMessage>
                 ) : null}
+                {/* The offline message already covers stale balances, so the
+                    shell notice steps aside rather than saying it twice. */}
+                {offline ? <HideReachabilityNotice /> : null}
                 {offline ? (
                     <StatusMessage variant="warning">
                         {balances
@@ -1282,8 +1360,17 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             : t('home.offline.empty')}
                     </StatusMessage>
                 ) : null}
-                {loadErrorText ? (
-                    <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
+                {/* Home's own balance error already says the balances could not
+                    be loaded, with Retry, so the shell notice steps aside. */}
+                {balanceStatusText ? <HideReachabilityNotice /> : null}
+                {balanceStatusText ? (
+                    <StatusMessage
+                        variant="error"
+                        className={styles.error}
+                        recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
+                    >
+                        {balanceStatusText}
+                    </StatusMessage>
                 ) : null}
 
                 {cachedBalancesUpdating ? (
@@ -1380,17 +1467,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                   * component owns that policy) so an observer sees no cue.
                   */}
                 <PanicFreezeNotice surface="home" />
-                {/* the demo disclosure sits above the balances, so a
-                    first-time visitor reads "this is a demo, the forms read 0
-                    because there is nothing to spend" before scrolling into a
-                    seven-figure fixture portfolio. Skipped when the shell
-                    already mounts it in its header (see `demoBannerInHeader`). */}
-                {activeWalletId && !demoBannerInHeader ? (
-                    <DemoBanner
-                        activeWalletId={activeWalletId}
-                        onExited={onLocked}
-                    />
-                ) : null}
                 {balances ? (
                     <HomeTabs
                         chainRegistry={chainRegistry}
@@ -1417,10 +1493,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
                         hiddenKeys={hiddenKeys}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
-                        verifyMap={verifyMap}
+                        verifyProofsEnabled={verifyProofsEnabled}
                         hideSmallBalances={hideSmallBalances}
                         onRefresh={refreshPortfolioOnline}
                         refreshing={portfolioRefreshing}
+                        // Offline already has its own message above; a degraded
+                        // check words the empty tabs instead.
+                        balancesUnchecked={!offline && reachabilityOverall === 'degraded'}
+                        onRecheckBalances={recheckBalances}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
@@ -1535,7 +1615,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         </Button>
                     ) : null}
                     <Button
-                        variant="ghost"
+                        variant="secondary"
                         block={!isFull}
                         onClick={onActions}
                         disabled={!onActions}
@@ -1584,6 +1664,7 @@ function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
         return (
             <Button
                 type="button"
+                variant="secondary"
                 className={styles.quickAction}
                 onClick={onOffline}
                 aria-disabled="true"
@@ -1597,6 +1678,7 @@ function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
     return (
         <Button
             type="button"
+            variant="secondary"
             className={styles.quickAction}
             onClick={onSend}
             disabled={!onSend}
@@ -1626,11 +1708,8 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSe
             <div
                 role="status"
                 aria-live="polite"
+                className={cardStyles.card}
                 style={{
-                    padding: 'var(--xc-space-3) var(--xc-space-4)',
-                    background: 'var(--xc-surface-raised)',
-                    border: '1px dashed var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-md)',
                     color: 'var(--xc-text-muted)',
                     fontSize: 'var(--xc-text-sm)',
                     marginBottom: 'var(--xc-space-3)',

@@ -80,7 +80,9 @@ describe('explorer rate limiter edge branches', () => {
         installExplorerRateLimit(sdk, new HostRateLimiter());
 
         const pending = sdk.explorer.client.get('/status');
-        await Promise.resolve();
+        // The host queue admits the request after a few microtasks, so wait
+        // until the old client is actually in flight before swapping it.
+        await vi.waitFor(() => expect(rejectOld).toBeTypeOf('function'));
         sdk.explorer.buildClient();
         rejectOld(new Error('old client failed'));
 

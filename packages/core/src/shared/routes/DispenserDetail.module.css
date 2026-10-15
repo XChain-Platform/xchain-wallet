@@ -1,13 +1,13 @@
-/* Dispenser detail: home-style layout. Info hero at the top, a 4-up
-   quick-action grid (Close / Refill / XChain / More), then a tab strip
+/* Dispenser detail: home-style layout. Info hero at the top, one row of
+   quick actions (Close / Refill / Edit / XChain / More), then a tab strip
    with the Dispenses list. Quick-action styles mirror Home.module.css. */
 
 .quickActions {
     display: grid;
-    /* Flows 4-5 across on wide shells and wraps gracefully on the narrow
-       extension popup, so owner-only actions (Refill, Edit) can join the
-       row without a fixed column count clipping them. */
-    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+    /* One row of equal tiles at every width, however many actions show, so
+       no tile wraps alone onto a second row; five still fit a 320px phone. */
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: var(--xc-space-2);
     /* Pull up against .detailsList's space-4 bottom margin so the grid
        sits tight under the stats card. */
@@ -127,14 +127,11 @@
 
 /* Dispense rows: one card, hairline dividers. */
 .dispenseList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -153,6 +150,14 @@
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--xc-text-muted);
+}
+
+.dispenseAmount,
+.dispensePaid,
+.remainingPill,
+.buyerAddressSelect {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .dispenseWhen {
@@ -222,36 +227,9 @@
     color: var(--xc-danger-fg);
 }
 
-/* Close-window banner: shown while a dispenser sits in its 1-hour
-   "cancelling" window before escrow is released. */
-.closeWindowNote {
-    margin: 0 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md, 8px);
-    background: color-mix(in srgb, var(--xc-warning, #b8860b) 12%, transparent);
-    color: var(--xc-warning, #b8860b);
-    font-size: var(--xc-text-sm);
-}
-
 /* Buy panel: fill-count field with an inline Max, mirroring the
    AmountField layout the Send/refill forms use. The button aligns to
    the input's baseline rather than the label's. */
-.buyFillsRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-}
-
-.buyFillsRow > *:first-child {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.buyFillsRow > button {
-    margin-block-start: 1.6rem;
-    flex: 0 0 auto;
-}
-
 .buySection {
     min-width: 0;
     margin-top: var(--xc-space-4);
@@ -275,16 +253,6 @@
 @media not all and (min-width: 400px) {
     .dispenseWhen {
         white-space: normal;
-    }
-
-    .buyFillsRow {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .buyFillsRow > button {
-        width: 100%;
-        margin-block-start: 0;
     }
 
     .remainingPill {

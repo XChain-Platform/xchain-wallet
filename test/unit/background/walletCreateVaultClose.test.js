@@ -123,7 +123,7 @@ describe('pre-host onboarding closes its Vault on every exit', () => {
         it(`${lane.name}: a refused vault save still zeros the Vault's key copy`, async () => {
             const deps = makeDeps();
             deps.storageBackend.save = async () => { throw new Error('disk full'); };
-            await expect(lane.call(deps)).rejects.toThrow('disk full');
+            await expect(lane.call(deps)).rejects.toThrow('Storage is full');
             expect(built).toHaveLength(1);
             expect(built[0].closes).toBe(1);
             expect(zeroed(built[0].key)).toBe(true);

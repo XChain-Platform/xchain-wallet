@@ -23,9 +23,10 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
+import { shareContent, ShareOutcome } from '../share.js';
 import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
@@ -44,48 +45,13 @@ import {
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
 import styles from './Receive.module.css';
+import qrStyles from '../../ui/QrDisplay.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
 const TOKEN_AMOUNT_MAX_DECIMALS = 18;
 const QR_FALLBACK_PIXEL_SIZE = 512;
-const PHONE_RECEIVE_QUERY = '(max-width: 420px)';
-
-function phoneReceiveLayoutMatches() {
-    if (typeof window === 'undefined') return false;
-    if (typeof window.matchMedia === 'function') {
-        return window.matchMedia(PHONE_RECEIVE_QUERY).matches;
-    }
-    return window.innerWidth <= 420;
-}
-
-function usePhoneReceiveLayout() {
-    const [matches, setMatches] = useState(phoneReceiveLayoutMatches);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return undefined;
-        if (typeof window.matchMedia !== 'function') {
-            const onResize = () => setMatches(phoneReceiveLayoutMatches());
-            window.addEventListener('resize', onResize);
-            return () => window.removeEventListener('resize', onResize);
-        }
-
-        const query = window.matchMedia(PHONE_RECEIVE_QUERY);
-        const onChange = (event) => setMatches(event.matches);
-        setMatches(query.matches);
-        if (typeof query.addEventListener === 'function') {
-            query.addEventListener('change', onChange);
-            return () => query.removeEventListener('change', onChange);
-        }
-        if (typeof query.addListener === 'function') {
-            query.addListener(onChange);
-            return () => query.removeListener(onChange);
-        }
-        return undefined;
-    }, []);
-
-    return matches;
-}
 
 export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
     const width = Number(cssWidth);
@@ -93,6 +59,36 @@ export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
     const ratio = Number(devicePixelRatio);
     const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
     return Math.ceil(width * safeRatio);
+}
+
+// Below this the code gets too small to scan reliably, so a window that
+// cannot fit a code this big beside the address and Copy row scrolls instead.
+export const QR_FIT_MIN_SIZE = 128;
+
+/**
+ * The largest QR side, in CSS px, that keeps the code, the address field and
+ * the Copy row inside the route scroller's visible height without scrolling.
+ * `contentTop` is the QR's top in the scroller's content (independent of the
+ * scroll position) and `belowQr` the distance from the QR's bottom to the
+ * Copy row's bottom, which does not depend on the QR's size. Returns null when
+ * there is nothing to fit (no measurable scroller) or when the fitted code
+ * would fall below QR_FIT_MIN_SIZE; the width cap then applies alone.
+ */
+export function qrFitSize({ viewportHeight, paddingBottom = 0, contentTop, belowQr }) {
+    const values = [viewportHeight, paddingBottom, contentTop, belowQr].map(Number);
+    if (values.some((value) => !Number.isFinite(value))) return null;
+    const [height, padding, top, below] = values;
+    if (height <= 0) return null;
+    const fit = Math.floor(height - padding - top - below);
+    return fit >= QR_FIT_MIN_SIZE ? fit : null;
+}
+
+/** The nearest ancestor that scrolls vertically, or null for the document. */
+function verticalScroller(element) {
+    for (let node = element?.parentElement; node && node !== document.body; node = node.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+    }
+    return null;
 }
 
 // descriptor.coin is the long coin name ('bitcoin' / 'litecoin' / 'dogecoin');
@@ -161,8 +157,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // signer mode. Refused here as well as in the nav, because the palette and
     // `xchain:` URI intents both reach this route without a nav click.
     const { isSignerMode } = useWalletMode();
-    const phoneReceiveLayout = usePhoneReceiveLayout();
-
     const [chainsByWallet, setChainsByWallet] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
@@ -187,6 +181,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [labelError, setLabelError] = useState(/** @type {string | null} */ (null));
     const [qrPixelSize, setQrPixelSize] = useState(QR_FALLBACK_PIXEL_SIZE);
     const qrSurfaceRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const qrActionsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const [qrFit, setQrFit] = useState(/** @type {number | null} */ (null));
     const [renderedQr, setRenderedQr] = useState(
         /** @type {{ uri: string, dataUrl: string } | null} */ (null),
     );
@@ -365,11 +361,41 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const surface = qrSurfaceRef.current;
         if (!surface) return undefined;
 
+        const scroller = verticalScroller(surface);
+
+        // Size the code from the height the route scroller shows as well as
+        // from its width, so a short window (the 360x600 extension popup)
+        // keeps the code, the address and the Copy row on screen together.
+        // Every term is independent of the code's own size, so applying the
+        // result never changes the next measurement.
+        const fitToHeight = () => {
+            const copyRow = qrActionsRef.current?.firstElementChild;
+            const surfaceRect = surface.getBoundingClientRect?.();
+            const copyRect = copyRow?.getBoundingClientRect?.();
+            if (!surfaceRect || !copyRect) return null;
+            if (!scroller) {
+                return qrFitSize({
+                    viewportHeight: window.innerHeight,
+                    contentTop: surfaceRect.top + window.scrollY,
+                    belowQr: copyRect.bottom - surfaceRect.bottom,
+                });
+            }
+            const scrollerRect = scroller.getBoundingClientRect();
+            return qrFitSize({
+                viewportHeight: scroller.clientHeight,
+                paddingBottom: parseFloat(getComputedStyle(scroller).paddingBottom) || 0,
+                contentTop: surfaceRect.top - scrollerRect.top - scroller.clientTop + scroller.scrollTop,
+                belowQr: copyRect.bottom - surfaceRect.bottom,
+            });
+        };
+
         const measure = (observedWidth) => {
             const fallbackWidth = surface.getBoundingClientRect?.().width || 0;
             const width = Number(observedWidth) > 0 ? Number(observedWidth) : fallbackWidth;
             const nextSize = qrPixelSizeFor(width, window.devicePixelRatio);
             setQrPixelSize((current) => (current === nextSize ? current : nextSize));
+            const nextFit = fitToHeight();
+            setQrFit((current) => (current === nextFit ? current : nextFit));
         };
         measure();
 
@@ -378,15 +404,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         let observer;
         if (typeof ResizeObserver === 'function') {
             observer = new ResizeObserver((entries) => {
-                measure(entries[0]?.contentRect?.width);
+                const own = entries.find((entry) => entry.target === surface);
+                measure(own?.contentRect?.width);
             });
             observer.observe(surface);
+            if (scroller) observer.observe(scroller);
         }
         return () => {
             observer?.disconnect();
             window.removeEventListener('resize', onWindowResize);
         };
-    }, [address?.id]);
+    }, [address?.id, activeChainId, loadError, generateError]);
 
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
@@ -534,6 +562,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         tick: reqTick,
         skip: isNativeRequest || !reqTick,
     });
+    // The live explorer omits divisibility, so TokenInfo carries null. Number(null)
+    // is 0, which would cap a divisible token at whole units and erase a valid
+    // amount; an unknown divisibility keeps the coin-precision fallback instead.
     const divisibilityRaw = prefill?.divisibility ?? requestTokenInfo?.divisibility;
     const selectedDivisibility = divisibilityRaw == null || divisibilityRaw === ''
         ? Number.NaN
@@ -559,6 +590,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             : null,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(activeChainId || '')?.networkKind === 'mainnet',
     });
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
@@ -579,7 +611,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (!fiatRate) {
                 if (stripped === '') setReqAmount('');
             } else {
-                const derivedCoin = fiatToCoin(stripped, fiatRate, NATIVE_COIN_DECIMALS);
+                const derivedCoin = fiatToCoin(stripped, fiatRate, requestDivisibility);
                 setReqAmount(derivedCoin != null ? derivedCoin : '');
             }
         } else {
@@ -830,29 +862,21 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             url: qrUri,
         };
         const nav = typeof navigator === 'undefined' ? null : navigator;
-        if (typeof nav?.share === 'function') {
+        let data = shareData;
+        if (typeof nav?.canShare === 'function') {
             try {
-                let data = shareData;
-                if (typeof nav.canShare === 'function') {
-                    try {
-                        const blob = dataUrlToBlob(qrDataUrl);
-                        const withFile = {
-                            ...shareData,
-                            files: [new File([blob], qrFileName, { type: blob.type })],
-                        };
-                        if (nav.canShare(withFile)) data = withFile;
-                    } catch { /* text and URL remain shareable without the QR image */ }
-                }
-                await nav.share(data);
-                return;
-            } catch (err) {
-                if (err?.name === 'AbortError') return;
-                console.error('Receive QR share failed:', err); // eslint-disable-line no-console
-            }
+                const blob = dataUrlToBlob(qrDataUrl);
+                const withFile = {
+                    ...shareData,
+                    files: [new File([blob], qrFileName, { type: blob.type })],
+                };
+                if (nav.canShare(withFile)) data = withFile;
+            } catch { /* text and URL remain shareable without the QR image */ }
         }
 
-        const { ok } = await copyText(qrUri);
-        showToast(ok
+        const outcome = await shareContent(data, { fallbackText: qrUri });
+        if (outcome === ShareOutcome.SHARED || outcome === ShareOutcome.CANCELED) return;
+        showToast(outcome === ShareOutcome.COPIED
             ? { message: 'Sharing is unavailable, so the payment link was copied to the clipboard.' }
             : { message: 'Could not share or copy the payment link.', variant: 'error' });
     }, [qrDataUrl, qrUri, reqTick, nativeTicker, descriptor?.displayName, reqAmount, qrFileName, showToast]);
@@ -878,8 +902,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to home"
-            title="Receive"
+            backLabel={t('common.backToHome')}
+            title={t('home.receive')}
             titleIcon={<Icon.ReceiveIcon />}
         />
     );
@@ -889,9 +913,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         return (
             <Screen variant={variant} header={header}>
                 <StatusMessage variant="status">
-                    This wallet is in signer mode. It can sign transactions from a
-                    watch-only wallet, but it does not have an address for receiving funds.
-                    To receive on this device, change Wallet mode in Settings.
+                    {t('receive.thisWalletIsInSigner')}
                 </StatusMessage>
             </Screen>
         );
@@ -911,7 +933,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <EmptyState
                     title={NO_CHAINS_TITLE}
                     body={NO_CHAINS_BODY}
-                    actionLabel="Open Network settings"
+                    actionLabel={t('common.openNetworkSettings')}
                     onAction={() => setNetworkSettingsOpen(true)}
                     actionIcon={<Icon.GearIcon />}
                 />
@@ -922,7 +944,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Choose a receive address"
+                title={t('receive.chooseAReceiveAddress')}
                 walletId={walletId}
                 accountId={accountId}
                 chainId={activeChainId}
@@ -948,23 +970,42 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         );
     }
 
+    const generateAddressButton = descriptor && addressType ? (
+        <Button
+            size="md"
+            type="button"
+            variant="secondary"
+            onClick={generateNewAddress}
+            loading={generating}
+            disabled={generating}
+            icon={<Icon.PlusIcon />}
+            aria-label={t('receive.generateNewAddress')}
+        >
+            {t('receive.newAddress')}
+        </Button>
+    ) : null;
+
     const qrActionsContent = address ? (
-        <div className={styles.qrActions}>
+        <div ref={qrActionsRef} className={`${qrStyles.actions} ${styles.qrActions}`}>
             <Button
+                size="md"
                 variant="secondary"
                 onClick={copyQrImage}
                 disabled={!qrDataUrl}
                 icon={<Icon.CopyIcon />}
+                aria-label={canCopyImages ? t('receive.copyQrCode') : t('receive.copyPaymentLink')}
             >
-                {canCopyImages ? 'Copy QR code' : 'Copy payment link'}
+                {t('receive.copyQr')}
             </Button>
             <Button
+                size="md"
                 variant="secondary"
                 onClick={shareQrImage}
                 disabled={!qrDataUrl}
                 icon={<Icon.UploadIcon />}
+                aria-label={t('receive.shareQrPaymentLink')}
             >
-                Share QR payment link
+                {t('receive.shareQr')}
             </Button>
             {addressExplorerUrl ? (
                 <a
@@ -972,25 +1013,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     href={addressExplorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={t('receive.viewAddressInBlockExplorer')}
                 >
-                    View address in block explorer <span aria-hidden="true">↗</span>
+                    {t('receive.explorer')} <span aria-hidden="true">↗</span>
                 </a>
             ) : null}
-        </div>
-    ) : null;
-
-    const generateAddressContent = descriptor && addressType ? (
-        <div className={styles.generateAddressAction}>
-            <Button
-                type="button"
-                variant="secondary"
-                onClick={generateNewAddress}
-                loading={generating}
-                disabled={generating}
-                icon={<Icon.PlusIcon />}
-            >
-                Generate new address
-            </Button>
+            {generateAddressButton}
         </div>
     ) : null;
 
@@ -1002,9 +1030,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {noAddresses ? (
                 <EmptyState
-                    title="No addresses yet"
-                    body="Generate an address to start receiving."
-                    actionLabel="Generate an address"
+                    title={t('history.empty.noAddressesTitle')}
+                    body={t('receive.generateAnAddressToStart')}
+                    actionLabel={t('receive.generateAnAddress')}
                     onAction={() => setAddAddressOpen(true)}
                     actionIcon={<Icon.PlusIcon />}
                 />
@@ -1012,7 +1040,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {descriptor?.addressTypes?.length > 1 ? (
                 <Select
-                    label="Address type"
+                    size="md"
+                    label={t('receive.addressType')}
                     value={addressType}
                     onChange={(event) => changeAddressType(event.target.value)}
                     disabled={generating || !addressType}
@@ -1023,88 +1052,90 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 </Select>
             ) : null}
 
-            {!phoneReceiveLayout ? generateAddressContent : null}
-
             {generateError ? (
                 <StatusMessage variant="error" className={styles.error}>{generateError}</StatusMessage>
             ) : null}
 
             {!address && descriptor && addressType && !generating && !generateError ? (
                 <StatusMessage variant="status">
-                    There is no {addressTypeLabel(addressType)} address yet. Create one to receive funds with this address type.
+                    {t('receive.thereIsNo')} {addressTypeLabel(addressType)} {t('receive.addressYetCreateOneTo')}
                 </StatusMessage>
             ) : null}
 
             {address ? (
-                <div className={`${styles.qrBox} ${styles.receiveQrBox}`}>
-                    <div ref={qrSurfaceRef} className={styles.qrSurface}>
-                        {qrDataUrl ? (
-                            <img
-                                src={qrDataUrl}
-                                alt={`QR code for ${address.address}`}
-                                width={qrPixelSize}
-                                height={qrPixelSize}
-                                className={styles.qr}
-                            />
-                        ) : (
-                            <div className={styles.qrPlaceholder} aria-hidden="true">
-                                Rendering QR…
-                            </div>
-                        )}
+                <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
+                    <div className={`${qrStyles.frame} ${styles.qrBox}`}>
+                        <div
+                            ref={qrSurfaceRef}
+                            className={styles.qrSurface}
+                            style={qrFit ? { '--xc-qr-fit-size': `${qrFit}px` } : undefined}
+                        >
+                            {qrDataUrl ? (
+                                <img
+                                    src={qrDataUrl}
+                                    alt={t('receive.qrCodeFor', { address: address.address })}
+                                    width={qrPixelSize}
+                                    height={qrPixelSize}
+                                    className={styles.qr}
+                                />
+                            ) : (
+                                <div className={styles.qrPlaceholder} aria-hidden="true">
+                                    {t('receive.renderingQr')}
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    <AddressField
+                        size="md"
+                        // The visible label is the accessible name; the hint says a tap
+                        // copies the address. A name about a payment link went stale when
+                        // the tap stopped copying one.
+                        label={address.label || t('verifySignature.address')}
+                        icon="addresses"
+                        value={address.address}
+                        readOnly
+                        onChange={() => {}}
+                        onClick={copyAddress}
+                        onKeyDown={onAddressKeyDown}
+                        title={t('receive.tapToCopyAddress')}
+                        hint={t('receive.tapTheAddressToCopy')}
+                        style={{ cursor: 'text', userSelect: 'text' }}
+                        wrapReadOnlyAddress
+                        onIconClick={() => setAddressPickerOpen(true)}
+                        iconLabel={t('receive.chooseReceiveAddress')}
+                    />
+                    {qrActionsContent}
                 </div>
             ) : null}
 
-            {address ? (
-                <AddressField
-                    // The visible label is the accessible name; the hint says a tap
-                    // copies the address. A name about a payment link went stale when
-                    // the tap stopped copying one.
-                    label={address.label || 'Address'}
-                    icon="addresses"
-                    value={address.address}
-                    readOnly
-                    onChange={() => {}}
-                    onClick={copyAddress}
-                    onKeyDown={onAddressKeyDown}
-                    title="Tap to copy address"
-                    hint="Tap the address to copy it."
-                    style={{ cursor: 'text', userSelect: 'text' }}
-                    wrapReadOnlyAddress
-                    onIconClick={() => setAddressPickerOpen(true)}
-                    iconLabel="Choose receive address"
-                />
-            ) : null}
-
-            {phoneReceiveLayout ? (
-                <>
-                    {qrActionsContent}
-                    {generateAddressContent}
-                </>
+            {!address && generateAddressButton ? (
+                <div className={styles.generateAddressAction}>{generateAddressButton}</div>
             ) : null}
 
             {address?.id ? (
                 <div className={styles.labelEditor}>
                     <Input
-                        label="Address label"
+                        size="md"
+                        label={t('receive.addressLabel')}
                         value={labelDraftValue}
                         onChange={(event) => setLabelDraft({
                             addressId: address.id,
                             value: event.target.value,
                         })}
                         onKeyDown={onLabelKeyDown}
-                        placeholder="Add a label"
+                        placeholder={t('receive.addALabel')}
                         autoComplete="off"
                         error={labelError || undefined}
                     />
                     <Button
+                        size="md"
                         type="button"
                         variant="secondary"
                         loading={labelSaving}
                         disabled={labelSaving || labelDraftValue.trim() === (address.label || '')}
                         onClick={saveAddressLabel}
                     >
-                        Save label
+                        {t('receive.saveLabel')}
                     </Button>
                 </div>
             ) : null}
@@ -1114,63 +1145,63 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 const isTokenSelection = !!prefillTickUpper
                     && nativeTicker
                     && prefillTickUpper !== nativeTicker;
-                // Standard token field: shows the selected token (or the
-                // chain's native coin) and reopens the picker to change it.
+                const selectedTick = isTokenSelection ? prefillTickUpper : (nativeTicker || '');
                 return (
-                    <TokenField
-                        label="Token"
-                        value={{
-                            chainId: descriptor.id,
-                            tick: isTokenSelection ? prefillTickUpper : (nativeTicker || ''),
-                        }}
-                        onOpenPicker={onChangeAsset || onBack}
-                    />
+                    <button
+                        type="button"
+                        className={styles.assetCard}
+                        onClick={onChangeAsset || onBack}
+                        // Icon-only control: the accessible name carries the chain the icon overlay shows.
+                        aria-label={t('receive.changeAssetCurrentlyOn', { selectedTick, displayName: descriptor.displayName })}
+                    >
+                        <TickerIcon chainId={descriptor.id} tick={selectedTick} size={48} />
+                    </button>
                 );
             })() : null}
 
             {address ? (
                 <>
-                    <AmountField
-                        amount={reqAmount}
-                        fiatAmount={fiatAmount}
-                        tick={reqTick.trim() || nativeTicker || ''}
-                        fiatRate={fiatRate}
-                        fiatCurrency={fiatCurrency}
-                        amountInputMode={amountInputMode}
-                        onAmountFieldChange={onAmountFieldChange}
-                        toggleAmountInputMode={toggleAmountInputMode}
-                        inputRef={amountInputRef}
-                    />
+                    <div className={styles.amountEditor}>
+                        <AmountField
+                            size="md"
+                            amount={reqAmount}
+                            fiatAmount={fiatAmount}
+                            tick={reqTick.trim() || nativeTicker || ''}
+                            fiatRate={fiatRate}
+                            fiatCurrency={fiatCurrency}
+                            amountInputMode={amountInputMode}
+                            divisibility={requestDivisibility}
+                            onAmountFieldChange={onAmountFieldChange}
+                            toggleAmountInputMode={toggleAmountInputMode}
+                            inputRef={amountInputRef}
+                        />
+                    </div>
                     {amountError ? (
                         <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
                     ) : null}
-                    {!phoneReceiveLayout ? qrActionsContent : null}
-
                     {isHwAddress ? (
                         <section
                             role="group"
-                            aria-label="Verify this receive address on your hardware wallet"
+                            aria-label={t('receive.verifyThisReceiveAddressOn')}
                             className={styles.hwVerify}
                         >
                             <div className={styles.addressBox}>
                                 <AddressText address={address.address} truncate={false} size="sm" />
-                                <CopyButton value={address.address} label="Copy receive address" />
+                                <CopyButton value={address.address} label={t('receive.copyReceiveAddress')} />
                             </div>
                             {hwVerify.status === 'confirmed' ? (
                                 <p className={styles.hint} role="status">
-                                    ✅ Address verified on your {hwDeviceLabel}. It is safe to share.
+                                    {t('receive.addressVerifiedOnYour')} {hwDeviceLabel}{t('receive.itIsSafeToShare')}
                                 </p>
                             ) : hwVerify.status === 'mismatch' ? (
                                 <StatusMessage variant="error" className={styles.error}>
-                                    Your {hwDeviceLabel} showed a different address. Do not use this address.
-                                    Disconnect and re-pair the device.
+                                    {t('receive.your')} {hwDeviceLabel} {t('receive.showedADifferentAddressDo')}
                                 </StatusMessage>
                             ) : hwVerify.status === 'error' ? (
                                 <StatusMessage variant="error" className={styles.error}>{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
-                                    Verify this address on your {hwDeviceLabel} before sharing it. This
-                                    protects you if the computer has been compromised.
+                                    {t('receive.verifyThisAddressOnYour')} {hwDeviceLabel} {t('receive.beforeSharingItThisProtects')}
                                 </p>
                             )}
                             <Button
@@ -1179,8 +1210,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                 disabled={hwVerify.status === 'checking'}
                             >
                                 {hwVerify.status === 'checking'
-                                    ? `Check your ${hwDeviceLabel}…`
-                                    : `Verify on your ${hwDeviceLabel}`}
+                                    ? t('receive.checkYour', { hwDeviceLabel })
+                                    : t('receive.verifyOnYour', { hwDeviceLabel })}
                             </Button>
                         </section>
                     ) : null}
@@ -1191,13 +1222,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <section
                     key={multisig.multisigConfigId}
                     role="group"
-                    aria-label="Multisig receive address"
+                    aria-label={t('receive.multisigReceiveAddress')}
                     style={{
                         marginTop: 'var(--xc-space-3)',
-                        padding: 'var(--xc-space-3)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        background: 'var(--xc-bg-muted)',
+                        padding: 'var(--xc-card-pad)',
+                        border: 'var(--xc-card-border)',
+                        borderRadius: 'var(--xc-card-radius)',
+                        background: 'var(--xc-card-bg)',
                     }}
                 >
                     <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
@@ -1208,28 +1239,30 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         />
                         <strong>{multisig.schemeLabel}</strong>
                     </header>
-                    {multisigQrs[multisig.multisigConfigId] ? (
-                        <div className={styles.qrBox}>
-                            <img
-                                src={multisigQrs[multisig.multisigConfigId]}
-                                alt={`Multisig QR code for ${multisig.address}`}
-                                width={qrPixelSize}
-                                height={qrPixelSize}
-                                className={styles.qr}
-                            />
+                    <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
+                        {multisigQrs[multisig.multisigConfigId] ? (
+                            <div className={`${qrStyles.frame} ${styles.qrBox}`}>
+                                <img
+                                    src={multisigQrs[multisig.multisigConfigId]}
+                                    alt={t('receive.multisigQrCodeFor', { address: multisig.address })}
+                                    width={qrPixelSize}
+                                    height={qrPixelSize}
+                                    className={styles.qr}
+                                />
+                            </div>
+                        ) : (
+                            <div className={`${qrStyles.frame} ${styles.qrBox}`} aria-hidden="true">
+                                <div className={styles.qrPlaceholder}>{t('receive.renderingMultisigQr')}</div>
+                            </div>
+                        )}
+                        <div className={styles.addressBox}>
+                            <AddressText address={multisig.address} truncate={false} size="sm" />
+                            <CopyButton value={multisig.address} label={t('receive.copyMultisignatureReceiveAddress')} />
                         </div>
-                    ) : (
-                        <div className={styles.qrBox} aria-hidden="true">
-                            <div className={styles.qrPlaceholder}>Rendering multisig QR…</div>
-                        </div>
-                    )}
-                    <div className={styles.addressBox}>
-                        <AddressText address={multisig.address} truncate={false} size="sm" />
-                        <CopyButton value={multisig.address} label="Copy multisignature receive address" />
                     </div>
                     {multisig.cosignerNames?.length > 0 ? (
                         <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>
-                            People who can sign (cosigners): {multisig.cosignerNames.join(' · ')}
+                            {t('receive.peopleWhoCanSignCosigners')} {multisig.cosignerNames.join(' · ')}
                         </p>
                     ) : null}
                 </section>
@@ -1240,7 +1273,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     return (
         <Screen variant={variant} header={header}>
-            <FormPage label="Receive payment" onSubmit={(event) => event.preventDefault()}>
+            <FormPage
+                label={t('receive.receivePayment')}
+                onSubmit={(event) => event.preventDefault()}
+                // The form has no submit button, so Enter in the amount, its last
+                // field, commits the request explicitly; other fields never submit.
+                onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || event.target !== amountInputRef.current) return;
+                    event.preventDefault();
+                    event.currentTarget.requestSubmit();
+                }}
+            >
                 {body}
             </FormPage>
         </Screen>

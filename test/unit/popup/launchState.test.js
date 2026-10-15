@@ -29,9 +29,9 @@ describe('extension popup launch state', () => {
         expect(shellForExtensionView(tab, extensionApi)).toBe('web');
     });
 
-    it('keeps the side panel compact and falls back to available width', () => {
+    it('uses the full layout for the side panel and falls back to available width', () => {
         const sidePanel = { location: { pathname: '/sidepanel.html' }, innerWidth: 900 };
-        expect(shellForExtensionView(sidePanel, { getViews: () => [] })).toBe('popup');
+        expect(shellForExtensionView(sidePanel, { getViews: () => [] })).toBe('web');
         expect(shellForExtensionView(
             { location: { pathname: '/popup.html' }, innerWidth: 601 },
             undefined,

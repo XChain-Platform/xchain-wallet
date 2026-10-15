@@ -125,13 +125,14 @@ describe('Privacy settings live behavior', () => {
     it('collapses small balances as soon as the setting is toggled', async () => {
         const { messaging } = renderPrivacy();
         const toggle = await screen.findByRole('switch', { name: 'Hide small balances' });
-        expect(screen.getByText('Litecoin')).toBeTruthy();
+        // Chain selects elsewhere on the page list Litecoin as an option, so match the balance row.
+        expect(screen.getByText('Litecoin', { selector: 'span' })).toBeTruthy();
 
         fireEvent.click(toggle);
 
         await waitFor(() => {
             expect(toggle.checked).toBe(true);
-            expect(screen.queryByText('Litecoin')).toBeNull();
+            expect(screen.queryByText('Litecoin', { selector: 'span' })).toBeNull();
             expect(screen.getByText('Show 1 small balance')).toBeTruthy();
         });
         expect(messaging.updateSettings).toHaveBeenCalledWith({

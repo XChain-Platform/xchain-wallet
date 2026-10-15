@@ -44,6 +44,7 @@ function mountAccount() {
         getSettings: () => Promise.resolve({}),
         getCoSignerAccount: () => Promise.resolve({
             id: 'acct-1',
+            walletId: 'wallet-1',
             name: 'Treasury agent',
             chainId: 'bitcoin-regtest',
             aggregateAddress: 'bcrt1qfundingaddress',
@@ -62,6 +63,7 @@ function mountAccount() {
 function account(overrides = {}) {
     return {
         id: 'acct-1',
+        walletId: 'wallet-1',
         name: 'Treasury agent',
         chainId: 'bitcoin-regtest',
         aggregateAddress: 'bcrt1qfundingaddress',
@@ -106,6 +108,23 @@ describe('CoSignerAccountDetail load-error copy', () => {
             expect(screen.getByText('This agent account was revoked on another device.')).toBeTruthy();
         });
     });
+
+    it.each([
+        ['another wallet', account({ walletId: 'wallet-2', name: 'Other wallet account' })],
+        ['a non-Bitcoin network', account({ chainId: 'litecoin-mainnet', name: 'Other network account' })],
+    ])('does not show account data from %s', async (_label, returned) => {
+        render(
+            <MessagingProvider shell="extension" messaging={{
+                getCoSignerAccount: vi.fn().mockResolvedValue(returned),
+            }}>
+                <CoSignerAccountDetail accountId="acct-1" walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Agent account not found for this wallet and network.')).toBeTruthy();
+        expect(screen.queryByText(returned.name)).toBeNull();
+        expect(screen.queryByText(returned.aggregateAddress)).toBeNull();
+    });
 });
 
 describe('CoSignerAccountDetail clipboard control', () => {
@@ -113,10 +132,33 @@ describe('CoSignerAccountDetail clipboard control', () => {
         mountAccount();
 
         expect(await screen.findByRole('button', { name: 'Copy funding address' })).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
     });
 });
 
 describe('CoSignerAccountDetail async state', () => {
+    it('validates edited policy addresses before saving', async () => {
+        const stored = account({
+            policy: { allowedActions: ['SEND'], allowedDestinations: ['not-an-address'] },
+        });
+        const updateCoSignerAccount = vi.fn();
+        render(
+            <MessagingProvider shell="extension" messaging={{
+                getCoSignerAccount: vi.fn().mockResolvedValue(stored),
+                updateCoSignerAccount,
+            }}>
+                <CoSignerAccountDetail accountId="acct-1" walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        await screen.findByText('Treasury agent');
+        fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+        expect(await screen.findByText('Allowed recipient 1: This address has a typo. Check it and try again.')).toBeTruthy();
+        expect(updateCoSignerAccount).not.toHaveBeenCalled();
+    });
+
     it('rejects a policy update whose editable baseline is stale', async () => {
         const put = vi.fn();
         const stored = account({ policy: { allowedActions: ['ISSUE'] } });

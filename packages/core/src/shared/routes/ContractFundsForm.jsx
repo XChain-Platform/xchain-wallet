@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -77,6 +78,7 @@ function isPositiveDecimal(value) {
  */
 export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isDeposit = mode === 'deposit';
@@ -118,7 +120,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -416,7 +418,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) {
@@ -466,9 +468,9 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
-                intro={`${verb} ${actionParams.QUANTITY} ${actionParams.TICK} ${preposition} contract #${actionParams.CONTRACT_ACTION_INDEX}.`}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
@@ -487,15 +489,19 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
+                                : verb}
                     </Button>
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={descriptor} size="sm" />
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{isDeposit ? 'From' : 'Recipient'}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -648,6 +654,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} ${preposition} contract`}
             onSubmit={handleReview}
             status={withdrawRefused || formError ? (

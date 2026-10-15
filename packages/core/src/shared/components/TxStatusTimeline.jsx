@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import styles from './TxStatusTimeline.module.css';
+import { t } from '../../i18n/index.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 
@@ -57,7 +58,7 @@ const MEMPOOL_STAGE_COPY = {
     failed: {
         label: 'Failed',
         done: false,
-        warn: true,
+        error: true,
         sub: "This send did not reach the network. Review the failure reason in this transaction's details, correct the problem, and try again",
     },
 };
@@ -175,7 +176,7 @@ export function TxStatusTimeline({
             : 'The service is still catching up to this block')
         : indexed
             ? (watermark > 0
-                ? `Fully processed · the service has reached block ${watermark.toLocaleString()}`
+                ? t('txTimeline.fullyProcessedAtBlock', { block: watermark })
                 : 'Fully processed and searchable')
             : (confirmed
                 ? 'The service is still catching up to this block'
@@ -185,8 +186,8 @@ export function TxStatusTimeline({
         : '';
     const confirmedSub = confirmations > 0
         ? (confirmedSubBase === ''
-            ? `${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`
-            : `${confirmedSubBase} · ${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`)
+            ? t('transactionStatus.confirmations', { count: confirmations })
+            : `${confirmedSubBase} · ${t('transactionStatus.confirmations', { count: confirmations })}`)
         : confirmedSubBase;
 
     // The mempool stage in three situations: an in-flight transaction (the
@@ -216,7 +217,7 @@ export function TxStatusTimeline({
         },
         {
             key: 'confirmed',
-            label: confirmed && blockIndex > 0 ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
+            label: confirmed && blockIndex > 0 ? t('txTimeline.confirmedAtBlock', { block: blockIndex }) : 'Confirmed',
             done: confirmed,
             sub: confirmedSub,
         },
@@ -232,37 +233,43 @@ export function TxStatusTimeline({
         : stages.findIndex((stage) => !stage.done);
 
     return (
-        <ol className={styles.timeline} aria-label="Transaction status">
-            {stages.map((s, i) => {
-                const current = i === currentStageIndex;
-                const stateLabel = s.done
-                    ? 'Complete'
-                    : current
-                        ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
-                        : 'Not started';
-                return (
-                    <li
-                        key={s.key}
-                        className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
-                            + (s.warn ? ` ${styles.rowWarn}` : '')}
-                        aria-current={current ? 'step' : undefined}
-                    >
-                        <span className={styles.dot} aria-hidden="true">
-                            {s.warn ? '!' : (s.done ? '●' : '○')}
-                        </span>
-                        {i < stages.length - 1 ? (
-                            <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
-                        ) : null}
-                        <div className={styles.body}>
-                            <div className={styles.heading}>
-                                <div className={styles.label}>{s.label}</div>
-                                <span className={styles.state}>{stateLabel}</span>
+        <>
+            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {confirmed ? t('txTimeline.transactionConfirmed') : ''}
+            </span>
+            <ol className={styles.timeline} aria-label={t('txTimeline.transactionStatus')}>
+                {stages.map((s, i) => {
+                    const current = i === currentStageIndex;
+                    const stateLabel = s.done
+                        ? 'Complete'
+                        : current
+                            ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
+                            : 'Not started';
+                    return (
+                        <li
+                            key={s.key}
+                            className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
+                                + (s.warn ? ` ${styles.rowWarn}` : '')
+                                + (s.error ? ` ${styles.rowError}` : '')}
+                            aria-current={current ? 'step' : undefined}
+                        >
+                            <span className={styles.dot} aria-hidden="true">
+                                {s.error ? '✕' : (s.warn ? '!' : (s.done ? '●' : '○'))}
+                            </span>
+                            {i < stages.length - 1 ? (
+                                <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
+                            ) : null}
+                            <div className={styles.body}>
+                                <div className={styles.heading}>
+                                    <div className={styles.label}>{s.label}</div>
+                                    <span className={styles.state}>{stateLabel}</span>
+                                </div>
+                                <div className={styles.sub}>{s.sub}</div>
                             </div>
-                            <div className={styles.sub}>{s.sub}</div>
-                        </div>
-                    </li>
-                );
-            })}
-        </ol>
+                        </li>
+                    );
+                })}
+            </ol>
+        </>
     );
 }

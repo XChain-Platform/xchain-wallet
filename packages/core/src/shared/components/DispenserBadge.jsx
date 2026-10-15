@@ -117,17 +117,19 @@ export function DispenserBadge({ chainId, tick, label }) {
             title={description}
             style={{
                 display: 'inline-flex',
+                boxSizing: 'border-box',
                 alignItems: 'center',
                 minWidth: 0,
                 maxWidth: '100%',
+                height: 'var(--xc-badge-height-sm)',
                 padding: '2px var(--xc-space-2)',
                 border: '1px solid var(--xc-accent-primary)',
                 borderRadius: 'var(--xc-radius-pill)',
                 background: 'color-mix(in srgb, var(--xc-accent-primary) 10%, transparent)',
                 color: 'var(--xc-accent-text)',
                 fontSize: 'var(--xc-text-xs)',
-                fontWeight: 700,
-                lineHeight: 1.4,
+                fontWeight: 'var(--xc-badge-font-weight)',
+                lineHeight: 1,
                 textTransform: 'uppercase',
                 letterSpacing: '0.02em',
             }}

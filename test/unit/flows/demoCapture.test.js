@@ -302,6 +302,45 @@ describe('demo balances have the aggregator\'s entry shape', () => {
 });
 
 describe('demo fixture network isolation', () => {
+    it('expresses pending native receives in whole-coin history units', () => {
+        const address = 'demo-wallet-address';
+        const cases = [
+            ['bitcoin-mainnet', '0.12345678'],
+            ['bitcoin-regtest', '100'],
+            ['dogecoin-regtest', '10000'],
+        ];
+
+        for (const [chainId, expectedAmount] of cases) {
+            const pending = synthesizeDemoHistory(chainId, address, {
+                now: DEMO_CAPTURE_CLOCK_MS,
+            })[0];
+            expect(pending).toMatchObject({
+                source: 'demo-faucet-1xchainpubdemoxchain',
+                destination: address,
+                amount: expectedAmount,
+                quantity: expectedAmount,
+                params: { amount: expectedAmount },
+            });
+        }
+    });
+
+    it('prices the 10,000 DOGE regtest holding at $0.08 per coin', () => {
+        const chainId = 'dogecoin-regtest';
+        const balances = synthesizeDemoBalances({
+            [chainId]: [{ address: 'demo-wallet-address' }],
+        });
+        const native = balances[chainId][0].balances.native;
+        const price = synthesizeDemoNativePrices([chainId])[chainId].priceFiat;
+
+        expect(native).toMatchObject({
+            quantity: '1000000000000',
+            divisibility: 8,
+            fiatRate: 0.08,
+        });
+        expect(price).toBe(0.08);
+        expect((Number(native.quantity) / (10 ** native.divisibility)) * price).toBe(800);
+    });
+
     it('keeps market activity on the caller\'s visible network', () => {
         const activity = synthesizeDemoMarketActivity('XCHAIN', {
             chainIds: ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'],

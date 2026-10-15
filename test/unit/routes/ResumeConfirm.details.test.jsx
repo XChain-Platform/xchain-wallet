@@ -154,9 +154,9 @@ describe('ResumeConfirm transaction result details', () => {
             const button = screen.getByRole('button', { name: 'Copy from address' });
             fireEvent.click(button);
 
-            await waitFor(() => expect(button).toHaveTextContent('Copied'));
+            await waitFor(() => expect(button).toHaveTextContent('From address copied'));
             expect(mocks.copyText).toHaveBeenCalledWith(FROM);
-            expect(mocks.announce).toHaveBeenCalledWith('Copied');
+            expect(mocks.announce).toHaveBeenCalledWith('From address copied.');
             act(() => vi.advanceTimersByTime(1501));
             expect(button).toHaveTextContent('Copy');
         } finally {

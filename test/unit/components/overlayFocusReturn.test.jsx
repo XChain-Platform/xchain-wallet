@@ -118,7 +118,7 @@ describe('overlay focus return', () => {
         expect(onParentBack).not.toHaveBeenCalled();
     });
 
-    it('closes a nested network list before the settings dialog', () => {
+    it('closes a nested network list before the settings dialog', async () => {
         render(
             <HeaderSettingsButton
                 chainRegistry={chainRegistry}
@@ -129,7 +129,8 @@ describe('overlay focus return', () => {
         );
         const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
         fireEvent.click(settingsTrigger);
-        const filterTrigger = screen.getByRole('button', { name: /All networks/ });
+        // The chain filter is a lazy chunk inside the popover.
+        const filterTrigger = await screen.findByRole('button', { name: /All networks/ });
         fireEvent.click(filterTrigger);
 
         fireEvent.keyDown(window, { key: 'Escape' });
@@ -140,10 +141,11 @@ describe('overlay focus return', () => {
         expect(filterTrigger).toHaveFocus();
     });
 
-    it('returns scan-menu focus after an outside press and an action', () => {
+    it('returns header action menu focus after an outside press and an action', () => {
         const onScan = vi.fn();
         render(<AppHeader onScan={onScan} />);
-        const trigger = screen.getByRole('button', { name: 'Scan and addresses' });
+        // Scan lives in the header action menu, which replaced the scan menu.
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
 
         fireEvent.click(trigger);
         screen.getByRole('menuitem', { name: 'Scan' }).focus();
@@ -182,7 +184,8 @@ describe('overlay focus return', () => {
     it('returns network-status focus after an outside press and an action', () => {
         const onOpenNetworkSettings = vi.fn();
         render(<NetworkStatusIndicator onOpenNetworkSettings={onOpenNetworkSettings} />);
-        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        // The trigger name leads with the active network, then the state.
+        const trigger = screen.getByRole('button', { name: /Network connected/ });
 
         fireEvent.click(trigger);
         screen.getByRole('button', { name: 'Network settings' }).focus();

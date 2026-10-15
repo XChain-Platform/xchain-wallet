@@ -231,8 +231,9 @@ describe('extension popup keyboard flows', () => {
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledOnce());
         expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+        // The review opens at its top: focus lands on the review title.
         await waitFor(() => expect(document.activeElement).toBe(
-            screen.getByRole('button', { name: 'Back to previous screen' }),
+            screen.getByRole('heading', { name: 'Confirm' }),
         ));
     });
 
@@ -243,7 +244,7 @@ describe('extension popup keyboard flows', () => {
             routeMessaging(),
         ));
 
-        const token = await screen.findByRole('button', { name: /^Token:/ });
+        const token = await screen.findByRole('button', { name: /^Change asset/ });
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
         token.focus();
         await user.tab();

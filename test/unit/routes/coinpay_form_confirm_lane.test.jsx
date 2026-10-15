@@ -315,6 +315,7 @@ describe('CoinpayForm shared confirmation', () => {
         expect(utils.getByText('From').nextElementSibling.textContent).toContain(PAYER.slice(0, 6));
         expect(utils.getByText('Paying to').nextElementSibling.textContent).toContain(PAYEE.slice(0, 6));
         expect(utils.getByText('Amount').nextElementSibling.textContent).toBe('10 DOGE');
+        expect(utils.queryByText(/Pay 10 DOGE to complete matched order/)).toBeNull();
         expect(utils.getByText('Payment deadline').nextElementSibling.textContent).toMatch(/\d/);
         expect(utils.queryByText(/deadline.*block/i)).toBeNull();
         expect(utils.getByText(/coin is still sent but you do not receive the tokens/i)).toBeTruthy();

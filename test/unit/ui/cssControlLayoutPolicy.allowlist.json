@@ -1,0 +1,13 @@
+{
+    "packages/core/src/shared/components/BottomTabBar.module.css | .tabDot | height: 8px": "The tab dot is a status indicator rather than an interactive control.",
+    "packages/core/src/shared/routes/ContactsList.module.css | .addButton | height: 38px": "The contacts header action matches the adjacent fixed-size header control.",
+    "packages/core/src/shared/routes/History.module.css | .chainPickerAllIcon | height: 18px": "The all-chains picker icon is artwork inside a control, not the control itself.",
+    "packages/core/src/shared/routes/History.module.css | .chainPickerIcon | height: 18px": "The chain-picker icon is artwork inside a control, not the control itself.",
+    "packages/core/src/shared/routes/History.module.css | .searchInput | min-height: 36px": "The history toolbar search intentionally uses the compact control measure.",
+    "packages/core/src/shared/routes/MyTokens.module.css | .chipGroup | min-height: 36px": "The chip group is a layout container rather than an interactive control.",
+    "packages/core/src/shared/routes/MyTokens.module.css | .issueButton | height: 32px": "The issue action matches the adjacent fixed-size route header control.",
+    "packages/core/src/shared/routes/TokenDetail.module.css | .socialChipIcon | height: 14px": "The social-chip icon is artwork inside a control, not the control itself.",
+    "packages/core/src/ui/Input.module.css | .input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator | height: var(--xc-tap-min, 24px)": "The native date and time picker glyph is a hit area sized from the shared tap minimum, not a control height.",
+    "packages/core/src/ui/Input.module.css | .input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator | min-height: var(--xc-tap-min, 24px)": "The native date and time picker glyph is a hit area sized from the shared tap minimum, not a control height.",
+    "packages/web/src/style-guide/sections/templateExamples.module.css | .select | min-height: 36px": "The style-guide select demonstrates the existing compact control measure."
+}

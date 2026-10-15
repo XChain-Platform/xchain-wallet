@@ -70,6 +70,7 @@ import {
 } from '../utils/dispenserPricing.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useToast } from '../components/ToastHost.jsx';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
@@ -134,6 +135,7 @@ const ADDRESS_CELL_STYLE = {
 export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
     const haptic = useHapticFeedback();
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     // A demo wallet's dispensers are fixtures; no explorer or chain read applies.
@@ -319,6 +321,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         chainCoin: descriptor?.coin,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: descriptor?.networkKind === 'mainnet',
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
         const value = coinToFiatExact(coinAmount, feeFiatRate);
@@ -838,7 +841,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
             haptic.tap();
-            announce('Copied');
+            announce(label === 'address' ? 'Dispenser address copied.' : 'Action index copied.');
             return;
         }
         setCopied(null);
@@ -1099,9 +1102,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         payer: buyerAddress?.address,
         amount: totalPayAmount || '',
     }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
+    // The confirm screen already titles itself; its summary needs no third
+    // "Review ..." heading of its own.
     const buyConfirmNotes = (
         <>
-            <p className={styles.successLabel}>Review purchase</p>
             <dl className={styles.detailsList} data-testid="buy-review-summary">
                 <dt className={styles.detailsLabel}>Price per fill</dt>
                 <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
@@ -1116,11 +1120,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <div data-testid="buy-dispenser-notice">
                     <StatusMessage variant="status">{buyDestinationNotice.summary}</StatusMessage>
                     {buyDestinationNotice.warnings.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
+                        <StatusMessage variant="warning" role="alert">
                             {buyDestinationNotice.warnings.map((warning) => (
-                                <p key={warning} className={styles.warning}>{warning}</p>
+                                <p key={warning}>{warning}</p>
                             ))}
-                        </div>
+                        </StatusMessage>
                     ) : null}
                 </div>
             ) : null}
@@ -1294,6 +1298,24 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
     }
 
+    async function verifyOwnerActionOpen(setError, action) {
+        if (!isOpen) {
+            setError(`This dispenser is ${liveStatus || 'not open'} and cannot accept another ${action}.`);
+            return false;
+        }
+        if (isDemoWallet) return true;
+        try {
+            const fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex }));
+            const freshStatus = flowsLib.dispenserLiveState(fresh).status;
+            if (freshStatus === 'open') return true;
+            if (fresh) setDispenser(fresh);
+            setError(`This dispenser is ${freshStatus || 'not open'} and cannot accept another ${action}.`);
+        } catch {
+            setError(`Could not verify that this dispenser is still open. Try the ${action} again.`);
+        }
+        return false;
+    }
+
     async function handleRefill(event) {
         event.preventDefault();
         if (refillStage === 'submitting' || !ownerAddress) return;
@@ -1308,6 +1330,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             noun: 'Refill amount',
         });
         if (precisionError) { setRefillError(precisionError); return; }
+        if (compareAmounts(amt, giveAmount) === -1) {
+            setRefillError(
+                `Refill amount must be at least one fill (${formatWithThousands(String(giveAmount))} ${giveTick}).`,
+            );
+            return;
+        }
+        if (refillBalance == null) {
+            setRefillError('Wait for the available balance before refilling.');
+            return;
+        }
         if (exceedsBalance(amt, refillBalance)) {
             setRefillError(
                 `This address holds only ${formatWithThousands(refillBalance)} ${giveTick}. `
@@ -1317,6 +1349,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
         // D-147: a spent ceiling is refused here as well as on the button.
         if (refillCount.remaining <= 0 && refillCount.exact) return;
+        if (!await verifyOwnerActionOpen(setRefillError, 'refill')) return;
         await runOwnerAction({
             params: {
                 VERSION: '2',
@@ -1383,6 +1416,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
+        if (!await verifyOwnerActionOpen(setCancelError, 'close')) return;
         await runOwnerAction({
             params: cancelParams,
             setStage: setCancelStage,
@@ -1426,7 +1460,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <ActionConfirmScreen
                 {...ownerLane.confirmProps}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 coinTicker={feeCoinTicker}
                 signerReady={signerReady}
                 hintClassName={styles.hint}
@@ -1454,7 +1488,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <ActionConfirmScreen
                 confirmAction={buyConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 coinTicker={feeCoinTicker}
                 signerReady={signerReady}
                 password={buyPassword}
@@ -1536,20 +1570,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (refillStage === 'confirm' || refillStage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Refill dispenser"
                 onSubmit={handleRefill}
-                intro={(
-                    <>
-                    Refill dispenser #{actionIndex}: add {giveTick} to escrow.
-                    </>
-                )}
                 status={refillError ? <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage> : null}
                 actions={(
                     <Button
                         type="submit"
                         variant="primary"
                         loading={refillStage === 'submitting'}
-                        disabled={refillCount.remaining <= 0 && refillCount.exact}
+                        disabled={refillBalance == null || (refillCount.remaining <= 0 && refillCount.exact)}
                     >
                         {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Refill dispenser'}
                     </Button>
@@ -1572,6 +1602,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )}
                 <AmountField
                     label="Refill amount"
+                    hint={`Amount of ${giveTick} to add to escrow.`}
                     amount={refillAmount}
                     tick={giveTick || ''}
                     divisibility={refillDivisibility}
@@ -1660,14 +1691,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const anyListFilled = Boolean(editAllowList.trim() || editBlockList.trim());
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Edit dispenser"
                 onSubmit={handleEdit}
-                intro={(
-                    <>
-                    Edit dispenser #{actionIndex}: reschedule its close time or update its
-                    allow/block lists. Leave a field blank to keep it unchanged.
-                    </>
-                )}
                 status={editError ? <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage> : null}
                 actions={(
                     <Button
@@ -1684,8 +1710,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     type="datetime-local"
                     label="New expiration"
                     hint={currentExpiration
-                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close.`
-                        : 'No expiration set. Enter a date to schedule an automatic close.'}
+                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close, or leave blank to keep it.`
+                        : 'No expiration set. Enter a date to schedule an automatic close, or leave blank to keep none.'}
                     value={editExpiration}
                     onChange={(e) => { setEditExpiration(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1693,7 +1719,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Allow list"
                     inputMode="numeric"
-                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser.`}
+                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser, or leave blank to keep it.`}
                     value={editAllowList}
                     onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1706,7 +1732,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Block list"
                     inputMode="numeric"
-                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it.`}
+                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it, or leave blank to keep it.`}
                     value={editBlockList}
                     onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1726,9 +1752,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     dispenser's own address too, so a list without it refuses
                     every buyer. Same check and copy as the create form. */}
                 {editAllowSelfWarning ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{editAllowSelfWarning}</p>
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>{editAllowSelfWarning}</p>
+                    </StatusMessage>
                 ) : null}
                 {editListConflictText && editListConflictText !== editError ? (
                     <StatusMessage variant="error" className={styles.error}>{editListConflictText}</StatusMessage>
@@ -1784,6 +1810,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (cancelStage === 'confirm' || cancelStage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Close dispenser"
                 onSubmit={handleCancel}
                 intro={decodedCancel?.summary}
@@ -1800,10 +1827,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )}
             >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={ownerAddress?.address || ''} />
@@ -1813,11 +1842,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     ))}
                 </dl>
                 {decodedCancel && decodedCancel.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decodedCancel.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {closeEscrowNote}
                 {feeSelector}
@@ -1889,7 +1918,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * 5,005,460 sats for a refused fill, unrecoverable.
               */}
             {currentAllowList || currentBlockList || tokenPolicyDescriptions.length > 0 ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     <strong>This dispenser is restricted.</strong>{' '}
                     {currentAllowList
                         ? `Only addresses on list #${currentAllowList} can trigger a fill.`
@@ -1904,7 +1933,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {' '}A payment from an address it refuses is <strong>not returned</strong>:
                     the {payTick || getCoin} is spent, the dispense is recorded invalid, and nothing
                     comes back.
-                </p>
+                </StatusMessage>
             ) : null}
             {/*
               * Show the specific eligibility verdict the wallet can resolve
@@ -1919,7 +1948,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * since the generic restriction warning still stands on its own.
               */}
             {buyerListNotice ? (
-                <p role="alert" className={styles.warning}>{buyerListNotice}</p>
+                <StatusMessage variant="warning" role="alert">{buyerListNotice}</StatusMessage>
             ) : null}
         </>
     );
@@ -1927,7 +1956,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     return wrap(
         <>
             {isClosing ? (
-                <p className={local.closeWindowNote} role="status" data-testid="close-window-banner">
+                <StatusMessage variant="warning" role="status" testId="close-window-banner">
                     {closeWindowNotice({
                         eta: closeEta,
                         escrowRemaining,
@@ -1935,12 +1964,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         cancelledBy: dispenser?.cancelled_by ?? dispenser?.state?.cancelled_by ?? null,
                         heldAddresses,
                     })}
-                </p>
+                </StatusMessage>
             ) : null}
             {isTerminal ? (
-                <p className={local.closeWindowNote} role="status">
+                <StatusMessage variant="warning" role="status">
                     {terminalDispenserNotice(liveStatus, { canReopen: canOpenAgain })}
-                </p>
+                </StatusMessage>
             ) : null}
             {isTerminal && ownsOnlyDispenserAddress ? (
                 <p className={styles.hint} data-testid="reopen-origin-note">
@@ -1948,20 +1977,19 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </p>
             ) : null}
             {priceStale ? (
-                <p role="alert" className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
                     <strong>{DISPENSER_PRICE_STALE_MESSAGE}</strong>
                     <span>. A payment made now would be refused and kept.</span>
-                </p>
+                </StatusMessage>
             ) : null}
             {!ownerAddress && isOpen && !hasCompleteFill ? (
-                <p role="status" className={local.closeWindowNote}>
+                <StatusMessage variant="warning" role="status">
                     This dispenser has no complete fills left to buy.
-                </p>
+                </StatusMessage>
             ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
                 are secondary (action index lives in the More menu). */}
-            <SectionHeader title="Dispenser details" />
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Dispensing</dt>
                 <dd className={styles.detailsValue}>
@@ -2147,7 +2175,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 role="menuitem"
                                 onClick={() => { setMoreOpen(false); handleCopy(dispAddress || source || '', 'address'); }}
                             >
-                                {copied === 'address' ? 'Copied' : 'Copy dispenser address'}
+                                {copied === 'address' ? 'Dispenser address copied' : 'Copy dispenser address'}
                             </Button>
                             <Button
                                 variant="ghost"
@@ -2157,7 +2185,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 role="menuitem"
                                 onClick={() => { setMoreOpen(false); handleCopy(String(actionIndex), 'index'); }}
                             >
-                                {copied === 'index' ? 'Copied' : 'Copy action index'}
+                                {copied === 'index' ? 'Action index copied' : 'Copy action index'}
                             </Button>
                         </div>
                     ) : null}
@@ -2191,11 +2219,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {tab === 'lifecycle' ? (
                 !lifecycleLoaded ? (
                     <StatusMessage variant="status">Loading lifecycle…</StatusMessage>
+                ) : lifecycleTimeline.length === 0 ? (
+                    // An empty list shows the bare empty state, never a box around it.
+                    <EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" />
                 ) : (
                     <ul className={local.dispenseList} aria-label="Dispenser lifecycle">
-                        {lifecycleTimeline.length === 0 ? (
-                            <li><EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" /></li>
-                        ) : lifecycleTimeline.slice(0, 40).map((e) => {
+                        {lifecycleTimeline.slice(0, 40).map((e) => {
                             const refused = e.kind === 'dispense' && !e.row.valid;
                             return (
                                 <li key={`${e.kind}-${e.row.action_index}`}>
@@ -2221,11 +2250,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )
             ) : !dispensesLoaded ? (
                 <StatusMessage variant="status">Loading dispenses…</StatusMessage>
+            ) : matchingDispenses.length === 0 ? (
+                // An empty list shows the bare empty state, never a box around it.
+                <EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" />
             ) : (
                 <ul className={local.dispenseList} aria-label="Dispenses">
-                    {matchingDispenses.length === 0 ? (
-                        <li><EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" /></li>
-                    ) : matchingDispenses.slice(0, 25).map((d) => {
+                    {matchingDispenses.slice(0, 25).map((d) => {
                         const paidAmount = d.get_amount ?? getAmount;
                         const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
                         return (
@@ -2252,7 +2282,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {canBuyWithSend ? (
                 <div data-testid="dispenser-buy-form">
                     <FormSection title="Buy from this dispenser" className={local.buySection}>
-                        <p className={styles.hint}>
+                        <p className={styles.hintLeft}>
                             {isTokenPaid
                                 ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
                                 : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
@@ -2276,25 +2306,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 Paying from <AddressText address={buyerAddress.address} />
                             </p>
                         ) : null}
-                        <div className={local.buyFillsRow}>
-                            <Input
-                                label="Fills"
-                                hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
-                                inputMode="numeric"
-                                value={fills}
-                                onChange={(e) => setFills(e.target.value)}
-                                autoComplete="off"
-                            />
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={onMaxFills}
-                                disabled={maxBuyFills == null || maxBuyFills <= 0n}
-                            >
-                                Max
-                            </Button>
-                        </div>
+                        {/* Max and Paste sit inside the field, as on every other
+                            amount; a separate full-width Max button under it
+                            read as a second action on a phone. */}
+                        <AmountField
+                            label="Fills"
+                            hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
+                            amount={fills}
+                            onAmountFieldChange={(rawValue) => setFills(String(rawValue).replace(/,/g, ''))}
+                            onMax={onMaxFills}
+                            maxDisabled={maxBuyFills == null || maxBuyFills <= 0n}
+                        />
                         {totalPayAmount && totalReceive ? (
                             <dl className={styles.detailsList} data-testid="buy-totals">
                                 <dt className={styles.detailsLabel}>Price per fill</dt>
@@ -2308,18 +2330,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             </dl>
                         ) : null}
                         {fillsError ? (
-                            <p role="alert" className={styles.warning}>{fillsError}</p>
+                            <StatusMessage variant="warning" role="alert">{fillsError}</StatusMessage>
                         ) : null}
                         {inventoryError ? (
-                            <p role="alert" className={styles.warning}>{inventoryError}</p>
+                            <StatusMessage variant="warning" role="alert">{inventoryError}</StatusMessage>
                         ) : null}
                         {minFillsNotice ? (
-                            <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
+                            <p className={styles.hintLeft} data-testid="min-fills-notice">{minFillsNotice}</p>
                         ) : null}
                         {buyDustBlock ? (
-                            <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
+                            <StatusMessage variant="warning" role="alert" testId="buy-dust-block">{buyDustBlock}</StatusMessage>
                         ) : null}
-                        <p className={styles.hint} data-testid="buy-balance">
+                        <p className={styles.hintLeft} data-testid="buy-balance">
                             {buyBalance == null
                                 ? `Checking your ${String(payTick).toUpperCase()} balance…`
                                 : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
@@ -2335,16 +2357,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
                         ) : null}
                         {ownerLane.isWatcherMode ? (
-                            <p className={styles.hint}>
+                            <p className={styles.hintLeft}>
                                 Watcher mode: this wallet will build an unsigned transaction. Sign it on your
                                 Signer-mode wallet, then broadcast from a Full-mode wallet.
                             </p>
                         ) : null}
+                        {demoGuard.note}
+                        {demoGuard.dialog}
                         <Button
                             variant="primary"
                             onClick={beginBuy}
                             loading={buyStage === 'submitting' || buyConfirm.composing}
-                            disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
+                            disabled={demoGuard.blocked || fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
                                 || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
                                 || buyerEligibilityBarred || dispenserSelfBarred || priceStale
                                 || Boolean(inventoryError)
@@ -2361,7 +2385,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {showPayHere ? (
                 <FormSection title="Pay to buy" className={local.buySection}>
                     {canBuyWithSend ? null : listWarnings}
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         This dispenser accepts bare {getCoin} payments.
                         {currentAllowList || currentBlockList
                             ? ''
@@ -2428,12 +2452,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dt className={styles.detailsLabel}>You receive per fill</dt>
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         {canBuyWithSend
                             ? `Paying from another ${getCoin} wallet works too: send the amount above to this address.`
                             : isFiatPriced
                                 ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
-                                : `No spendable ${getCoin} address in this wallet on this chain; use any ${getCoin} wallet to trigger the dispense.`}
+                                : `No spendable ${getCoin} address in this wallet on this network; use any ${getCoin} wallet to trigger the dispense.`}
                     </p>
                 </FormSection>
             ) : null}
@@ -2513,10 +2537,10 @@ function closeWindowNotice({ eta, escrowRemaining, giveTick, cancelledBy, heldAd
     // time reading can say the next block is that block; the device clock
     // alone cannot, since the chain's time can trail it.
     if (eta.pastDue && eta.basis === 'chain') {
-        return `Closing at the next block: the chain has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+        return `Closing at the next block: the network has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
     }
     if (eta.pastDue) {
-        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the chain's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the network's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
     }
     return `Closing in ${eta.countdown} (around ${formatLocalClock(eta.closeAtMs)}). This dispenser is in its 1-hour close window; ${escrow} returns to ${destination} with the first block after it ends. ${honored}`;
 }
@@ -2565,7 +2589,6 @@ function OwnerConfirmNotes({
     if (kind === 'refill') {
         return (
             <>
-                <p className={styles.successLabel}>Review refill</p>
                 <dl className={styles.detailsList} data-testid="refill-review-summary">
                     <dt className={styles.detailsLabel}>Dispenser</dt>
                     <dd className={styles.detailsValue}>#{actionIndex}</dd>
@@ -2588,7 +2611,6 @@ function OwnerConfirmNotes({
     }
     return (
         <>
-            <p className={styles.successLabel}>Review edit</p>
             <dl className={styles.detailsList} data-testid="edit-review-summary">
                 <dt className={styles.detailsLabel}>Dispenser</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
@@ -2615,9 +2637,9 @@ function OwnerConfirmNotes({
                 ) : null}
             </dl>
             {allowListWarning ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{allowListWarning}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{allowListWarning}</p>
+                </StatusMessage>
             ) : null}
             {listsChanged ? (
                 <p className={styles.hint}>

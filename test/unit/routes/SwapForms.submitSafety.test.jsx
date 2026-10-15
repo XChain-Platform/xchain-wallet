@@ -24,6 +24,7 @@ import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx'
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const BTC = 'bitcoin-mainnet';
+const REGTEST = 'bitcoin-regtest';
 const ADDRESS = {
     id: 'btc-a',
     address: 'bc1qexample',
@@ -32,6 +33,7 @@ const ADDRESS = {
     source: 'hd',
     signerId: 's1',
 };
+const REGTEST_ADDRESS = { ...ADDRESS, id: 'btc-regtest-a', address: 'bcrt1qexample' };
 
 afterEach(() => {
     cleanup();
@@ -47,7 +49,10 @@ function deferred() {
 
 function messaging(composeForConfirm, { walletMode = 'full', buildActionPsbtRequest } = {}) {
     const base = {
-        getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [ADDRESS] }),
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            [BTC]: [ADDRESS],
+            [REGTEST]: [REGTEST_ADDRESS],
+        }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getWalletBalances: vi.fn().mockResolvedValue({
             [BTC]: [{
@@ -154,6 +159,17 @@ describe('swap form submit safety', () => {
                 fireEvent.change(price, { target: { value: '5' } });
             },
         });
+    });
+
+    it('does not render the selected network kind in SellOwnershipForm', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging(vi.fn())}>
+                <SellOwnershipForm walletId="w" onBack={() => {}} chainId={REGTEST} tick="ALPHA" />
+            </MessagingProvider>,
+        );
+
+        await screen.findByLabelText(/^Price/);
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('dispatches only one watcher swap for two same-tick submits', async () => {

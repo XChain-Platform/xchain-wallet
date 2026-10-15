@@ -33,6 +33,11 @@
 import { Fragment, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
+import {
+    applySendAssetPick,
+    beginSendAssetSwitch,
+    cancelSendAssetSwitch,
+} from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
@@ -55,10 +60,12 @@ import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.j
 import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.jsx';
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
-import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -150,9 +157,8 @@ import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.j
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
-import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
-import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
+import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
@@ -247,6 +253,7 @@ function BottomTabBarWithObligations({ badges, ...rest }) {
 }
 
 function AppInner() {
+    const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const statusRequest = useRef(0);
     // Keyboard-binding overrides for the palette + shortcuts live in
@@ -332,8 +339,8 @@ function AppInner() {
     // `sendPrefill` above, which is what the send outcome has always done.
     const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
     // Which view Send should return to when the user hits Back. Defaults
-    // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
-    // out lands on the token list the user was just browsing.
+    // to 'home'. The asset picker is a step of Send and leaves it alone, so
+    // Send's Back still returns to whatever opened Send.
     const [sendBackTo, setSendBackTo] = useState(
         /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
     );
@@ -349,6 +356,8 @@ function AppInner() {
     // for LeftNav / BottomTabBar wallet-switcher labelling and so the
     // 'settings' top-level view can pass `activeWallet` into Settings.
     const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
+    // Bumped when a sibling window moves the active network, so chain-scoped routes remount.
+    const [networkRevision, setNetworkRevision] = useState(0);
     const statusStateRef = useRef(status.state);
     const walletListRef = useRef(walletList);
     const pendingActiveWalletId = useRef(/** @type {string | null} */ (null));
@@ -508,12 +517,13 @@ function AppInner() {
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
     );
     const [marketsAsset, setMarketsAsset] = useState(
-        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ ({
-            chainId: 'bitcoin-mainnet',
-            tick: 'BTC',
-            kind: 'native',
-        }),
+        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ (
+            () => defaultDexAssetForNetwork(settings?.activeNetwork)
+        ),
     );
+    useEffect(() => {
+        setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));
+    }, [settings?.activeNetwork]);
     // §24.6 / Cluster Y FOLLOWUP 4: when the renderer is launched
     // with an `xc-init-route` search-string entry (set by main on
     // detach-window IPC), parse it once at mount, route the new
@@ -573,6 +583,7 @@ function AppInner() {
                 });
             });
     }, []);
+    useDemoAutoWipe(activeWalletId, refresh);
 
     function clearTransientActionState() {
         setUnlockedView('home');
@@ -616,6 +627,14 @@ function AppInner() {
         return bridge.onStateChange((change) => {
             if (change?.kind === 'session') {
                 refresh();
+                return;
+            }
+            // A sibling's settings write reaches this window's useSettings the way its own does.
+            if (change?.kind === 'settings' || change?.kind === 'network') {
+                const settings = change.settings;
+                if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return;
+                window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: settings }));
+                if (change.kind === 'network') setNetworkRevision((value) => value + 1);
                 return;
             }
             if (change?.kind !== 'active-wallet' || statusStateRef.current !== 'unlocked') return;
@@ -725,10 +744,7 @@ function AppInner() {
                     : [];
                 // Restore the last selected account for this wallet if it
                 // still exists; otherwise fall back to the lowest index.
-                const persisted = readActiveAccount(activeWalletId);
-                const chosen = (persisted && sorted.some((a) => a.id === persisted))
-                    ? persisted
-                    : (sorted[0]?.id || null);
+                const chosen = reconcileActiveAccount(activeWalletId, sorted);
                 setActiveAccountId(chosen);
             })
             .catch(() => { if (!cancelled) setActiveAccountId(null); });
@@ -738,19 +754,35 @@ function AppInner() {
     // Switch the active account and remember it per wallet, so a restart
     // returns to it instead of snapping back to the lowest-index account.
     const handleSwitchAccount = (id) => {
-        setActiveAccountId(id);
-        if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
+        const nextId = typeof id === 'string' && id ? id : null;
+        setActiveAccountId(nextId);
+        if (!activeWalletId) return;
+        if (nextId) writeActiveAccount(activeWalletId, nextId);
+        else clearActiveAccount(activeWalletId);
     };
 
     // D-34(c): switch the active WALLET and remember it, so a restart returns
     // to it instead of snapping back to the first wallet. Twin of the account
     // handler above, one level up.
-    const handleSwitchWallet = (id) => {
+    const handleSwitchWallet = (id, name) => {
         setActiveAccountId(null);
         const changed = typeof id === 'string' && id.length > 0 && id !== activeWalletId;
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id);
+        if (id) writeActiveWallet(id, name);
         if (changed) messaging.setActiveWallet(id).catch(() => { /* best-effort sibling-window notice */ });
+    };
+
+    const handleWalletAdded = (wallet) => {
+        if (wallet?.id) {
+            setWalletList((list) => (
+                list.some((entry) => entry.id === wallet.id)
+                    ? list.map((entry) => (entry.id === wallet.id ? { ...entry, ...wallet } : entry))
+                    : [...list, wallet]
+            ));
+            handleSwitchWallet(wallet.id, wallet.name);
+            showToast({ message: `${wallet.name || 'New wallet'} is now active.`, variant: 'success' });
+        }
+        refresh();
     };
 
     // Two gates, because the lanes stopped agreeing. Staking,
@@ -909,7 +941,7 @@ function AppInner() {
                             setUnlockedView('home');
                         }}
                         onChangeAsset={(carry) => {
-                            setSendPrefill({ assetSwitchDraft: carry });
+                            setSendPrefill((prev) => beginSendAssetSwitch(prev, carry));
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -920,35 +952,12 @@ function AppInner() {
                     <SendPicker
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
+                        onBack={() => {
+                            setSendPrefill(cancelSendAssetSwitch);
+                            setUnlockedView('send');
+                        }}
                         onSelect={(sel) => {
-                            setSendPrefill((prev) => ({
-                                chainId: sel.chainId,
-                                tick: sel.tick,
-                                kind: sel.kind,
-                                displayName: sel.displayName,
-                                imageUrl: sel.imageUrl,
-                                address: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? (prev.assetSwitchDraft.address || undefined)
-                                    : undefined,
-                                amount: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    && prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                        === String(sel.tick || '').trim().toUpperCase()
-                                    ? (prev.assetSwitchDraft.amount || undefined)
-                                    : undefined,
-                                feeSelection: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? prev.assetSwitchDraft.feeSelection
-                                    : undefined,
-                                assetSwitchNotice: prev?.assetSwitchDraft
-                                    ? (prev.assetSwitchDraft.chainId !== sel.chainId
-                                        ? 'Chain changed. Recipient, amount, and fee rate were reset.'
-                                        : prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                            !== String(sel.tick || '').trim().toUpperCase()
-                                            ? 'Token changed. Amount was reset for the new token precision.'
-                                            : undefined)
-                                    : undefined,
-                            }));
-                            setSendBackTo('send-picker');
+                            setSendPrefill((prev) => applySendAssetPick(prev, sel));
                             setUnlockedView('send');
                         }}
                     />
@@ -960,7 +969,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         hideOwnFilter
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('receive')}
                         onSelect={(sel) => {
                             setReceivePrefill({
                                 chainId: sel.chainId,
@@ -1212,6 +1221,7 @@ function AppInner() {
             if (unlockedView === 'list-detail' && activeWalletId && listRef) {
                 return (
                     <ListDetail
+                        walletId={activeWalletId}
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
                         onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
@@ -1854,6 +1864,7 @@ function AppInner() {
                 return (
                     <CoSignerAccountDetail
                         accountId={coSignerAccountId}
+                        walletId={activeWalletId}
                         onBack={() => setUnlockedView('cosigner-accounts')}
                     />
                 );
@@ -2605,7 +2616,7 @@ function AppInner() {
                         <CreateWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={handleWalletAdded}
                         />
                     );
                 }
@@ -2614,7 +2625,7 @@ function AppInner() {
                         <ImportWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }
@@ -2624,7 +2635,7 @@ function AppInner() {
                             mode="add"
                             variant="freewallet"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }
@@ -2646,12 +2657,8 @@ function AppInner() {
             }
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
-                    {/* `demoBannerInHeader`: this shell mounts DemoBanner in
-                        the layout header, which already renders above Home, so Home
-                        must not mount a second one. */}
                     <Home
                     activeWalletId={activeWalletId}
-                    demoBannerInHeader
                     onLocked={refresh}
                     onSend={activeWalletId ? () => {
                         setSendPrefill(null);
@@ -2660,7 +2667,7 @@ function AppInner() {
                     onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                     onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                     onExchange={activeWalletId ? () => {
-                        setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
+                        setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
                         setUnlockedView('markets');
                     } : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
@@ -2743,6 +2750,8 @@ function AppInner() {
                 hasVmAddress,
                 hasGovernanceAddress,
                 isSignerMode,
+                isWatcherMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
             };
             // entity handlers: tokens open TokenDetail with the full
             // ref the row already carries (desktop parity); sites land
@@ -2772,6 +2781,8 @@ function AppInner() {
             // resolves the chain from the first available when unset). A
             // txid/date-shaped query offers "search history".
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
+                isSignerMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
@@ -2822,20 +2833,18 @@ function AppInner() {
                             onCommandPalette={palette.openPalette}
                             onLock={handleNavLock}
                             isWatcherMode={isWatcherMode}
-                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                            activeWallet={activeWalletId ? { id: activeWalletId, name: activeWalletName } : null}
+                            activeNetwork={settings?.activeNetwork}
                         />
                     }
                     notices={
                         activeWalletId ? (
                             <>
-                                <NetworkBanner activeNetwork={settings?.activeNetwork} />
-                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
-                                    unlocked view via the shared layout notices slot. */}
-                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
+                                {/* Demo data is fixture data and never stale, so no reachability notice. */}
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                             </>
-                        ) : <NetworkBanner activeNetwork={settings?.activeNetwork} />
+                        ) : null
                     }
                 >
                     <ShellRouteOutlet
@@ -2843,7 +2852,7 @@ function AppInner() {
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                     >
-                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                        <Fragment key={`${palette.navigationKey}:${networkRevision}`}>{routeNode}</Fragment>
                     </ShellRouteOutlet>
                     {messageSentNotice ? (
                         <NoticeModal

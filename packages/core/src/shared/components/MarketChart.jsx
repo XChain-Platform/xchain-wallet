@@ -36,6 +36,7 @@ import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { describeChartSeries } from './Sparkline.jsx';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -121,7 +122,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                     lineWidth: 2,
                     priceFormat: {
                         type: 'custom',
-                        formatter: (value) => `${formatChartPrice(value)} ${tick2}`,
+                        formatter: formatAxisPrice,
                     },
                     priceLineVisible: false,
                     lastValueVisible: true,
@@ -230,15 +231,16 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         return (
             <div
                 style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: '4px',
-                    padding: '0.75rem',
+                    border: 'var(--xc-card-border)',
+                    background: 'var(--xc-card-bg)',
+                    borderRadius: 'var(--xc-card-radius)',
+                    padding: 'var(--xc-card-pad)',
                     minHeight: '6rem',
                 }}
             >
-                <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>Chart</p>
+                <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>{t('components.marketChart.chart')}</p>
                 <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: '0.875rem' }}>
-                    The price chart is unavailable right now.
+                    {t('components.marketChart.thePriceChartIsUnavailable')}
                 </p>
             </div>
         );
@@ -248,9 +250,10 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         <div
             aria-busy={loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
             <div
@@ -264,24 +267,13 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 }}
             >
                 <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Timeframe
+                    {t('components.marketChart.timeframe')}
                 </span>
                 <select
                     value={periodId}
                     onChange={(e) => setPeriodId(e.target.value)}
-                    aria-label="Chart timeframe"
-                    style={{
-                        background: 'var(--xc-bg-muted)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 999,
-                        padding: '2px 6px 2px 10px',
-                        maxWidth: '100%',
-                        fontSize: 'var(--xc-text-sm)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        font: 'inherit',
-                    }}
+                    aria-label={t('components.marketChart.chartTimeframe')}
+                    style={{ maxWidth: '100%' }}
                 >
                     {PERIODS.map((p) => (
                         <option key={p.id} value={p.id}>{p.label}</option>
@@ -295,21 +287,21 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 aria-label={chartLabel}
             />
             {loading ? (
-                <div role="status" aria-label="Loading price chart">
+                <div role="status" aria-label={t('components.marketChart.loadingPriceChart')}>
                     <Skeleton.List rows={3} avatar={false} rowHeight={28} />
                 </div>
             ) : null}
             {loadError ? (
                 <StatusMessage
                     variant="error"
-                    recovery={{ label: 'Try again', onAction: () => setRetryKey((value) => value + 1) }}
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setRetryKey((value) => value + 1) }}
                 >
                     {loadError}
                 </StatusMessage>
             ) : null}
             {!loading && !loadError && points.length === 0 ? (
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
-                    No trades yet in this market.
+                    {t('components.marketChart.noTradesYetInThis')}
                 </p>
             ) : null}
         </div>
@@ -366,4 +358,13 @@ function extractRows(resp) {
 
 function formatChartPrice(value) {
     return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
+}
+
+// The price scale and its last-value tag show a price below 1 to four
+// significant digits, a larger one to four decimals, and no unit: eight digits plus " BTC" made a sub-satoshi price tag about 170px
+// wide, which left a phone-width chart half its plot. The unit is in the
+// market header, and the chart's accessible description keeps full precision.
+function formatAxisPrice(value) {
+    const options = Math.abs(value) >= 1 ? { maximumFractionDigits: 4 } : { maximumSignificantDigits: 4 };
+    return new Intl.NumberFormat('en-US', options).format(value);
 }

@@ -14,7 +14,7 @@
 //   FU 5: clear on remove-wallet:
 //     - ThisWalletSection imports `clearLastView` and calls it after a
 //       successful messaging.removeWallet.
-//     - DemoBanner does the same when the user (or auto-expire) exits
+//     - the demo teardown does the same when the user (or auto-expire) exits
 // demo mode, now via the shared `exitDemoWallet` teardown.
 //   FU 6: multi-wallet threading:
 //     - useLastView guards the persist effect with a per-walletId
@@ -34,8 +34,8 @@ const thisWalletSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'ThisWalletSection.jsx'),
     'utf8',
 );
-const demoBannerSrc = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'DemoBanner.jsx'),
+const demoAutoWipeSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'hooks', 'useDemoAutoWipe.js'),
     'utf8',
 );
 const demoGraduationSrc = readFileSync(
@@ -62,17 +62,17 @@ assert.match(
 
 // The demo teardown moved into one shared helper so the three
 // escapes (Wallet details, the 24h auto-expire, and the add-wallet
-// graduation) cannot drift. DemoBanner now reaches clearLastView +
+// graduation) cannot drift. The shell auto-wipe hook reaches clearLastView +
 // clearDemoWalletId through it, so pin the call site and the helper.
 assert.match(
-    demoBannerSrc,
+    demoAutoWipeSrc,
     /import \{ exitDemoWallet \} from '\.\.\/utils\/demoGraduation\.js'/,
-    'DemoBanner routes its exit through the shared demo teardown',
+    'the auto-wipe hook routes its exit through the shared demo teardown',
 );
 assert.match(
-    demoBannerSrc,
-    /exitDemoWallet\(\{[\s\S]+?walletId: activeWalletId,/,
-    'DemoBanner tears down the active demo wallet on exit',
+    demoAutoWipeSrc,
+    /exitDemoWallet\(\{ messaging, walletId \}\)/,
+    'the auto-wipe hook tears down the active demo wallet on exit',
 );
 assert.match(
     demoGraduationSrc,

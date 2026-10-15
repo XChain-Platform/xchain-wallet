@@ -34,7 +34,7 @@ assert.match(schemaSrc, /showFiatInHistory/, 'schema documents/defines showFiatI
 // History reads + writes it through the standard useSettings() nested patch.
 assert.match(src, /showFiatInHistory\s*=\s*Boolean\(proofSettings\.settings\?\.showFiatInHistory\)/, 'reads showFiatInHistory from settings');
 assert.match(src, /proofSettings\.update\(\{\s*showFiatInHistory:\s*!showFiatInHistory\s*\}\)/, 'toggle writes through the nested-patch pattern');
-assert.match(src, /t\('history\.filters\.showFiat'\)/, 'renders a Show-fiat control');
+assert.match(src, /t\('history\.filters\.showFiatOff'\)/, 'renders a Show-fiat control that names its off state');
 
 // The fiat rate uses the existing price-lookup plumbing (§45), not a
 // bespoke fetch.

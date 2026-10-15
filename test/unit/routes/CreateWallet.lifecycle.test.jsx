@@ -77,7 +77,7 @@ function enterPasswordStep({ passphrase = false } = {}) {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
     if (passphrase) {
-        fireEvent.click(screen.getByLabelText(/^Use a BIP39 passphrase/));
+        fireEvent.click(screen.getByRole('switch', { name: /^Use a BIP39 passphrase/ }));
         fireEvent.change(screen.getByLabelText('BIP39 passphrase'), {
             target: { value: BIP39_PASSPHRASE },
         });

@@ -388,12 +388,12 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await gotoPalette(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await page.getByText(TICK, { exact: true }).first().click();
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
 
             await main.getByRole('button', { name: /Advanced options/ }).click();

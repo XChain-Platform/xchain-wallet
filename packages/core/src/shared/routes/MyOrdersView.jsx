@@ -20,16 +20,18 @@
 // action-VALIDITY status, and a single order's getAction(...).state.status
 // does NOT promptly reflect a cancel, so "cancelled" is read from the
 // authoritative + immediate order_cancels table (getOrderCancelsForAddress)
-// and "expired" from the order's own EXPIRATION vs wall clock. Neither
-// feed carries fills, so every order those two leave open is read once
+// and "expired" from the order's own EXPIRATION vs the current indexed
+// chain clock. Neither feed carries fills, so every order those two leave
+// open is read once
 // through orders.detail, whose `state` block nets settled matches out of
 // give_remaining and reports `complete` or `filled` once the order is fully filled.
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -99,7 +101,8 @@ const CLOSED_LABELS = Object.freeze({
 // latest order status (open / cancelling / cancelled / expiring / expired /
 // complete / filled) and `state.give_remaining` is the give amount net of settled
 // matches, zeroed once the order is terminal. Null when the detail lacks
-// the block, so the caller falls back to the feeds alone.
+// the block, so the caller falls back to the feeds alone. The optional
+// expiry_status records the chain-clock classification from the query flow.
 export function fillStateOf(detail) {
     const state = detail && typeof detail === 'object' ? detail.state : null;
     if (!state || typeof state !== 'object') return null;
@@ -107,6 +110,7 @@ export function fillStateOf(detail) {
         status: String(state.status || ''),
         giveRemaining: state.give_remaining ?? null,
         expiration: state.expiration ?? null,
+        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
     };
 }
 
@@ -122,6 +126,8 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
         if (fill.status === 'expired') return 'expired';
         const remaining = compareDecimalStrings(fill.giveRemaining, '0');
         if (fill.status === 'open' && remaining !== null && remaining <= 0) return 'filled';
+        if (fill.expiryStatus === 'expired') return 'expired';
+        if (fill.expiryStatus != null) return 'open';
     }
     const exp = Number(fill?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
@@ -331,7 +337,16 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <PageHeader
             onBack={onBack}
             title="My orders"
-            trailing={onCreateOrder ? <Button variant="secondary" size="sm" onClick={onCreateOrder}>New order</Button> : undefined}
+            trailing={onCreateOrder ? (
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={onCreateOrder}
+                    aria-label="New order"
+                    title="New order"
+                />
+            ) : undefined}
         />
     );
     const wrap = (children) => (
@@ -417,8 +432,10 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         {chip}
                     </div>
                     <div className={L.rowMeta}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        {' · #'}{detailText(it.row.action_index)}
+                        {descriptor ? (
+                            <><ChainBadge descriptor={descriptor} size="sm" showName={false} /> {'· '}</>
+                        ) : null}
+                        {'#'}{detailText(it.row.action_index)}
                         {' · '}<AddressText address={it.owner.address} />
                     </div>
                     {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
@@ -427,10 +444,11 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
                     </div>
                     {consent && isNativeGive(it.row) ? (
-                        <label className={F.checkRow}>
-                            <input type="checkbox" checked={consent.autopay === true} onChange={() => handleAutopayToggle(consent)} />
-                            {' '}CoinPay auto-pay {consent.autopay === true ? 'on' : 'off (notify-only)'}
-                        </label>
+                        <Switch
+                            label={`CoinPay auto-pay ${consent.autopay === true ? 'on' : 'off (notify-only)'}`}
+                            checked={consent.autopay === true}
+                            onChange={() => handleAutopayToggle(consent)}
+                        />
                     ) : null}
                 </div>
                 <div className={L.rowActions}>
@@ -490,6 +508,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 function OrderActionPanel({
     type, item, chainAddresses, variant, walletId, messaging, onDone, onCancelBroadcast, onBack,
 }) {
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { chainId, owner, row } = item;
     const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
@@ -614,7 +633,7 @@ function OrderActionPanel({
                 {...lane.confirmProps}
                 confirmAction={withFormattedExpiration(lane.confirmProps.confirmAction)}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 signerReady={signerReady}
                 hintClassName={F.hint}
             />
@@ -668,6 +687,7 @@ function OrderActionPanel({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={isCancel ? 'Cancel order' : 'Edit order'}
             onSubmit={submit}
             actions={(
@@ -686,8 +706,8 @@ function OrderActionPanel({
                 {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
             </p>
             <dl className={F.detailsList}>
-                <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                <dt className={F.detailsLabel}>Network</dt>
+                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                 <dt className={F.detailsLabel}>Order</dt>
                 <dd className={F.detailsValue}>#{detailText(row.action_index)}</dd>
                 <dt className={F.detailsLabel}>From</dt>

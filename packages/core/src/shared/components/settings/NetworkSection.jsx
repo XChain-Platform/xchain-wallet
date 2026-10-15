@@ -26,8 +26,8 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
 import {
-    activeNetworkLabel,
     activeNetworkOptions,
+    activeNetworkSwitchCopy,
     normalizeActiveNetwork,
     persistActiveNetwork,
 } from '../../utils/activeNetworkSwitch.js';
@@ -61,14 +61,10 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
 
     const onChange = async (next) => {
         if (next === current) return;
-        const nextLabel = activeNetworkLabel(next);
-        const currentLabel = activeNetworkLabel(current);
+        const copy = activeNetworkSwitchCopy(current, next);
         const confirmed = await confirmDialog.confirm({
-            title: t('settings.network.switchTitle', { network: nextLabel }),
-            message: t('settings.network.switchMessage', {
-                nextNetwork: nextLabel,
-                currentNetwork: currentLabel,
-            }),
+            title: copy.title,
+            message: copy.message,
             confirmLabel: t('settings.network.switchConfirm'),
         });
         if (!confirmed) return;
@@ -102,11 +98,7 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
                     ))}
                 </select>
             </div>
-            {switchError ? (
-                <div role="alert" style={{ color: 'var(--xc-danger-fg, #c33)', fontSize: 'var(--xc-text-xs)' }}>
-                    {switchError}
-                </div>
-            ) : null}
+            {switchError ? <Status text={switchError} tone="error" /> : null}
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}

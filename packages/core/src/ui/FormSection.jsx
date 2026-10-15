@@ -10,15 +10,14 @@
 
 import { useId } from 'react';
 import { SectionHeader } from './SectionHeader.jsx';
-// Shares FormPage's stylesheet: whether a section draws a card depends on
-// the form around it, and only one module can express that pairing.
+// Shares FormPage's stylesheet because the surrounding form defines the
+// section rhythm, and only one module can express that pairing.
 import styles from './FormPage.module.css';
 
 /**
- * One titled part of a long form. Inside `<FormPage sectioned>` it is a
- * card of its own when the viewport is wide and a bare block divided from
- * the previous one by its heading when narrow. Inside a plain FormPage it
- * is always the bare, heading-divided block, so a card never nests in a card.
+ * One titled part of a long form. Inside `<FormPage sectioned>` it is a bare
+ * block divided from the previous section inside the form's single card.
+ * Inside a plain FormPage it stays bare, so a card never nests in a card.
  *
  * The section is a named region (aria-labelledby its heading), so a screen
  * reader lists it among the page's landmarks.
@@ -44,7 +43,7 @@ export function FormSection({ title, description, headingLevel = 'h2', className
                 description={description}
                 className={styles.sectionHeader}
             />
-            <div className={styles.sectionBody}>{children}</div>
+            <div className={styles.sectionBody} data-form-stack="">{children}</div>
         </section>
     );
 }

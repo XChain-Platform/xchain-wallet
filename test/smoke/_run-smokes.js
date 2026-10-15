@@ -25,6 +25,10 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { noteDocsTreeState } from './_docs-repo.js';
 import { noteWorkspaceLinkage } from './_workspace-linkage.js';
+import { smokeEnv, smokeNodeArgs } from './_smoke-launch.js';
+
+// Smokes start through _smoke-launch.js, which the push gate's changed-test tier
+// shares, so a smoke reads source the same way under both.
 
 const here = dirname(fileURLToPath(import.meta.url));        // .../test/smoke
 const wsRoot = join(here, '..', '..');                        // .../xchain-wallet
@@ -179,11 +183,12 @@ export function runSmokes() {
     for (const fullPath of smokes) {
         const display = fullPath.slice(here.length + 1);
         const start = Date.now();
-        const result = spawnSync(process.execPath, [fullPath], {
+        const result = spawnSync(process.execPath, smokeNodeArgs(fullPath), {
             stdio: ['inherit', 'pipe', 'pipe'],
             encoding: 'utf8',
             maxBuffer: 16 * 1024 * 1024,
             cwd: wsRoot,
+            env: smokeEnv(fullPath),
         });
         const ms = Date.now() - start;
         if (result.stdout) process.stdout.write(result.stdout);

@@ -53,7 +53,7 @@ describe('ObligationsView countdown', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-07-08T14:00:00Z'));
         hookState.obligations = [{
-            chainId: 'litecoin-mainnet',
+            chainId: 'litecoin-testnet',
             address: 'ltc1payer',
             payeeAddress: 'ltc1payee',
             orderMatchActionIndex: '42',
@@ -75,6 +75,7 @@ describe('ObligationsView countdown', () => {
 
         expect(screen.getByText('Expired')).toBeInTheDocument();
         expect(screen.queryByText(/0s|-\d+s/)).toBeNull();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
         expect(vi.getTimerCount()).toBe(0);
     });
 });

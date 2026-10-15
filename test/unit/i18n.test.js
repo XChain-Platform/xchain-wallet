@@ -14,6 +14,7 @@ import { IntlMessageFormat } from 'intl-messageformat';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    formatOrList,
     getFormatLocale,
     getLocale,
     onLocaleChange,
@@ -35,8 +36,23 @@ const uriSources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 const packageSources = { ...sharedSources, ...uriSources };
+const packageKeySources = import.meta.glob(
+    [
+        '../../packages/**/*.{js,jsx}',
+        '!../../packages/core/src/i18n/locales/**',
+        // Build output holds minified copies of the same source; parsing it
+        // adds nothing and times the test out after a local build.
+        '!../../packages/**/dist/**',
+        '!../../packages/**/build/**',
+        '!../../packages/mobile/www/**',
+        '!../../packages/mobile/android/**',
+        '!../../packages/mobile/ios/**',
+        '!../../packages/**/node_modules/**',
+    ],
+    { query: '?raw', import: 'default', eager: true },
+);
 
-function translationUsage(source) {
+function translationUsage(source, acceptsInjectedTranslator = false) {
     const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
     let importsT = false;
     const keys = new Set();
@@ -58,7 +74,10 @@ function translationUsage(source) {
         },
     });
 
-    return { importsT, keys: importsT ? keys : new Set() };
+    return {
+        importsT,
+        keys: importsT || acceptsInjectedTranslator ? keys : new Set(),
+    };
 }
 
 function missingTranslationKeys(keys, dictionary) {
@@ -214,6 +233,27 @@ afterAll(async () => {
     if (getLocale() !== 'en') await setLocale('en');
 });
 
+describe('formatOrList', () => {
+    it('joins accepted word counts as an English "or" list and leaves one value bare', () => {
+        expect(formatOrList([12, 15, 18, 21, 24])).toBe('12, 15, 18, 21, or 24');
+        expect(formatOrList([12])).toBe('12');
+    });
+
+    it('reads the word-count error through the dictionary', () => {
+        expect(t('importWallet.phrase.wrongWordCount', {
+            expected: formatOrList([12, 15, 18, 21, 24]),
+            count: 13,
+        })).toBe('Expected 12, 15, 18, 21, or 24 words, got 13.');
+    });
+
+    it('formats under a locale code Intl rejects instead of throwing', async () => {
+        // Same shape as pseudo-rtl: a 3-letter subtag after a long language.
+        registerLocale('pseudo-rtl-list', en);
+        await setLocale('pseudo-rtl-list');
+        expect(formatOrList([12, 24])).toBe('12 or 24');
+    });
+});
+
 describe('translations', () => {
     it('keeps English copy platform-neutral and typographically consistent', () => {
         const values = Object.values(en);
@@ -233,6 +273,42 @@ describe('translations', () => {
         expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
     });
 
+    it('keeps localized A-to-M route copy plain and consistent', () => {
+        expect({
+            networkSettings: en['common.openNetworkSettings'],
+            unavailable: en['common.notAvailable'],
+            watcher: en['common.watcherBuildsUnsigned'],
+            multisigAvailability: en['multisig.share.availability'],
+            signerRegion: en['home.signer.region'],
+            signerBody: en['home.signer.body'],
+            argumentCount: en['execute.review.args'],
+            arguments: en['execute.params'],
+            optionalArguments: en['execute.paramsOptional'],
+            argumentHint: en['execute.paramsHint'],
+            savedPackKey: en['gatedPublish.watcherSavedKey'],
+            watcherPackKey: en['gatedPublish.watcherHint'],
+            importOptions: en['importWallet.lane'],
+            historySearch: en['history.filters.searchPlaceholder'],
+            peerError: en['history.detail.peerError'],
+        }).toEqual({
+            networkSettings: 'Open network settings',
+            unavailable: 'Not available',
+            watcher: 'Watcher mode: this wallet builds an unsigned transaction. Sign it with your signer wallet, then bring the signed transaction to a wallet that can broadcast it.',
+            multisigAvailability: 'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
+            signerRegion: 'Signer mode home',
+            signerBody: "This wallet signs transactions from a paired watcher wallet. Sending, receiving, and balances aren't available. To use them on this device, switch modes under Settings → Wallet mode.",
+            argumentCount: '{count, plural, one { with # argument} other { with # arguments}}',
+            arguments: 'Arguments',
+            optionalArguments: 'Arguments (optional)',
+            argumentHint: 'Separate arguments with |, for example foo|42|bc1q… Leave blank if the method takes no arguments.',
+            savedPackKey: 'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
+            watcherPackKey: 'Watcher mode: this builds an unsigned transaction. The pack key stays in this wallet either way.',
+            importOptions: 'Wallet import options',
+            historySearch: 'Search action, address, token, transaction ID, memo…',
+            peerError: "Couldn't load the linked transaction. Try again.",
+        });
+    });
+
     it('looks up English keys and exposes unknown keys', () => {
         expect(t('scan.title')).toBe('Scan');
         expect(t('missing.unit.key')).toBe('missing.unit.key');
@@ -248,14 +324,16 @@ describe('translations', () => {
 
     it('formats localized plurals with their source dictionary rules', async () => {
         registerLocale('ru', {
-            'test.addressCount': [
-                '{count, plural, one {# address} few {# addresses-few}',
-                'many {# addresses-many} other {# addresses-other}}',
+            'addressList.hidden.show': [
+                '{count, plural, one {Show # hidden address-one} few {Show # hidden addresses-few}',
+                'many {Show # hidden addresses-many} other {Show # hidden addresses-other}}',
             ].join(' '),
         });
         await setLocale('ru');
 
-        expect(t('test.addressCount', { count: 2 })).toBe('2 addresses-few');
+        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 hidden address-one');
+        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 hidden addresses-few');
+        expect(t('addressList.hidden.show', { count: 5 })).toBe('Show 5 hidden addresses-many');
         expect(t('history.recipients.saved', { count: 21, name: 'Ada' }))
             .toBe('Saved 21 addresses as a single contact "Ada".');
     });
@@ -352,6 +430,19 @@ describe('translations', () => {
         expect(t('history.row.confirmations', { count })).toBe(confirmations);
     });
 
+    it('pluralizes audited English address, token, and confirmation copy', () => {
+        expect(t('addressList.hidden.show', { count: 1 })).toBe('Show 1 hidden address');
+        expect(t('addressList.hidden.show', { count: 2 })).toBe('Show 2 hidden addresses');
+        expect(t('balanceList.hiddenTokens.show', { count: 1 })).toBe('Show 1 hidden token');
+        expect(t('balanceList.hiddenTokens.show', { count: 2 })).toBe('Show 2 hidden tokens');
+        expect(t('transactionStatus.confirmations', { count: 1 })).toBe('1 confirmation');
+        expect(t('transactionStatus.confirmations', { count: 2 })).toBe('2 confirmations');
+        expect(t('manageToken.officialProjectNoun', { count: 1 })).toBe('project.');
+        expect(t('manageToken.officialProjectNoun', { count: 2 })).toBe('projects.');
+        expect(t('manageToken.subassetCount', { count: 1 })).toBe('Subasset (1)');
+        expect(t('manageToken.subassetCount', { count: 2 })).toBe('Subassets (2)');
+    });
+
     it.each([
         [0, '0 protected content packs', 'packs'],
         [1, '1 protected content pack', 'pack'],
@@ -384,7 +475,11 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // Retrying a desktop update download and retrying a balance load.
+            ['desktopUpdate.retry', 'home.retryBalances'],
             ['home.receive', 'uri.intent.receive'],
+            // The Send form's network field and the Settings network row.
+            ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],
         ]);
     });
@@ -404,7 +499,7 @@ describe('translations', () => {
             .toEqual(['status.failed']);
     });
 
-    it('defines every translation key used by shared code in English', () => {
+    it('keeps English keys synchronized with package source', () => {
         const translatedFiles = [];
         const usedKeys = new Set();
 
@@ -422,5 +517,13 @@ describe('translations', () => {
         ]));
         expect(usedKeys.size).toBeGreaterThan(0);
         expect(missingTranslationKeys(usedKeys, en)).toEqual([]);
+
+        const referencedKeys = new Set(usedKeys);
+        for (const source of Object.values(packageKeySources)) {
+            const usage = translationUsage(source, true);
+            for (const key of usage.keys) referencedKeys.add(key);
+        }
+
+        expect(Object.keys(en).filter((key) => !referencedKeys.has(key))).toEqual([]);
     });
 });

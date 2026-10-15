@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
+import { t } from '../i18n/index.js';
 
 export const MAX_SCANNED_QR_CHARS = 8 * 1024;
 
@@ -190,6 +191,16 @@ function isNativeApp() {
     }
 }
 
+/** True when the browser exposes a callable camera API. */
+function hasBrowserCamera() {
+    try {
+        return typeof navigator !== 'undefined'
+            && typeof navigator.mediaDevices?.getUserMedia === 'function';
+    } catch {
+        return false;
+    }
+}
+
 /**
  * The native-scanner surface: a "Scan with camera" button that opens the
  * shell's full-screen camera view, and plain words when it cannot.
@@ -268,25 +279,24 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '0.5rem',
+                gap: 'var(--xc-space-2)',
             }}
         >
             <Button
                 variant="secondary"
-                size="sm"
                 onClick={open}
                 loading={phase === 'starting'}
                 disabled={phase !== 'idle'}
             >
-                Scan with camera
+                {t('ui.qrScanner.scanWithCamera')}
             </Button>
             {error ? (
                 <p
                     role="alert"
                     style={{
                         margin: 0,
-                        padding: '0.75rem',
-                        fontSize: '0.85rem',
+                        padding: 'var(--xc-space-3)',
+                        fontSize: 'var(--xc-text-sm)',
                         lineHeight: 1.4,
                         color: 'var(--xc-text)',
                         background: 'var(--xc-bg-muted)',
@@ -296,10 +306,10 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
                     {error}
                 </p>
             ) : (
-                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
+                <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {phase === 'open'
-                        ? 'Scanning… point the camera at a QR code.'
-                        : 'Opens the camera to read a QR code.'}
+                        ? t('ui.qrScanner.scanningPointTheCameraAt')
+                        : t('ui.qrScanner.opensTheCameraToRead')}
                 </p>
             )}
         </div>
@@ -310,7 +320,7 @@ export function QrScanner({
     onFrame: onFrameHandler,
     autoStart = true,
     width = 320,
-    alt = 'QR scanner',
+    alt = t('ui.qrScanner.qrScanner'),
     previewState,
 }) {
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
@@ -333,8 +343,7 @@ export function QrScanner({
             && typeof window !== 'undefined'
             && typeof window.BarcodeDetector === 'function');
     const hasGetUserMedia = previewState === 'unsupported'
-        || (typeof navigator !== 'undefined'
-            && typeof navigator.mediaDevices?.getUserMedia === 'function');
+        || hasBrowserCamera();
     const isSecureContext = Boolean(previewState) || (typeof window !== 'undefined'
         && (window.isSecureContext === true
             || ['localhost', '127.0.0.1', '[::1]'].includes(window.location?.hostname)));
@@ -496,13 +505,12 @@ export function QrScanner({
             const origin = typeof window !== 'undefined' ? window.location?.origin : '';
             reason = (
                 <>
-                    Camera scanning requires a <strong>secure context</strong>{' '}
-                    (HTTPS, or <code>localhost</code>). This page is loaded from{' '}
-                    <code>{origin}</code> which browsers treat as insecure, so
-                    <code>getUserMedia</code> and <code>BarcodeDetector</code> are
-                    blocked. Either open the wallet via <code>https://</code> or
-                    <code>http://localhost</code>, or add this origin to Chrome's
-                    {' '}<code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>.
+                    {t('ui.qrScanner.cameraScanningRequiresA')} <strong>{t('ui.qrScanner.secureContext')}</strong>{' '}
+                    {t('ui.qrScanner.httpsOr')} <code>{t('ui.qrScanner.localhost')}</code>{t('ui.qrScanner.thisPageIsLoadedFrom')}{' '}
+                    <code>{origin}</code> {t('ui.qrScanner.whichBrowsersTreatAsInsecure')}
+                    <code>{t('ui.qrScanner.getusermedia')}</code> {t('ui.qrScanner.and')} <code>{t('ui.qrScanner.barcodedetector')}</code> {t('ui.qrScanner.areBlockedEitherOpenThe')} <code>{t('ui.qrScanner.https')}</code> {t('ui.qrScanner.or')}
+                    <code>{t('ui.qrScanner.httpLocalhost')}</code>{t('ui.qrScanner.orAddThisOriginTo')}
+                    {' '}<code>{t('ui.qrScanner.chromeFlagsUnsafelyTreatInsecure')}</code>.
                 </>
             );
         } else if (!hasBarcodeDetector) {
@@ -512,32 +520,28 @@ export function QrScanner({
             // advice is to paste.
             reason = isNativeApp() ? (
                 <>
-                    Scanning with the camera is not available on this device yet.
-                    Paste the code below instead.
+                    {t('ui.qrScanner.scanningWithTheCameraIs')}
                 </>
             ) : (
                 <>
-                    This browser cannot scan QR codes with the camera. Chrome, Edge
-                    and other Chromium browsers can; here, paste the code below
-                    instead.
+                    {t('ui.qrScanner.thisBrowserCannotScanQr')}
                 </>
             );
         } else {
             reason = (
                 <>
-                    Camera access is not available in this browser. Paste the code
-                    below instead.
+                    {t('ui.qrScanner.cameraAccessIsNotAvailable')}
                 </>
             );
         }
         return (
             <div
                 role="status"
-                aria-label={`${alt} (unsupported)`}
+                aria-label={t('ui.qrScanner.unsupported', { alt })}
                 data-testid="qr-scanner-unsupported"
                 style={{
-                    padding: '0.75rem',
-                    fontSize: '0.85rem',
+                    padding: 'var(--xc-space-3)',
+                    fontSize: 'var(--xc-text-sm)',
                     color: 'var(--xc-text)',
                     lineHeight: 1.4,
                     background: 'var(--xc-bg-muted)',
@@ -559,9 +563,9 @@ export function QrScanner({
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.75rem',
-                    fontSize: '0.85rem',
+                    gap: 'var(--xc-space-2)',
+                    padding: 'var(--xc-space-3)',
+                    fontSize: 'var(--xc-text-sm)',
                     color: 'var(--xc-text)',
                     lineHeight: 1.4,
                     background: 'var(--xc-bg-muted)',
@@ -569,15 +573,13 @@ export function QrScanner({
                 }}
             >
                 <p style={{ margin: 0 }}>
-                    XChain Wallet uses the camera only to scan QR codes while this scanner is open.
-                    You can paste the code instead.
+                    {t('ui.qrScanner.xchainWalletUsesTheCamera')}
                 </p>
                 <Button
                     variant="secondary"
-                    size="sm"
                     onClick={() => setCameraRationaleAccepted(true)}
                 >
-                    Continue to camera
+                    {t('ui.qrScanner.continueToCamera')}
                 </Button>
             </div>
         );
@@ -592,7 +594,7 @@ export function QrScanner({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '0.5rem',
+                gap: 'var(--xc-space-2)',
             }}
         >
             {/* A camera surface appears only after playback starts. Permission
@@ -611,7 +613,7 @@ export function QrScanner({
                     height: 'auto',
                     aspectRatio: '4 / 3',
                     background: '#0F172A',
-                    borderRadius: 4,
+                    borderRadius: 'var(--xc-radius-sm)',
                 }}
             />
             {error ? (
@@ -619,8 +621,8 @@ export function QrScanner({
                     role="alert"
                     style={{
                         margin: 0,
-                        padding: '0.75rem',
-                        fontSize: '0.85rem',
+                        padding: 'var(--xc-space-3)',
+                        fontSize: 'var(--xc-text-sm)',
                         lineHeight: 1.4,
                         color: 'var(--xc-text)',
                         background: 'var(--xc-bg-muted)',
@@ -630,8 +632,8 @@ export function QrScanner({
                     {error}
                 </p>
             ) : (
-                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
-                    {running ? 'Scanning… point the camera at a QR code.' : 'Starting camera…'}
+                <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                    {running ? t('ui.qrScanner.scanningPointTheCameraAt') : t('ui.qrScanner.startingCamera')}
                 </p>
             )}
         </div>

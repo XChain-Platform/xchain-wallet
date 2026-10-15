@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
@@ -67,7 +68,38 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+// Both control rows take the shared centred row class from the section stylesheet.
+const controlRowCss = readFileSync(
+    'packages/core/src/shared/components/settings/ConnectedSitesSection.module.css',
+    'utf8',
+).match(/\.controlRow\s*\{[^}]*\}/s)?.[0] || '';
+
 describe('ConnectedSitesSection settings controls', () => {
+    it('centres md controls in the throttle row', async () => {
+        render(<ConnectedSitesSection />);
+        const burstField = (await screen.findByRole('spinbutton', {
+            name: 'Sign-throttle burst (max requests per window)',
+        })).parentElement.parentElement;
+        const throttleForm = screen.getByRole('form', { name: 'Sign-request throttle controls' });
+
+        expect(burstField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(throttleForm.className).toMatch(/controlRow/);
+        expect(controlRowCss).toMatch(/align-items:\s*center/);
+        expect(screen.getByRole('button', { name: 'Apply' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('centres the md manual block action beside its md field', async () => {
+        render(<ConnectedSitesSection />);
+        const origin = await screen.findByRole('textbox', { name: 'Origin or wildcard to block' });
+        const originField = origin.parentElement.parentElement;
+        const blockForm = origin.closest('form');
+
+        expect(originField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(blockForm.className).toMatch(/controlRow/);
+        expect(controlRowCss).toMatch(/align-items:\s*center/);
+        expect(screen.getByRole('button', { name: 'Block' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
     it('ignores a connected-site load from a replaced messaging source', async () => {
         let resolveOld;
         const oldMessaging = messaging;
@@ -162,6 +194,10 @@ describe('ConnectedSitesSection settings controls', () => {
         render(<ConnectedSitesSection />);
 
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Connected sites and dApp permissions' })).toBeTruthy();
+        // The page header already reads Connected sites, so the list's own heading names what it holds.
+        expect(screen.getByRole('region', { name: 'Allowed sites' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Connected sites' })).toBeNull();
         expect(screen.getByText(/When a website asks to connect/)).toBeTruthy();
     });
 

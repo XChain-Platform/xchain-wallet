@@ -206,7 +206,10 @@ describe('DispenserForm "Another address": format', () => {
             ));
             await drainMicrotasks();
         });
-        expect(utils.getByLabelText('Dispenser address').value).toBe('New dispenser address (generated at preview)');
+        expect(utils.getByLabelText('Dispenser address').value).toBe('');
+        expect(utils.getByLabelText('Dispenser address').getAttribute('placeholder')).toBe('New address, made at preview');
+        // The address shortener never runs on the placeholder sentence.
+        expect(utils.container.textContent).not.toMatch(/New di…/);
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' }));
             await drainMicrotasks();

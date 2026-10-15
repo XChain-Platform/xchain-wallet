@@ -80,7 +80,9 @@ describe('confirmation password cleanup', () => {
         const file = new File(['content'], 'gated.txt', { type: 'text/plain' });
         fireEvent.change(await screen.findByLabelText('File to publish'), { target: { files: [file] } });
         await screen.findByText(/gated\.txt/);
-        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('checkbox', {
+            name: /I understand the encrypted file is published on-chain forever/,
+        }));
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         await rejectConfirmation();

@@ -20,12 +20,13 @@
 // sentinel; the panel surfaces that fact rather than displaying the
 // sentinel as if it were a real address.
 
-import { registry as registryLib } from '@xchain-wallet/core';
-import { InfoTip } from '@xchain-wallet/core/ui';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { InfoTip, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
-import { INPUT, ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
+import { ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -33,10 +34,10 @@ const CHAIN_BLOCK = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
+    padding: 'var(--xc-card-pad)',
+    background: 'var(--xc-card-bg)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
 };
 const FIELD_ROW = {
     display: 'flex',
@@ -46,7 +47,7 @@ const FIELD_ROW = {
     gap: 'var(--xc-space-2)',
 };
 const SUBTLE = { color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' };
-const NUMERIC = { ...INPUT, width: 140, textAlign: 'right' };
+const NUMERIC = { width: 140, textAlign: 'right' };
 const ADDRESS_BOX = {
     fontFamily: 'var(--xc-font-mono, monospace)',
     fontSize: 'var(--xc-text-xs)',
@@ -56,19 +57,31 @@ const ADDRESS_BOX = {
     borderRadius: 'var(--xc-radius-sm)',
     padding: 'var(--xc-space-1) var(--xc-space-2)',
     overflow: 'auto',
-    wordBreak: 'break-all',
+    wordBreak: 'normal',
+};
+const PLACEHOLDER_BOX = {
+    ...ADDRESS_BOX,
+    fontFamily: 'inherit',
+    fontStyle: 'italic',
+    color: 'var(--xc-text-muted)',
+    overflow: 'visible',
+    wordBreak: 'normal',
+    overflowWrap: 'break-word',
 };
 
 export function AdsSection() {
     const { settings, loading, error, update } = useSettings();
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const chainIds = Object.keys(settings.ads.perChain).filter((cid) => {
         const d = chainRegistry.get(cid);
         if (!d) return true; // surface stale entries so they can be edited away
-        return registryLib.isChainVisibleToUser(d, settings);
+        // Chains are named without their network kind, so only the active
+        // network's chains are listed and each chain appears once.
+        return registryLib.isChainVisibleToUser(d, settings)
+            && flowsLib.filterChainIdsByActiveNetwork([cid], settings, chainRegistry).length > 0;
     }).sort();
 
     const onToggleEnabled = async (next) => {
@@ -88,21 +101,24 @@ export function AdsSection() {
 
     return (
         <div style={STACK}>
+            {/* The page title already names the subject, so the switch reads as
+                an action; screen readers hear the subject too. */}
             <ToggleRow
-                label="Automatic Donation System"
-                hint="It sets aside a small amount when you send a transaction and sends it as one donation once it adds up; turning it off stops further set-asides without clearing the pending total."
+                label={t('settings.toggle.turnOn')}
+                accessibleLabel={t('settings.ads.switchAccessibleLabel')}
+                hint={t('settings.ads.itSetsAsideASmall')}
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}
             />
 
             <div role="status" aria-live="polite" style={{ ...ROW_HINT, padding: '0 var(--xc-space-3)' }}>
                 {settings.ads.enabled
-                    ? 'On. New outgoing transactions add to the pending donation total.'
-                    : 'Off. New outgoing transactions do not add to the pending donation total.'}
+                    ? t('settings.ads.onNewOutgoingTransactionsAdd')
+                    : t('settings.ads.offNewOutgoingTransactionsDo')}
             </div>
 
             {chainIds.length === 0 ? (
-                <Status text="No chains set up for donations yet. Each one is added automatically when you activate that chain." />
+                <Status text={t('settings.ads.noChainsSetUpFor')} />
             ) : null}
 
             {chainIds.map((chainId) => {
@@ -118,23 +134,21 @@ export function AdsSection() {
                     ? Math.ceil(resolved.triggerAmountSats / resolved.perTxAmountSats)
                     : null;
                 const displayName = descriptor?.displayName || chainId;
-                const networkSuffix = descriptor && descriptor.networkKind !== 'mainnet'
-                    ? ` · ${descriptor.networkKind}`
-                    : '';
                 const donationAddress = descriptor?.adsDonationAddress || '';
                 const isPlaceholder = donationAddress === ADS_DONATION_ADDRESS_PLACEHOLDER;
+                const placeholderDescription = `A donation address for ${displayName} arrives in a future release; until then nothing is sent on this network.`;
                 return (
                     <div key={chainId} style={CHAIN_BLOCK}>
                         <div style={{ fontWeight: 600, color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                            {displayName}{networkSuffix}
+                            {displayName}
                         </div>
 
                         <div style={FIELD_ROW}>
                             <span style={SUBTLE}>
-                                Set aside per outgoing transaction (sats)
-                                {perTxIsDefault ? ' · default' : ' · custom'}
+                                {t('settings.ads.setAsidePerOutgoingTransaction')}
+                                {perTxIsDefault ? t('settings.ads.default') : t('settings.ads.custom')}
                             </span>
-                            <input
+                            <Input
                                 type="text"
                                 inputMode="numeric"
                                 enterKeyHint="done"
@@ -156,7 +170,7 @@ export function AdsSection() {
                                     onChainPatch(chainId, { perTxAmountSats: n });
                                 }}
                                 onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                                aria-label={`${displayName} per-transaction amount`}
+                                aria-label={t('settings.ads.perTransactionAmount', { displayName })}
                                 style={NUMERIC}
                                 disabled={!settings.ads.enabled}
                             />
@@ -165,20 +179,20 @@ export function AdsSection() {
                         <div style={FIELD_ROW}>
                             <div>
                                 <span style={SUBTLE}>
-                                    Send donation when pending reaches (sats)
-                                    {triggerIsDefault ? ' · default' : ' · custom'}
+                                    {t('settings.ads.sendDonationWhenPendingReaches')}
+                                    {triggerIsDefault ? t('settings.ads.default') : t('settings.ads.custom')}
                                     <InfoTip
-                                        aria="Trigger threshold help"
-                                        label="A sat is the smallest unit of the network's coin. The donation joins the next outgoing transaction at this amount; larger amounts send donations less often and share one network fee."
+                                        aria={t('settings.ads.triggerThresholdHelpLabel')}
+                                        label={t('settings.ads.aSatIsTheSmallest')}
                                     />
                                 </span>
                                 <div style={ROW_HINT}>
                                     {transactionsToThreshold === null
-                                        ? 'No pending amount is added while the per-transaction amount is 0.'
-                                        : `About ${transactionsToThreshold.toLocaleString()} outgoing ${transactionsToThreshold === 1 ? 'transaction' : 'transactions'} to reach the threshold, then sent with the next one.`}
+                                        ? t('settings.ads.noPendingAmountIsAdded')
+                                        : t('settings.ads.transactionsToThreshold', { count: transactionsToThreshold })}
                                 </div>
                             </div>
-                            <input
+                            <Input
                                 type="text"
                                 inputMode="numeric"
                                 enterKeyHint="done"
@@ -198,43 +212,44 @@ export function AdsSection() {
                                     onChainPatch(chainId, { triggerAmountSats: n });
                                 }}
                                 onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                                aria-label={`${displayName} trigger threshold`}
+                                aria-label={t('settings.ads.triggerThreshold', { displayName })}
                                 style={NUMERIC}
                                 disabled={!settings.ads.enabled}
                             />
                         </div>
 
                         <div>
-                            <div style={ROW_HINT}>Donation address</div>
+                            <div style={ROW_HINT}>{t('settings.ads.donationAddress')}</div>
                             {isPlaceholder ? (
-                                <div style={{ ...ADDRESS_BOX, fontStyle: 'italic', color: 'var(--xc-text-muted)' }}>
-                                    Not set yet. A donation address for {displayName} arrives in a future release; until then nothing is sent on this chain.
+                                <div style={PLACEHOLDER_BOX} aria-description={placeholderDescription}>
+                                    {t('settings.ads.notAvailableYet')}
                                 </div>
                             ) : (
-                                <div style={ADDRESS_BOX} aria-label={`${displayName} donation address`}>
+                                <div style={{ ...ADDRESS_BOX, wordBreak: 'break-all' }} aria-label={t('settings.ads.donationAddress2', { displayName })}>
                                     {donationAddress}
                                 </div>
                             )}
                         </div>
 
                         <div style={ROW}>
-                            <span style={ROW_LABEL}>Pending donation</span>
+                            <span style={ROW_LABEL}>{t('settings.ads.pendingDonation')}</span>
                             <span style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-xs)' }}>
-                                {chainState.accumulatedSats.toLocaleString()} sats
+                                {t('settings.ads.satsAmount', { amount: chainState.accumulatedSats })}
                             </span>
                         </div>
 
                         <div style={ROW}>
-                            <span style={ROW_LABEL}>Lifetime donations</span>
+                            <span style={ROW_LABEL}>{t('settings.ads.lifetimeDonations')}</span>
                             <span style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-xs)' }}>
-                                {chainState.lifetimeDonatedSats.toLocaleString()} sats
-                                {' · '}
-                                {chainState.lifetimeTxCount} {chainState.lifetimeTxCount === 1 ? 'tx' : 'txs'}
+                                {t('settings.ads.lifetimeSummary', {
+                                    sats: chainState.lifetimeDonatedSats,
+                                    txs: t('settings.ads.txCount', { count: chainState.lifetimeTxCount }),
+                                })}
                             </span>
                         </div>
                         {chainState.lifetimeDonatedSats > 0 ? (
                             <div style={{ ...SUBTLE, fontStyle: 'italic', textAlign: 'right' }}>
-                                You've donated {chainState.lifetimeDonatedSats.toLocaleString()} sats to XChain development. Thank you.
+                                {t('settings.ads.thanksDonated', { sats: chainState.lifetimeDonatedSats })}
                             </div>
                         ) : null}
                     </div>

@@ -23,6 +23,7 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import styles from './PortfolioChart.module.css';
+import { t } from '../../i18n/index.js';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
 // so 24h slices the tail of that real series and 7d uses it as-is.
@@ -51,7 +52,7 @@ export const RANGES = [
  * @param {Array<any>} props.rows                  rows from `buildBalanceRows`, already network-filtered
  * @param {string | null} [props.walletId]         used to seed synthesized walks per wallet so flipping wallets reshuffles
  */
-export function PortfolioChart({ rows, walletId }) {
+export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoading, nativePricesError }) {
     const { messaging } = useMessaging();
     const { settings } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
@@ -85,31 +86,32 @@ export function PortfolioChart({ rows, walletId }) {
     // A demo wallet prices itself from its own fixtures, like every other
     // number on this screen (see TotalBalanceHero for the whole argument).
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
-    const [priceLoading, setPriceLoading] = useState(!isDemo && nativeChainIds.length > 0);
-    const [priceError, setPriceError] = useState(/** @type {string | null} */ (null));
+    const [fetchedPriceLoading, setFetchedPriceLoading] = useState(!isDemo && nativeChainIds.length > 0);
+    const [fetchedPriceError, setFetchedPriceError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
+        if (nativePriceMap !== undefined) return undefined;
         if (isDemo) {
             setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
-            setPriceLoading(false);
-            setPriceError(null);
+            setFetchedPriceLoading(false);
+            setFetchedPriceError(null);
             return undefined;
         }
         if (nativeChainIds.length === 0) {
             setPriceMap({});
-            setPriceLoading(false);
-            setPriceError(null);
+            setFetchedPriceLoading(false);
+            setFetchedPriceError(null);
             return undefined;
         }
         if (typeof messaging?.getNativePricesRequest !== 'function') {
             setPriceMap({});
-            setPriceLoading(false);
-            setPriceError('Price history is unavailable.');
+            setFetchedPriceLoading(false);
+            setFetchedPriceError('Price history is unavailable.');
             return undefined;
         }
         let cancelled = false;
         setPriceMap({});
-        setPriceLoading(true);
-        setPriceError(null);
+        setFetchedPriceLoading(true);
+        setFetchedPriceError(null);
         messaging.getNativePricesRequest({
             chainIds: nativeChainIds,
             includeSparkline: true,
@@ -117,18 +119,21 @@ export function PortfolioChart({ rows, walletId }) {
         })
             .then((res) => {
                 if (cancelled) return;
-                if (res?.disabled) { setPriceMap({}); setPriceLoading(false); return; }
+                if (res?.disabled) { setPriceMap({}); setFetchedPriceLoading(false); return; }
                 setPriceMap(res?.prices || {});
-                setPriceLoading(false);
+                setFetchedPriceLoading(false);
             })
             .catch((err) => {
                 if (cancelled) return;
                 setPriceMap({});
-                setPriceLoading(false);
-                setPriceError(readFailureMessage(err, 'load portfolio price history'));
+                setFetchedPriceLoading(false);
+                setFetchedPriceError(readFailureMessage(err, 'load portfolio price history'));
             });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+    const effectivePriceMap = nativePriceMap ?? priceMap;
+    const priceLoading = nativePriceMap === undefined ? fetchedPriceLoading : Boolean(nativePricesLoading);
+    const priceError = nativePriceMap === undefined ? fetchedPriceError : nativePricesError;
 
     // A demo wallet's id is a fresh UUID on every demo session, and the
     // synthesized walk below is seeded by it, so the demo chart (and the
@@ -143,8 +148,8 @@ export function PortfolioChart({ rows, walletId }) {
     const seedId = isDemo ? DEMO_CHART_SEED : walletId;
 
     const series = useMemo(
-        () => buildPortfolioSeries(rows, priceMap, seedId, range, isDemo),
-        [rows, priceMap, seedId, range, isDemo],
+        () => buildPortfolioSeries(rows, effectivePriceMap, seedId, range, isDemo),
+        [rows, effectivePriceMap, seedId, range, isDemo],
     );
 
     const hasData = Array.isArray(series) && series.length > 0;
@@ -177,7 +182,7 @@ export function PortfolioChart({ rows, walletId }) {
     return (
         <section
             className={styles.wrap}
-            aria-label="Portfolio performance"
+            aria-label={t('components.portfolioChart.portfolioPerformance')}
             aria-busy={priceLoading || undefined}
         >
             <div
@@ -188,14 +193,14 @@ export function PortfolioChart({ rows, walletId }) {
                 {hasData && delta != null && !hidden ? (
                     <div
                         className={`${styles.change} ${tone}`}
-                        aria-label={`${pctDisplay?.label ?? 'Change unavailable'}; ${formatFiat(Math.abs(delta), fiatCurrency)}`}
+                        aria-label={t('components.portfolioChart.change', { label: range.label, value: pctDisplay?.label ?? 'Change unavailable', formatFiatValue: formatFiat(Math.abs(delta), fiatCurrency) })}
                     >
                         {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
-                        {pctDisplay ? ` (${pctDisplay.text})` : ''}
+                        {pctDisplay ? ` (${pctDisplay.text})` : ''} · {range.label}
                     </div>
                 ) : null}
                 {priceLoading ? (
-                    <StatusMessage variant="status">Loading price history…</StatusMessage>
+                    <StatusMessage variant="status">{t('components.portfolioChart.loadingPriceHistory')}</StatusMessage>
                 ) : priceError ? (
                     <StatusMessage variant="error">{priceError}</StatusMessage>
                 ) : hasData ? (
@@ -203,16 +208,16 @@ export function PortfolioChart({ rows, walletId }) {
                         <Sparkline
                             series={series}
                             height={40}
-                            label="Portfolio performance chart"
+                            label={t('components.portfolioChart.portfolioPerformanceChart')}
                             rangeLabel={range.label}
                             formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
                         />
                     </div>
                 ) : (
-                    <div className={styles.placeholder}>No price history for this range yet.</div>
+                    <div className={styles.placeholder}>{t('components.portfolioChart.noPriceHistoryForThis')}</div>
                 )}
             </div>
-            <div className={styles.ranges} role="tablist" aria-label="Chart range">
+            <div className={styles.ranges} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
                 {ranges.map((r) => (
                     <button
                         key={r.id}
@@ -257,15 +262,8 @@ function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
     // current fiat value. The series always ends at `current`, so the
     // summed chart's last point equals the portfolio total exactly.
     if (range.realCapable && row.kind === 'native' && row.chainId) {
-        const entry = priceMap?.[row.chainId];
-        const spark = entry?.sparkline;
-        if (Array.isArray(spark) && spark.length > 0) {
-            const finiteSpark = spark.filter((point) => Number.isFinite(point) && point > 0);
-            const src = range.id === '24h'
-                ? finiteSpark.slice(-Math.min(range.points, finiteSpark.length))
-                : finiteSpark;
-            if (src.length === 0) return null;
-            const resampled = resampleTo(src, range.points);
+        const resampled = priceHistoryForRange(priceMap?.[row.chainId], range);
+        if (resampled) {
             const last = resampled[resampled.length - 1];
             if (last > 0) {
                 const scaled = resampled.map((p) => (p / last) * current);
@@ -283,6 +281,16 @@ function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
     const key = `${seedId || '_'}|${row.chainId || ''}|${row.kind === 'native' ? 'native' : row.tick}|${range.id}|${current.toFixed(2)}`;
     const { sparkline } = synthesizeTokenChart(key, current, range.points);
     return sparkline;
+}
+
+export function priceHistoryForRange(entry, range) {
+    if (!range?.realCapable || !Array.isArray(entry?.sparkline)) return null;
+    const finite = entry.sparkline.filter((point) => Number.isFinite(point) && point > 0);
+    if (finite.length === 0) return null;
+    const source = range.id === '24h'
+        ? finite.slice(-Math.min(range.points, finite.length))
+        : finite;
+    return resampleTo(source, range.points);
 }
 
 // Linear resample of `src` onto `n` evenly-spaced points. Used when a

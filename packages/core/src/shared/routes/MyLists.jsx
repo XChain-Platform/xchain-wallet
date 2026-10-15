@@ -177,9 +177,10 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
             title="My lists"
-            // Only the round + belongs in the header: PageHeader styles every
-            // trailing button as a 38px circle, and the two text actions
-            // squeezed into circles spilled across the title at phone width.
+            // Only the + belongs in the header: PageHeader styles every
+            // trailing button as a small square icon control, and the two text
+            // actions squeezed into those boxes spilled across the title at
+            // phone width.
             // They live in the body's action row instead.
             trailing={onCreateList ? (
                 <>
@@ -249,7 +250,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return wrap(
             <EmptyState
                 title="No supported address"
-                body="Publishing a list requires an address on a supported chain."
+                body="Publishing a list requires an address on a supported network."
                 titleAs="p"
             />,
         );
@@ -260,6 +261,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             <div className={local.searchField}>
                 <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
                     className={local.search}
@@ -368,6 +370,7 @@ function MyListRow({ row, onSelect }) {
             subtitle={isFork
                 ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
                 : 'Created list'}
+            trailingClassName={local.statusSlot}
             trailing={(
                 <span className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}>
                     {valid ? 'Valid' : status}

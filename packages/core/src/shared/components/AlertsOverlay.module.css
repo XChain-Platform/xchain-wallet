@@ -5,15 +5,17 @@
     background: rgba(15, 23, 42, 0.55);
     display: flex;
     justify-content: flex-end;
-    padding: env(safe-area-inset-top, 0px)
-        env(safe-area-inset-right, 0px)
-        env(safe-area-inset-bottom, 0px)
-        env(safe-area-inset-left, 0px);
+    padding: env(safe-area-inset-top, 0)
+        env(safe-area-inset-right, 0)
+        env(safe-area-inset-bottom, 0)
+        env(safe-area-inset-left, 0);
 }
 
 .panel {
+    --xc-slide-in-offset: var(--xc-space-5);
     box-sizing: border-box;
     width: 100%;
+    /* The side panel stays at its established width, which has no token equivalent. */
     max-width: min(380px, 100%);
     min-width: 0;
     min-height: 0;
@@ -22,23 +24,29 @@
     display: flex;
     flex-direction: column;
     box-shadow: var(--xc-shadow-side-panel);
-    animation: slideIn 160ms ease-out;
+    animation: slideIn var(--xc-motion-duration-standard) var(--xc-motion-ease-enter);
 }
 
 @keyframes slideIn {
-    from { transform: translateX(20px); opacity: 0.4; }
+    from { transform: translateX(var(--xc-slide-in-offset)); opacity: 0.4; }
     to   { transform: translateX(0); opacity: 1; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .panel { animation: none; }
+:global(html[dir='rtl']) .panel {
+    --xc-slide-in-offset: calc(-1 * var(--xc-space-5));
 }
+
+@media (prefers-reduced-motion: reduce) {
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .panel { animation: none; }
+}
+
+:global(:root[data-xc-reduced-motion='reduce']) .panel { animation: none; }
 
 .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: calc(var(--xc-space-3) + env(safe-area-inset-top, 0px)) var(--xc-space-4) var(--xc-space-3);
+    padding: calc(var(--xc-space-3) + env(safe-area-inset-top, 0)) var(--xc-space-4) var(--xc-space-3);
     border-bottom: 1px solid var(--xc-border);
     flex: 0 0 auto;
 }
@@ -59,6 +67,7 @@
     color: var(--xc-on-accent);
     font-size: var(--xc-text-xs);
     font-weight: 700;
+    /* The one-pixel vertical inset has no spacing-token equivalent. */
     padding: 1px var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     text-transform: none;
@@ -70,8 +79,8 @@
     background: transparent;
     border: none;
     color: var(--xc-text-muted);
-    width: 32px;
-    height: 32px;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
     border-radius: 50%;
     cursor: pointer;
     display: inline-flex;
@@ -88,6 +97,7 @@
    default is unreadable on the high-contrast and dark themes. */
 .close:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The two-pixel focus separation has no spacing-token equivalent. */
     outline-offset: 2px;
 }
 
@@ -97,7 +107,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: var(--xc-space-3);
-    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0));
 }
 
 .empty {
@@ -121,7 +131,7 @@
 
 .alert {
     background: var(--xc-bg-muted);
-    border-inline-start: 4px solid var(--xc-text-muted);
+    border-inline-start: var(--xc-space-1) solid var(--xc-text-muted);
     border-radius: var(--xc-radius-md);
     padding: var(--xc-space-3);
     max-width: 100%;

@@ -125,7 +125,8 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
             onBack={onBack}
             title="Payments due"
             // Icon only: the header's trailing slot draws every button as a
-            // 38px circle, and the word "Refresh" ran off the screen edge.
+            // small square icon control, and the word "Refresh" ran off the
+            // screen edge.
             trailing={(
                 <Button
                     variant="secondary"
@@ -241,9 +242,7 @@ function ObligationRow({ row, onPay }) {
         <li className={styles.row}>
             <div className={styles.rowMain}>
                 <div className={styles.rowHead}>
-                    {descriptor
-                        ? <ChainBadge descriptor={descriptor} size="sm" />
-                        : <span>{row.chainId}</span>}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
                     <span className={styles.rowTitle}>
                         Matched order #{row.orderMatchActionIndex}
                     </span>
