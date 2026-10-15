@@ -191,9 +191,9 @@ describe('watch-only route boundaries', () => {
         fireEvent.click(screen.getByRole('button', { name: /More/i }));
         const menu = await screen.findByRole('menu');
         if (offered) {
-            expect(within(menu).queryByText('Speed up')).not.toBeNull();
+            expect(within(menu).queryByText('Speed up transaction')).not.toBeNull();
         } else {
-            expect(within(menu).queryByText('Speed up')).toBeNull();
+            expect(within(menu).queryByText('Speed up transaction')).toBeNull();
             expect(within(menu).queryByText('Cancel transaction')).toBeNull();
         }
         expect(messaging.replaceTx).not.toHaveBeenCalled();
