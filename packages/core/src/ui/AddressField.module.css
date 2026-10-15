@@ -44,6 +44,20 @@
     line-height: 20px;
 }
 
+/* The input is forced left to right so an address always reads in order, which
+   makes its logical sides run opposite to the wrapper's in an RTL app. The
+   actions sit at the wrapper's end edge (the physical left in RTL), so the room
+   for them is reserved on whichever side of the input that is. */
+.wrap input {
+    padding-inline-end: var(--address-end-room, var(--address-control-padding-x));
+}
+
+:global([dir='rtl']) .wrap input {
+    padding-inline-start: var(--address-end-room, var(--address-control-padding-x));
+    padding-inline-end: var(--address-control-padding-x);
+    text-align: end;
+}
+
 .iconButton {
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);

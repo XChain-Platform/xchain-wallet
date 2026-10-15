@@ -288,6 +288,10 @@
     font-weight: 600;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    /* Names and addresses are the sender's text, not the interface's, so the
+       line takes the direction of its own content: a Latin name keeps its
+       beginning and gets its ellipsis at the end in a right-to-left app. */
+    unicode-bidi: plaintext;
 }
 
 /* The timestamp keeps its full width ("20 seconds ago"); the name gives way. */
@@ -300,6 +304,7 @@
 
 /* Line 2: single-line message preview, ellipsized. */
 .convPreview {
+    unicode-bidi: plaintext;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

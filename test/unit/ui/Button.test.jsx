@@ -221,7 +221,7 @@ describe('<Button>', () => {
             if (component === 'AddressField') {
                 // The end padding clears the icon action alone, or Paste and
                 // the icon together when the field shows the in-field Paste.
-                expect(source).toMatch(/paddingInlineEnd: endRoom/);
+                expect(source).toMatch(/'--address-end-room': endRoom/);
                 expect(source).toMatch(
                     /'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
                 );

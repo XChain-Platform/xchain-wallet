@@ -1473,3 +1473,130 @@ extension ScreenshotTests {
         }
     }
 }
+
+// MARK: - iPhone layout probe
+
+/// Walk the real app on an iPhone at its current orientation, appearance and text size,
+/// one PNG per screen. Run `-only-testing:AppUITests/ScreenshotTests/testIPhoneLayoutProbe`;
+/// `TEST_RUNNER_IPAD_PASS_DIR=<dir>` writes the PNGs there, `TEST_RUNNER_IPHONE_TAG` prefixes
+/// them and `TEST_RUNNER_IPHONE_ORIENT=landscape` turns the device first. Misses print, never fail.
+extension ScreenshotTests {
+
+    func testIPhoneLayoutProbe() throws {
+        let env = ProcessInfo.processInfo.environment
+        let tag = env["IPHONE_TAG"] ?? "i"
+        print("ORIENT env=\(env["IPHONE_ORIENT"] ?? "nil")")
+        XCUIDevice.shared.orientation = env["IPHONE_ORIENT"] == "landscape" ? .landscapeLeft : .portrait
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        if hittable("Accept and continue") != nil || app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS[c] %@", "agree to the GNU Affero")).firstMatch.exists {
+            probeShot("\(tag)-onb-01-terms")
+            acceptTerms()
+            probeShot("\(tag)-onb-02-intro")
+            advanceIntroCarousel()
+            probeShot("\(tag)-onb-03-welcome")
+            enterDemoMode()
+            Thread.sleep(forTimeInterval: 2)
+        }
+        if env["IPHONE_ORIENT"] == "landscape" { landscapeSettings(tag) } else { phoneWalk(tag) }
+        XCUIDevice.shared.orientation = .portrait
+        print("PROBE missed: \(missed.joined(separator: "; "))")
+    }
+
+    /// Landscape phones reach Settings through the header menu, not the side rail.
+    private func landscapeSettings(_ o: String) {
+        goHome()
+        guard openMenu(), let row = hittable("Settings") else { print("LAND: no Settings in the menu"); return }
+        row.tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        for page in 0..<6 { probeShot("\(o)-30-settings-page\(page)"); swipePage() }
+        var p = 1
+        for panel in ["Display", "Privacy", "Safety", "Backup", "Fees", "Network", "About"] {
+            goHome()
+            guard openMenu(), let again = hittable("Settings") else { continue }
+            again.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            guard let r = scrollTo(panel, max: 24) else { print("LAND: no row '\(panel)'"); continue }
+            r.tap()
+            probeShot(String(format: "%@-3%02d-settings-%@", o, p, slug(panel)))
+            swipePage()
+            probeShot(String(format: "%@-3%02d-settings-%@-b", o, p, slug(panel)))
+            p += 1
+        }
+        goHome()
+    }
+
+    /// Close the More sheet if it is open, then land on Home.
+    private func phoneHome() {
+        if app.keyboards.count > 0 {
+            dumpButtons("kb-open")
+            let done = app.buttons.matching(NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Done", "Hide keyboard")).firstMatch
+            if done.exists && done.isHittable { done.tap() } else {
+                app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+            }
+            Thread.sleep(forTimeInterval: 0.6)
+        }
+        if let close = hittable("Close more navigation", exact: true) { close.tap(); Thread.sleep(forTimeInterval: 0.6) }
+        goHome()
+    }
+
+    /// Open a row of the phone More sheet, scrolling the sheet when the row sits below the fold.
+    private func openMoreRow(_ label: String) -> Bool {
+        phoneHome()
+        guard let more = hittable("More", exact: true) else { print("PHONE: no More tab"); return false }
+        more.tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        guard let row = scrollTo(label, max: 4) else { print("PHONE: no More row '\(label)'"); return false }
+        row.tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        return true
+    }
+
+    private func phoneWalk(_ o: String) {
+        phoneHome()
+        probeShot("\(o)-00-home")
+        for i in 1...3 { swipePage(); probeShot("\(o)-00-home-scrolled\(i)") }
+        var n = 1
+        for label in ["History"] {
+            phoneHome()
+            // Home carries a quick-action Send as well as the tab: take the lowest match, the tab.
+            let matches = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
+            guard let b = matches.max(by: { $0.frame.minY < $1.frame.minY }) else { print("NAV \(o): no '\(label)'"); continue }
+            b.tap()
+            probeShot(String(format: "%@-%02d-nav-%@", o, n, slug(label)))
+            n += 1
+            if label == "Send" { probeKeyboard("\(o)-send", hints: ["address or name", "To", "Amount"]) }
+        }
+        phoneHome()
+        if let scan = hittable("Scan", exact: true) { scan.tap(); probeShot("\(o)-05-nav-Scan") }
+        phoneHome()
+        if let more = hittable("More", exact: true) {
+            more.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            probeShot("\(o)-40-more-sheet")
+            swipePage()
+            probeShot("\(o)-40-more-sheet-scrolled")
+        }
+        var r = 1
+        for row in ["Receive", "DEX", "Dispensers", "Contracts", "Messaging", "Contacts", "Lists", "Payments due"] {
+            guard openMoreRow(row) else { continue }
+            probeShot(String(format: "%@-4%02d-more-%@", o, r, slug(row)))
+            if row == "Receive" { probeKeyboard("\(o)-receive", hints: ["Amount", "0.00"]) }
+            r += 1
+        }
+        guard openMoreRow("Settings") else { return }
+        for page in 0..<5 { probeShot("\(o)-20-settings-page\(page)"); swipePage() }
+        var p = 1
+        for panel in Self.settingsDrills {
+            guard openMoreRow("Settings") else { continue }
+            guard let row = scrollTo(panel) else { print("SETTINGS \(o): no row '\(panel)'"); continue }
+            row.tap()
+            probeShot(String(format: "%@-2%02d-settings-%@", o, p, slug(panel)))
+            swipePage()
+            probeShot(String(format: "%@-2%02d-settings-%@-b", o, p, slug(panel)))
+            p += 1
+        }
+        phoneHome()
+    }
+}

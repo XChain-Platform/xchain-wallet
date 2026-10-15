@@ -108,7 +108,7 @@ export function nav(page) {
  * (`packages/extension/src/popup/App.jsx:600-603` says so explicitly), so no
  * nav landmark exists there to wait on.
  *
- * The nav rail's Lock button is not usable for this either: below 600px it
+ * The nav rail's Lock button is not usable for this either: below 640px it
  * lives inside the More sheet, which is closed by default.
  */
 export function unlockedShell(page) {

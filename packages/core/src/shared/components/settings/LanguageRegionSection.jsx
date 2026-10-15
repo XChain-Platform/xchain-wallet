@@ -187,7 +187,7 @@ export function LanguageRegionSection() {
                     <span style={ROW_VALUE}>{t('settings.languageRegion.fiatCurrency')}</span>
                     <span style={ROW_HINT}>{t('settings.languageRegion.showEstimatedWalletValuesIn')}</span>
                 </div>
-                <div style={CONTROLS}>
+                <div data-settings-fill="" style={CONTROLS}>
                     <input
                         type="search"
                         role="combobox"

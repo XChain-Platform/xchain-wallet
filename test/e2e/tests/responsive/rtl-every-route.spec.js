@@ -70,9 +70,8 @@ async function enablePseudoRtl(page) {
 }
 
 // The pseudo locale wraps every translated string, the navigation and the
-// palette chrome included, as RLM + "⟦" + English + "⟧". Match that form, so
-// the walk still proves each label went through translation. The palette's
-// command titles are not translated yet and stay English.
+// palette chrome and command titles included, as RLM + "⟦" + English + "⟧".
+// Match that form, so the walk still proves each label went through translation.
 function pseudoName(name) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`^\\u200F?⟦${escaped}⟧`);
@@ -100,7 +99,9 @@ async function gotoRoute(page, route) {
     const palette = page.getByRole('dialog', { name: pseudoName('Command palette') });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(route.name);
-    await palette.getByRole('option', { name: new RegExp(`^${route.name}\\b`) }).first().click();
+    // Command titles go through translation now, so in the pseudo locale they
+    // carry the same RLM and bracket wrapper as the navigation labels.
+    await palette.getByRole('option', { name: new RegExp(`^\\u200F?⟦?${route.name}\\b`) }).first().click();
     await expect(palette).toBeHidden();
 }
 

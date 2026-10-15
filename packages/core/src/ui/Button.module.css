@@ -168,6 +168,8 @@
     padding: 0 var(--xc-space-1);
     background: transparent;
     border-color: transparent;
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: transparent;
     color: var(--xc-accent-text);
     font-weight: inherit;
     text-decoration: underline;
