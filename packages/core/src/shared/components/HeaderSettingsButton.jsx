@@ -287,7 +287,7 @@ export function HeaderSettingsButton({
 
                     {showNetwork ? (
                         <Suspense fallback={null}>
-                            <Section title="Chain filter">
+                            <Section title="Network filter">
                                 <NetworkFilter
                                     chainRegistry={chainRegistry}
                                     coinFamilies={coinFamilies}

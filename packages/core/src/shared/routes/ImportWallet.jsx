@@ -673,7 +673,7 @@ export function ImportWallet({
             return;
         }
         if (!wifChainId) {
-            setError('Pick the chain this private key belongs to.');
+            setError('Pick the network this private key belongs to.');
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -705,7 +705,7 @@ export function ImportWallet({
         } catch (err) {
             setError(userFacingMessage(
                 err,
-                'Could not import that private key. Check the key and the chain, then try again.',
+                'Could not import that private key. Check the key and the network, then try again.',
             ));
             endBusy();
         }

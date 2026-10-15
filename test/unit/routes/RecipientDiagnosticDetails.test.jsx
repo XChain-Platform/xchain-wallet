@@ -46,7 +46,7 @@ async function expectSkippedAddressDisclosure() {
     fireEvent.click(summary);
     const details = summary.closest('details');
     expect(details).toHaveTextContent(WRONG_NETWORK);
-    expect(details).toHaveTextContent(/Does not belong to the (?:active network|selected chain)\./);
+    expect(details).toHaveTextContent(/Does not belong to the (?:active network|selected network)\./);
 }
 
 afterEach(() => cleanup());

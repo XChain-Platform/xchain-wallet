@@ -177,7 +177,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <EmptyState
                     title="No betting address"
-                    body="Betting requires an address on a supported chain."
+                    body="Betting requires an address on a supported network."
                 />
             </ListPage>,
         );
@@ -255,7 +255,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             {rows && rows.length === 0 ? (
                 <EmptyState
                     title="No markets"
-                    body={openOnly ? 'No markets are taking bets on this chain right now.' : 'Markets created on this chain appear here.'}
+                    body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
                 />
             ) : null}
 

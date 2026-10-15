@@ -42,7 +42,7 @@ describe('MyLists load failure wording', () => {
         expect(screen.queryByText(raw)).toBeNull();
     });
 
-    it('names the chain without API paths or HTTP codes', async () => {
+    it('names the network without API paths or HTTP codes', async () => {
         const raw = 'Explorer returned HTTP 429 for /BTC/api/lists/tb1qexample/address';
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue({
@@ -266,7 +266,7 @@ describe('ContractsList filter field sizing', () => {
             const card = await screen.findByRole('button', { name: new RegExp(`^Open ${contractName}`) });
             expect(card).toHaveClass(contractStyles.contractRow);
             expect(card).toHaveTextContent(contractName);
-            expect(screen.getByRole('tablist', { name: 'Chain filter' }))
+            expect(screen.getByRole('tablist', { name: 'Network filter' }))
                 .toHaveClass(contractStyles.chainFilters);
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);

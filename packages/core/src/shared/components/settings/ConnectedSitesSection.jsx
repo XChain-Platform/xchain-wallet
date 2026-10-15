@@ -641,7 +641,7 @@ function PermissionsSummary({ permissions }) {
     const actions = permissions.canSignAction || {};
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
-            <PermRow label="Chains" text={chains.length === 0 ? 'None' : chains.join(', ')} />
+            <PermRow label="Networks" text={chains.length === 0 ? 'None' : chains.join(', ')} />
             <PermRow label="Accounts" text={accounts.length === 0 ? 'None' : accounts.join(', ')} />
             <PermRow
                 label="Sign messages"
