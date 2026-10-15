@@ -46,6 +46,42 @@ describe('<StatusMessage>', () => {
         expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
+    it('keeps role="alert" on a warning that must interrupt', () => {
+        render(<StatusMessage variant="warning" role="alert">Check the address</StatusMessage>);
+        const message = screen.getByRole('alert');
+        expect(message).toHaveAttribute('aria-live', 'assertive');
+        expect(message).toHaveAttribute('data-variant', 'warning');
+    });
+
+    it('drops the live region for a warning that is part of the page from the first paint', () => {
+        const { container } = render(<StatusMessage variant="warning" role={null}>Sharing is permanent.</StatusMessage>);
+        const message = container.firstElementChild;
+        expect(message).not.toHaveAttribute('role');
+        expect(message).not.toHaveAttribute('aria-live');
+        expect(message).not.toHaveAttribute('aria-atomic');
+        expect(message).toHaveAttribute('data-variant', 'warning');
+    });
+
+    it('passes a note role and a test hook through', () => {
+        render(<StatusMessage variant="warning" role="note" testId="outside-note">Outside address</StatusMessage>);
+        const message = screen.getByTestId('outside-note');
+        expect(message).toHaveAttribute('role', 'note');
+        expect(message).not.toHaveAttribute('aria-live');
+    });
+
+    it('holds several lines in one box and one announcement', () => {
+        render(
+            <StatusMessage variant="warning" role="alert">
+                <p>First line</p>
+                <p>Second line</p>
+            </StatusMessage>,
+        );
+        const [message] = screen.getAllByRole('alert');
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(message).toHaveTextContent('First line');
+        expect(message).toHaveTextContent('Second line');
+    });
+
     it.each([null, undefined, ''])('renders nothing for empty content %#', (children) => {
         const { container } = render(<StatusMessage>{children}</StatusMessage>);
         expect(container).toBeEmptyDOMElement();

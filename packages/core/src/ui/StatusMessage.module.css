@@ -96,3 +96,22 @@
     color: var(--xc-success);
     border: 1px solid var(--xc-success, var(--xc-border));
 }
+
+/* A multi-line message passes one paragraph or list item per line; the lines
+   sit tight inside the one box instead of carrying page paragraph margins. */
+.body > p,
+.body > ul,
+.body > ol {
+    margin: 0;
+}
+
+.body > ul,
+.body > ol {
+    padding: 0;
+    list-style: none;
+}
+
+.body > * + *,
+.body li + li {
+    margin-top: var(--xc-space-1);
+}
