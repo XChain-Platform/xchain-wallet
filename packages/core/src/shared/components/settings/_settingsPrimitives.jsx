@@ -74,6 +74,14 @@ export const INPUT = {
     lineHeight: 'var(--xc-control-line)',
     fontFamily: 'inherit',
 };
+// What a disabled settings input adds: the shared disabled colours, as a disabled Button.
+export const INPUT_DISABLED = {
+    background: 'var(--xc-control-disabled-bg)',
+    borderColor: 'var(--xc-control-disabled-border)',
+    color: 'var(--xc-control-disabled-text)',
+    WebkitTextFillColor: 'var(--xc-control-disabled-text)',
+    cursor: 'not-allowed',
+};
 
 export const ROW_COPY = {
     display: 'flex',

@@ -38,7 +38,7 @@
     font-size: var(--xc-control-font);
     color: var(--xc-text);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-control-border);
     border-radius: var(--xc-control-radius);
     cursor: pointer;
     text-align: start;
@@ -56,7 +56,10 @@
 }
 
 .control:disabled {
-    opacity: 0.55;
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    opacity: var(--xc-disabled-opacity);
     cursor: not-allowed;
 }
 

@@ -9,7 +9,7 @@
 // size, so they sat beside a dropdown that looked different.
 
 import { describe, expect, it } from 'vitest';
-import { INPUT } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import { INPUT, INPUT_DISABLED } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
 
 describe('settings INPUT style', () => {
     it('is drawn from the shared control tokens', () => {
@@ -18,5 +18,13 @@ describe('settings INPUT style', () => {
         expect(INPUT.height).toBe('var(--xc-control-h-md)');
         expect(INPUT.fontSize).toBe('var(--xc-control-font-md)');
         expect(INPUT.padding).toBe('0 var(--xc-control-pad-x-md)');
+    });
+});
+
+describe('settings INPUT_DISABLED style', () => {
+    it('uses the shared disabled colours', () => {
+        expect(INPUT_DISABLED.background).toBe('var(--xc-control-disabled-bg)');
+        expect(INPUT_DISABLED.borderColor).toBe('var(--xc-control-disabled-border)');
+        expect(INPUT_DISABLED.color).toBe('var(--xc-control-disabled-text)');
     });
 });

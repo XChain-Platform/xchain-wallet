@@ -939,7 +939,7 @@ fieldset {
     line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background-color: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-control-border);
     border-radius: var(--xc-control-radius, 8px);
     max-width: 100%;
     cursor: pointer;
@@ -969,6 +969,9 @@ select:not([multiple]):not([size]):not(:disabled):not([aria-invalid='true']):hov
 }
 
 select:disabled {
+    background-color: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
     cursor: not-allowed;
 }
 
