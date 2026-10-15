@@ -113,7 +113,7 @@
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
-    padding-inline: var(--xc-control-pad-x-md, 12px);
+    padding-inline: var(--xc-space-3);
     /* The palette's only text entry meets the pointer-target floor because
        it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);
