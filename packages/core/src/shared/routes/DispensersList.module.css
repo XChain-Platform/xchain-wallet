@@ -25,12 +25,6 @@
     border-radius: var(--xc-control-radius);
 }
 
-.toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
 .searchField {
     flex: 1 1 12rem;
     min-width: 0;
