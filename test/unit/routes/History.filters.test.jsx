@@ -283,7 +283,7 @@ describe('History filters', () => {
         fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'alpha' } });
         fireEvent.change(screen.getByLabelText('From date'), { target: { value: today } });
         fireEvent.change(screen.getByLabelText('To date'), { target: { value: today } });
-        fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
+        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
         chooseOption(/^All action types$/, 'Send');
         chooseOption(/^All statuses$/, 'Confirmed');
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:50:${LTC_ADDRESS}`]));
