@@ -502,7 +502,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 </StatusMessage>
                 {verification?.sharedChainIds?.length ? (
                     <p style={COPY}>
-                        Matching chains: {verification.sharedChainIds.join(', ')}.
+                        Matching networks: {verification.sharedChainIds.join(', ')}.
                     </p>
                 ) : null}
                 <div style={STACK}>

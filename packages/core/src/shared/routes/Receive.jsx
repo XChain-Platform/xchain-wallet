@@ -1218,6 +1218,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         wrapReadOnlyAddress
                         onIconClick={() => setAddressPickerOpen(true)}
                         iconLabel={t('receive.chooseReceiveAddress')}
+                        data-testid="receive-address"
                     />
                     {qrActionsContent}
                 </div>

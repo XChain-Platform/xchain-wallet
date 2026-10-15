@@ -83,6 +83,8 @@ export const en = {
     'crossChainSwap.success.giveTxLabel': 'Give network transaction',
     'crossChainSwap.success.hint':
         'Your offer is open on the give network. The swap settles atomically when a counterparty fills it on the get network; until then no funds move.',
+    'crossChainOrder.success.hint':
+        'Your {tick} is escrowed on the give network. The network matches this order automatically against offers on the get network; it may fill in parts, and each fill is released from escrow on both networks with no further transaction from you.',
     'parallelComposer.summary':
         '{actions, plural, one {# action} other {# actions}} across {networks, plural, one {# network} other {# networks}}',
     'parallelComposer.noRollback':
@@ -1100,7 +1102,7 @@ export const en = {
     'flows.pairPartner.seedMismatch':
         "These two wallets were made from different recovery phrases ({chains} doesn't match). Restore both halves from the same phrase and pair again.",
     'flows.pairPartner.paired':
-        'Paired. Both wallets come from the same recovery phrase and agree on {count, plural, one {# chain} other {# chains}}.',
+        'Paired. Both wallets come from the same recovery phrase and agree on {count, plural, one {# network} other {# networks}}.',
 
     'flows.protocolFee.freeLabel': 'This action has no protocol fee',
     'flows.protocolFee.freeHint':
@@ -1599,9 +1601,9 @@ export const en = {
     'settings.endpoints.encoderUrl': 'Encoder URL',
     'settings.endpoints.hubUrl': 'Hub URL',
     'settings.endpoints.savingPointsThisChainS':
-        "Saving points this chain's balances, history and broadcasts at these addresses right away.",
+        "Saving points this network's balances, history and broadcasts at these addresses right away.",
     'settings.endpoints.urlFormatIsCheckedHere':
-        "URL format is checked here, but the host isn't contacted until the wallet uses it. If it's unreachable, this chain's balances, history and transactions may be unavailable.",
+        "URL format is checked here, but the host isn't contacted until the wallet uses it. If it's unreachable, this network's balances, history and transactions may be unavailable.",
     'settings.endpoints.resetToDefault': 'Reset to default',
     'settings.languageRegion.language': 'Language',
     'settings.languageRegion.fiatCurrency': 'Fiat currency',
@@ -2045,7 +2047,7 @@ export const en = {
     'components.placeOrderPanel.paymentMustBeSentWithin':
         'payment must be sent within the payment window (about 2 hours) or the match expires.',
     'components.placeOrderPanel.enableCoinpayAutoPay': 'Enable CoinPay auto-pay',
-    'components.placeOrderPanel.outstandingAutoPayExposureOn': 'Outstanding auto-pay exposure on this chain:',
+    'components.placeOrderPanel.outstandingAutoPayExposureOn': 'Outstanding auto-pay exposure on this network:',
     'components.placeOrderPanel.fromThisOrder': ' (+ {thisOrderGive} {coinTicker} from this order)',
     'components.placeOrderPanel.evenIfTheServiceThat':
         '. Even if the service that reports matches were fully compromised, auto-pay could send no more than this.',
@@ -2601,7 +2603,7 @@ export const en = {
     'settings.page.exportOrImportTheAddress': 'Address book import and export.',
     'settings.page.automaticDonationSystem': 'Automatic donation system',
     'settings.page.turnAutomaticDonationsOnOr':
-        'Turn automatic donations on or off, set per-chain amounts and thresholds, and view lifetime totals.',
+        'Turn automatic donations on or off, set per-network amounts and thresholds, and view lifetime totals.',
     'settings.page.developerMode': 'Developer mode',
     'settings.page.configureRegtestNetworksCustomEndpoints':
         'Configure regtest networks, custom endpoints, local dApp controls, and diagnostics.',

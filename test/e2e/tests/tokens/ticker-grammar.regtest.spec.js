@@ -768,7 +768,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
 
             if (NATIVE_FEE_MANDATORY) {
                 await expect(main.getByText(new RegExp(
-                    `${NATIVE_TICKER} is the only way to pay a protocol fee on this chain`)),
+                    `${NATIVE_TICKER} is the only way to pay a protocol fee on this network`)),
                     `the Create token form does not tell a ${REGTEST_CHAIN_LABEL} user that the `
                     + 'protocol fee can only be paid in coin here')
                     .toBeVisible({ timeout: 30_000 });

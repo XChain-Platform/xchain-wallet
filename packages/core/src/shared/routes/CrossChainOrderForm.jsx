@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -288,7 +289,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
         if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         const ga = getAddress.trim();
-        if (!ga) { setFormError(`Receive address on ${getDescriptor?.displayName || 'the get chain'} is required.`); return false; }
+        if (!ga) { setFormError(`Receive address on ${getDescriptor?.displayName || 'the get network'} is required.`); return false; }
         if (validationError) { setFormError(validationError); return false; }
         if (expMode === 'custom') {
             const raw = expInput.trim();
@@ -507,16 +508,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 <SectionHeader title="Cross-chain order broadcast" />
                 {txid ? (
                     <>
-                        <p className={styles.successLabel}>Give-chain transaction</p>
+                        <p className={styles.successLabel}>{t('crossChainSwap.success.giveTxLabel')}</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
                     </>
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
-                <p className={styles.hint}>
-                    Your {giveTick.trim().toUpperCase()} is escrowed on the give chain. The network
-                    matches this order automatically against offers on the get chain; it may fill in
-                    parts, and each fill is released from escrow on both chains with no further transaction from you.
-                </p>
+                <p className={styles.hint}>{t('crossChainOrder.success.hint', { tick: giveTick.trim().toUpperCase() })}</p>
                 <div className={styles.actions}>
                     {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
                     <Button variant="primary" onClick={onBack}>Done</Button>
