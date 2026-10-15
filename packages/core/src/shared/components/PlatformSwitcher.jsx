@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../ui/index.js';
 import LINKS from '../platform-links.json';
+import { platformLinkLabel } from '../platformLinkLabel.js';
 import styles from './PlatformSwitcher.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { t } from '../../i18n/index.js';
@@ -135,9 +136,9 @@ export function PlatformSwitcher({ current }) {
                             role="menuitem"
                             aria-current="page"
                             aria-disabled="true"
-                            aria-label={t('components.platformSwitcher.currentSite', { label: p.label })}
+                            aria-label={t('components.platformSwitcher.currentSite', { label: platformLinkLabel(p) })}
                         >
-                            <span>{p.label}</span>
+                            <span>{platformLinkLabel(p)}</span>
                             <span className={styles.hereTag} aria-hidden="true">{t('components.platformSwitcher.youAreHere')}</span>
                         </div>
                     ) : (
@@ -154,7 +155,7 @@ export function PlatformSwitcher({ current }) {
                             tabIndex={-1}
                             onClick={() => closeMenu(true)}
                         >
-                            <span>{p.label}</span>
+                            <span>{platformLinkLabel(p)}</span>
                             <span className={styles.itemIcon} aria-hidden="true">
                                 <Icon.ExternalLinkIcon />
                             </span>

@@ -13,6 +13,7 @@ import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { isNativeShell } from '../nativeShell.js';
 import PLATFORM_LINKS from '../platform-links.json';
+import { platformLinkLabel } from '../platformLinkLabel.js';
 import styles from './AppHeader.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -218,7 +219,7 @@ export function HeaderActionMenu({
                             onClick={() => close()}
                         >
                             <span className={styles.rowIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                            <span className={styles.rowLabel}>{site.label}</span>
+                            <span className={styles.rowLabel}>{platformLinkLabel(site)}</span>
                         </a>
                     ))}
                 </div>

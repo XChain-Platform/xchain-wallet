@@ -21,6 +21,7 @@ import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import PLATFORM_LINKS from '../platform-links.json';
+import { platformLinkLabel } from '../platformLinkLabel.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -385,7 +386,7 @@ export function BottomTabBar({
                                                 <span className={styles.sheetIcon} aria-hidden="true">
                                                     <Icon.ExternalLinkIcon />
                                                 </span>
-                                                <span>{site.label}</span>
+                                                <span>{platformLinkLabel(site)}</span>
                                             </a>
                                         </li>
                                     )) : null}
