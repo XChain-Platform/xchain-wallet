@@ -1928,8 +1928,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <div className={styles.toolbarTop}>
                     <div className={styles.phoneFilterToggle}>
                         <Button
+                            className={styles.toolbarControl}
                             variant="secondary"
-                            size="sm"
                             block
                             icon={<Icon.FilterIcon />}
                             aria-expanded={phoneFiltersOpen}
