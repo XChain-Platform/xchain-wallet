@@ -60,6 +60,17 @@ import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// Confirm sessions outlive a network switch in the host, so Home offers only
+// the ones whose chain belongs to the active network.
+function confirmSessionsForNetwork(sessions, activeNetwork) {
+    return sessions.filter((session) => {
+        const chainId = session?.dispatch?.base?.chainId
+            || session?.composed?.chainId
+            || session?.request?.chainId;
+        return chainRegistry.get(chainId)?.networkKind === activeNetwork;
+    });
+}
+
 // The verb the balance banner is written in, in one place: the humanized
 // message minted in the catch and the countdown re-rendered once a second have
 // to open with the same words or the banner changes voice as it ticks.
@@ -891,10 +902,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             try {
                 const resp = await messaging.listConfirmSessions();
                 if (!isCancelled()) {
-                    setConfirmSessions(filterConfirmSessionsForAccount(
-                        resp?.sessions,
-                        walletId,
-                        accountId,
+                    setConfirmSessions(confirmSessionsForNetwork(
+                        filterConfirmSessionsForAccount(resp?.sessions, walletId, accountId),
+                        activeNetwork,
                     ));
                 }
             } catch { /* non-fatal */ }
