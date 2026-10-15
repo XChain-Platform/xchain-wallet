@@ -198,6 +198,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
     const [buildErrorDetails, setBuildErrorDetails] = useState('');
     const [rowValidationErrors, setRowValidationErrors] = useState(/** @type {Record<string, string>} */ ({}));
+    // Rows the user has edited, or every row once Review was pressed. A row
+    // with no action picked yet only says so after one of those.
+    const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
     const [preReviewError, setPreReviewError] = useState(/** @type {string | null} */ (null));
     const [validatingRows, setValidatingRows] = useState(false);
     const [password, setPassword] = useState('');
@@ -318,6 +321,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         return constraintError;
     }, [parsedRows, rowErrors, constraintError]);
 
+    // The error shown beside each row: an unpicked action waits until the row
+    // is touched or Review is pressed; every other row error shows at once.
+    const shownRowErrors = rows.map((row, i) => (
+        rowErrors[i] && (row.action || touchedRows[row.id]) ? rowErrors[i] : null
+    ));
+
     const draftKey = JSON.stringify({ chainId, fromAddressId, rows });
     const draftKeyRef = useRef(draftKey);
     draftKeyRef.current = draftKey;
@@ -335,6 +344,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     };
     const updateRow = (i, patch) => {
         clearPreReviewErrors(rows[i]?.id);
+        const id = rows[i]?.id;
+        if (id) setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
         setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     };
     const addRow = () => {
@@ -349,6 +360,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const sendTotals = useMemo(() => sendTotalsFor(parsedRows), [parsedRows]);
 
     async function goReview() {
+        setTouchedRows(Object.fromEntries(rows.map((row) => [row.id, true])));
         if (composeError) return;
         const validatedDraftKey = draftKey;
         setValidatingRows(true);
@@ -737,7 +749,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 <StatusMessage variant="error" className={styles.error}>{preReviewError || constraintError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={Boolean(composeError) || validatingRows}>
+                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={validatingRows}>
                     Review
                 </Button>
             )}
@@ -796,9 +808,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         placeholder='{"VERSION":"0", ...}'
                         spellCheck={false}
                     />
-                    {rowErrors[i] ? (
+                    {shownRowErrors[i] ? (
                         <StatusMessage variant="error" className={styles.error}>
-                            {rowErrors[i]}
+                            {shownRowErrors[i]}
                         </StatusMessage>
                     ) : null}
                     <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>

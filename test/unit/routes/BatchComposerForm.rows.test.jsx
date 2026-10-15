@@ -70,12 +70,31 @@ describe('BatchComposerForm rows', () => {
         expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
     });
 
+    it('waits to ask for an action until the user touches the row or presses Review', async () => {
+        mount();
+        const review = await screen.findByRole('button', { name: 'Review' });
+        expect(screen.queryByText(/pick an action/)).toBeNull();
+        expect(review).not.toBeDisabled();
+
+        fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
+        const rows = screen.getAllByRole('region', { name: /Step \d/ });
+        fireEvent.change(within(rows[1]).getByRole('textbox', { name: 'Params (JSON object)' }), {
+            target: { value: '{"VERSION":"0","TEXT":"hi"}' },
+        });
+        expect(within(rows[1]).getByText('Step 2: pick an action.')).toBeInTheDocument();
+        expect(within(rows[0]).queryByText(/pick an action/)).toBeNull();
+
+        fireEvent.click(review);
+        expect(within(rows[0]).getByText('Step 1: pick an action.')).toBeInTheDocument();
+    });
+
     it('shows validation beside the affected row and retracts it when the field is fixed', async () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: /Add action/ }));
         const rows = screen.getAllByRole('region', { name: /Step \d/ });
         const second = within(rows[1]);
 
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(second.getByText('Step 2: pick an action.')).toBeInTheDocument();
         fireEvent.change(second.getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
         expect(second.queryByText('Step 2: pick an action.')).toBeNull();

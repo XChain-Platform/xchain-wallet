@@ -10,7 +10,7 @@
 // list keeps its Chain row.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -28,7 +28,7 @@ const FROM = {
 
 afterEach(() => cleanup());
 
-function mount() {
+function mount(initialRows = [{ chainId: CHAIN_ID, action: 'SEND', params: { VERSION: '0' } }]) {
     const messaging = {
         getAddressesByChain: vi.fn(async () => ({ [CHAIN_ID]: [FROM] })),
         getActiveAddresses: vi.fn(async () => ({ [CHAIN_ID]: FROM })),
@@ -41,7 +41,7 @@ function mount() {
             <ParallelComposer
                 walletId="wallet-1"
                 onBack={() => {}}
-                initialRows={[{ chainId: CHAIN_ID, action: 'SEND', params: { VERSION: '0' } }]}
+                initialRows={initialRows}
             />
         </MessagingProvider>,
     );
@@ -54,5 +54,24 @@ describe('ParallelComposer row editor', () => {
         await screen.findByRole('button', { name: 'Remove' });
         expect(screen.getByRole('combobox', { name: 'Chain' })).toBeTruthy();
         expect(form.querySelectorAll(`.${badgeStyles.badge}`)).toHaveLength(0);
+    });
+
+    it('waits to ask for an action until the user touches the row or presses Review', async () => {
+        mount(null);
+        const review = await screen.findByRole('button', { name: 'Review' });
+        expect(screen.queryByText(/pick an action/)).toBeNull();
+        expect(review).not.toBeDisabled();
+
+        fireEvent.click(review);
+        expect(await screen.findByText('Row 1: pick an action.')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
+        fireEvent.change(screen.getAllByRole('combobox', { name: 'Action' })[0], { target: { value: 'SEND' } });
+        expect(screen.queryByText(/pick an action/)).toBeNull();
+
+        fireEvent.change(screen.getAllByRole('textbox', { name: 'Params (JSON object)' })[1], {
+            target: { value: '{"VERSION":"0","MEMO":"x"}' },
+        });
+        expect(screen.getByText('Row 2: pick an action.')).toBeTruthy();
     });
 });
