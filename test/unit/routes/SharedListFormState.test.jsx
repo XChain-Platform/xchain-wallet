@@ -91,6 +91,57 @@ describe('shared list route state boundaries', () => {
         expect(screen.getAllByRole('listitem')).toHaveLength(40);
     });
 
+    it('keeps a load-more click made before the first page effects have flushed', async () => {
+        const lists = Array.from({ length: 50 }, (_, index) => ({
+            home_chain: 'BTC',
+            home_list_index: index + 1,
+            type: 1,
+            owner: `owner-${index}`,
+            member_count: 1,
+            share_block: 100 + index,
+            bindTarget: 1000 + index,
+        }));
+        let resolveLists;
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSharedLists: vi.fn(() => new Promise((resolve) => { resolveLists = resolve; })),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <SharedListDirectory walletId="wallet-1" chainId={CHAIN} mode="browse" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(resolveLists).toBeTypeOf('function'));
+
+        // Outside act React commits the loaded directory and defers its passive
+        // effects to a later task. Click Load more from the DOM mutation that
+        // shows the list, which is before those effects have run: this is the
+        // gap a loaded machine widens for a test that waits with findBy.
+        const env = globalThis;
+        env.IS_REACT_ACT_ENVIRONMENT = false;
+        try {
+            await new Promise((resolve, reject) => {
+                const observer = new MutationObserver(() => {
+                    if (screen.queryAllByRole('listitem').length === 0) return;
+                    observer.disconnect();
+                    try {
+                        expect(screen.getAllByRole('listitem')).toHaveLength(20);
+                        fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+                resolveLists({ lists, unavailable: [] });
+            });
+        } finally {
+            env.IS_REACT_ACT_ENVIRONMENT = true;
+        }
+        await act(async () => {});
+        expect(screen.getAllByRole('listitem')).toHaveLength(40);
+    });
+
     it('surfaces a synchronous directory failure through the load error', async () => {
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
