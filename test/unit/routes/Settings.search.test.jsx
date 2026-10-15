@@ -178,12 +178,14 @@ describe('Settings search', () => {
         mount();
         searchFor('no setting has these words');
 
-        expect(screen.getByRole('status')).toHaveTextContent('No settings match "no setting has these words".');
+        // A section still loading shows its own status row, so find the search one by its words.
+        expect(screen.getAllByRole('status').find((el) => /No settings match/.test(el.textContent)))
+            .toHaveTextContent('No settings match "no setting has these words".');
         expect(screen.queryByText('Backup')).toBeNull();
 
         searchFor('');
 
-        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.queryByText(/No settings match/)).toBeNull();
         expect(screen.getByText('Backup')).toBeTruthy();
         expect(screen.getByText('About')).toBeTruthy();
     });
@@ -192,6 +194,7 @@ describe('Settings search', () => {
         mount({ activeWallet: null, onOpenAccountPicker: undefined });
         searchFor('signer pairing');
 
-        expect(screen.getByRole('status')).toHaveTextContent('No settings match "signer pairing".');
+        expect(screen.getAllByRole('status').find((el) => /No settings match/.test(el.textContent)))
+            .toHaveTextContent('No settings match "signer pairing".');
     });
 });

@@ -168,6 +168,8 @@ export function AmountField({
         const usesDotDecimal = formatWithThousands('1.1').includes('.');
         onAmountFieldChange(normalized, usesDotDecimal ? normalizedCursor : null);
     };
+    const showSwap = Boolean(fiatRate && toggleAmountInputMode);
+    const hasFooter = showSwap || hasBalanceText;
     const priceSourceLabel = fiatRate?.source === 'market' ? ' · DEX price' : '';
 
     let derivedText = '';
@@ -248,36 +250,41 @@ export function AmountField({
                     </Button>
                 ) : null}
             </div>
-            <div className={styles.amountFooter}>
-                {fiatRate && toggleAmountInputMode ? (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Icon.SwapIcon />}
-                        onClick={() => {
-                            setInputError('');
-                            toggleAmountInputMode();
-                        }}
-                        aria-pressed={isFiat}
-                        aria-label={isFiat
-                            ? `Switch input to ${tickUpper || 'coin'}`
-                            : `Switch input to ${fiatCcy}`}
-                    >
-                        <span className={styles.amountSwapValue}>{derivedText}</span>
-                    </Button>
-                ) : (
-                    <span />
-                )}
-                <span className={styles.amountFooterRight}>
-                    <span
-                        role={hasBalanceText ? 'status' : undefined}
-                        aria-live={hasBalanceText ? 'polite' : undefined}
-                        aria-atomic={hasBalanceText ? 'true' : undefined}
-                    >
-                        {balanceText ?? null}
+            {/* Rendered only when it has something to show: an empty footer still
+                took its top margin (and, stacked on a phone, a row gap), so the
+                form gap under a bare amount field read 8px wider than the rest. */}
+            {hasFooter ? (
+                <div className={styles.amountFooter}>
+                    {showSwap ? (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Icon.SwapIcon />}
+                            onClick={() => {
+                                setInputError('');
+                                toggleAmountInputMode();
+                            }}
+                            aria-pressed={isFiat}
+                            aria-label={isFiat
+                                ? `Switch input to ${tickUpper || 'coin'}`
+                                : `Switch input to ${fiatCcy}`}
+                        >
+                            <span className={styles.amountSwapValue}>{derivedText}</span>
+                        </Button>
+                    ) : (
+                        <span />
+                    )}
+                    <span className={styles.amountFooterRight}>
+                        <span
+                            role={hasBalanceText ? 'status' : undefined}
+                            aria-live={hasBalanceText ? 'polite' : undefined}
+                            aria-atomic={hasBalanceText ? 'true' : undefined}
+                        >
+                            {balanceText ?? null}
+                        </span>
                     </span>
-                </span>
-            </div>
+                </div>
+            ) : null}
         </div>
     );
 }

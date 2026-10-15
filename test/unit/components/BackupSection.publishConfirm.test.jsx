@@ -282,7 +282,8 @@ describe('AboutSection copy confirmation', () => {
             const button = screen.getByRole('button', { name: 'Copy diagnostics' });
             fireEvent.click(button);
 
-            expect(await screen.findByRole('status')).toHaveTextContent(/^Copied/);
+            // The message row leads with its (aria-hidden) tone icon.
+            expect(await screen.findByRole('status')).toHaveTextContent(/^\W*Copied/);
             expect(writeText).toHaveBeenCalledOnce();
             expect(button).toHaveTextContent('Copied');
             act(() => vi.advanceTimersByTime(1501));

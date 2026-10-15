@@ -1703,18 +1703,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                                     : 'Check the chains you mean and apply to correct it.')}
                         </StatusMessage>
                     ) : null}
-                    <span className={styles.pickerLabel}>Destination chains</span>
-                    {bridgeDestinations.map((coin) => (
-                        <Checkbox
-                            key={coin}
-                            label={bridgeCoinDisplay(coin)}
-                            checked={!!bridgeChainPicks[coin]}
-                            disabled={bridgeFrozen || bridgePolicyBound}
-                            onChange={(e) => setBridgeChainPicks(
-                                (prev) => ({ ...prev, [coin]: e.target.checked }),
-                            )}
-                        />
-                    ))}
+                    {/* One group, so the label sits a label gap above its chains
+                        instead of a form gap plus its own margin, and the
+                        chains read as one control rather than loose fields. */}
+                    <div className={styles.checkGroup} role="group" aria-labelledby="bridge-destination-chains">
+                        <span id="bridge-destination-chains" className={styles.pickerLabel}>Destination chains</span>
+                        {bridgeDestinations.map((coin) => (
+                            <Checkbox
+                                key={coin}
+                                label={bridgeCoinDisplay(coin)}
+                                checked={!!bridgeChainPicks[coin]}
+                                disabled={bridgeFrozen || bridgePolicyBound}
+                                onChange={(e) => setBridgeChainPicks(
+                                    (prev) => ({ ...prev, [coin]: e.target.checked }),
+                                )}
+                            />
+                        ))}
+                    </div>
                     <p className={styles.hint}>
                         Unchecking every chain closes the door to NEW transfers. It never
                         touches copies already out there, and holders can still bring those
