@@ -1150,7 +1150,7 @@ describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
         await approveHardwareSend(messaging);
 
         await waitFor(() => expect(messaging.sendAssetHw).toHaveBeenCalledOnce());
-        expect(await screen.findByRole('status')).toHaveTextContent(
+        expect(await screen.findByTestId('confirm-notice')).toHaveTextContent(
             'Signing was canceled on your hardware wallet. Nothing was signed. Review the details and select Approve again when you are ready.',
         );
         expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
