@@ -26,6 +26,7 @@ export const TOKEN_GROUPS = [
             color('--xc-bg-muted', '#F5F6F8', '#121824', 'Muted page region'),
             color('--xc-surface', '#FFFFFF', '#151B28', 'Default card surface'),
             color('--xc-surface-raised', '#FFFFFF', '#1B2231', 'Modal and popover surface'),
+            color('--xc-skeleton', '#E6E9EF', '#1B2231', 'Loading placeholder fill'),
             color('--xc-border', '#818B9B', '#5F6D83', 'Default border'),
             color('--xc-border-strong', '#818B9B', '#5F6D83', 'Border compatibility alias'),
             color('--xc-text', '#0F172A', '#E5EAF2', 'Primary text'),
