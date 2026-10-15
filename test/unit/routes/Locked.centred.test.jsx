@@ -42,19 +42,22 @@ describe('Locked screen centring', () => {
             React.createElement(Locked, { onUnlocked: vi.fn() }),
         ));
         const form = screen.getByRole('form', { name: 'Unlock wallet' });
-        expect(form.parentElement.className).toMatch(/centre/);
-        expect(form.parentElement.children).toHaveLength(1);
+        // The form template's page column (its notice slot, then the form) is
+        // the one child the centre column centres.
+        const column = form.parentElement;
+        expect(column.parentElement.className).toMatch(/centre/);
+        expect(column.parentElement.children).toHaveLength(1);
 
         expect(css).toMatch(/\.centre\s*\{[^}]*display: flex;[^}]*flex-direction: column;[^}]*min-height: 100%;/);
         // Auto margins, not justify-content: center, which would push the top
         // of a taller form out of reach of the scroller.
-        expect(css).toMatch(/\.centre > form\s*\{\s*margin-block: auto;\s*\}/);
+        expect(css).toMatch(/\.centre > \*\s*\{\s*margin-block: auto;\s*\}/);
         expect(css).not.toMatch(/\.centre\s*\{[^}]*justify-content:\s*center/);
     });
 
     it('keeps the form at the top while the keyboard is open', () => {
         expect(css).toMatch(
-            /:global\(html\[data-xc-keyboard='open'\]\) \.centre > form\s*\{\s*margin-block: 0;\s*\}/,
+            /:global\(html\[data-xc-keyboard='open'\]\) \.centre > \*\s*\{\s*margin-block: 0;\s*\}/,
         );
     });
 });
