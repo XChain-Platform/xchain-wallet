@@ -176,7 +176,7 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
             await expect(page.getByRole('heading', { name: 'Issue a token', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('button', { name: /^Custom\b/ }).click();
-            const form = page.getByRole('form', { name: 'Choose token chain', exact: true });
+            const form = page.getByRole('form', { name: 'Choose token network', exact: true });
             await expectAlignedForm(form, `${viewport.name} Create token`);
             await expectNoHorizontalOverflow(page, `${viewport.name} Create token`);
         });

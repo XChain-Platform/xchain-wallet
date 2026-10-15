@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -34,8 +32,11 @@ const POLL = Object.freeze({
     winning_option: 0,
 });
 
-// The demo wallet runs on Bitcoin regtest, so the delegate is a regtest address.
-const DELEGATE_ADDRESS = 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f';
+// A created wallet, not the demo one: a demo wallet keeps every compose
+// submit disabled behind its demo note, so it can never reach a review. A
+// created wallet's Bitcoin chain is mainnet, so the delegate is a mainnet address.
+const FIXTURE_CHAIN = 'bitcoin-mainnet';
+const DELEGATE_ADDRESS = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 const DEPOSIT = '125.5';
 const NORMAL_FEE = '0.000015 BTC (6 sat/vB)';
 
@@ -60,33 +61,48 @@ async function settle(page) {
 }
 
 async function installGovernanceFixture(page) {
-    await page.evaluate(async ({ poll }) => {
+    await page.evaluate(async ({ poll, chainId }) => {
         const messaging = await import('/src/messaging.js');
         const bridge = await import('/src/hostBridge.js');
         const wallets = await messaging.listWallets();
         const walletId = wallets[0]?.id;
-        if (!walletId) throw new Error('demo wallet fixture did not create a wallet');
+        if (!walletId) throw new Error('the wallet fixture did not create a wallet');
 
-        const [addressesByChain, activeAddresses, currentSettings] = await Promise.all([
+        // The governance token picker reads the wallet's balances, so the
+        // fixture host keeps serving the created wallet's own.
+        const [addressesByChain, activeAddresses, currentSettings, walletBalances] = await Promise.all([
             messaging.getAddressesByChain(walletId),
             messaging.getActiveAddresses(walletId),
             messaging.getSettings(),
+            messaging.getWalletBalances(walletId),
         ]);
-        // The demo wallet runs on Bitcoin regtest.
-        const bitcoinAddresses = addressesByChain['bitcoin-regtest'];
+        const bitcoinAddresses = addressesByChain[chainId];
         if (!Array.isArray(bitcoinAddresses) || bitcoinAddresses.length === 0) {
-            throw new Error('demo wallet fixture did not create a Bitcoin address');
+            throw new Error('the wallet fixture did not create a Bitcoin address');
         }
-        const fixtureAddresses = { 'bitcoin-regtest': bitcoinAddresses };
-        const fixtureActive = { 'bitcoin-regtest': activeAddresses['bitcoin-regtest'] };
+        const fixtureAddresses = { [chainId]: bitcoinAddresses };
+        // The poll deposit is checked against the source's XCHAIN, which the
+        // dev-mock balance set does not hold; give the first address 10,000.
+        const fixtureBalances = (walletBalances?.[chainId] || []).map((entry, index) => (index > 0 ? entry : {
+            ...entry,
+            balances: {
+                ...entry.balances,
+                tokens: [
+                    ...(entry.balances?.tokens || []),
+                    { tick: 'XCHAIN', displayName: 'XChain', divisibility: 8, quantity: '1000000000000' },
+                ],
+            },
+        }));
+        const fixtureActive = { [chainId]: activeAddresses[chainId] };
         const settings = { ...currentSettings, walletMode: 'watcher' };
 
         const results = {
             'addresses.byChain': fixtureAddresses,
             'addresses.active': fixtureActive,
+            'balances.wallet': { [chainId]: fixtureBalances },
             'settings.get': settings,
             'contacts.list': [],
-            'indexer.watermark': { chainId: 'bitcoin-regtest', watermark: 699900 },
+            'indexer.watermark': { chainId, watermark: 699900 },
             'chain.tipBlockTime': { blockTime: 0 },
             'governance.polls': { data: [poll] },
             'governance.poll': { data: [poll] },
@@ -105,7 +121,7 @@ async function installGovernanceFixture(page) {
             },
         });
         window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: settings }));
-    }, { poll: POLL });
+    }, { poll: POLL, chainId: FIXTURE_CHAIN });
 }
 
 async function expectMatchingControlRows(page, label) {
@@ -193,7 +209,7 @@ for (const viewport of VIEWPORTS) {
     test(`governance flows render and review correctly at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        await createWallet(page);
         await installGovernanceFixture(page);
 
         await gotoPalette(page, 'Governance');

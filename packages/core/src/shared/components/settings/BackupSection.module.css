@@ -1,14 +1,6 @@
-/* An opened Backup row keeps the bordered row frame, so its form reads as
-   that row expanded, as This wallet's forms do. */
-.formSection {
-    composes: card from '../../../ui/Card.module.css';
-}
-
-.formSection > div:last-child {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
+/* An opened Backup row is the shared card (ui/Card.module.css), set on the
+   FormSection in the JSX, so its form reads as that row expanded, as This
+   wallet's forms do. */
 
 .actions {
     display: flex;

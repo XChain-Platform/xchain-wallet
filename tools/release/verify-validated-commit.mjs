@@ -44,6 +44,17 @@
 // does not matter, the fix is to make CI green and re-run this workflow,
 // which re-evaluates from scratch.
 //
+// THE ONLY EXCEPTION IS A REVIEWED WAIVER ENTRY, never a flag or env var.
+// tools/release/gate-waivers.json lists entries that each name ONE release
+// version (matched against package.json of the checked-out tree), ONE
+// workflow and the exact JOBS allowed to be red, with the reason and who
+// ruled it. A completed run whose only non-success jobs are the waived ones
+// is accepted, the acceptance is printed as a WAIVER line, and every other
+// job must still be `success` or `skipped`. A waiver never applies to a
+// run still in progress, never to commit statuses (license/cla), and a
+// jobs list that cannot be fetched is a refusal. Adding an entry is a
+// committed, reviewable change that dies with the version it names.
+//
 // WAITING IS NOT WEAKENING (--wait, added for the develop/master flow).
 // Under `release-management.md` a release tag is cut on master's MERGE
 // commit, and that commit's CI does not exist until the merge happens: the
@@ -67,6 +78,10 @@
 //   XCHAIN_REQUIRED_WORKFLOWS  optional, comma-separated workflow file
 //                       names; defaults to `ci.yml`
 //   XCHAIN_GATE_WAIT_SECONDS   optional, default for --wait-timeout
+
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const REQUIRED_DEFAULT = 'ci.yml';
 const REQUIRED_STATUSES = ['license/cla'];
@@ -115,6 +130,12 @@ Env:
   XCHAIN_REQUIRED_WORKFLOWS  optional, comma-separated workflow file names;
                              defaults to \`${REQUIRED_DEFAULT}\`
   XCHAIN_GATE_WAIT_SECONDS   optional, default for --wait-timeout
+
+Waivers: there is no skip switch. A waiver exists only as a reviewed entry in
+  tools/release/gate-waivers.json, for one release version at a time (the
+  version in package.json of this checkout), naming the workflow and the
+  exact jobs allowed to fail. Every other job must still succeed. Waivers
+  never cover commit statuses or a run still in progress.
 
 Required commit statuses: ${REQUIRED_STATUSES.join(', ')}
   A status absent from the commit itself is taken from the head of the merged
@@ -222,6 +243,21 @@ async function api(path) {
 }
 
 const diagnoses = [];
+const waiverBanners = [];
+
+// Waivers are data in the repo, read from the checked-out tree the gate runs
+// from (the tag checkout in release.yml). Anything unreadable or malformed
+// yields no waiver, which keeps the gate fail-closed.
+function loadWaiverContext() {
+    try {
+        const here = dirname(fileURLToPath(import.meta.url));
+        const version = JSON.parse(readFileSync(resolve(here, '..', '..', 'package.json'), 'utf8')).version;
+        const list = JSON.parse(readFileSync(resolve(here, 'gate-waivers.json'), 'utf8'));
+        return { version, list: Array.isArray(list) ? list : [] };
+    } catch {
+        return { version: null, list: [] };
+    }
+}
 
 // S41. The verdict below was always right and the ADVICE under it was
 // not. A red run got one sentence - "make CI green on this exact commit" -
@@ -303,6 +339,35 @@ async function diagnose(runId) {
               + 'account\'s Actions billing and runner availability.');
 }
 
+// Judge a completed, non-success run against the waiver for this version.
+// Returns an evidence line when the run is accepted, else null (refuse).
+async function waivedAcceptance(wanted, run) {
+    const ctx = loadWaiverContext();
+    if (!ctx.version) return null;
+    const waiver = ctx.list.find((w) => w && w.workflow === wanted && w.version === ctx.version
+        && Array.isArray(w.jobs) && w.jobs.length > 0);
+    if (!waiver) return null;
+    const jobs = (await tryApi(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`))?.jobs;
+    if (!Array.isArray(jobs) || jobs.length === 0) return null;
+    const waived = new Set(waiver.jobs);
+    const waivedSeen = [];
+    for (const job of jobs) {
+        if (waived.has(job.name)) {
+            if (!['success', 'failure', 'cancelled', 'skipped'].includes(job.conclusion)) return null;
+            waivedSeen.push(`${job.name}=${job.conclusion}`);
+        } else if (job.conclusion !== 'success' && job.conclusion !== 'skipped') {
+            return null;
+        }
+    }
+    const line = `${wanted}: run ${run.id} ACCEPTED UNDER WAIVER for version ${waiver.version}; `
+        + `waived jobs: ${waivedSeen.join(', ') || waiver.jobs.join(', ')}; reason: ${waiver.reason}; `
+        + `ruled by ${waiver.ruled_by} on ${waiver.ruled_at}`;
+    waiverBanners.push(`WAIVER: ${wanted} run ${run.id} accepted with waived job(s) `
+        + `${waivedSeen.join(', ') || waiver.jobs.join(', ')} for version ${waiver.version} `
+        + `(ruled by ${waiver.ruled_by}, ${waiver.ruled_at}). Reason: ${waiver.reason}`);
+    return line;
+}
+
 // One pass over the API's answer. Split out of the top level so --wait can
 // ask again: the state it reports is the whole verdict, and PENDING is kept
 // apart from PROBLEMS because only pending is worth waiting on. A concluded
@@ -350,6 +415,11 @@ async function evaluate() {
             continue;
         }
         if (newest.conclusion !== 'success') {
+            const accepted = await waivedAcceptance(wanted, newest);
+            if (accepted) {
+                evidence.push(accepted);
+                continue;
+            }
             problems.push(`\`${wanted}\` run ${newest.id} concluded \`${newest.conclusion}\`, `
                 + 'not `success`');
             failedRuns.push(newest.id);
@@ -456,10 +526,13 @@ if (problems.length > 0) {
         + 'concurrency group cancels the previous push\'s run, so a commit that\n'
         + 'was superseded before its suite finished looks untroubled and was\n'
         + 'never actually tested. That is how v0.334.0 was cut.\n\n'
-        + 'There is no skip switch. Make CI green on this exact commit, then\n'
+        + 'There is no skip switch (a waiver exists only as a reviewed entry in\n'
+        + 'tools/release/gate-waivers.json, one version at a time, naming jobs).\n'
+        + 'Make CI green on this exact commit, then\n'
         + 're-run this workflow - it re-evaluates from scratch. If the commit\n'
         + 'needs changing, it needs a new tag, because the tag names the bytes.');
 }
 
+for (const banner of new Set(waiverBanners)) process.stdout.write(`\n*** ${banner} ***\n\n`);
 process.stdout.write('Step 1 gate: the tag commit has a green run of every required workflow '
     + 'and every required status is successful.\n');

@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -153,13 +151,15 @@ for (const viewport of VIEWPORTS) {
         test.slow();
         let generatedAddress;
         await page.setViewportSize(viewport);
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // A created wallet, not the demo one: a demo wallet keeps every compose
+        // submit disabled behind its demo note, so it can never reach a review.
+        await createWallet(page);
 
         await test.step('add an address from the populated address list', async () => {
             await gotoPalette(page, 'Addresses');
             await expectScreenLayout(page, 'Addresses', 'initial address list');
             const before = new Set(await listedAddresses(page));
-            expect(before.size, 'demo mode did not seed any addresses').toBeGreaterThan(0);
+            expect(before.size, 'the new wallet holds no address').toBeGreaterThan(0);
 
             await page.getByRole('button', { name: 'Add or import address' }).click();
             await expectScreenLayout(page, 'Addresses', 'open add-address menu');

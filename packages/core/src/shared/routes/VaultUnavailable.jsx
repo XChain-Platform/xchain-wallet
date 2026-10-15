@@ -222,7 +222,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 role="region"
                                 aria-label={wipeCopy.region}
                             >
-                                <StatusMessage variant="error" role={null}>
+                                <StatusMessage variant="warning" role={null} className={styles.wipeWarning}>
                                     <strong>
                                         {t('vaultUnavailable.wipeWarning')}
                                     </strong>

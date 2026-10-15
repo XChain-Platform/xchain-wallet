@@ -64,17 +64,40 @@ async function enablePseudoRtl(page) {
     await page.getByRole('button', { name: 'Back to settings' }).click();
     await page.getByLabel('Language', { exact: true }).selectOption('pseudo-rtl');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('pseudo-rtl');
+    // The field's own label is localized too, so in the pseudo locale it reads
+    // as the wrapped pseudo string rather than "Language".
+    await expect(page.getByLabel(/^\u200F?⟦Language⟧$/)).toHaveValue('pseudo-rtl');
+}
+
+// The pseudo locale wraps every translated string, the navigation and the
+// palette chrome included, as RLM + "⟦" + English + "⟧". Match that form, so
+// the walk still proves each label went through translation. The palette's
+// command titles are not translated yet and stay English.
+function pseudoName(name) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^\\u200F?⟦${escaped}⟧`);
+}
+
+async function gotoPseudoSection(page, name) {
+    const navItem = page.getByRole('navigation').getByRole('button', { name: pseudoName(name) }).first();
+    if (await navItem.isVisible().catch(() => false)) {
+        await navItem.click();
+        return;
+    }
+    await page.getByRole('navigation').getByRole('button', { name: pseudoName('More') }).first().click();
+    const sheet = page.getByRole('dialog', { name: pseudoName('More') });
+    await expect(sheet, `no More sheet to find "${name}" in`).toBeVisible();
+    await sheet.getByRole('button', { name: pseudoName(name) }).first().click();
 }
 
 async function gotoRoute(page, route) {
     if (!route.palette) {
-        await gotoSection(page, route.name);
+        await gotoPseudoSection(page, route.name);
         return;
     }
 
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: pseudoName('Command palette') });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(route.name);
     await palette.getByRole('option', { name: new RegExp(`^${route.name}\\b`) }).first().click();

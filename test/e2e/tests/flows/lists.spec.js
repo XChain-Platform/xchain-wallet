@@ -4,20 +4,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     gotoSection,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const LIST_INDEX = '700001';
 const LIST_NAME = 'Road trip';
-// The demo wallet runs on Bitcoin regtest, so list members are regtest addresses.
-const LIST_MEMBER = 'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080';
-const SECOND_MEMBER = 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f';
-const TRANSFER_DESTINATION = 'n1HvYayKZr8qW54uBoDgveVS7waeaUrBEy';
+// A created wallet, not the demo one: a demo wallet keeps every compose
+// submit disabled behind its demo note, so it can never reach a review. A
+// created wallet holds Bitcoin mainnet addresses, so list members are too.
+const LIST_CHAIN = 'bitcoin-mainnet';
+const LIST_MEMBER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const SECOND_MEMBER = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+const TRANSFER_DESTINATION = '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2';
 const VIEWPORTS = [
     { width: 412, height: 869 },
     { width: 1280, height: 800 },
@@ -79,7 +80,7 @@ const sendMessage = async (type, request) => {
         return { 0: 'create', 1: 'edit', 2: 'share', 3: 'transfer', 4: 'create-meta', 5: 'rename' };
     }
     if (type === 'lists.forSource') {
-        if (request?.chainId !== 'bitcoin-regtest') return []; // the demo wallet's Bitcoin chain
+        if (request?.chainId !== '${LIST_CHAIN}') return [];
         if (!e2eListOwner) e2eListOwner = request.address;
         if (request.address !== e2eListOwner) return [];
         return { data: [{
@@ -228,7 +229,7 @@ for (const viewport of VIEWPORTS) {
         test.slow();
         await installListFixtures(page);
         await page.setViewportSize(viewport);
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        await createWallet(page);
         await gotoSection(page, 'Lists');
 
         const listRow = page.getByRole('button', {

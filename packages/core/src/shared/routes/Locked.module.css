@@ -57,22 +57,9 @@
     color: var(--xc-text);
 }
 
+/* The lockout notice is the shared StatusMessage; the form gap spaces it. */
 .lockoutBanner {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    margin-bottom: var(--xc-space-3);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-warning, var(--xc-border-strong));
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-}
-
-.lockoutBanner::before {
-    content: '⏱';
-    font-size: var(--xc-text-md);
+    margin: 0;
 }
 
 .lockoutCountdown {
@@ -123,6 +110,11 @@
     gap: var(--xc-space-2);
 }
 
+/* The wipe warning is the shared StatusMessage; the panel gap spaces it. */
+.wipeWarning {
+    margin: 0;
+}
+
 .wipeNote {
     margin: 0;
     font-size: var(--xc-text-xs);
@@ -159,11 +151,6 @@
         /* The compact brand mark has no matching size token. */
         width: 40px;
         margin-bottom: 0;
-    }
-
-    .lockoutBanner {
-        padding: var(--xc-space-2);
-        margin-bottom: var(--xc-space-2);
     }
 
     .forgotBlock {
@@ -214,9 +201,4 @@
     margin-top: var(--xc-space-2);
     padding-top: 0;
     border-top: 0;
-}
-
-:global(html[data-xc-keyboard='open']) .lockoutBanner {
-    padding: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
 }

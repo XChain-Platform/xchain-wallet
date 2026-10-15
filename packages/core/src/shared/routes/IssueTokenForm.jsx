@@ -1054,14 +1054,12 @@ export function IssueTokenForm({ walletId, onBack }) {
                 is a separate owner-only action on an existing row. What belongs
                 on THIS screen is the one decision that is irreversible from
                 here: binding an address list to the token shuts the bridge door
-                for good in milestone 1. */}
+                for good in milestone 1. It is the shared warning notice, not a
+                box of its own inside the form card. */}
             <StatusMessage variant="warning" role={null}>
-                <p>
-                    {t('issue.bridgingHint')}
-                </p>
-                <p>
-                    {t('issue.boundListHint')}
-                </p>
+                <span>{t('issue.bridgingHint')}</span>
+                {' '}
+                <span>{t('issue.boundListHint')}</span>
             </StatusMessage>
             <AddressField
                 id="issue-transfer-owner"

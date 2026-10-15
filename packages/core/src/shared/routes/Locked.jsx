@@ -521,22 +521,19 @@ export function Locked({ onUnlocked }) {
         </div>
     );
 
+    // The shared warning notice, not a box of its own inside the form card.
+    // The notice reads whole when it appears; the countdown ticks silently
+    // inside it so a screen reader does not repeat the sentence every second.
     const lockoutBanner = isLockedOut ? (
-        <div
-            className={styles.lockoutBanner}
-            role="status"
-            aria-live="polite"
-        >
-            <span>
-                {/* The device scope and network guidance distinguish this
-                    local counter from a network-level restriction. */}
-                {t('locked.tooManyIncorrectPasswordsOn')}{' '}
-                <span className={styles.lockoutCountdown}>
-                    {formatCountdown(remainingMs)}
-                </span>
-                {' '}{t('locked.beforeTryingAgainChangingNetworks')}
+        <StatusMessage variant="warning" className={styles.lockoutBanner}>
+            {/* The device scope and network guidance distinguish this
+                local counter from a network-level restriction. */}
+            {t('locked.tooManyIncorrectPasswordsOn')}{' '}
+            <span className={styles.lockoutCountdown} aria-live="off">
+                {formatCountdown(remainingMs)}
             </span>
-        </div>
+            {' '}{t('locked.beforeTryingAgainChangingNetworks')}
+        </StatusMessage>
     ) : null;
 
     const form = (
@@ -646,7 +643,7 @@ export function Locked({ onUnlocked }) {
                                         </>
                                     ) : (
                                         <>
-                                            <StatusMessage variant="error" role={null}>
+                                            <StatusMessage variant="warning" role={null} className={styles.wipeWarning}>
                                                 <strong>{t('locked.thisPermanentlyDeletesEveryWallet')}</strong>
                                             </StatusMessage>
                                             <p className={styles.wipeNote}>
