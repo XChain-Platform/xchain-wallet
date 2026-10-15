@@ -25,7 +25,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, _electron as electron } from '@playwright/test';
 import { createSweep, measureControlRows, measureRulings } from './sweep.js';
-import { launchGuardedElectron } from '../fixtures/electron.js';
+import { closeElectron, launchGuardedElectron } from '../fixtures/electron.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -113,7 +113,7 @@ for (const [width, height] of SIZES) {
             const measured = readFileSync(join(outDir, 'results.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
             expect(measured.length, 'harness coverage: the sweep measured no screen').toBeGreaterThan(0);
         } finally {
-            await app.close();
+            await closeElectron(app);
         }
     });
 }
