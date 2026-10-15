@@ -139,7 +139,7 @@
 /* Short viewports reserve the visible area for credentials, feedback, and
    actions. The keyboard attribute covers iOS, where the keyboard overlays the
    layout viewport instead of reducing the height used by media queries. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .hero {
         flex-direction: row;
         justify-content: center;

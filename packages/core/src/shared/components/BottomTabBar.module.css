@@ -228,7 +228,7 @@
 
 /* A shorter row leaves room for route content on landscape phones without
    reducing the tab buttons below the shared pointer-target floor. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .bar {
         min-height: 2.75rem;
     }
