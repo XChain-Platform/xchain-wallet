@@ -110,6 +110,25 @@ describe('ConnectApproval network checklist', () => {
         expect(screen.queryByText('https://safe.test\u202E.example')).toBeNull();
     });
 
+    it('renders dApp origin titles containing markup as text in the approval', () => {
+        const origin = '<img src=x onerror="globalThis.originExecuted = true">';
+        const appName = '<script>globalThis.appNameExecuted = true</script>';
+        const { container } = render(
+            <ConnectApproval
+                id="markup-identity"
+                payload={{ origin, appName, requestedChains: [bundled.id] }}
+                onReject={() => {}}
+            />,
+        );
+
+        expect(screen.getByTestId('request-origin-full')).toHaveTextContent(origin);
+        expect(screen.getByText(appName)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('img[src="x"]')).toBeNull();
+        expect(globalThis.originExecuted).toBeUndefined();
+        expect(globalThis.appNameExecuted).toBeUndefined();
+    });
+
     it('lists the granted capabilities and only offers networks the site requested', () => {
         mount([bundled.id]);
 

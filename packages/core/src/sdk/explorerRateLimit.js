@@ -210,7 +210,7 @@ export class HostRateLimiter {
         let st = this.hosts.get(host);
         if (!st) {
             st = {
-                blockedUntil: 0, remaining: null, resetAt: null, nextSlotAt: 0,
+                blockedUntil: 0, rateBlockedUntil: 0, remaining: null, resetAt: null, nextSlotAt: 0,
                 strikes: 0, lastStrikeAt: 0, needsTrial: false, trial: null,
                 active: 0, waiters: [],
                 retryActive: 0, retryQueue: [],
@@ -294,18 +294,28 @@ export class HostRateLimiter {
         st.remaining = Math.max(0, remaining);
         st.resetAt = t + resetMs;
         // An empty window is a block until it resets, even before any 429.
-        if (st.remaining === 0) st.blockedUntil = Math.max(st.blockedUntil, st.resetAt);
+        if (st.remaining === 0) {
+            st.blockedUntil = Math.max(st.blockedUntil, st.resetAt);
+            st.rateBlockedUntil = Math.max(st.rateBlockedUntil, st.resetAt);
+        }
     }
 
-    /** Pause the host until `waitMs` from now (never shortens an existing pause). */
-    block(host, waitMs) {
+    /**
+     * Pause the host until `waitMs` from now (never shortens an existing pause).
+     * `rateLimited` is false for a transport failure's backoff: that pause
+     * spaces out retries but must never be reported as the service asking the
+     * wallet to slow down.
+     */
+    block(host, waitMs, rateLimited = true) {
         const st = this.state(host);
-        st.blockedUntil = Math.max(st.blockedUntil, this.now() + Math.max(0, waitMs));
+        const until = this.now() + Math.max(0, waitMs);
+        st.blockedUntil = Math.max(st.blockedUntil, until);
+        if (rateLimited) st.rateBlockedUntil = Math.max(st.rateBlockedUntil, until);
     }
 
-    /** Whole seconds the host stays paused, or 0. */
+    /** Whole seconds the host stays paused for a rate limit, or 0 (a network backoff is not counted). */
     pausedSeconds(host) {
-        const left = this.state(host).blockedUntil - this.now();
+        const left = this.state(host).rateBlockedUntil - this.now();
         return left > 0 ? Math.ceil(left / 1000) : 0;
     }
 
@@ -403,7 +413,7 @@ export class HostRateLimiter {
      * @param {string} host
      * @param {string|null} key   coalescing key for an idempotent read, null otherwise
      * @param {() => Promise<any>} send
-     * @param {(seconds: number) => any} tooLong  builds the error for a pause past the cap
+     * @param {(seconds: number, rateLimited: boolean) => any} tooLong  builds the error for a pause past the cap
      * @param {number} [maxRetries] retries available to this HTTP method
      * @param {AbortSignal} [signal] cancels rate-limit and pacing waits
      */
@@ -461,7 +471,7 @@ export class HostRateLimiter {
             const release = await this.acquire(host, signal);
             try {
                 const waitSeconds = await this.gate(host, deadline, signal);
-                if (waitSeconds > 0) throw tooLong(waitSeconds);
+                if (waitSeconds > 0) throw tooLong(waitSeconds, this.pausedSeconds(host) > 0);
                 // After a transient failure one request goes first and the rest wait
                 // for its answer, so an unhealthy host sees one probe instead of a wave.
                 if (st.needsTrial && st.trial) {
@@ -508,7 +518,7 @@ export class HostRateLimiter {
                     const wait = named !== null
                         ? named
                         : this.backoffMs(Math.max(retries, st.strikes - 1));
-                    this.block(host, wait);
+                    this.block(host, wait, status === 429);
                     // Every 4xx is final for this call. The pause only protects later calls.
                     if (status === 429 || retries >= maxRetries || wait > this.opts.maxWaitMs) throw err;
                     retries += 1;
@@ -530,7 +540,16 @@ export class HostRateLimiter {
 export const sharedExplorerLimiter = new HostRateLimiter();
 
 /** An axios-shaped 429 for a request the layer did not send because the host is paused. */
-function pausedError(seconds, config) {
+function pausedError(seconds, config, rateLimited = true) {
+    if (!rateLimited) {
+        // The host is only backing off after a transport failure: say so as the
+        // network failure it is, never as a 429 the service did not send.
+        const net = /** @type {any} */ (new Error('Network Error'));
+        net.isAxiosError = true;
+        net.code = 'ERR_NETWORK';
+        net.config = config;
+        return net;
+    }
     const err = /** @type {any} */ (new Error('Request failed with status code 429'));
     err.isAxiosError = true;
     err.config = config;
@@ -592,14 +611,14 @@ function wrapExplorerAxios(client, limiter, maxRetries, isCurrent = () => true) 
         const key = shareable ? requestKey('GET', base, url, config && config.params) : null;
         return limiter.request(
             host, key, () => currentResponse(() => get(url, config), isCurrent),
-            (s) => pausedError(s, config),
+            (s, rateLimited) => pausedError(s, config, rateLimited),
             maxRetries, config?.signal,
         );
     };
     if (post) {
         client.post = (url, body, config = {}) => limiter.request(
             host, null, () => currentResponse(() => post(url, body, config), isCurrent),
-            (s) => pausedError(s, config),
+            (s, rateLimited) => pausedError(s, config, rateLimited),
             maxRetries, config?.signal,
         );
     }
@@ -706,7 +725,7 @@ function wrapEncoderAxios(client, limiter, maxRetries, isCurrent = () => true) {
         const key = isRead ? encoderRequestKey(base, body) : null;
         return limiter.request(
             host, key, () => currentResponse(() => post(url, body, config), isCurrent),
-            (s) => pausedError(s, config),
+            (s, rateLimited) => pausedError(s, config, rateLimited),
             isRead ? maxRetries : 0, config?.signal,
         );
     };

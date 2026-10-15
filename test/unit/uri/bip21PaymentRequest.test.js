@@ -140,8 +140,9 @@ describe('BIP21-style Receive payment requests', () => {
     it('recognizes uppercase standard and required keys from QR payloads', () => {
         const address = 'BC1QAR0SRRR7XFKVY5L643LYDNW9RE59GTZZWF5MDQ';
         const parsed = parseBip21Uri(
-            `BITCOIN:${address}?AMOUNT=0.25&LABEL=Coffee%20shop&MESSAGE=Order%2042&EXTRA=kept`,
+            `BITCOIN:${address}?AMOUNT=0.25&LABEL=Coffee%20shop&MESSAGE=Order%2042&EXTRA=dropped`,
         );
+        expect(parsed.params.EXTRA).toBeUndefined();
 
         expect(parsed).toMatchObject({
             scheme: 'bitcoin',
@@ -153,7 +154,6 @@ describe('BIP21-style Receive payment requests', () => {
                 amount: '0.25',
                 label: 'Coffee shop',
                 message: 'Order 42',
-                EXTRA: 'kept',
             },
         });
         expect(parseBip21Uri(`bitcoin:${address}?REQ-SOMETHING=1`)).toMatchObject({

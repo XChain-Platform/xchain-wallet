@@ -25,7 +25,7 @@
 // "Review" action so the user knows the transactions are ready to send.
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { ChainBadge, useReducedMotion } from '@xchain-wallet/core/ui';
+import { ChainBadge, StatusMessage, useReducedMotion } from '@xchain-wallet/core/ui';
 import { defaultRegistry } from '../../registry/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -257,6 +257,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             >
                 {t('components.queuedBroadcastBanner.waitingToSend')}{queue.length})
             </div>
+            <StatusMessage variant="error">{error}</StatusMessage>
             <ul className={styles.list}>
                 {queue.map((entry) => (
                     <li key={entry.id} className={styles.row}>
@@ -309,9 +310,6 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                     </li>
                 ))}
             </ul>
-            {error ? (
-                <div role="alert" className={styles.error}>{error}</div>
-            ) : null}
         </section>
     );
 }

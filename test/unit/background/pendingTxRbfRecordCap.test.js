@@ -58,7 +58,7 @@ function makeHost() {
                 delete: async (id) => rows.delete(id),
             },
             wallets: { list: async () => [{ id: 'w1' }] },
-            settings: { get: async () => ({ schemaVersion: 2, ads: { enabled: false, perChain: {} } }), put: async () => {} },
+            settings: { get: async () => ({ schemaVersion: 2, activeNetwork: 'regtest', ads: { enabled: false, perChain: {} } }), put: async () => {} },
         },
         chainRegistry: { get: (id) => descriptors[id] ?? null, list: () => [] },
         sdkRegistry: { get: () => ({}), for: () => ({}) },

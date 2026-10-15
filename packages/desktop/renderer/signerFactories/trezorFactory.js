@@ -44,7 +44,7 @@
 // in core's `makeTrezorFactory`, this file only owns the desktop
 // bridge-window loader + RPC + init.
 
-import { makeTrezorFactory } from '@xchain-wallet/core/signerFactories';
+import { makeTrezorFactory, walletOnlyRegistry } from '@xchain-wallet/core/signerFactories';
 
 // Must match main/security.js's TREZOR_CONNECT_BRIDGE_WINDOW_NAME
 // byte-for-byte (index.js's window-open handler keys off it). Not
@@ -297,12 +297,21 @@ async function loadViaInjectedLoader(loader) {
 /**
  * @param {Object} [opts]
  * @param {() => Promise<any>} [opts.loader]
+ * @param {() => Promise<any>} [opts.walletLoader]
  */
-export async function pairTrezorSigner({ loader } = {}) {
+export async function pairTrezorSigner({ loader, walletLoader = defaultWalletLoader } = {}) {
     const factory = makeTrezorFactory({
         getConnect: () => getTrezorConnect(loader),
+        getSdkRegistry: async () => {
+            const mod = await walletLoader();
+            return walletOnlyRegistry(mod?.default ?? mod);
+        },
     });
     return factory();
+}
+
+function defaultWalletLoader() {
+    return import('xchain-sdk/src/wallet.js');
 }
 
 export function resetTrezorConnect() {

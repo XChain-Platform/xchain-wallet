@@ -124,6 +124,7 @@ export const en = {
     'settings.network.switchMessage':
         'The wallet will reload and show {nextNetwork} networks. Your {currentNetwork} balances and network settings stay unchanged. Unlock the wallet again after it reloads.',
     'settings.network.switchConfirm': 'Switch network',
+    'settings.network.switching': 'Switching networks. This can take a moment.',
     'settings.network.switchError': "Couldn't switch networks. Try again.",
     'settings.undoSend.label': 'Hold signed sends before broadcast',
     'settings.undoSend.hintUnavailable':
@@ -322,6 +323,7 @@ export const en = {
     'home.pendingPayments': 'Pending payments due',
     'home.paymentDue': 'Payment due: pay {amount} to complete matched order #{order}',
     'home.paymentDue.hint': 'Sign to finish paying for your matched order.',
+    'home.paymentDue.watcherHint': 'Build an unsigned payment to export to a signer.',
     'home.quickActions': 'Quick actions',
     'home.exchange': 'Exchange',
     'home.exchangeOffline': 'Exchange needs a network connection',
@@ -679,6 +681,7 @@ export const en = {
     'send.networkFee': 'Network fee',
     'send.advanced': 'Advanced',
     'send.memo': 'Memo',
+    'send.paymentRequestMessage': 'Payment request message:',
     'send.rbf.label': 'Allow a higher network fee later',
     'send.rbf.helpLabel': 'Learn about changing the network fee',
     'send.rbf.help':

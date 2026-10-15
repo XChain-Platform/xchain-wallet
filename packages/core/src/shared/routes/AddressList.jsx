@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
@@ -200,13 +201,16 @@ export function AddressList({
         setChainPrefsError(null);
         if (!selected?.address || !selected?.chainId) return undefined;
         if (typeof messaging.getAddressPreferences !== 'function') return undefined;
+        // A demo wallet's addresses never go to an explorer (issue #82); the
+        // card shows no values.
+        if (isDemoWallet(walletId)) return undefined;
         messaging.getAddressPreferences({ chainId: selected.chainId, address: selected.address })
             .then((p) => { if (!cancelled) setChainPrefs(p); })
             .catch((err) => {
                 if (!cancelled) setChainPrefsError(userFacingMessage(err, 'Preferences unavailable.'));
             });
         return () => { cancelled = true; };
-    }, [messaging, selected?.address, selected?.chainId]);
+    }, [messaging, selected?.address, selected?.chainId, walletId]);
 
     // "+" menu in the header: ordinary or advanced generation, plus import.
     const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -740,7 +744,7 @@ export function AddressList({
                     label={t('routes.addressList.generateAddressAtIndex')}
                     onSubmit={handleAdvancedGenerate}
                     status={advancedError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {advancedError}
                         </StatusMessage>
                     ) : null}
@@ -1032,7 +1036,7 @@ export function AddressList({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
