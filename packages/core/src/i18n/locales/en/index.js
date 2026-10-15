@@ -1002,7 +1002,7 @@ export const en = {
 
     'extension.connect.title': 'Connect to XChain Wallet?',
     'extension.connect.approve': 'Connect',
-    'extension.connect.declaredName': 'The site calls itself',
+    'extension.connect.declaredName': 'Site-provided name',
     'extension.connect.permissions': 'Requested permissions',
     'extension.connect.permission.accounts':
         'View the accounts you select, including their addresses and balances',
@@ -1023,7 +1023,7 @@ export const en = {
         'This site can see your primary account.',
 
     'extension.sign.source': 'Source',
-    'extension.sign.declaredName': 'The site calls itself: {name}',
+    'extension.sign.declaredName': 'Site-provided name: {name}',
     'extension.sign.signInAs': 'Sign in as',
     'extension.sign.noSignInAddress': 'This site has no address it may sign in with.',
     'extension.sign.checkingWalletMode': 'Checking wallet mode…',

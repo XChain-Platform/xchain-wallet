@@ -79,10 +79,12 @@ describe('ConnectApproval network checklist', () => {
         expect(text.indexOf('security.attacker.test')).toBeLessThan(text.indexOf(longOrigin));
         expect(screen.getByTestId('request-origin-host-ending').textContent)
             .toBe('security.attacker.test');
+        expect(screen.getByTestId('request-origin-registrable-domain').textContent)
+            .toBe('attacker.test');
         expect(screen.getByTestId('request-origin-full').textContent).toBe(longOrigin);
         expect(screen.getByText('XChain Wallet␦security')).toBeTruthy();
         expect(screen.queryByText('XChain Wallet\u202Esecurity')).toBeNull();
-        expect(screen.getByText('The site calls itself')).toBeTruthy();
+        expect(screen.getByText('Site-provided name')).toBeTruthy();
         expect(screen.getByText('Requesting site')).toBeTruthy();
         expect(screen.queryByText('Verified site')).toBeNull();
         expect(screen.getByText(/Only connect if you recognize and trust this site/))
