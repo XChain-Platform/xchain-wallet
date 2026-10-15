@@ -27,9 +27,9 @@ const CONTENT_ACTION_ROUTES = [
     { paletteName: 'History', heading: 'History', actionName: 'Refresh history' },
     { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
     { paletteName: 'Staking', heading: 'Staking', actionName: 'New stake' },
-    // The demo wallet has no orders or swaps, so the empty state's action is the one shown.
-    { paletteName: 'My orders', heading: 'My orders', actionName: 'Create an order' },
-    { paletteName: 'My swaps', heading: 'My swaps', actionName: 'Create a swap' },
+    // An empty list offers Create from its empty state and a list with rows offers New from the actions row.
+    { paletteName: 'My orders', heading: 'My orders', actionName: /^(Create an order|New order)$/ },
+    { paletteName: 'My swaps', heading: 'My swaps', actionName: /^(Create a swap|New swap)$/ },
     { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Issue new token' },
     { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh payments' },
     { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Save' },
