@@ -259,7 +259,7 @@ function RawTransactionBroadcast({
                 label="Review signed transaction"
                 onSubmit={broadcast}
                 status={error || mismatch ? (
-                    <StatusMessage variant="error" className={styles.error}>{error || mismatch}</StatusMessage>
+                    <StatusMessage variant="error">{error || mismatch}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -304,7 +304,7 @@ function RawTransactionBroadcast({
                     </p>
                 ) : null}
                 {broadcastTime.timedOut ? (
-                    <StatusMessage variant="error" className={styles.error}>
+                    <StatusMessage variant="error">
                         The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
                     </StatusMessage>
                 ) : null}
@@ -317,7 +317,7 @@ function RawTransactionBroadcast({
             demoGuard={demoGuard}
             label="Broadcast signed transaction"
             onSubmit={review}
-            status={error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             actions={<Button type="submit" variant="primary">Preview transaction</Button>}
         >
             <BroadcastKindPicker value="transaction" onChange={onKindChange} />
@@ -799,7 +799,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 {!lockedToken ? (
                     <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
                 ) : null}
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -870,7 +870,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 label="Review broadcast"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -992,7 +992,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             label="Broadcast"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1030,7 +1030,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}

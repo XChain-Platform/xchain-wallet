@@ -23,7 +23,7 @@ const rawPixelExceptions = {
     'AddAddressModal.module.css': [],
     'AddressList.wif.module.css': ['1px', '2px'],
     'ContractScreens.module.css': ['200px'],
-    'CreateWallet.module.css': ['96px', '2px', '1px', '520px', '64px'],
+    'CreateWallet.module.css': ['96px', '2px', '520px', '64px'],
 };
 
 describe('route CSS token coverage', () => {

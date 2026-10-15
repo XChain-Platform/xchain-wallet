@@ -602,7 +602,7 @@ export function TokenWizard({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
+        return wrap(<ListPage><StatusMessage variant="error">{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
@@ -837,7 +837,7 @@ export function TokenWizard({ walletId, onBack }) {
                     openConfirmScreen();
                 }}
                 status={formError ? (
-                    <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    <StatusMessage variant="error">{formError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1244,7 +1244,7 @@ function renderChainStage({
                         : undefined}
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}
@@ -1317,7 +1317,7 @@ function renderDetailsStage({
             onSubmit={onSubmit}
             onChangeCapture={onEdit}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button type="submit" variant="primary" loading={submitLoading}>

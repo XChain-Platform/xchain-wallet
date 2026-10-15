@@ -593,7 +593,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -659,7 +659,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 label="Review swap"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -873,17 +873,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             status={validationError || feeError || formError ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {validationError}
                         </StatusMessage>
                     ) : null}
                     {feeError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {feeError}
                         </StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {formError}
                         </StatusMessage>
                     ) : null}
@@ -1026,7 +1026,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onChange={(e) => setExpInput(e.target.value)}
                 />
             ) : null}
-            {expError ? <StatusMessage variant="error" className={styles.error}>{expError}</StatusMessage> : null}
+            {expError ? <StatusMessage variant="error">{expError}</StatusMessage> : null}
 
             <dl className={styles.detailsList}>
                 <DetailRow label="Rate" value={rateText} />

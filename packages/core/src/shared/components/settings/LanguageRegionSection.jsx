@@ -170,7 +170,6 @@ export function LanguageRegionSection() {
             <div style={ROW}>
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>{t('settings.languageRegion.language')}</span>
-                    <span style={ROW_HINT}>{t('settings.languageRegion.chooseTheLanguageUsedFor')}</span>
                 </div>
                 <select
                     value={settings.language}

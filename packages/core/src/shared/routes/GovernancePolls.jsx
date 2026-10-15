@@ -161,7 +161,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: t('common.tryAgain'), onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
@@ -182,7 +181,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             {pollError ? (
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
                 >
                     {pollError}

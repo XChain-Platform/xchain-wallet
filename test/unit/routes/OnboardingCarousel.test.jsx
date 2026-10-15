@@ -532,10 +532,15 @@ describe('Onboarding: demo entry', () => {
         await waitFor(() => expect(onDemoEntered).toHaveBeenCalledTimes(1));
 
         expect(importMnemonic).toHaveBeenCalledTimes(1);
+        // xchain-wallet#78: the demo lands on mainnet, with mainnet leading
+        // the chain list and testnet and regtest still registered.
         expect(importMnemonic.mock.calls[0][0]).toMatchObject({
             name: 'Demo Wallet',
-            activeNetwork: 'regtest',
+            activeNetwork: 'mainnet',
         });
+        const chainIds = importMnemonic.mock.calls[0][0].activeChainIds;
+        expect(chainIds[0]).toBe('bitcoin-mainnet');
+        expect(chainIds).toEqual(expect.arrayContaining(['bitcoin-testnet', 'bitcoin-regtest']));
         expect(importMnemonic.mock.calls[0][0].password).toMatch(/^[0-9a-f]{64}$/);
         expect(globalThis.localStorage.getItem('xc:demoWalletId')).toBe('demo-wallet');
         expect(globalThis.localStorage.getItem('xc:demoWalletPassword')).toBe(importMnemonic.mock.calls[0][0].password);

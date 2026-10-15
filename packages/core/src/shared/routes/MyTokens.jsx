@@ -22,6 +22,7 @@ import {
     ListRow,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
@@ -93,6 +94,12 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         if (!addressesByChain) return undefined;
         setTokens(null);
         setTokensError(null);
+        // A demo wallet issued nothing, and a demo wallet's addresses never go
+        // to an explorer (issue #82).
+        if (isDemoWallet(walletId)) {
+            setTokens([]);
+            return undefined;
+        }
         if (typeof messaging?.getOwnedTokens !== 'function') {
             setTokensError('Token ownership lookup is not available in this shell.');
             setTokens([]);
@@ -149,7 +156,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             setTokens(merged);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, tokensReload]);
+    }, [walletId, addressesByChain, messaging, tokensReload]);
 
     const filteredTokens = useMemo(() => {
         if (!tokens) return null;

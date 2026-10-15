@@ -21,24 +21,38 @@ afterEach(() => { vi.unstubAllGlobals(); });
 describe('util/uuid', () => {
     describe('randomUUID', () => {
         it('returns a valid v4 string under the native path', () => {
+            vi.stubGlobal('crypto', {
+                randomUUID: () => '123e4567-e89b-42d3-a456-426614174000',
+            });
             const id = randomUUID();
             expect(id).toMatch(UUID_V4_RE);
         });
 
         it('produces unique values across many calls', () => {
+            let sequence = 0;
+            vi.stubGlobal('crypto', {
+                randomUUID: () => {
+                    sequence += 1;
+                    return `00000000-0000-4000-8000-${sequence.toString(16).padStart(12, '0')}`;
+                },
+            });
             const seen = new Set();
             for (let i = 0; i < 256; i += 1) seen.add(randomUUID());
             expect(seen.size).toBe(256);
+            for (const id of seen) expect(id).toMatch(UUID_V4_RE);
         });
 
         it('falls back to getRandomValues when crypto.randomUUID is unavailable', () => {
             const fakeCrypto = {
-                getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto),
+                getRandomValues: (bytes) => {
+                    bytes.set(Array.from({ length: bytes.length }, (_, index) => index));
+                    return bytes;
+                },
                 // randomUUID intentionally absent
             };
             vi.stubGlobal('crypto', fakeCrypto);
             const id = randomUUID();
-            expect(id).toMatch(UUID_V4_RE);
+            expect(id).toBe('00010203-0405-4607-8809-0a0b0c0d0e0f');
         });
 
         it('fallback path version + variant bits are correct', () => {

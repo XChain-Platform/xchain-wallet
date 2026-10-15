@@ -1450,7 +1450,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     );
 
     if (loading) return wrap(<StatusMessage variant="status">Loading dispenser…</StatusMessage>);
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!action) return wrap(<EmptyState title="Dispenser not found" body="It may have been closed or not indexed yet." />);
 
     // The confirm page stands in for whichever owner form opened it; that
@@ -1573,7 +1573,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 demoGuard={demoGuard}
                 label="Refill dispenser"
                 onSubmit={handleRefill}
-                status={refillError ? <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage> : null}
+                status={refillError ? <StatusMessage variant="error">{refillError}</StatusMessage> : null}
                 actions={(
                     <Button
                         type="submit"
@@ -1594,7 +1594,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                   * transaction the chain always rejects.
                   */}
                 {refillCount.remaining <= 0 && refillCount.exact ? (
-                    <StatusMessage variant="error" className={styles.error}>
+                    <StatusMessage variant="error">
                         {refillCeilingMessage(refillCount)}
                     </StatusMessage>
                 ) : (
@@ -1694,7 +1694,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 demoGuard={demoGuard}
                 label="Edit dispenser"
                 onSubmit={handleEdit}
-                status={editError ? <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage> : null}
+                status={editError ? <StatusMessage variant="error">{editError}</StatusMessage> : null}
                 actions={(
                     <Button
                         type="submit"
@@ -1757,7 +1757,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </StatusMessage>
                 ) : null}
                 {editListConflictText && editListConflictText !== editError ? (
-                    <StatusMessage variant="error" className={styles.error}>{editListConflictText}</StatusMessage>
+                    <StatusMessage variant="error">{editListConflictText}</StatusMessage>
                 ) : null}
                 {feeSelector}
                 {/* Off Bitcoin this is mandatory, so the toggle renders
@@ -1814,7 +1814,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 label="Close dispenser"
                 onSubmit={handleCancel}
                 intro={decodedCancel?.summary}
-                status={cancelError ? <StatusMessage variant="error" className={styles.error}>{cancelError}</StatusMessage> : null}
+                status={cancelError ? <StatusMessage variant="error">{cancelError}</StatusMessage> : null}
                 actions={(
                     <Button
                         type="submit"
@@ -2354,7 +2354,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             />
                         ) : null}
                         {buyError ? (
-                            <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
+                            <StatusMessage variant="error">{buyError}</StatusMessage>
                         ) : null}
                         {ownerLane.isWatcherMode ? (
                             <p className={styles.hintLeft}>

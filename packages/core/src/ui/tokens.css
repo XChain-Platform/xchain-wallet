@@ -224,6 +224,7 @@
     --xc-bg-muted: #F5F6F8;
     --xc-surface: #FFFFFF;
     --xc-surface-raised: #FFFFFF;
+    --xc-skeleton: #E6E9EF;
     /* Borders identify controls and regions against every theme surface. */
     --xc-border: #818B9B;
     --xc-border-strong: var(--xc-border);
@@ -460,6 +461,7 @@
         --xc-bg-muted: #121824;
         --xc-surface: #151B28;
         --xc-surface-raised: #1B2231;
+        --xc-skeleton: #1B2231;
         --xc-border: #5F6D83;
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
@@ -500,6 +502,7 @@
     --xc-bg-muted: #121824;
     --xc-surface: #151B28;
     --xc-surface-raised: #1B2231;
+    --xc-skeleton: #1B2231;
     --xc-border: #5F6D83;
     --xc-text: #E5EAF2;
     --xc-text-muted: #94A3B8;
@@ -651,6 +654,7 @@
         --xc-bg-muted: #EEF1F5;
         --xc-surface: #FFFFFF;
         --xc-surface-raised: #FFFFFF;
+        --xc-skeleton: #D5DAE2;
         --xc-border: #1F2937;
         --xc-text: #000000;
         --xc-text-muted: #1F2937;
@@ -674,6 +678,7 @@
             --xc-bg-muted: #0B0F17;
             --xc-surface: #050810;
             --xc-surface-raised: #0B0F17;
+            --xc-skeleton: #1F2937;
             --xc-border: #E5EAF2;
             --xc-text: #FFFFFF;
             --xc-text-muted: #E5EAF2;
@@ -700,6 +705,7 @@
         --xc-bg-muted: #0B0F17;
         --xc-surface: #050810;
         --xc-surface-raised: #0B0F17;
+        --xc-skeleton: #1F2937;
         --xc-border: #E5EAF2;
         --xc-text: #FFFFFF;
         --xc-text-muted: #E5EAF2;
@@ -727,6 +733,7 @@
         --xc-bg-muted: Canvas;
         --xc-surface: Canvas;
         --xc-surface-raised: Canvas;
+        --xc-skeleton: GrayText;
         --xc-border: CanvasText;
         --xc-text: CanvasText;
         --xc-text-muted: GrayText;

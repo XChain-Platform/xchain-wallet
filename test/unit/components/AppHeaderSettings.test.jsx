@@ -549,6 +549,28 @@ describe('HeaderSettingsButton section gating', () => {
         await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest'));
     });
 
+    it('shows a progress status while the network switch is under way', async () => {
+        const onActiveNetworkChange = vi.fn(() => new Promise(() => {}));
+        render(
+            <HeaderSettingsButton
+                activeNetwork="testnet"
+                developerMode
+                onActiveNetworkChange={onActiveNetworkChange}
+            />,
+        );
+
+        fireEvent.click(gear());
+        expect(screen.queryByRole('status')).toBeNull();
+        fireEvent.change(screen.getByLabelText('Active network in header'), {
+            target: { value: 'regtest' },
+        });
+        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Switching networks'));
+        expect(screen.getByLabelText('Active network in header')).toBeDisabled();
+    });
+
     it('moves focus into the body-level popover on open and back to the trigger on Escape', async () => {
         render(
             <HeaderSettingsButton

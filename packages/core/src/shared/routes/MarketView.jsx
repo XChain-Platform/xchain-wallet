@@ -262,7 +262,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 ) : (
                     <>
                         {summaryError ? (
-                            <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
+                            <StatusMessage variant="error">{summaryError}</StatusMessage>
                         ) : null}
                         <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:ticker`}>
                             {headerCard}
@@ -270,7 +270,6 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         {historyError ? (
                             <StatusMessage
                                 variant="error"
-                                className={styles.error}
                                 recovery={{
                                     label: t('common.tryAgain'),
                                     onAction: () => setHistoryRetryKey((key) => key + 1),

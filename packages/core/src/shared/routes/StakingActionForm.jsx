@@ -687,7 +687,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </ListPage>,
         );
     }
@@ -743,7 +743,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -879,9 +879,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             label={`${verb} staking`}
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : positionsError ? (
-                <StatusMessage variant="error" className={styles.error}>{positionsError}</StatusMessage>
+                <StatusMessage variant="error">{positionsError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

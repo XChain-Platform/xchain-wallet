@@ -32,7 +32,6 @@ import {
     findContactByName,
     mergeContactGroup,
 } from '../utils/contactMerge.js';
-import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -658,7 +657,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 notices={(
                     <StatusMessage
                         variant="error"
-                        className={styles.error}
                         recovery={{
                             label: 'Try again',
                             onAction: () => {
@@ -706,7 +704,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="New contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -751,7 +749,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="Edit contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>

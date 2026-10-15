@@ -564,7 +564,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -603,7 +603,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 label="Review poll"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
-                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
                     <>
@@ -755,7 +755,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             label="Create poll"
             onSubmit={handleReview}
             sectioned
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"

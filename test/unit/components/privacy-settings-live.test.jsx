@@ -171,7 +171,7 @@ describe('Privacy setting hints', () => {
         await screen.findByRole('switch', { name: 'Hide small balances' });
 
         expect(screen.getByText(/Imported-key and watch-only sends keep the spending address/)).toBeTruthy();
-        expect(screen.getByText(/Collapse balances below the selected threshold into an expandable section/)).toBeTruthy();
+        expect(screen.getByText('Pinned and escrowed balances stay visible.')).toBeTruthy();
         expect(screen.getByText(/Blur the entire wallet display/)).toBeTruthy();
         expect(screen.getByText(/batch label and contact edits/)).toBeTruthy();
         expect(screen.getByText(/OS or in-app reduced-motion settings suppress haptics/)).toBeTruthy();

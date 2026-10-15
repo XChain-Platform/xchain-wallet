@@ -80,6 +80,18 @@ describe('<Checkbox>', () => {
         expect(css).toContain('@media (forced-colors: active)');
     });
 
+    it('never lets the hover rule repaint a checked or indeterminate box', () => {
+        // A touch screen keeps :hover on the tapped row. The hover selector is
+        // more specific than the checked one, so without the exclusions a
+        // checked box stayed pale grey on the K51 (Android WebView).
+        const css = readFileSync('packages/core/src/ui/Checkbox.module.css', 'utf8');
+        const hover = css.match(/\.root:hover[^{]*\{/g) || [];
+
+        expect(hover).toHaveLength(1);
+        expect(hover[0]).toContain(':not(:checked)');
+        expect(hover[0]).toContain(':not(:indeterminate)');
+    });
+
     it('appears in the live style guide and state matrix', () => {
         const section = SECTIONS.find(({ id }) => id === 'checkbox');
 

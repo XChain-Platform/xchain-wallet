@@ -113,7 +113,7 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
                     ))}
                 </select>
             </label>
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             {selectedInfo ? (
                 <>
                     <div style={payloadStyle}>

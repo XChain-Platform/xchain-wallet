@@ -327,7 +327,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         )}>
             {demoGuard.note}
             {demoGuard.dialog}
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             {!rows ? <p>Loading your markets…</p> : null}
             {rows && rows.length === 0 && !error ? (
                 <EmptyState
@@ -335,7 +335,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     body="Betting markets created by this wallet appear here."
                 />
             ) : null}
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             {result ? (
                 <div className={styles.listCard} data-testid="oracle-result">
                     <p className={styles.summary}>
