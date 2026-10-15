@@ -78,6 +78,7 @@ function hasSpendableBalance(row) {
  * @param {string} props.walletId
  * @param {string} [props.accountId]
  * @param {string} [props.networkFilter]
+ * @param {string} [props.chainIdFilter] exact chain to show within a coin-family filter
  * @param {(coin: string) => void} [props.onNetworkFilterChange]
  * @param {string} [props.tokenQuery]
  * @param {(query: string) => void} [props.onTokenQueryChange]
@@ -98,6 +99,7 @@ export function TokenPicker({
     walletId,
     accountId,
     networkFilter: networkFilterProp,
+    chainIdFilter,
     onNetworkFilterChange: onNetworkFilterChangeProp,
     tokenQuery: tokenQueryProp,
     onTokenQueryChange: onTokenQueryChangeProp,
@@ -274,6 +276,9 @@ export function TokenPicker({
         let next = isReceive
             ? allRows
             : allRows.filter(hasSpendableBalance);
+        if (chainIdFilter) {
+            next = next.filter((r) => r.chainId === chainIdFilter);
+        }
         if (networkFilter !== 'all') {
             next = next.filter((r) => coinFromChainId(r.chainId) === networkFilter);
         }
@@ -311,7 +316,7 @@ export function TokenPicker({
                 ...sorted.filter((row) => !hasSpendableBalance(row)),
             ]
             : sorted;
-    }, [allRows, isReceive, networkFilter, kindFilter, tokenQueryTrim]);
+    }, [allRows, isReceive, networkFilter, chainIdFilter, kindFilter, tokenQueryTrim]);
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
@@ -369,7 +374,8 @@ export function TokenPicker({
         setPlatformError(null);
         const handle = setTimeout(async () => {
             const chainIds = Object.keys(addressesByChain).filter((chainId) => (
-                networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
+                (!chainIdFilter || chainId === chainIdFilter)
+                && (networkFilter === 'all' || coinFromChainId(chainId) === networkFilter)
             ));
             const cache = platformCacheRef.current;
             try {
@@ -407,7 +413,7 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, chainIdFilter, addressesByChain, messaging, localKeySet, platformReload]);
 
     const resetFilters = () => {
         setTokenQuery('');
