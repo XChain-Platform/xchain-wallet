@@ -251,10 +251,6 @@ function cardFaults() {
         if (el.querySelector(':scope > canvas, :scope > video, :scope > svg[role="img"], :scope > img, :scope > * > img[alt*="QR" i]')) continue;
         // The shared notice (StatusMessage) is the one box allowed in a card.
         if (el.hasAttribute('data-variant')) continue;
-        // Known exception, tracked to move onto StatusMessage: the authoring
-        // forms' hand-drawn warning lists (the .warnings class, about a
-        // hundred call sites). Take this line out when they move.
-        if (el.matches('[role="alert"]') && [...el.classList].some((c) => /(^|_)warnings(_|$)/.test(c))) continue;
         const bordered = sides.every((s) => cs[`border${s}Style`] !== 'none' && parseFloat(cs[`border${s}Width`]) > 0);
         // Any other bordered box, or a filled one set off from what is
         // behind it, is a box of its own; inside a card it is a box in a box.
