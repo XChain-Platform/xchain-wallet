@@ -100,6 +100,9 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     const [validationError, setValidationError] = useState(/** @type {string | null} */ (null));
     const [validating, setValidating] = useState(false);
     const validationRunRef = useRef(0);
+    // Rows the user has edited, or every row once Review was pressed. A row
+    // still missing its chain, address or action only says so after one of those.
+    const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
 
     const [rows, setRows] = useState(/** @type {Row[]} */ ([]));
     const [acknowledgedNoRollback, setAcknowledgedNoRollback] = useState(false);
@@ -172,6 +175,8 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     }, [addressesByChain]);
 
     const updateRow = (index, patch) => {
+        const id = rows[index]?.id;
+        if (id) setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
         validationRunRef.current += 1;
         setValidating(false);
         setValidationError(null);
@@ -193,35 +198,43 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         setRows((rs) => rs.filter((_, i) => i !== index));
     };
 
-    const composeError = useMemo(() => {
-        if (rows.length === 0) return 'Add at least one action.';
-        for (let i = 0; i < rows.length; i += 1) {
-            const r = rows[i];
-            if (!r.chainId) return `Row ${i + 1}: pick a network.`;
-            if (!r.fromAddressId) return `Row ${i + 1}: pick a from-address.`;
-            if (!(addressesByChain?.[r.chainId] || []).some((address) => address.id === r.fromAddressId)) {
-                return `Row ${i + 1}: the from-address is no longer available. Pick another address.`;
-            }
-            if (!r.action) return `Row ${i + 1}: pick an action.`;
-            if (!isActionOfferedOnChain(chainRegistry, r.chainId, r.action)) {
-                const chainName = chainRegistry.get(r.chainId)?.displayName || r.chainId;
-                return `Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available on ${chainName}.`;
-            }
-            // A prefilled row skips the picker, so the build check repeats here.
-            if (!isActionOfferedInBuild(r.action, { hasDexSurface })) {
-                return `Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available in this build.`;
-            }
-            const parseErr = parseParamsJson(r.paramsJson);
-            if (parseErr) return `Row ${i + 1}: ${parseErr}`;
-            // A BATCH row carries its legs in params, which no picker filtered.
-            if (!isActionDataOfferedInBuild({ action: r.action, params: JSON.parse(r.paramsJson) }, { hasDexSurface })) {
-                return `Row ${i + 1}: a BATCH step is not available in this build.`;
-            }
+    // One entry per row: null, or the row's first problem. `missing` marks a
+    // field not filled in yet, which waits until the row is touched.
+    const rowIssues = useMemo(() => rows.map((r, i) => {
+        const missing = (message) => ({ message, missing: true });
+        const problem = (message) => ({ message, missing: false });
+        if (!r.chainId) return missing(`Row ${i + 1}: pick a network.`);
+        if (!r.fromAddressId) return missing(`Row ${i + 1}: pick a from-address.`);
+        if (!(addressesByChain?.[r.chainId] || []).some((address) => address.id === r.fromAddressId)) {
+            return problem(`Row ${i + 1}: the from-address is no longer available. Pick another address.`);
+        }
+        if (!r.action) return missing(`Row ${i + 1}: pick an action.`);
+        if (!isActionOfferedOnChain(chainRegistry, r.chainId, r.action)) {
+            const chainName = chainRegistry.get(r.chainId)?.displayName || r.chainId;
+            return problem(`Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available on ${chainName}.`);
+        }
+        // A prefilled row skips the picker, so the build check repeats here.
+        if (!isActionOfferedInBuild(r.action, { hasDexSurface })) {
+            return problem(`Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available in this build.`);
+        }
+        const parseErr = parseParamsJson(r.paramsJson);
+        if (parseErr) return problem(`Row ${i + 1}: ${parseErr}`);
+        // A BATCH row carries its legs in params, which no picker filtered.
+        if (!isActionDataOfferedInBuild({ action: r.action, params: JSON.parse(r.paramsJson) }, { hasDexSurface })) {
+            return problem(`Row ${i + 1}: a BATCH step is not available in this build.`);
         }
         return null;
-    }, [rows, hasDexSurface, addressesByChain]);
+    }), [rows, hasDexSurface, addressesByChain]);
+
+    const composeError = rows.length === 0
+        ? 'Add at least one action.'
+        : (rowIssues.find(Boolean)?.message || null);
+    const shownComposeError = rows.length === 0
+        ? composeError
+        : (rowIssues.find((issue, i) => issue && (!issue.missing || touchedRows[rows[i].id]))?.message || null);
 
     const goReview = async () => {
+        setTouchedRows(Object.fromEntries(rows.map((row) => [row.id, true])));
         if (composeError || validating) return;
         const runId = ++validationRunRef.current;
         const draftRows = rows.map((row) => ({ ...row }));
@@ -596,8 +609,8 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 await goReview();
             }}
             sectioned
-            status={composeError || validationError ? (
-                <StatusMessage variant="error" className={styles.error}>{composeError || validationError}</StatusMessage>
+            status={shownComposeError || validationError ? (
+                <StatusMessage variant="error" className={styles.error}>{shownComposeError || validationError}</StatusMessage>
             ) : null}
             actions={(
                 <>
@@ -608,7 +621,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         type="submit"
                         variant="primary"
                         loading={validating}
-                        disabled={Boolean(composeError) || validating}
+                        disabled={Boolean(shownComposeError) || validating}
                     >
                         Review
                     </Button>

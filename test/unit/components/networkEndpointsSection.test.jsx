@@ -164,8 +164,8 @@ describe('NetworkEndpointsSection', () => {
             target: { value: 'https://private.example.com/BTC' },
         });
 
-        expect(within(block).getByText(/host is not contacted/)).toHaveTextContent(
-            /If it is unreachable, this chain's balances, history and transactions may be unavailable\./,
+        expect(within(block).getByText(/host isn't contacted/)).toHaveTextContent(
+            /If it's unreachable, this chain's balances, history and transactions may be unavailable\./,
         );
     });
 

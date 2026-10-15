@@ -926,21 +926,23 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     // clean 8-dp value so toLocaleString() reads nicely.
     const px = (qty) => Number((unit * qty).toFixed(8));
     const wrap = (row) => ({ chainId, row });
-    // Dispenser and dispense rows use the explorer's own fields (decimal
-    // strings, a string status, the lifecycle beside it) so the demo drives
-    // the same render path real rows do.
+    // Dispense rows use the explorer's own fields (decimal strings, a
+    // string status) so the demo drives the same render path real rows do.
     const pxs = (qty) => px(qty).toFixed(8).replace(/\.?0+$/, '');
-    const offer = (idx, give, remaining) => ({
-        action_index: idx, status: 'valid', current_status: 'open',
-        give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give),
-        escrow_remaining: String(remaining),
-    });
     const sale = (n, give, ago) => ({
         tx_hash: `demo-${chainId}-dispense-${n}`, status: 'valid',
         give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give), timestamp: sec(ago),
     });
 
-    const offers = [offer(900101, 1000, 7500), offer(900102, 500, 2000)].map(wrap);
+    // Open dispensers are the demo wallet's own open fixtures selling this
+    // token on each visible chain, the same rows DispenserDetail resolves,
+    // so every listing opens its detail page. A token with no open demo
+    // dispenser lists none.
+    const offers = requestedChainIds.flatMap((cid) => demoDispenserRows(cid)
+        .filter((r) => String(r.status).toLowerCase() === 'open'
+            && String(r.give_tick || '').toUpperCase() === tick
+            && Number(r.escrow_remaining) > 0)
+        .map((r) => ({ chainId: cid, row: { ...r } })));
 
     const sales = [sale(1, 1000, 3_600), sale(2, 250, 14_400), sale(3, 2000, 86_400)].map(wrap);
 
@@ -1191,10 +1193,21 @@ const DEMO_DISPENSES = /** @type {Record<string, any[]>} */ ({
  */
 export function synthesizeDemoDispensers(chainId, sourceAddress) {
     if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
-    const rows = DEMO_DISPENSERS[chainId]
+    return demoDispenserRows(chainId).map((r) => ({ ...r, source: sourceAddress }));
+}
+
+/**
+ * The demo dispenser fixture rows for `chainId`. Regtest and testnet ids
+ * reuse their mainnet fixture, so every network the demo wallet can show
+ * resolves the same dispensers.
+ *
+ * @param {string} chainId
+ * @returns {any[]}
+ */
+function demoDispenserRows(chainId) {
+    return DEMO_DISPENSERS[chainId]
         || DEMO_DISPENSERS[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')]
         || [];
-    return rows.map((r) => ({ ...r, source: sourceAddress }));
 }
 
 /**

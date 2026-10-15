@@ -130,7 +130,7 @@ assert.match(
 );
 assert.match(
     src,
-    /aria-label=\{`Preview \$\{family\.label\} sound`\}/,
+    /aria-label=\{t\('settings\.notifications\.sound', \{ label: family\.label \}\)\}/,
     'renders a per-family Preview button',
 );
 

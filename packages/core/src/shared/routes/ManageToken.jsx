@@ -558,8 +558,8 @@ export function ManageToken({
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to my tokens"
-            title="Manage token"
+            backLabel={t('routes.manageToken.backToMyTokens')}
+            title={t('routes.manageToken.manageToken')}
             titleIcon={<Icon.TokenIcon />}
         />
     );
@@ -576,7 +576,7 @@ export function ManageToken({
         <Screen variant={variant} header={header}>
             <ListPage className={styles.body}>
                 {/* Hero: identity (no Total Balance; this is the issuer view). */}
-                <section className={styles.hero} aria-label="Token identity">
+                <section className={styles.hero} aria-label={t('routes.manageToken.tokenIdentity')}>
                     <div className={styles.heroIconWrap}>
                         <TickerIcon chainId={chainId} tick={tick} size={64} />
                     </div>
@@ -589,31 +589,29 @@ export function ManageToken({
                             <span className={styles.heroBadges}>
                                 {locked ? (
                                     <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
-                                        <Icon.LockIcon />Locked
+                                        <Icon.LockIcon />{t('routes.manageToken.locked')}
                                     </span>
                                 ) : (
                                     <span className={`${styles.lockBadge} ${styles.lockBadgeUnlocked}`}>
-                                        <Icon.UnlockIcon />Unlocked
+                                        <Icon.UnlockIcon />{t('routes.manageToken.unlocked')}
                                     </span>
                                 )}
                                 {sleepState.paused ? (
-                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? 'Paused indefinitely' : (sleepState.resumeBlock ? `Paused until block ${sleepState.resumeBlock}` : 'Paused')}>
-                                        <Icon.LockIcon />Paused
+                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? t('routes.manageToken.pausedIndefinitely') : (sleepState.resumeBlock ? t('routes.manageToken.pausedUntilBlock', { resumeBlock: sleepState.resumeBlock }) : t('routes.manageToken.paused'))}>
+                                        <Icon.LockIcon />{t('routes.manageToken.paused')}
                                     </span>
                                 ) : null}
                             </span>
                         </div>
-                        <div className={styles.heroSub}>
-                            <span>{descriptor?.displayName || chainId}</span>
-                            {owner ? (
-                                <>
-                                    <span className={styles.heroDot}>·</span>
-                                    <span>Owned by</span>
-                                    <AddressText address={owner} className={styles.heroOwner} />
-                                    <CopyButton value={owner} ariaLabel="Copy owner address" />
-                                </>
-                            ) : null}
-                        </div>
+                        {/* No chain name here: the icon and its chain overlay
+                            carry the network (operator ruling). */}
+                        {owner ? (
+                            <div className={styles.heroSub}>
+                                <span>{t('routes.manageToken.ownedBy')}</span>
+                                <AddressText address={owner} className={styles.heroOwner} />
+                                <CopyButton value={owner} ariaLabel={t('routes.manageToken.copyOwnerAddress')} />
+                            </div>
+                        ) : null}
                         {description ? (
                             <p className={styles.heroDescription}>{description}</p>
                         ) : null}
@@ -624,7 +622,7 @@ export function ManageToken({
                     current roster (owner-attested; Project_Registry.md). */}
                 {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
                     <p className={styles.officialBanner} role="status">
-                        This token is an official token in the{' '}
+                        {t('routes.manageToken.thisTokenIsAnOfficial')}{' '}
                         {assetInfo.projects.map((p, i) => (
                             <span key={p} className={styles.officialBannerProject}>
                                 {i > 0 ? ', ' : ''}{p}
@@ -638,21 +636,21 @@ export function ManageToken({
                     chart slot is reserved for future supply / dispense-
                     price history; today it shows an empty-state hint so
                     the layout doesn't shift when data wires up later. */}
-                <section className={styles.marketPanel} aria-label="Token stats">
+                <section className={styles.marketPanel} aria-label={t('routes.manageToken.tokenStats')}>
                     <div className={styles.statsStrip}>
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>
-                                {assetInfo ? `${locked ? 'Locked' : 'Unlocked'} supply` : 'Supply'}
+                                {assetInfo ? t('routes.manageToken.supply', { value: locked ? 'Locked' : 'Unlocked' }) : t('issue.supply')}
                             </span>
                             <span className={styles.statValue}>
                                 {totalSupply != null ? formatTokenQuantity(totalSupply, divisibility) : '-'}
                             </span>
                             <span className={styles.statSub}>
-                                {maxSupply != null ? `of ${formatTokenQuantity(maxSupply, divisibility)} cap` : 'no cap'}
+                                {maxSupply != null ? t('routes.manageToken.ofCap', { formatTokenQuantityValue: formatTokenQuantity(maxSupply, divisibility) }) : t('routes.manageToken.noCap')}
                             </span>
                         </div>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>You hold</span>
+                            <span className={styles.statLabel}>{t('routes.manageToken.youHold')}</span>
                             <span className={styles.statValue}>
                                 {yourBalance != null ? formatAmount(yourBalance, divisibility || 0) : '-'}
                             </span>
@@ -660,18 +658,18 @@ export function ManageToken({
                                 in raw atomic units, so formatAmount is
                                 the correct formatter here. */}
                             <span className={styles.statSub}>
-                                {yourSharePct != null ? `${yourSharePct.toFixed(1)}% of supply` : ' '}
+                                {yourSharePct != null ? t('routes.manageToken.ofSupply', { value: yourSharePct.toFixed(1) }) : ' '}
                             </span>
                         </div>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>Holders</span>
+                            <span className={styles.statLabel}>{t('routes.manageToken.holders')}</span>
                             <span className={styles.statValue}>
                                 {holders != null ? holders.length.toLocaleString() : '-'}
                             </span>
                             <span className={styles.statSub}>&nbsp;</span>
                         </div>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>Open offers</span>
+                            <span className={styles.statLabel}>{t('routes.manageToken.openOffers')}</span>
                             <span className={styles.statValue}>
                                 {listings != null ? listings.length.toLocaleString() : '-'}
                             </span>
@@ -708,7 +706,7 @@ export function ManageToken({
                             >
                                 <Sparkline series={chartSeries} height={40} />
                             </div>
-                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
                                 {/* Chart-range tabs stay native because Button does not implement tab semantics. */}
                                 {CHART_RANGES.map((r) => (
                                     <button
@@ -729,8 +727,8 @@ export function ManageToken({
                         </>
                     ) : (
                         <EmptyState
-                            title={isDemo ? 'No market data yet' : 'No price history yet'}
-                            body="Indexed market activity builds this token's price history."
+                            title={isDemo ? t('routes.manageToken.noMarketDataYet') : t('routes.manageToken.noPriceHistoryYet')}
+                            body={t('routes.manageToken.indexedMarketActivityBuildsThis')}
                             titleAs="p"
                         />
                     )}
@@ -742,15 +740,12 @@ export function ManageToken({
                     auto-hidden below; the banner explains why. */}
                 {isOwner === false ? (
                     <p className={styles.ownerWarning} role="status">
-                        This wallet doesn't hold the token's issuer address.
-                        Mint, Mint settings, Lock, Description, Artwork,
-                        Transfer, Broadcast, and Dividend require signing
-                        from <AddressText address={owner} />.
+                        {t('routes.manageToken.thisWalletDoesnTHold')} <AddressText address={owner} />.
                     </p>
                 ) : null}
 
                 {/* Action buttons: same 3-primary + More pattern as Home. */}
-                <div className={styles.manageGrid} role="group" aria-label="Manage actions">
+                <div className={styles.manageGrid} role="group" aria-label={t('routes.manageToken.manageActions')}>
                     {primaryActions.map((a) => (
                         <Button
                             key={a.id}
@@ -779,7 +774,7 @@ export function ManageToken({
                                 aria-expanded={moreOpen}
                                 onClick={() => setMoreOpen((o) => !o)}
                             >
-                                More
+                                {t('history.detail.more')}
                             </Button>
                             {moreOpen ? (
                                 <div className={styles.manageMoreMenu} role="menu">
@@ -807,7 +802,7 @@ export function ManageToken({
                 </div>
 
                 {/* Tab strip + panels: matches TokenDetail's tab pattern. */}
-                <div className={styles.tabs} role="tablist" aria-label="Token management panels">
+                <div className={styles.tabs} role="tablist" aria-label={t('routes.manageToken.tokenManagementPanels')}>
                     {/* Token panels stay native because Button does not implement tab semantics. */}
                     {tabs.map((t) => (
                         <button
@@ -870,40 +865,40 @@ export function ManageToken({
                     section. Hidden when neither piece of data is
                     present (dev mock returns nothing). */}
                 {(genesisInfo || subassetTicks.length > 0) ? (
-                    <section className={styles.genesisPanel} aria-label="Genesis and subassets">
-                        <SectionHeader as="h3" title="Genesis" />
+                    <section className={styles.genesisPanel} aria-label={t('routes.manageToken.genesisAndSubassets')}>
+                        <SectionHeader as="h3" title={t('routes.manageToken.genesis')} />
                         {genesisInfo ? (
                             <dl className={styles.genesisList}>
                                 {genesisInfo.actionIndex ? (
                                     <>
-                                        <dt>Issue action</dt>
+                                        <dt>{t('routes.manageToken.issueAction')}</dt>
                                         <dd className={styles.genesisMono}>{genesisInfo.actionIndex}</dd>
                                     </>
                                 ) : null}
                                 {genesisInfo.blockIndex ? (
                                     <>
-                                        <dt>Block</dt>
+                                        <dt>{t('settings.connectedSites.block')}</dt>
                                         <dd>{Number(genesisInfo.blockIndex).toLocaleString('en-US')}</dd>
                                     </>
                                 ) : null}
                                 {genesisInfo.timestamp ? (
                                     <>
-                                        <dt>Issued</dt>
+                                        <dt>{t('routes.manageToken.issued')}</dt>
                                         <dd>{new Date(Number(genesisInfo.timestamp) * (Number(genesisInfo.timestamp) > 1e12 ? 1 : 1000)).toLocaleString()}</dd>
                                     </>
                                 ) : null}
                                 {genesisInfo.source ? (
                                     <>
-                                        <dt>Issuer</dt>
+                                        <dt>{t('routes.manageToken.issuer')}</dt>
                                         <dd className={styles.copyableGenesis}>
                                             <AddressText address={genesisInfo.source} className={styles.genesisMono} />
-                                            <CopyButton value={genesisInfo.source} ariaLabel="Copy genesis issuer address" />
+                                            <CopyButton value={genesisInfo.source} ariaLabel={t('routes.manageToken.copyGenesisIssuerAddress')} />
                                         </dd>
                                     </>
                                 ) : null}
                             </dl>
                         ) : (
-                            <EmptyState title="No genesis record yet" body={`The indexed genesis record for ${tick} appears here.`} titleAs="p" />
+                            <EmptyState title={t('routes.manageToken.noGenesisRecordYet')} body={t('routes.manageToken.theIndexedGenesisRecordFor', { tick })} titleAs="p" />
                         )}
                         {subassetTicks.length > 0 ? (
                             <>
@@ -944,10 +939,10 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     if (listings.length === 0) {
         return (
             <EmptyState
-                title="No open dispensers"
-                body={`Open dispensers selling ${tick} appear here.`}
+                title={t('routes.manageToken.noOpenDispensers')}
+                body={t('routes.manageToken.openDispensersSellingAppearHere', { tick })}
                 titleAs="p"
-                actionLabel={typeof onCreateDispenser === 'function' ? 'Create one' : undefined}
+                actionLabel={typeof onCreateDispenser === 'function' ? t('routes.manageToken.createOne') : undefined}
                 onAction={onCreateDispenser}
             />
         );
@@ -976,7 +971,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
                         chainId={chainId}
                         action="DISPENSER"
                         status="open"
-                        statusLabel="Open"
+                        statusLabel={t('routes.manageToken.open')}
                         summary={summary}
                         blockIndex={d.block_index || d.blockIndex}
                         timestamp={d.timestamp || d.block_time}
@@ -997,7 +992,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
             <Skeleton height={72} />
         </div>
     );
-    if (orders.length === 0) return <EmptyState title="No open orders" body={`Open orders involving ${tick} appear here.`} titleAs="p" />;
+    if (orders.length === 0) return <EmptyState title={t('routes.manageToken.noOpenOrders')} body={t('routes.manageToken.openOrdersInvolvingAppearHere', { tick })} titleAs="p" />;
     return (
         /* Safari needs an explicit list role because this class removes list styling. */
         <ul className={styles.list} role="list">
@@ -1016,7 +1011,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
                         tick={tick}
                         action="ORDER"
                         status="open"
-                        statusLabel="Open"
+                        statusLabel={t('routes.manageToken.open')}
                         summary={summary}
                         blockIndex={o.block_index || o.blockIndex}
                         timestamp={o.timestamp || o.block_time}
@@ -1035,7 +1030,7 @@ function SwapsPanel({ swaps, error, tick }) {
             <Skeleton height={72} />
         </div>
     );
-    if (swaps.length === 0) return <EmptyState title="No recent swaps" body={`Recent swaps involving ${tick} appear here.`} titleAs="p" />;
+    if (swaps.length === 0) return <EmptyState title={t('routes.manageToken.noRecentSwaps')} body={t('routes.manageToken.recentSwapsInvolvingAppearHere', { tick })} titleAs="p" />;
     return (
         /* Safari needs an explicit list role because this class removes list styling. */
         <ul className={styles.list} role="list">
@@ -1078,16 +1073,16 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
         </div>
     );
     if (holders.length === 0) return (
-        <EmptyState title="No holders yet" body="Holders appear here after supply is minted or distributed." titleAs="p" />
+        <EmptyState title={t('history.recipients.noHoldersFound')} body={t('routes.manageToken.holdersAppearHereAfterSupply')} titleAs="p" />
     );
     return (
         <>
             <table className={tableStyles.table}>
-                <caption className={tableStyles.visuallyHiddenCaption}>Top holder balances</caption>
+                <caption className={tableStyles.visuallyHiddenCaption}>{t('routes.manageToken.topHolderBalances')}</caption>
                 <thead>
                     <tr>
-                        <th className={tableStyles.headerCell} scope="col">Address</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
+                        <th className={tableStyles.headerCell} scope="col">{t('verifySignature.address')}</th>
+                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('routes.manageToken.balance')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1102,7 +1097,7 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
                                     {(h.address || h.holder) ? (
                                         <CopyButton
                                             value={h.address || h.holder}
-                                            ariaLabel={`Copy holder address ${i + 1}`}
+                                            ariaLabel={t('routes.manageToken.copyHolderAddress', { value: i + 1 })}
                                         />
                                     ) : null}
                                 </span>
@@ -1118,7 +1113,7 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
             </table>
             {typeof onViewAll === 'function' && holders.length > 10 ? (
                 <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
-                    View all {holders.length} holders
+                    {t('routes.manageToken.viewAll')} {holders.length} {t('routes.manageToken.holders2')}
                 </Button>
             ) : null}
         </>
@@ -1135,7 +1130,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
         </div>
     );
     if (activity.length === 0) return (
-        <EmptyState title="No activity yet" body={`Indexed activity for ${tick} appears here.`} titleAs="p" />
+        <EmptyState title={t('history.empty.noActivityTitle')} body={t('routes.manageToken.indexedActivityForAppearsHere', { tick })} titleAs="p" />
     );
     return (
         <>
@@ -1171,7 +1166,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
             </ul>
             {typeof onViewAll === 'function' ? (
                 <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
-                    View all activity
+                    {t('routes.manageToken.viewAllActivity')}
                 </Button>
             ) : null}
         </>
@@ -1223,9 +1218,9 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
             ) : null}
             <span className={styles.histMeta}>
                 {blockNum != null && Number.isFinite(blockNum) && blockNum > 0 ? (
-                    <span>Block {blockNum.toLocaleString('en-US')}</span>
+                    <span>{t('settings.connectedSites.block')} {blockNum.toLocaleString('en-US')}</span>
                 ) : (
-                    <span>unconfirmed</span>
+                    <span>{t('routes.manageToken.unconfirmed')}</span>
                 )}
                 {timestamp ? (
                     <span className={styles.histTime}>{formatRelativeDateTime(timestamp)}</span>

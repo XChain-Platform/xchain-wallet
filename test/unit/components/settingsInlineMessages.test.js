@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 
 const settingsDir = join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'settings');
 const files = [
@@ -45,10 +46,10 @@ describe('settings inline messages', () => {
     });
 
     it('puts a row result under the row at full width, not in its label column', () => {
-        const display = readFileSync(join(settingsDir, 'DisplaySection.jsx'), 'utf8');
-        expect(display).toMatch(/Saved chain filters<\/span>\s*<\/div>/);
+        const display = withEnglishCopy(readFileSync(join(settingsDir, 'DisplaySection.jsx'), 'utf8'));
+        expect(display).toMatch(/Saved network filters<\/span>\s*<\/div>/);
         expect(display).toMatch(/saved list preferences\.<\/span>\s*<\/div>/);
-        const region = readFileSync(join(settingsDir, 'LanguageRegionSection.jsx'), 'utf8');
+        const region = withEnglishCopy(readFileSync(join(settingsDir, 'LanguageRegionSection.jsx'), 'utf8'));
         expect(region).toMatch(/Asset balances are unchanged\.<\/span>\s*<\/div>/);
     });
 

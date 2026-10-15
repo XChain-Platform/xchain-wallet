@@ -14,6 +14,7 @@
 import { Icon, Input } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import styles from './HomeFilterBar.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -46,8 +47,8 @@ export function HomeFilterBar({
                     autoCorrect="off"
                     spellCheck={false}
                     className={styles.search}
-                    placeholder="Search tokens…"
-                    aria-label="Search tokens by name"
+                    placeholder={t('home.filter.searchTokens')}
+                    aria-label={t('home.filter.searchTokensByName')}
                     value={tokenQuery || ''}
                     onChange={(e) => onTokenQueryChange(e.target.value)}
                 />
@@ -58,7 +59,7 @@ export function HomeFilterBar({
                     coinFamilies={coinFamilies || []}
                     value={networkFilter || 'all'}
                     onChange={onNetworkFilterChange}
-                    ariaLabel="Filter by network"
+                    ariaLabel={t('home.filter.filterByNetwork')}
                 />
             </div>
         </div>
