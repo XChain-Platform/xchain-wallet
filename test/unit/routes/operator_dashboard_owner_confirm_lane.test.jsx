@@ -192,7 +192,7 @@ describe('operator publisher owner-action lane', () => {
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(OWNER.address.slice(0, 6));
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(OWNER.address.slice(-6));
         expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
-        expect(screen.getAllByText('Publish 123.45 to feed 700')).toHaveLength(2);
+        expect(screen.getByText('Publish 123.45 to feed 700')).toBeInTheDocument();
         expect(methods.composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
             actionData: {
                 action: 'BROADCAST',

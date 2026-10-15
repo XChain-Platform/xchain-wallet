@@ -2270,7 +2270,7 @@ export const en = {
     'components.operatorPublisherMode.lastPublishedTxid': 'Last published: txid',
     'components.operatorPublisherMode.publishValue': 'Publish value',
     'components.operatorPublisherMode.loadingFeed': 'Loading the most recent feed for this address.',
-    'components.operatorPublisherMode.sourceNotInWallet': 'This wallet does not contain the source address on this network.',
+    'components.operatorPublisherMode.sourceNotInWallet': "This wallet doesn't contain the source address on this network.",
     'components.operatorPublisherMode.sourceLoadFailed': "Couldn't load the source address. Try again.",
     'components.operatorPublisherMode.feeDecimals': 'Custom fee rate can have at most 8 decimal places.',
     'components.operatorPublisherMode.feePositive': 'Custom fee rate must be greater than zero.',
