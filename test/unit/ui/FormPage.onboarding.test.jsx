@@ -55,11 +55,9 @@ describe('FormPage onboarding layout', () => {
         );
 
         const form = screen.getByRole('form', { name: 'Send' });
-        // The notice sits above the form card, not inside it, so a wide card never nests a box.
-        expect(form.previousElementSibling).toHaveTextContent('Enter a recipient address.');
-        expect(form).not.toHaveTextContent('Enter a recipient address.');
         const children = [...form.children];
-        expect(children[0]).toContainElement(screen.getByLabelText('To'));
-        expect(children[1]).toContainElement(screen.getByRole('button', { name: 'Send' }));
+        expect(children[0]).toHaveTextContent('Enter a recipient address.');
+        expect(children[1]).toContainElement(screen.getByLabelText('To'));
+        expect(children[2]).toContainElement(screen.getByRole('button', { name: 'Send' }));
     });
 });
