@@ -167,12 +167,12 @@ export function PrivacySection() {
             <FormDraftTtlRow settings={settings} update={update} />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_VALUE}>Reset privacy settings</span>
-                    <span style={ROW_HINT}>Restore the privacy controls above to their defaults.</span>
+                    <span style={ROW_VALUE}>{t('settings.privacy.resetPrivacySettings')}</span>
+                    <span style={ROW_HINT}>{t('settings.privacy.restoreThePrivacyControlsAbove')}</span>
                     <PrivacySaveError visible={saveError === 'reset'} />
                 </div>
                 <Button size="sm" variant="secondary" icon={null} onClick={resetPrivacy}>
-                    Reset to defaults
+                    {t('settings.display.resetToDefaults')}
                 </Button>
             </div>
         </div>
@@ -187,7 +187,7 @@ function PrivacySaveError({ visible }) {
 
 function ClipboardAutoClearRow({ settings, update }) {
     const [saveError, setSaveError] = useState(false);
-    const [inputError, setInputError] = useState(/** @type {string | null} */ (null));
+    const [inputError, setInputError] = useState(false);
     const stored = settings?.privacy?.clipboardAutoClearSeconds;
     const current = Number.isInteger(stored) ? stored : CLIPBOARD_AUTO_CLEAR_DEFAULT;
     const onChange = async (event) => {
@@ -197,10 +197,10 @@ function ClipboardAutoClearRow({ settings, update }) {
             || !Number.isInteger(next)
             || next < CLIPBOARD_AUTO_CLEAR_MIN
             || next > CLIPBOARD_AUTO_CLEAR_MAX) {
-            setInputError(`Enter a whole number from ${CLIPBOARD_AUTO_CLEAR_MIN} to ${CLIPBOARD_AUTO_CLEAR_MAX}.`);
+            setInputError(true);
             return;
         }
-        setInputError(null);
+        setInputError(false);
         setSaveError(null);
         try {
             await update({ privacy: { clipboardAutoClearSeconds: next } });
@@ -235,9 +235,10 @@ function ClipboardAutoClearRow({ settings, update }) {
                 style={{ ...INPUT, width: '6rem' }}
             />
             {inputError ? (
-                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-                    {inputError}
-                </span>
+                <Status
+                    text={t('settings.privacy.enterAWholeNumberFrom', { min: CLIPBOARD_AUTO_CLEAR_MIN, max: CLIPBOARD_AUTO_CLEAR_MAX })}
+                    tone="error"
+                />
             ) : null}
             <PrivacySaveError visible={saveError} />
         </div>

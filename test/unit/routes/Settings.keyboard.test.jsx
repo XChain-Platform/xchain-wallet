@@ -215,6 +215,7 @@ describe('Settings keyboard interaction', () => {
             ...switches,
             screen.getByRole('spinbutton', { name: 'Clipboard auto-clear seconds' }),
             screen.getByRole('combobox', { name: 'Form draft retention' }),
+            screen.getByRole('button', { name: 'Reset to defaults' }),
         ]);
 
         const user = userEvent.setup();
