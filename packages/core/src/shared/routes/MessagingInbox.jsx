@@ -661,6 +661,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     label="Unlock messaging inbox"
                     onSubmit={handleUnlock}
                     status={unlockError ? (
+                        <StatusMessage id="messaging-unlock-error" variant="error">
                             {unlockError}
                         </StatusMessage>
                     ) : null}
