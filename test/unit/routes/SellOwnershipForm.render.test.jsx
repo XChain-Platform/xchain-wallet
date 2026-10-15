@@ -123,7 +123,7 @@ describe('SellOwnershipForm rendering', () => {
         }));
         await screen.findByLabelText(/^Price/);
         fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Price token: Select a token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose price token' }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select BAD\|TOKEN on Bitcoin/ }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -153,7 +153,7 @@ describe('SellOwnershipForm rendering', () => {
         }));
         await screen.findByLabelText(/^Price/);
         fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Price token: Select a token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose price token' }));
 
         expect(await screen.findByRole('button', { name: /^Select MAINONLY on Bitcoin/ })).toBeInTheDocument();
         expect(screen.queryByText('TESTONLY')).not.toBeInTheDocument();
