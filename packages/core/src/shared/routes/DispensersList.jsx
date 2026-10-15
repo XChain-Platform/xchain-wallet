@@ -407,7 +407,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             ) : null}
             actions={actionsFor(emptyOffersCreate)}
             toolbar={(
-                <div className={local.toolbar} style={{ flexWrap: 'wrap' }}>
+                <div className={local.toolbar}>
                     <div className={local.searchField}>
                         <Input
                             type="search"

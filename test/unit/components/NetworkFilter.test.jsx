@@ -447,7 +447,13 @@ describe('shared network filter surfaces', () => {
         expect(filterCss).toMatch(/\.triggerLabel\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s);
         expect(contactsCss).toMatch(/\.toolbar\s*\{[^}]*flex-wrap:\s*wrap/s);
         expect(contactsSource).toMatch(/<div className=\{picker\.toolbar\}>[\s\S]*announceNetworkCount/);
-        expect(dispensersSource).toMatch(/<div className=\{local\.toolbar\} style=\{\{ flexWrap: 'wrap' \}\}>/);
+        // The class must exist: an undefined one left the two controls stacked.
+        const dispensersCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/routes/DispensersList.module.css',
+        ), 'utf8');
+        expect(dispensersCss).toMatch(/\.toolbar\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
+        expect(dispensersSource).toMatch(/<div className=\{local\.toolbar\}>/);
         expect(dispensersSource).toMatch(/<div className=\{local\.searchField\}>\s*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
     });
 });
