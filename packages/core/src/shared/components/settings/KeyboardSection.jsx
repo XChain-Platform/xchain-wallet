@@ -38,8 +38,8 @@ import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPri
 import { t } from '../../../i18n/index.js';
 
 const GROUP_HEADER = {
-    fontSize: 'var(--xc-text-sm)',
-    fontWeight: 600,
+    fontSize: 'var(--xc-type-section-title-size)',
+    fontWeight: 'var(--xc-type-section-title-weight)',
     color: 'var(--xc-text)',
     marginTop: 'var(--xc-space-3)',
     marginBottom: 0,

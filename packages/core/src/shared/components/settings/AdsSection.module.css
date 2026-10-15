@@ -5,14 +5,16 @@
     composes: card from '../../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-form-gap);
     min-width: 0;
 }
 
 .chainName {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
+    /* The title sits the section header gap above its fields, inside the
+       form gap that separates the fields from each other. */
+    margin: 0 0 calc(var(--xc-section-header-gap) - var(--xc-form-gap));
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     color: var(--xc-text);
 }
 
