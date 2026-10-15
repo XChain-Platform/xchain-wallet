@@ -18,7 +18,7 @@ import { useLearnMode } from '../hooks/useLearnMode.js';
 import styles from './LearnNote.module.css';
 import { t } from '../../i18n/index.js';
 
-const DOCS_URL = 'https://docs.xchain.io/';
+const DOCS_URL = 'https://docs.xchain.io/components/wallet/security#sign-screen-safety-rails';
 const DISMISSED_KEY_PREFIX = 'xc:learn-note:dismissed:';
 const DISMISS_LABEL = 'Dismiss learn note';
 const DISMISS_TEXT = 'Dismiss';

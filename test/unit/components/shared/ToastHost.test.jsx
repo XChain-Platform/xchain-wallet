@@ -211,4 +211,15 @@ describe('ToastHost', () => {
             expect(block[1], tone).toMatch(/background:\s*linear-gradient\([^;]*\),\s*var\(--xc-surface-raised\);/);
         }
     });
+
+    it('renders broadcast notifications containing markup as text', () => {
+        const message = '<script>globalThis.notificationExecuted = true</script>';
+        setup();
+        show({ id: 'broadcast', message, durationMs: 0 });
+
+        const notification = screen.getByText(message);
+        expect(notification).toBeInTheDocument();
+        expect(notification.closest('[aria-label="Notifications"]').querySelector('script')).toBeNull();
+        expect(globalThis.notificationExecuted).toBeUndefined();
+    });
 });
