@@ -13,6 +13,7 @@ import {
     Screen,
     PageHeader,
     FormPage,
+    FormNotice,
     Button,
     Input,
     ChainBadge,
@@ -1043,9 +1044,9 @@ export function IssueTokenForm({ walletId, onBack }) {
                 // Locking minting alongside a partial initial mint strands the
                 // remainder forever: the cap says one thing, the token can only
                 // ever hold another. Say so before the fee is spent.
-                <StatusMessage variant="status">
+                <FormNotice variant="status">
                     {t('issue.lockSupplyWarning', { amount: mintHeadroom })}
-                </StatusMessage>
+                </FormNotice>
             ) : null}
             {/* Bridgeability, the ISSUE format 7 fields (xchain-token-bridge.md
                 section 7). NOT set here, and the panel says so rather than
@@ -1054,13 +1055,12 @@ export function IssueTokenForm({ walletId, onBack }) {
                 is a separate owner-only action on an existing row. What belongs
                 on THIS screen is the one decision that is irreversible from
                 here: binding an address list to the token shuts the bridge door
-                for good in milestone 1. It is the shared warning notice, not a
-                box of its own inside the form card. */}
-            <StatusMessage variant="warning" role={null}>
-                <span>{t('issue.bridgingHint')}</span>
-                {' '}
-                <span>{t('issue.boundListHint')}</span>
-            </StatusMessage>
+                for good in milestone 1. It is the shared warning notice, shown at
+                the top of the form with the others, not a box of its own inside
+                the form card. */}
+            <FormNotice variant="warning" role={null}>
+                {`${t('issue.bridgingHint')} ${t('issue.boundListHint')}`}
+            </FormNotice>
             <AddressField
                 id="issue-transfer-owner"
                 label={t('issue.transferOwnershipOptional')}

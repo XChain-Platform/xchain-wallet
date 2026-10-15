@@ -139,9 +139,15 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         });
     }, [chainId, query, visibleLists]);
 
-    useEffect(() => {
+    // Return to the first page when the listing changes. This is done while
+    // rendering rather than in an effect: an effect runs after paint, so a
+    // Load more click made in that gap queued its update first and the late
+    // reset then overwrote it with a single page.
+    const [pageScope, setPageScope] = useState({ filterType, mode, directory });
+    if (pageScope.filterType !== filterType || pageScope.mode !== mode || pageScope.directory !== directory) {
+        setPageScope({ filterType, mode, directory });
         setVisibleLimit(PAGE_SIZE);
-    }, [filterType, mode, directory]);
+    }
 
     const pagedLists = matchingLists.slice(0, visibleLimit);
     // Chains that did not answer, as badges for the single notice. An unknown
@@ -156,9 +162,9 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             title={mode === 'pick' ? 'Choose a shared list' : 'Shared lists'}
         />
     );
-    const wrap = (children, toolbar) => (
+    const wrap = (children, toolbar, notices) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>{children}</ListPage>
+            <ListPage notices={notices} toolbar={toolbar}>{children}</ListPage>
         </Screen>
     );
 
@@ -195,24 +201,24 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         </div>
     );
 
+    // One notice for every chain that did not answer, not one per chain.
+    const unavailableNotice = directory.unavailable.length > 0 ? (
+        <StatusMessage variant="error">
+            Shared lists unavailable
+            {unavailableDescriptors.length > 0 ? ' from ' : null}
+            {unavailableDescriptors.map((descriptor, index) => (
+                <Fragment key={descriptor.id || index}>
+                    {index === 0 ? null : ' '}
+                    <ChainBadge descriptor={descriptor} size="sm" />
+                </Fragment>
+            ))}
+            . Try again in a moment.
+        </StatusMessage>
+    ) : null;
+
     const filteredType = listType(filterType);
     return wrap(
         <>
-            {/* One notice for every chain that did not answer, not one per chain. */}
-            {directory.unavailable.length > 0 ? (
-                <StatusMessage variant="error">
-                    Shared lists unavailable
-                    {unavailableDescriptors.length > 0 ? ' from ' : null}
-                    {unavailableDescriptors.map((descriptor, index) => (
-                        <Fragment key={descriptor.id || index}>
-                            {index === 0 ? null : ' '}
-                            <ChainBadge descriptor={descriptor} size="sm" />
-                        </Fragment>
-                    ))}
-                    . Try again in a moment.
-                </StatusMessage>
-            ) : null}
-
             {/* With that notice up and no search typed, an empty state would be a
                 second message for the same state. */}
             {matchingLists.length === 0 && directory.unavailable.length > 0 && !query.trim() ? null : matchingLists.length === 0 ? (
@@ -255,6 +261,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             )}
         </>,
         toolbar,
+        unavailableNotice,
     );
 }
 

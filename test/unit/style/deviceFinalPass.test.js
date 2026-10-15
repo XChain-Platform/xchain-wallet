@@ -56,12 +56,12 @@ describe('device pass layout guards', () => {
 
     it('stacks icon over label in the four-column Home action grid', () => {
         const css = read('packages/core/src/shared/routes/Home.module.css');
-        expect(css).toMatch(/@media not all and \(min-width: 1024px\)\s*\{\s*\.actionsFull > button\s*\{[^}]*flex-direction:\s*column/s);
+        expect(css).toMatch(/\n\.actionsFull > button\s*\{[^}]*flex-direction:\s*column/s);
     });
 
     it('keeps stacked Home action icons on one line when a label wraps', () => {
         const css = read('packages/core/src/shared/routes/Home.module.css');
-        expect(css).toMatch(/@media not all and \(min-width: 1024px\)\s*\{\s*\.actionsFull > button\s*\{[^}]*justify-content:\s*flex-start/s);
+        expect(css).toMatch(/\n\.actionsFull > button\s*\{[^}]*justify-content:\s*flex-start/s);
     });
 
     it('hides a search-only header menu when the rail shows Search', () => {

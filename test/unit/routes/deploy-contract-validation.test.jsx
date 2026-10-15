@@ -228,6 +228,29 @@ describe('DeployContractForm validation diagnostics', () => {
         expect(await utils.findByRole('alert')).toHaveTextContent('Gas limit must be a positive whole number.');
     });
 
+    it('draws template names as plain labels with no icon picked from the word', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider
+                    shell="web"
+                    messaging={messagingWithValidation({}, {
+                        listContractTemplates: () => Promise.resolve({
+                            templates: ['escrow', 'validation'],
+                            patterns: [],
+                        }),
+                    })}
+                >
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+        const chip = utils.getByRole('button', { name: 'validation' });
+        expect(chip.querySelector('svg')).toBeNull();
+        expect(utils.getByRole('button', { name: 'escrow' }).querySelector('svg')).toBeNull();
+    });
+
     it('shows the required source message before review', async () => {
         let utils;
         await domAct(async () => {

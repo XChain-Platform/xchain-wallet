@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { FormErrorSummary, Input } from '@xchain-wallet/core/ui';
+import { FormErrorSummary, FormNotice, FormPage, Input } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function FormErrorSummarySection() {
@@ -46,6 +46,20 @@ export function FormErrorSummarySection() {
                 />
                 <Input id="sg-summary-to" label="To" error="Destination address is required." onChange={() => {}} />
                 <Input id="sg-summary-amount" label="Amount" error="Amount must be a positive number." onChange={() => {}} />
+            </LiveExample>
+            <Guidance
+                what={<>FormNotice: a plain-string notice written in the middle of a form body that FormPage shows at the top of the form with its other notices. Props: <code>variant</code> (default warning), <code>role</code>, and the text as children.</>}
+                when={<>A fact about the whole form that a field or control knows only once it renders, such as the fee selector's fallback-rate note.</>}
+                whenNot={<>A field problem (the field's own <code>error</code>) · text that is not a plain string, which renders in place.</>}
+                sizing={<>The StatusMessage row, at full content width, first in the form, with the form gap between stacked notices.</>}
+                doRule={<>✓ Write it next to the control that raises it · keep the text a plain string</>}
+                dontRule={<>✗ Render a StatusMessage between fields</>}
+            />
+            <LiveExample label="Written beside the field, shown at the top">
+                <FormPage as="div">
+                    <Input id="sg-notice-amount" label="Amount" onChange={() => {}} />
+                    <FormNotice variant="warning">Live fee estimate unavailable. Using safe default rates.</FormNotice>
+                </FormPage>
             </LiveExample>
         </Section>
     );

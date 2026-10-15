@@ -120,12 +120,13 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     text-align: center;
-    /* Fee tier stops are the quickest way to set a fee. Flex centering keeps
-       each label on its nub while the button meets the pointer-target floor. */
+    /* Fee tier stops are the quickest way to set a fee. Labels hang from one
+       top edge, so a one-line stop (Custom) lines up with the two-line ones,
+       while the button still meets the pointer-target floor. */
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
 }

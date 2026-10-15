@@ -15,7 +15,6 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import styles from './IssueTokenForm.module.css';
 import { AssetMark } from '../../ui/AssetMark.jsx';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
@@ -280,9 +279,27 @@ export function MarketsList({
             ? (selectedAsset.displayName || selectorTickUpper)
             : (selectorDescriptor?.displayName || selectorNativeTicker || selectorTickUpper))
         : 'Select coin or token';
+    // The load error is a page notice, shown first; the results region below
+    // renders nothing in its place.
+    const showLoadError = !!selectedAsset && !(marketsLoading && !hasCachedMarkets) && !!loadError;
     return (
         <Screen variant={variant} header={header}>
             <ListPage
+                notices={showLoadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setSettledAssetKey(null);
+                                setLoading(true);
+                                setMarketsReload((value) => value + 1);
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                ) : null}
                 toolbar={(
                     <div style={{ width: '100%' }}>
                         <Button
@@ -379,22 +396,7 @@ export function MarketsList({
                             <div role="status" aria-label="Loading markets">
                                 <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
                             </div>
-                        ) : loadError ? (
-                            <StatusMessage
-                                variant="error"
-                                className={styles.hint}
-                                recovery={{
-                                    label: 'Try again',
-                                    onAction: () => {
-                                        setSettledAssetKey(null);
-                                        setLoading(true);
-                                        setMarketsReload((value) => value + 1);
-                                    },
-                                }}
-                            >
-                                {loadError}
-                            </StatusMessage>
-                        ) : displayMarkets.length === 0 ? (
+                        ) : loadError ? null : displayMarkets.length === 0 ? (
                             <EmptyState
                                 title={filtersHideAllMarkets
                                     ? 'No results for these filters'

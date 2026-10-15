@@ -59,6 +59,31 @@
     padding-inline: var(--xc-control-padding-x, 12px);
 }
 
+/* The browser's own file button is a grey default-styled box; it takes the
+   outlined secondary button look so a file field reads like every other
+   control. The button takes the small control height, which fits inside the
+   field's inset. */
+.input[type='file'] {
+    padding-block: var(--xc-space-1);
+    padding-inline: var(--xc-space-1);
+    color: var(--xc-text-muted);
+}
+
+.input[type='file']::file-selector-button {
+    box-sizing: border-box;
+    height: var(--xc-control-h-sm);
+    margin-inline-end: var(--xc-space-2);
+    padding-inline: var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius, 8px);
+    background: transparent;
+    color: var(--xc-accent-text);
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
 .input:is([type='number'], [inputmode='decimal'], [inputmode='numeric']) {
     direction: ltr;
 }

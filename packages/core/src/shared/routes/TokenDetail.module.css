@@ -690,6 +690,8 @@
 .socialChip {
     display: inline-flex;
     align-items: center;
+    min-height: var(--xc-tap-min);
+    box-sizing: border-box;
     gap: 6px;
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: 999px;
