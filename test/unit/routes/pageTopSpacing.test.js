@@ -54,6 +54,6 @@ describe('route page-top ownership', () => {
         for (const [, block] of banner.matchAll(/@media \([^)]*width[^)]*\)\s*\{([\s\S]*?)\n\}/g)) {
             expect(block).not.toMatch(/margin/);
         }
-        expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.body\s*\{[^}]*scrollbar-gutter:\s*auto/);
+        expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\)[\s\S]*?\.body\s*\{[^}]*scrollbar-gutter:\s*auto/);
     });
 });

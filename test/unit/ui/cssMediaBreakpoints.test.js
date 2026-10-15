@@ -69,6 +69,6 @@ describe('core CSS module media breakpoints', () => {
         expect(formPage).toContain('@media (min-width: 600px)');
         expect(locked).toContain('@media (min-width: 600px)');
         // The short-viewport rule keys on landscape height, not on width.
-        expect(locked).toContain('@media (orientation: landscape) and (max-height: 480px)');
+        expect(locked).toContain('@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2)');
     });
 });

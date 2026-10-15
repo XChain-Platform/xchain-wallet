@@ -33,6 +33,22 @@ describe('AboutSection diagnostics', () => {
         expect(screen.getByText('extension')).toBeTruthy();
     });
 
+    it('names the native OS where the web host reports web', async () => {
+        const prior = Object.getOwnPropertyDescriptor(globalThis, 'Capacitor');
+        Object.defineProperty(globalThis, 'Capacitor', {
+            configurable: true,
+            value: { isNativePlatform: () => true, getPlatform: () => 'android' },
+        });
+        try {
+            mount({ wallet: { platform: 'web' }, build: { gitCommit: 'abc123def456' } });
+            expect(await screen.findByText('android')).toBeTruthy();
+            expect(screen.queryByText('web')).toBeNull();
+        } finally {
+            if (prior) Object.defineProperty(globalThis, 'Capacitor', prior);
+            else delete globalThis.Capacitor;
+        }
+    });
+
     it('opens every document link externally without an opener', () => {
         mount();
         const links = screen.getAllByRole('link');
