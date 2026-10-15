@@ -1466,6 +1466,8 @@ export const en = {
         'Desktop only: send wallet traffic through a local Tor SOCKS5 proxy at 127.0.0.1:9050; Tor must already be running because unreachable requests fail rather than quietly going direct.',
     'settings.privacy.notAvailableOnThisPlatform':
         "Not available on this platform or shell because browser wallets can't open a wallet-only SOCKS connection and extension proxies affect the entire browser; the desktop app can route only wallet traffic through Tor.",
+    'settings.privacy.notAvailableInNativeApp':
+        "Not available in the iOS and Android apps because the wallet runs in the system web view, which can't open a wallet-only SOCKS connection; the desktop app can route only wallet traffic through Tor.",
     'settings.privacy.changeAddressRotation': 'Change-address rotation',
     'settings.privacy.importedKeyAndWatchOnly':
         'Imported-key and watch-only sends keep the spending address, while HD wallets use the next internal change address when available and list rotated leftovers as “Change #N”.',
