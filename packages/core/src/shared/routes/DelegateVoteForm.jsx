@@ -368,7 +368,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -406,7 +406,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -539,7 +539,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             label={verb}
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

@@ -556,7 +556,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -682,13 +682,13 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         <StatusMessage variant="status">{feeWarning}</StatusMessage>
                     ) : null}
                     {blockingError ? (
-                        <StatusMessage variant="error" className={styles.error}>{blockingError}</StatusMessage>
+                        <StatusMessage variant="error">{blockingError}</StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                     {submitError ? (
-                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                        <StatusMessage variant="error">{submitError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}
@@ -752,7 +752,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ) : null}
 
             {noDestinationAccount ? (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     {leg.fixedDestination
                         ? 'You have no address on the required destination network in this wallet yet.'
                             + ' Use Receive to create one first: this bridged copy can only move back to its origin network,'
@@ -762,7 +762,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                             + ' and the credit cannot be redirected once it applies.'}
                 </StatusMessage>
             ) : requiredDestinationMissing ? (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     This bridge route is unavailable because this wallet has no address on
                     the required destination chain. Use Receive there to create one first.
                 </StatusMessage>

@@ -584,7 +584,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         );
     }
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -637,7 +637,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 label="Review advanced action"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -763,7 +763,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             label="Compose advanced action"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -791,7 +791,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}

@@ -543,7 +543,7 @@ export function CreateBetFeedForm({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -632,7 +632,7 @@ export function CreateBetFeedForm({
             demoGuard={demoGuard}
             label="Open a market"
             onSubmit={submit}
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"

@@ -479,7 +479,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         </Screen>
     );
 
-    if (loadError) return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
+    if (loadError) return wrap(<ListPage><StatusMessage variant="error">{loadError}</StatusMessage></ListPage>);
     if (!addressesByChain || !giveChainId) return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
 
     const chainIds = chainsWithAddresses.length ? chainsWithAddresses : [giveChainId];
@@ -487,7 +487,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     if (distinctCoins.size < 2) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     A cross-chain order needs addresses on two different networks. Use Receive on a second network and try again.
                 </StatusMessage>
             </ListPage>,
@@ -567,7 +567,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 label="Review cross-chain order"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -636,8 +636,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             sectioned
             status={validationError || formError ? (
                 <>
-                    {validationError ? <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage> : null}
-                    {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+                    {validationError ? <StatusMessage variant="error">{validationError}</StatusMessage> : null}
+                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                 </>
             ) : null}
             actions={(
@@ -681,7 +681,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                             iconLabel="Choose source address"
                         />
                     ) : (
-                        <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
+                        <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
                     )}
                     <Input
                         label="Give token"

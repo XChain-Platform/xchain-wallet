@@ -9,19 +9,21 @@
 // contact legal@dankest.llc.
 
 import { Section, Guidance, LiveExample } from '../StyleGuidePage.jsx';
+import { declaredToken } from '../tokenValues.js';
 
 const SIZES = [
-    { token: '--xc-text-2xl', value: '24px', role: 'Hero figures (Total balance), screen H1' },
-    { token: '--xc-text-xl',  value: '20px', role: 'Asset hero name, panel section headers' },
-    { token: '--xc-text-lg',  value: '16px', role: 'Big-field input text, section titles' },
-    { token: '--xc-text-md',  value: '14px', role: 'Body text (default), balance quantity, button labels' },
-    { token: '--xc-text-sm',  value: '13px', role: 'Form labels, tab labels, address text' },
-    { token: '--xc-text-xs',  value: '11px', role: 'Metadata, hints, subtitles, badges' },
+    { token: '--xc-text-2xl', role: 'Hero figures (Total balance), screen H1' },
+    { token: '--xc-text-xl',  role: 'Asset hero name, panel section headers' },
+    { token: '--xc-text-lg',  role: 'Big-field input text, section titles' },
+    { token: '--xc-text-md',  role: 'Body text (default), balance quantity, button labels' },
+    { token: '--xc-text-sm',  role: 'Form labels, tab labels, address text' },
+    { token: '--xc-text-xs',  role: 'Metadata, hints, subtitles, badges' },
 ];
 
 const SAMPLE = 'The quick brown fox jumps over the lazy dog · 0123456789';
 
-function SizeRow({ token, value, role }) {
+function SizeRow({ token, role }) {
+    const value = declaredToken(token);
     return (
         <div style={{
             display: 'grid',
@@ -51,10 +53,10 @@ export function TypographySection() {
             id="typography"
             title="Typography"
             tag="6-step scale + 2 families"
-            kicker="System sans for everything by default; mono only for digits (balance quantities, addresses, fee rates). The six size tokens cover everything from hero figures down to badge text. Never hard-code a font-size."
+            kicker="The bundled sans for everything by default; mono only for digits (balance quantities, addresses, fee rates). The six size tokens cover everything from hero figures down to badge text. Never hard-code a font-size."
         >
             <Guidance
-                what={<>Two font families (<code>--xc-font-sans</code> / <code>--xc-font-mono</code>, both system stacks, no web-font fetch) and six size tokens (<code>--xc-text-xs</code> through <code>--xc-text-2xl</code>). Line-height stays at the default (1.5) unless a specific component needs tighter (hero figures use 1.1).</>}
+                what={<>Two font families: <code>--xc-font-sans</code> is the bundled Inter variable font (<code>XChain Sans</code>, shipped with the app, never fetched from a font service) over a metric-matched Arial fallback so the swap does not move the layout, and <code>--xc-font-mono</code> is the system monospace stack. There are six size tokens (<code>--xc-text-xs</code> through <code>--xc-text-2xl</code>, in rem so they follow the user's text size). Line-height stays at the default (1.5) unless a specific component needs tighter (hero figures use 1.1).</>}
                 doRule={<>✓ Always reference the tokens: <code>font-size: var(--xc-text-sm)</code>, never <code>font-size: 13px</code> · use the mono family for digits that should line up across rows (balance quantities, address text, fee rates in sat/vB) · weights: 400 for default body, 600 for labels / button text, 700 for names + values, 800 for hero figures only</>}
                 dontRule={<>✗ Hard-code px values (defeats theme overrides + accessibility user-scaling) · use mono for non-numeric text · introduce a new size between the existing steps (pick the nearest token instead)</>}
             />

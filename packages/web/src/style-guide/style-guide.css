@@ -12,9 +12,18 @@ body {
 }
 
 .sg-page {
+    box-sizing: border-box;
+    width: 100%;
     max-width: 1120px;
     margin: 0 auto;
     padding: 32px 24px 96px;
+    overflow-wrap: anywhere;
+}
+
+.sg-page *,
+.sg-page *::before,
+.sg-page *::after {
+    box-sizing: border-box;
 }
 
 .sg-h1 {
@@ -97,8 +106,13 @@ body {
 .sg-guide dl {
     margin: 0;
     display: grid;
-    grid-template-columns: 110px 1fr;
+    grid-template-columns: 110px minmax(0, 1fr);
     gap: 6px 16px;
+}
+
+@media (max-width: 520px) {
+    .sg-guide dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .sg-guide dd { margin-bottom: 10px; }
 }
 
 .sg-guide dt {
@@ -115,6 +129,7 @@ body {
     font-size: 13px;
     color: var(--xc-text);
     line-height: 1.55;
+    overflow-wrap: anywhere;
 }
 
 .sg-guide dd code {
@@ -131,6 +146,7 @@ body {
     background: color-mix(in srgb, var(--xc-warning) 10%, transparent);
     font-size: 12.5px;
     color: var(--xc-text);
+    overflow-wrap: anywhere;
 }
 
 .sg-supersedes code {
@@ -140,16 +156,19 @@ body {
 }
 
 .sg-markup {
+    min-width: 0;
     margin: 16px 0 0;
 }
 
 .sg-markup pre {
+    width: 100%;
+    max-width: 100%;
     background: var(--xc-text);
     color: var(--xc-bg);
     border: 1px solid var(--xc-border);
     border-radius: 6px;
     padding: 14px 16px;
-    overflow: auto;
+    overflow-x: auto;
     font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     margin: 0;
 }
@@ -371,6 +390,7 @@ body {
 }
 
 .sg-frame-scroll {
+    max-width: 100%;
     overflow-x: auto;
 }
 
@@ -408,4 +428,80 @@ body {
     margin: 0;
     max-width: 100%;
     overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+    .sg-page {
+        padding: 20px 16px 64px;
+    }
+
+    .sg-h1 {
+        align-items: flex-start;
+        font-size: 24px;
+    }
+
+    .sg-guide {
+        padding: 12px 14px;
+    }
+
+    .sg-guide dl {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px;
+    }
+
+    .sg-guide dd:not(:last-child) {
+        margin-bottom: 8px;
+    }
+
+    .sg-example {
+        padding: 12px;
+    }
+
+    .sg-sticky {
+        align-items: stretch;
+        margin-inline: -16px;
+        padding-inline: 16px;
+    }
+
+    .sg-view-switch {
+        display: flex;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .sg-view-switch button {
+        flex: 1 1 0;
+        min-width: 0;
+        padding-inline: 6px;
+    }
+
+    .sg-view-width {
+        display: block;
+        margin-top: 4px;
+        font-size: 11px;
+    }
+
+    .sg-jump {
+        width: 100%;
+    }
+
+    .sg-jump select {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .sg-example-wide {
+        inset-inline: auto;
+        width: 100%;
+        transform: none;
+    }
+
+    .sg-triptych {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sg-triptych-cell {
+        width: 100%;
+    }
 }

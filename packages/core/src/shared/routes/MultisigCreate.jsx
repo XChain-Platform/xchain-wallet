@@ -360,7 +360,7 @@ export function MultisigCreate({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </ListPage>,
         );
     }
@@ -408,7 +408,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 label="Review multisig"
                 onSubmit={handleSubmit}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <div className={styles.actions}>
@@ -461,10 +461,10 @@ export function MultisigCreate({ walletId, onBack }) {
             status={composeError || submitError ? (
                 <>
                     {composeError ? (
-                        <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
+                        <StatusMessage variant="error">{composeError}</StatusMessage>
                     ) : null}
                     {submitError ? (
-                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                        <StatusMessage variant="error">{submitError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}

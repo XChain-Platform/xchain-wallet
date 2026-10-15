@@ -79,10 +79,12 @@ describe('ConnectApproval network checklist', () => {
         expect(text.indexOf('security.attacker.test')).toBeLessThan(text.indexOf(longOrigin));
         expect(screen.getByTestId('request-origin-host-ending').textContent)
             .toBe('security.attacker.test');
+        expect(screen.getByTestId('request-origin-registrable-domain').textContent)
+            .toBe('attacker.test');
         expect(screen.getByTestId('request-origin-full').textContent).toBe(longOrigin);
         expect(screen.getByText('XChain Wallet␦security')).toBeTruthy();
         expect(screen.queryByText('XChain Wallet\u202Esecurity')).toBeNull();
-        expect(screen.getByText('The site calls itself')).toBeTruthy();
+        expect(screen.getByText('Site-provided name')).toBeTruthy();
         expect(screen.getByText('Requesting site')).toBeTruthy();
         expect(screen.queryByText('Verified site')).toBeNull();
         expect(screen.getByText(/Only connect if you recognize and trust this site/))
@@ -115,6 +117,8 @@ describe('ConnectApproval network checklist', () => {
         expect(permissions.textContent).toContain('addresses and balances');
         expect(permissions.textContent).toContain('only the networks you select');
         expect(permissions.textContent).toContain('before signing any message or transaction');
+        expect(permissions.textContent).toContain('only if you choose');
+        expect(permissions.textContent).toContain('Revoke it anytime in Connected sites');
         expect(screen.getByLabelText(label(bundled))).toBeTruthy();
         expect(screen.queryByLabelText(label(notRequested))).toBeNull();
         expect(screen.queryByRole('checkbox', { name: /message signatures/i })).toBeNull();
@@ -212,6 +216,7 @@ describe('ConnectApproval account checklist', () => {
         shim.resolveApproval = async (_id, decision) => { submitted.push(decision); return { approved: true }; };
         mountWithAccounts(ACCOUNTS);
 
+        expect(screen.getByText('Account 1')).toBeVisible();
         expect(screen.getByLabelText('Share Account 1').checked).toBe(true);
         expect(screen.getByLabelText('Share Account 2').checked).toBe(false);
 

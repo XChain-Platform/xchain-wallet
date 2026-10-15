@@ -67,6 +67,10 @@ export const INPUT = {
     border: '1px solid var(--xc-border)',
     borderRadius: 'var(--xc-radius-sm)',
     padding: 'var(--xc-space-1) var(--xc-space-2)',
+    // The same height the settings dropdowns take, so a number field beside or
+    // under a select is not a 29px sliver on a phone.
+    boxSizing: 'border-box',
+    minHeight: 'var(--xc-control-h-md)',
     fontSize: 'var(--xc-text-sm)',
     fontFamily: 'inherit',
 };

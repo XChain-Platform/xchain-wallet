@@ -445,7 +445,7 @@ function ScopedCoinpayForm({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -509,7 +509,7 @@ function ScopedCoinpayForm({
                 label="Review matched order payment"
                 onSubmit={handleSubmit}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : stage === 'submitting' ? (
                     <StatusMessage>Preparing payment for confirmation…</StatusMessage>
                 ) : null}
@@ -554,7 +554,7 @@ function ScopedCoinpayForm({
                     <DetailRow label="Network fee rate" value={feeRateLabel} />
                 </dl>
 
-                <StatusMessage className={styles.error}>{EXPIRY_LOSS_WARNING}</StatusMessage>
+                <StatusMessage>{EXPIRY_LOSS_WARNING}</StatusMessage>
 
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
@@ -579,7 +579,7 @@ function ScopedCoinpayForm({
                 <p className={styles.hint}>Scanning for payments due…</p>
             ) : null}
             {scanError ? (
-                <StatusMessage variant="error" className={styles.error}>{scanError}</StatusMessage>
+                <StatusMessage variant="error">{scanError}</StatusMessage>
             ) : null}
             {addressesByChain !== null && !scanning && !scanError && obligations.length === 0 ? (
                 <EmptyState
@@ -665,7 +665,7 @@ function ScopedCoinpayForm({
                     label="Selected payment obligation"
                     onSubmit={handleReview}
                     status={(submitError || validationError || insufficientBalanceMessage) ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {submitError || validationError || insufficientBalanceMessage}
                         </StatusMessage>
                     ) : nativeBalance.loading ? (

@@ -330,11 +330,11 @@ function PublisherFields({
                 autoComplete="off"
             />
             {feedError ? (
-                <StatusMessage variant="error" className={formStyles.error}>{feedError}</StatusMessage>
+                <StatusMessage variant="error">{feedError}</StatusMessage>
             ) : null}
             {sourceLoading ? <p className={dashStyles.entryDescription}>{t('components.operatorPublisherMode.loadingSourceAddress')}</p> : null}
             {!sourceLoading && sourceError ? (
-                <StatusMessage variant="error" className={formStyles.error}>{sourceError}</StatusMessage>
+                <StatusMessage variant="error">{sourceError}</StatusMessage>
             ) : null}
         </>
     );
@@ -360,7 +360,7 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
                 </p>
             ) : null}
             {submission.error ? (
-                <StatusMessage variant="error" className={formStyles.error}>{submission.error}</StatusMessage>
+                <StatusMessage variant="error">{submission.error}</StatusMessage>
             ) : null}
             {lastTxid ? (
                 <p className={dashStyles.entryDescription}>

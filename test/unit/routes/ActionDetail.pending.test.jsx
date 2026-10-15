@@ -204,11 +204,11 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
 
     it('renders no peer block for a pending entry that carries a link record', async () => {
         const { view } = renderCard(pendingEntry());
-        fireEvent.click(screen.getByText('Raw'));
+        fireEvent.click(screen.getByText('Raw data'));
         // The raw payload itself still renders; only the peer half of
         // the tab is gone.
         expect(view.container.querySelector('pre')).toBeTruthy();
-        expect(view.container.textContent).not.toContain('Peer ·');
+        expect(view.container.textContent).not.toContain('Linked transaction ·');
     });
 
     it('renders the peer block once the same transaction has a block', async () => {
@@ -220,8 +220,8 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
                 linkActionIndex: '43',
             },
         }));
-        fireEvent.click(screen.getByText('Raw'));
-        expect(view.container.textContent).toContain('Peer ·');
+        fireEvent.click(screen.getByText('Raw data'));
+        expect(view.container.textContent).toContain('Linked transaction ·');
     });
 
     it('labels an oracle-priced zero in Details without changing Raw', () => {
@@ -235,7 +235,7 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
         expect(label.closest('tr').querySelector('td').textContent)
             .toBe('0 (protocol placeholder; price set by oracle)');
 
-        fireEvent.click(screen.getByText('Raw'));
+        fireEvent.click(screen.getByText('Raw data'));
         expect(view.container.querySelector('pre').textContent).toContain('"get_amount": "0"');
         expect(view.container.querySelector('pre').textContent).not.toContain('protocol placeholder');
     });
@@ -247,7 +247,7 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
 
         for (const key of ['Allow list', 'Block list']) {
             const label = screen.getByRole('rowheader', { name: key });
-            expect(label.closest('tr').querySelector('td').textContent).toBe('none');
+            expect(label.closest('tr').querySelector('td').textContent).toBe('None');
         }
         expect(view.container.textContent).not.toMatch(/list #0/i);
     });

@@ -71,22 +71,6 @@ function hasEarlierFallback(decl, feature) {
     return false;
 }
 
-function hasGeneratedColorMixFallback(decl) {
-    const rule = decl.parent;
-    const gate = rule?.next();
-    if (!gate || gate.type !== 'atrule' || gate.name.toLowerCase() !== 'supports') return false;
-    if (!/^not\s*\([^)]*color-mix\s*\(/i.test(gate.params)) return false;
-    return gate.nodes?.some((node) => (
-        node.type === 'rule'
-        && node.selector === rule.selector
-        && node.nodes.some((candidate) => (
-            candidate.type === 'decl'
-            && candidate.prop === decl.prop
-            && !/color-mix\s*\(/i.test(candidate.value)
-        ))
-    ));
-}
-
 function addIssue(issues, node, feature) {
     issues.push({ feature, line: node.source?.start?.line ?? 1 });
 }
@@ -123,9 +107,12 @@ export function findChrome102CssIssues(root) {
 
         for (const feature of features) {
             if (!feature.value.test(decl.value)) continue;
+            if (feature.name === 'color-mix()') {
+                if (!hasEarlierFallback(decl, feature)) addIssue(issues, decl, feature.name);
+                continue;
+            }
             if (hasSupportsGuard(decl, feature.supports)) continue;
             if (hasEarlierFallback(decl, feature)) continue;
-            if (feature.name === 'color-mix()' && hasGeneratedColorMixFallback(decl)) continue;
             addIssue(issues, decl, feature.name);
         }
     });

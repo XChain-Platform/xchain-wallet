@@ -767,7 +767,7 @@ function OrderActionPanel({
                     Signer-mode wallet, then broadcast from a Full-mode wallet.
                 </p>
             ) : null}
-            {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
 
         </FormPage>,
     );

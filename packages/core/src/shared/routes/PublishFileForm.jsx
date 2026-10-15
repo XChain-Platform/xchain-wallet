@@ -553,7 +553,7 @@ export function PublishFileForm({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -644,7 +644,7 @@ export function PublishFileForm({ walletId, onBack }) {
                 label="Review publish"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -748,7 +748,7 @@ export function PublishFileForm({ walletId, onBack }) {
             label="Publish file"
             onSubmit={handleReview}
             status={mode === 'public' && formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={mode === 'public' ? (
                 <Button
@@ -799,7 +799,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     {ownedTokens === null ? (
                         <p className={styles.hint}>Looking up tokens you own…</p>
                     ) : ownedTokensError && ownedTokens.length === 0 ? (
-                        <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
+                        <StatusMessage variant="error">{ownedTokensError}</StatusMessage>
                     ) : ownedTokens.length === 0 ? (
                         <EmptyState
                             title="No owned tokens"
@@ -809,7 +809,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     ) : (
                         <>
                             {ownedTokensError ? (
-                                <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
+                                <StatusMessage variant="error">{ownedTokensError}</StatusMessage>
                             ) : null}
                             <p className={styles.hint}>
                                 Pick the token whose holders can unlock the file:

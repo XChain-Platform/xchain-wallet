@@ -385,7 +385,7 @@ export function SignMessageForm({ walletId, onBack }) {
             label="Sign message"
             onSubmit={handleSubmit}
             status={error ? (
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
+                <StatusMessage variant="error">{error}</StatusMessage>
             ) : null}
             actions={(
                 <Button

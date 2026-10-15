@@ -8,11 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// An engine without `color-mix()` (Chromium below 111) drops any declaration
-// that uses it. On an LG K51's stock WebView 102 that left the balance hero
-// as white text on a white card (2026-10-12). The web build now appends an
-// old-engine-only copy of every such rule with the mixes flattened; these
-// guards pin how the fallback is derived and how it is delivered.
+// An engine without `color-mix()` drops declarations that use it. These tests
+// pin the theme-aware fallback values and both forms of build-time delivery.
 
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -26,7 +23,7 @@ describe('flattenColorMix', () => {
         expect(flattenColorMix('color-mix(in srgb, var(--xc-accent-primary) 80%, #000)'))
             .toBe('var(--xc-accent-primary)');
         expect(flattenColorMix('color-mix(in srgb, var(--xc-accent-primary) 12%, transparent)'))
-            .toBe('transparent');
+            .toBe('var(--xc-info-bg)');
         expect(flattenColorMix('color-mix(in srgb, red, blue 70%)')).toBe('blue');
         expect(flattenColorMix('color-mix(in oklab, 30% red, blue)')).toBe('blue');
     });
@@ -95,28 +92,27 @@ describe('colorMixFallback plugin', () => {
         expect(colorMixFallback().postcssPlugin).toBe('xchain-color-mix-fallback');
     });
 
-    it('leaves the original rule untouched and appends an old-engine-only copy', () => {
+    it('precedes the modern value and appends an old-engine-only copy', () => {
         const out = squash(run('.hero { color: #fff; background: linear-gradient(var(--a) 0%, color-mix(in srgb, var(--a) 80%, #000) 100%); }'));
         expect(out).toBe(
-            '.hero { color: #fff; background: linear-gradient(var(--a) 0%, color-mix(in srgb, var(--a) 80%, #000) 100%); } '
+            '.hero { color: #fff; background: linear-gradient(var(--a) 0%, var(--a) 100%); background: linear-gradient(var(--a) 0%, color-mix(in srgb, var(--a) 80%, #000) 100%); } '
             + `@supports ${NO_COLOR_MIX} { .hero { background: linear-gradient(var(--a) 0%, var(--a) 100%); } }`,
         );
     });
 
-    it('never puts a plain declaration in front of the modern one', () => {
-        // The pair form loses on old engines: a var()-bearing declaration is
-        // not validated at parse time, so it wins the cascade and only then
-        // turns out invalid. This is the regression the first attempt shipped.
+    it('uses a precomputed theme token before a translucent semantic mix', () => {
         const out = run('.a { background: color-mix(in srgb, var(--a) 80%, #000); }');
-        expect(out.match(/background:/g)).toHaveLength(2);
-        expect(out.indexOf('color-mix(in srgb, var(--a)')).toBeLessThan(out.indexOf('@supports'));
-        expect(out.slice(0, out.indexOf('@supports'))).not.toMatch(/background:\s*var\(--a\)\s*;/);
+        expect(out.match(/background:/g)).toHaveLength(3);
+        expect(out).toMatch(/background:\s*var\(--a\);\s*background:\s*color-mix/);
+
+        const themed = run('.b { background: color-mix(in srgb, var(--xc-danger) 10%, transparent); }');
+        expect(themed).toMatch(/background:\s*var\(--xc-danger-bg\);\s*background:\s*color-mix/);
     });
 
     it('keeps the copy inside the same media query as its rule', () => {
         const out = squash(run('@media (min-width: 600px) { .a { color: color-mix(in srgb, red 10%, blue); } } .b { color: red; }'));
         expect(out).toBe(
-            `@media (min-width: 600px) { .a { color: color-mix(in srgb, red 10%, blue); } @supports ${NO_COLOR_MIX} { .a { color: blue; } } } .b { color: red; }`,
+            `@media (min-width: 600px) { .a { color: blue; color: color-mix(in srgb, red 10%, blue); } @supports ${NO_COLOR_MIX} { .a { color: blue; } } } .b { color: red; }`,
         );
     });
 
