@@ -323,6 +323,7 @@ export const en = {
     'home.pendingPayments': 'Pending payments due',
     'home.paymentDue': 'Payment due: pay {amount} to complete matched order #{order}',
     'home.paymentDue.hint': 'Sign to finish paying for your matched order.',
+    'home.paymentDue.watcherHint': 'Build an unsigned payment to export to a signer.',
     'home.quickActions': 'Quick actions',
     'home.exchange': 'Exchange',
     'home.exchangeOffline': 'Exchange needs a network connection',

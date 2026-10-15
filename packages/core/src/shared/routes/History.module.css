@@ -895,12 +895,6 @@
     justify-content: flex-end;
 }
 
-.error {
-    color: var(--xc-danger-fg);
-    font-size: var(--xc-text-sm);
-    margin: 0;
-}
-
 .rbfError {
     flex-basis: 100%;
     margin: 0;

@@ -115,7 +115,7 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         };
         pressBroadcast();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toBe(
+        expect(alert.textContent.slice(1)).toBe(
             'Sending failed, and the transaction is still queued. Try again in 3 seconds.',
         );
         expect(alert.textContent).not.toMatch(/Encoder RPC|ETIMEDOUT/);
@@ -139,7 +139,7 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         broadcastImpl = async () => { throw new Error('boom'); };
         pressBroadcast();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toBe('Could not send this transaction. It is still waiting to send. Try again.');
+        expect(alert.textContent.slice(1)).toBe('Could not send this transaction. It is still waiting to send. Try again.');
         expect(screen.getByText('Send 1 XCP')).toBeTruthy();
     });
 

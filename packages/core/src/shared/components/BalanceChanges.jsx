@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import styles from './BalanceChanges.module.css';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useNativeFiatRates, useTokenFiatRates } from '../hooks/useFiatRate.js';
@@ -92,9 +93,9 @@ export function BalanceChanges({
         return (
             <section className={styles.root} data-state="error">
                 <h3 className={styles.heading}>{title}</h3>
-                <p className={styles.error}>
+                <StatusMessage variant="error" role="status">
                     {t('components.balanceChanges.weCouldnTEstimateThis')}
-                </p>
+                </StatusMessage>
             </section>
         );
     }

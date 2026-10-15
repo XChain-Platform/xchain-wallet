@@ -107,7 +107,3 @@
     outline-offset: 2px;
 }
 
-.error {
-    color: var(--xc-danger-text);
-    font-size: var(--xc-text-xs);
-}

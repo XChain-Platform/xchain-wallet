@@ -744,7 +744,7 @@ export function AddressList({
                     label={t('routes.addressList.generateAddressAtIndex')}
                     onSubmit={handleAdvancedGenerate}
                     status={advancedError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {advancedError}
                         </StatusMessage>
                     ) : null}
@@ -1038,7 +1038,7 @@ export function AddressList({
     if (loadError) {
         return wrap(
             <ListPage
-                notices={<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>}
+                notices={<StatusMessage variant="error">{loadError}</StatusMessage>}
                 actions={addMenu}
             />,
         );

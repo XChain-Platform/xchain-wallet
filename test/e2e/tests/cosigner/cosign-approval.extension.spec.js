@@ -233,7 +233,9 @@ test.describe('passive co-signer, in a browser', () => {
         // compose. SEND is the canonical co-signable shape.
         await page.getByRole('checkbox', { name: 'Send', exact: true }).check();
 
-        await page.getByRole('button', { name: 'Create agent account' }).click();
+        // The form is two steps: review the exact values, then create.
+        await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
 
         // The success screen shows the funded 2-of-2 address. AddressText
         // TRUNCATES for display but carries the full string in aria-label, so
@@ -344,7 +346,9 @@ test.describe('passive co-signer, in a browser', () => {
         await page.getByLabel(/Agent public key/).fill(agentPk.toString('hex'));
         await page.getByLabel('Account name').fill('E2E agent');
         await page.getByRole('checkbox', { name: 'Send', exact: true }).check();          // SEND only
-        await page.getByRole('button', { name: 'Create agent account' }).click();
+        // The form is two steps: review the exact values, then create.
+        await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
 
         await expect(page.getByText('Agent account created')).toBeVisible({ timeout: 60_000 });
         const aggregateAddress = await readAggregateAddress(page);
@@ -405,8 +409,11 @@ test.describe('passive co-signer, in a browser', () => {
             new Promise((r) => setTimeout(() => r({ ok: false, e: 'request never settled' }), 60_000)),
         ]);
         if (outcome.ok) {
-            expect(outcome.r.approved, 'an out-of-policy action was SIGNED').toBe(false);
+            // The provider resolves a user rejection as { ok: false, error: 'USER_REJECTED' }
+            // rather than throwing; anything that signed would carry approved: true.
+            expect(outcome.r.approved, 'an out-of-policy action was SIGNED').not.toBe(true);
             expect(outcome.r.signatures).toBeUndefined();
+            expect(outcome.r).toMatchObject({ ok: false, error: 'USER_REJECTED' });
         } else {
             expect(outcome.e, 'the request failed for an unexpected reason')
                 .toMatch(/rejected|POLICY_ACTION_DENIED|DECODE_|denied/i);

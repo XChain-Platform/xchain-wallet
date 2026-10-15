@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 // Smoke for §29 Send/Receive, Step 6: History.jsx only wires RBF
-// Speed up + Cancel actions when the shell supplies the replacement call.
+// Speed up + Cancel actions when the shell supplies the replacement call and
+// the active wallet can sign.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -50,8 +51,8 @@ assert.match(
 );
 assert.match(
     histSrc,
-    /if \(isReplaceCallAvailable\(messaging\) && replaceable\.ok && !entry\.pending\?\.replaced\)/,
-    'RBF menu options require a shell replacement call and a replaceable entry',
+    /if \(walletModeReady && !isWatcherMode && isReplaceCallAvailable\(messaging\) && replaceable\.ok && !entry\.pending\?\.replaced\)/,
+    'RBF menu options require a known signing mode, a shell replacement call, and a replaceable entry',
 );
 
 // --- RbfActions component shape --------------------------------------

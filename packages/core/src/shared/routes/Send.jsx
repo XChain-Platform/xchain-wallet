@@ -45,7 +45,6 @@ import {
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
@@ -403,10 +402,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { developerMode } = useDeveloperMode();
-    const { settings } = useSettings();
+    const { settings, loading: settingsLoading } = useSettings();
     // Watcher mode still composes unsigned PSBTs, so balance-based Send
-    // empty states never replace its form.
-    const { isWatcherMode, isSignerMode } = useWalletMode();
+    // empty states never replace its form. Mode and readiness come from one
+    // settings snapshot, so the signing form never renders before a
+    // watch-only mode is known; a failed settings read opens in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
+    const isWatcherMode = settings?.walletMode === 'watcher';
+    const isSignerMode = settings?.walletMode === 'signer';
     // A demo wallet holds fixture balances and cannot move funds: the form
     // opens at once with an inline note instead of waiting on a balance read.
     const isDemo = isDemoWallet(walletId);
@@ -2803,6 +2806,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         </StatusMessage>
     ) : null;
 
+    if (!walletModeReady) {
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+    }
+
     // §20: signer mode does not spend. The Wallet Mode screen
     // promises "Send / receive screens are hidden; this wallet does not
     // broadcast", so the form is refused rather than rendered - and the
@@ -3542,7 +3549,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               * has already watched the whole transaction get composed.
               * Duress-armed freezes render nothing here, by design.
               */}
-            <PanicFreezeNotice surface="send" />
+            {!isWatcherMode ? <PanicFreezeNotice surface="send" /> : null}
             {draftBanner}
             {requestMessage ? (
                 <StatusMessage variant="status">
