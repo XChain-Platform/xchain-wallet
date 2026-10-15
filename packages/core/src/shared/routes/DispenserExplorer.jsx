@@ -483,7 +483,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                                         variant="secondary"
                                         loading={state.loadingMore}
                                         onClick={() => onLoadMore(cid)}
-                                        aria-label={`Load more results for ${d?.displayName || 'this chain'}`}
+                                        aria-label={t('dispenserExplorer.loadMoreFor', { name: d?.displayName || t('send.rbf.thisChain') })}
                                     >
                                         Load more results
                                     </Button>
