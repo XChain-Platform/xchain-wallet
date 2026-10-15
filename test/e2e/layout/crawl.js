@@ -478,6 +478,11 @@ export function createCrawl(page, {
         }
 
         await openSettings(page);
+        // Through a nav, openSettings returns on the click; the section list
+        // renders a beat later, and reading it at once found no sections at
+        // all on phone widths, so every Settings screen went uncrawled.
+        await page.getByRole('heading', { level: 1, name: 'Settings', exact: true }).waitFor({ timeout: 15_000 });
+        await page.locator('main button:visible:not([disabled])').first().waitFor({ timeout: 15_000 });
         const sections = await page.locator('main button:visible:not([disabled])').evaluateAll((els) => els
             .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
         await home();
