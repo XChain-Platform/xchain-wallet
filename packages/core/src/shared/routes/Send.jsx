@@ -3334,7 +3334,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             {draftBanner}
             {requestMessage ? (
                 <StatusMessage variant="status">
-                    Payment request message: <span data-testid="payment-request-message">
+                    {t('send.paymentRequestMessage')} <span data-testid="payment-request-message">
                         {requestMessage}
                     </span>
                 </StatusMessage>

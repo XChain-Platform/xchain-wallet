@@ -676,6 +676,7 @@ export const en = {
     'send.networkFee': 'Network fee',
     'send.advanced': 'Advanced',
     'send.memo': 'Memo',
+    'send.paymentRequestMessage': 'Payment request message:',
     'send.rbf.label': 'Allow a higher network fee later',
     'send.rbf.helpLabel': 'Learn about changing the network fee',
     'send.rbf.help':
