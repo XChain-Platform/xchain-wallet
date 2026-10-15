@@ -336,11 +336,7 @@ export function AboutSection() {
                     {preview}
                 </pre>
             ) : null}
-            {status ? (
-                <div role="status" aria-live="polite" style={{ ...ROW_VALUE_MUTED, padding: 'var(--xc-space-2) var(--xc-space-3)' }}>
-                    {status}
-                </div>
-            ) : null}
+            {status ? <StatusMessage variant="success">{status}</StatusMessage> : null}
             {error ? (
                 <StatusMessage
                     variant="error"

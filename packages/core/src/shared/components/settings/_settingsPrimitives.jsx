@@ -16,7 +16,7 @@
 // other directories shouldn't import from here.
 
 import { cloneElement, useId } from 'react';
-import { Switch } from '@xchain-wallet/core/ui';
+import { StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import cardStyles from '../../../ui/Card.module.css';
 
@@ -205,21 +205,21 @@ export function ToggleRow({
 }
 
 /**
+ * A settings message: the shared StatusMessage row, so a settings error or
+ * status looks like every other inline message in the wallet (it was an
+ * outlined box for errors and a dashed box otherwise).
+ *
  * @param {object} props
  * @param {string} props.text
- * @param {'error'|'muted'} [props.tone]
+ * @param {'error'|'warning'|'success'|'muted'} [props.tone]   muted (the default) is a plain status
  * @param {string} [props.id]
  */
 export function Status({ text, tone, id }) {
+    const variant = tone === 'error' || tone === 'warning' || tone === 'success' ? tone : 'status';
     return (
-        <div id={id} role={tone === 'error' ? 'alert' : undefined} className={cardStyles.card} style={{
-            // An error keeps the card shape and names its tone in the border colour.
-            borderColor: tone === 'error' ? 'var(--xc-danger-fg)' : undefined,
-            color: tone === 'error' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)',
-            fontSize: 'var(--xc-text-sm)',
-        }}>
+        <StatusMessage variant={variant} id={id}>
             {text}
-        </div>
+        </StatusMessage>
     );
 }
 

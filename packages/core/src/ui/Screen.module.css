@@ -77,6 +77,15 @@
     scroll-padding-block: var(--xc-space-3);
 }
 
+/* Scroll room under the last row while a toast shows (toastPlacement.js sets
+   the variable to the toast stack's height), so a control the stack sits over
+   can always be scrolled clear of it. Zero height otherwise. */
+.body::after {
+    content: '';
+    display: block;
+    height: var(--xc-toast-room, 0px);
+}
+
 /* The shared scroll class reserves the scrollbar lane on the end edge only,
    so content runs to the page gutter on the start edge and stops one gutter
    short of the scrollbar on the end edge, with no blank lane on the left.
