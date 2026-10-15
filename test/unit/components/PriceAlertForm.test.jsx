@@ -145,7 +145,12 @@ describe('PriceAlertForm', () => {
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '0' } });
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Enter a price greater than zero.');
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('Enter a price greater than zero.');
+        // The bad price is the price field's own error, read with the field.
+        const target = screen.getByRole('textbox', { name: 'Target price' });
+        expect(target.getAttribute('aria-describedby')).toContain(alert.id);
+        expect(screen.queryByRole('status')).toBeNull();
         expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
         expect(onCreate).not.toHaveBeenCalled();
     });

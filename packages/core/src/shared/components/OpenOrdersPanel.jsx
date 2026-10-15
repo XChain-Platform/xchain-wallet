@@ -403,9 +403,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     {demoGuard.note}
                     {demoGuard.dialog}
                     {submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
+                        <StatusMessage variant="error">{submitError}</StatusMessage>
                     ) : null}
                     <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.5rem' }}>
                         <Button

@@ -594,14 +594,14 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     }}
                 />
                 {result?.autopayArmed === true ? (
-                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
+                    <StatusMessage variant="success">
                         CoinPay auto-pay is armed for this order. You can turn it off any time from the open-orders list.
-                    </p>
+                    </StatusMessage>
                 ) : result?.autopayArmed === false ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-danger-fg)' }}>
+                    <StatusMessage variant="error">
                         The order was placed, but auto-pay could not be armed
                         {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}. Matches will need manual payment from Payments due.
-                    </p>
+                    </StatusMessage>
                 ) : null}
             </>
         );
@@ -712,12 +712,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     <dd style={ddStyle}>{feeDisplay}</dd>
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <p
-                        role="alert"
-                        style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
-                    >
-                        {NATIVE_FEE_WARNING}
-                    </p>
+                    <StatusMessage variant="warning" role="alert">{NATIVE_FEE_WARNING}</StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
@@ -740,9 +735,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     />
                 )}
                 {submitError && (isWatcherMode || hw) ? (
-                    <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
             </FormPage>
         );
@@ -885,17 +878,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 mandatory={nativeFeeMandatory}
             />
             {payFeeInNativeCoin ? (
-                <p
-                    role="alert"
-                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
-                >
-                    {NATIVE_FEE_WARNING}
-                </p>
+                <StatusMessage variant="warning" role="alert">{NATIVE_FEE_WARNING}</StatusMessage>
             ) : null}
             {gatedGiveNotice.gated ? (
-                <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
+                <StatusMessage variant="warning" role="alert">
                     {gatedTickWarningCopy(side === 'sell' ? tick1 : tick2, 'the order counterparty')}
-                </p>
+                </StatusMessage>
             ) : null}
             {giveIsNative ? (
                 <div style={{
