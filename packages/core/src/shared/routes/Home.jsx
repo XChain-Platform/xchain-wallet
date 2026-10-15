@@ -1305,7 +1305,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     {balanceStatusText ? (
                         <StatusMessage
                             variant="error"
-                            className={styles.error}
                             recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
                         >
                             {balanceStatusText}
@@ -1366,7 +1365,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {balanceStatusText ? (
                     <StatusMessage
                         variant="error"
-                        className={styles.error}
                         recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
                     >
                         {balanceStatusText}

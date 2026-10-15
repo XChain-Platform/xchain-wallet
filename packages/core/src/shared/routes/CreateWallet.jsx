@@ -473,7 +473,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                     : t('createWallet.writeTheseWordsOnPaper', { wordCount, RECOVERY_PHRASE_WARNING })}
                 progress={<span aria-current="step">{t('createWallet.step2Of3')}</span>}
                 status={persistError ? (
-                    <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
+                    <StatusMessage variant="error">{persistError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button

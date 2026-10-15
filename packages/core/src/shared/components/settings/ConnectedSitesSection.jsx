@@ -570,11 +570,10 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
             title={t('settings.connectedSites.blockedSites')}
             description={(
                 <>
-                    {t('settings.connectedSites.blockedSitesCannotConnectOr')}{' '}
+                    {t('settings.connectedSites.blockPatternLead')}{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{t('settings.connectedSites.exampleCom')}</code>{' '}
-                    {t('settings.connectedSites.andAdd')}{' '}
-                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{t('settings.connectedSites.exampleCom2')}</code>{' '}
-                    {t('settings.connectedSites.separatelyToBlockTheMain')}
+                    {t('settings.connectedSites.blockPatternJoin')}{' '}
+                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{t('settings.connectedSites.exampleCom2')}</code>.
                 </>
             )}
         >

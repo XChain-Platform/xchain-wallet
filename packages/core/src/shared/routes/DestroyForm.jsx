@@ -413,7 +413,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             <FormPage
                 demoGuard={demoGuard}
                 label="Destroy token"
-                status={<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>}
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
             />,
         );
     }
@@ -468,7 +468,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 label="Review destroy"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -639,7 +639,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             label="Destroy token"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -675,7 +675,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}

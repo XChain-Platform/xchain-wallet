@@ -35,9 +35,10 @@
 // rejection: the deferred resolves with `{ approved: false }`, which
 // the bridge surfaces as `USER_REJECTED` to the dApp.
 //
-// Multiple concurrent approvals are supported; each gets its own id
-// and its own popup window. The broker's map is keyed by id so a user
-// can triage them in any order.
+// Multiple concurrent approvals are supported; each gets its own id and popup
+// window. Concurrent connect requests from one origin share the pending choice
+// so a page cannot stack duplicate connection windows. Other requests remain
+// independently reviewable, and the map stays keyed by id for resolution.
 
 import { sessionRandomUUID } from './uuid.js';
 
@@ -120,7 +121,17 @@ export class ApprovalBroker {
     // -- Approvals interface (called by the bridge handlers) -------------
 
     /** @param {import('../bridge/Approvals.js').ConnectApprovalRequest} req */
-    connect(req) { return this._request('connect', req); }
+    connect(req) {
+        const origin = typeof req?.origin === 'string' ? req.origin : '';
+        if (origin) {
+            for (const entry of this._pending.values()) {
+                if (entry.kind === 'connect' && entry.payload?.origin === origin) {
+                    return entry.deferred.promise;
+                }
+            }
+        }
+        return this._request('connect', req);
+    }
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
     signAction(req) { return this._request('signAction', req); }
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */

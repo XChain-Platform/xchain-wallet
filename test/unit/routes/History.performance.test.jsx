@@ -109,7 +109,7 @@ describe('History large-list performance', () => {
         expect(renderMetrics.blockLabels.mock.calls.length - initialBlockLabels).toBe(1);
 
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        expect(screen.getByText(`${ENTRY_COUNT.toLocaleString()} filtered rows will be exported.`))
+        expect(screen.getByText(`${ENTRY_COUNT.toLocaleString()} history items will be exported.`))
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 

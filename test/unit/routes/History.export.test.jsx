@@ -151,7 +151,7 @@ describe('History export button', () => {
         try {
             mountHistory([historyRow()]);
             const trigger = await screen.findByRole('button', { name: 'Export…' });
-            const additionalDetails = screen.getByRole('button', { name: 'Additional details' });
+            const additionalDetails = screen.getByRole('button', { name: 'More filters' });
             const showFiat = screen.getByRole('button', { name: 'Show fiat: Off' });
             const grouping = screen.getByRole('radiogroup', { name: 'Grouping mode' });
             const toolbar = additionalDetails.parentElement;

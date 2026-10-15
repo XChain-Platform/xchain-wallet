@@ -519,7 +519,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (stage === 'done') {
@@ -618,7 +618,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -698,7 +698,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             onSubmit={handleReview}
             noValidate
             sectioned
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <>
                     {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
@@ -745,7 +745,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         iconLabel="Choose source address"
                     />
                 ) : (
-                    <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
+                    <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
                 )}
 
                 <SideEditor

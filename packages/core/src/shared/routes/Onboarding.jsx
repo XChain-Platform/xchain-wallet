@@ -564,10 +564,12 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         <Screen variant={variant} header={header}>
             <FormPage
                 label={t('onboarding.walletSetup')}
-                title={branding.PRODUCT_NAME}
-                headingAs={header ? 'h2' : 'h1'}
-                description={branding.TAGLINE}
-                visual={(
+                // Inside the app the page header already names the screen and the
+                // app header carries the logo, so the brand block only shows on the
+                // first-run screen that has neither.
+                title={header ? undefined : branding.PRODUCT_NAME}
+                description={header ? undefined : branding.TAGLINE}
+                visual={header ? undefined : (
                     <img
                         src={branding.logoUrl()}
                         alt={branding.PRODUCT_NAME}

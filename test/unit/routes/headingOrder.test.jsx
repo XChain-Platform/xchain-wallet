@@ -198,8 +198,8 @@ describe('main route heading order', () => {
             />,
             messaging,
         );
-        fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
-        await screen.findByRole('heading', { level: 2, name: 'Peer · LTC #9' });
+        fireEvent.click(screen.getByRole('tab', { name: 'Raw data' }));
+        await screen.findByRole('heading', { level: 2, name: 'Linked transaction · LTC #9' });
         expectOrderedHeadings(linked.container);
     });
 });

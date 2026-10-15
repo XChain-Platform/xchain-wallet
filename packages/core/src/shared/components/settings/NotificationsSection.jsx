@@ -195,7 +195,6 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'messages',
         get label() { return t('settings.notifications.incomingMessages'); },
-        get hint() { return t('settings.notifications.notifyWhenAWatchedAddress2'); },
     },
     {
         key: 'governancePolls',
@@ -216,24 +215,20 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'dispenserEscrow',
         get label() { return t('settings.notifications.dispenserRunningLow'); },
-        get hint() { return t('settings.notifications.notifyWhenADispenserYou'); },
         // v2-tolerant default, like the sibling watcher flags.
         defaultOn: true,
     },
     {
         key: 'dispenserFills',
         get label() { return t('settings.notifications.dispenserFills'); },
-        get hint() { return t('settings.notifications.notifyWhenADispenserYou2'); },
     },
     {
         key: 'orderFills',
         get label() { return t('settings.notifications.orderFills'); },
-        get hint() { return t('settings.notifications.notifyWhenADexOrder'); },
     },
     {
         key: 'priceAlerts',
         get label() { return t('settings.notifications.priceAlerts'); },
-        get hint() { return t('settings.notifications.notifyWhenACoinHits'); },
     },
 ]);
 

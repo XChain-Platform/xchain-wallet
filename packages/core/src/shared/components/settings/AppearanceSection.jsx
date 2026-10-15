@@ -77,7 +77,6 @@ export function AppearanceSection() {
             {saveError ? <Status text={saveError} tone="error" /> : null}
             <SettingsFieldRow
                 label={t('settings.appearance.theme')}
-                hint={t('settings.appearance.chooseALightOrDark')}
             >
                 <select
                     value={settings.theme}
@@ -91,7 +90,6 @@ export function AppearanceSection() {
             </SettingsFieldRow>
             <SettingsFieldRow
                 label={t('settings.appearance.reducedMotion')}
-                hint={t('settings.appearance.controlInterfaceAnimationOrFollow')}
             >
                 <select
                     value={settings.reducedMotion ?? 'auto'}
