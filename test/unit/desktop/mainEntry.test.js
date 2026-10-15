@@ -987,6 +987,28 @@ describe('desktop main entry point', () => {
         error.mockRestore();
     });
 
+    it('never shows a window whose close aborted its renderer load', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+        createWindow();
+        electron.state.loadFileError = new Error('aborted by close');
+        const closing = createWindow();
+        const readyToShow = closing.once.mock.calls.find(([name]) => name === 'ready-to-show')[1];
+        const close = closing.on.mock.calls.find(([name]) => name === 'close')[1];
+
+        // Another window is visible, so this close goes ahead, and the load
+        // it cut short reports failure while Electron tears the window down.
+        const event = { preventDefault: vi.fn() };
+        close(event);
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        readyToShow();
+        await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[xchain] renderer load failed'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(closing.show).not.toHaveBeenCalled();
+        error.mockRestore();
+    });
+
     it('auto-hides the menu bar on the main window except on macOS', async () => {
         const { createWindow } = await import('../../../packages/desktop/main/index.js');
         const original = Object.getOwnPropertyDescriptor(process, 'platform');

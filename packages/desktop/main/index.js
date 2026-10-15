@@ -166,6 +166,10 @@ const deepLinkSlot = createDeepLinkSlot();
 let deepLinkRecipient = null;
 // Windows opened on a pinned view (open-window), which never take a deep link.
 const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
+// Windows whose close is under way. Electron tears a closing window down
+// after its 'close' event, and showing it in that gap (a renderer load the
+// close aborted reports failure there) crashes the main process.
+const closingWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
 // §9.7 / G007: boot-time chain-registry sync promise. Main owns the
 // network fetch (the renderer CSP pins connect-src 'self'); the verified
@@ -607,10 +611,10 @@ export function createWindow(opts = {}) {
     void runMainTask(
         () => win.loadFile(join(APP_ROOT, 'index.html'), loadOpts),
         'renderer load',
-        { recover: () => { if (!win.isDestroyed()) win.show(); } },
+        { recover: () => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); } },
     );
     win.once('ready-to-show', () => {
-        runMainCallback(() => { if (!win.isDestroyed()) win.show(); }, 'renderer reveal');
+        runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); }, 'renderer reveal');
     });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
@@ -620,7 +624,7 @@ export function createWindow(opts = {}) {
             // Synchronous: on quit the process can exit before an async write
             // lands, which left window-bounds.json holding stale values.
             flushWindowBoundsSync();
-            applyWindowCloseConvention(win, event);
+            if (!applyWindowCloseConvention(win, event)) closingWindows.add(win);
             // Hidden or closing, this window no longer counts as one in use.
             // A hidden window elsewhere keeps window-all-closed from firing,
             // so the windowless idle check starts here.
