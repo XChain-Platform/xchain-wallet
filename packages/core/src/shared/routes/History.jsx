@@ -2828,16 +2828,16 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         </Button>
                     ))}
                     <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
-                        <Button
-                            variant="secondary"
-                            block
-                            icon={<Icon.MoreIcon />}
+                        <button
+                            type="button"
+                            className={styles.detailAction}
                             aria-haspopup="menu"
                             aria-expanded={moreOpen}
                             onClick={() => setMoreOpen((o) => !o)}
                         >
-                            {t('history.detail.more')}
-                        </Button>
+                            <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                            <span>{t('history.detail.more')}</span>
+                        </button>
                         {moreOpen ? (
                             <div className={styles.moreMenu} role="menu">
                                 {moreOptions.length > 0 ? (
