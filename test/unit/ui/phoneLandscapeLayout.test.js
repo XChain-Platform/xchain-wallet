@@ -61,6 +61,19 @@ describe('phone landscape layout', () => {
         expect(landscape).toMatch(/\.body\s*\{[^}]*flex:\s*1 0 220px;[^}]*min-height:\s*220px;/);
     });
 
+    it('lets a 360px-tall phone fit a footer route without scrolling the title row', () => {
+        const landscape = mediaBody(screen, landscapeQuery);
+        const floor = landscape.match(/\.body:not\(:last-child\)\s*\{([^}]*)\}/);
+        expect(floor, 'footer routes get their own body floor').not.toBeNull();
+        const basis = Number(floor[1].match(/flex-basis:\s*(\d+)px/)[1]);
+        expect(floor[1]).toMatch(new RegExp(`min-height:\\s*${basis}px;`));
+        // 360px phone, 53px app header, 37px page header, 53px footer row.
+        const room = 360 - 53;
+        expect(37 + basis + 53).toBeLessThanOrEqual(room);
+        // The floor still makes a keyboard-shortened screen scroll its title away.
+        expect(basis).toBeGreaterThan(Math.round(360 * 0.45) - 53);
+    });
+
     it('keeps core chrome on its own inset and the popup recovery panel on the page gutter', () => {
         expect(pageHeader).not.toMatch(/margin-inline-(?:start|end):\s*calc/);
         expect(routeError).not.toContain('var(--xc-page-gutter)');

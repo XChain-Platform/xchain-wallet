@@ -77,6 +77,15 @@
     scroll-padding-block: var(--xc-space-3);
 }
 
+/* Scroll room under the last row while a toast shows (toastPlacement.js sets
+   the variable to the toast stack's height), so a control the stack sits over
+   can always be scrolled clear of it. Zero height otherwise. */
+.body::after {
+    content: '';
+    display: block;
+    height: var(--xc-toast-room, 0px);
+}
+
 /* The shared scroll class reserves the scrollbar lane on the end edge only,
    so content runs to the page gutter on the start edge and stops one gutter
    short of the scrollbar on the end edge, with no blank lane on the left.
@@ -136,6 +145,15 @@
            title scrolls away; this viewport floor has no spacing token. */
         flex: 1 0 220px;
         min-height: 220px;
+    }
+
+    /* A footer row is route content too, so a body followed by one keeps a
+       smaller floor. With the full floor a 360px-tall phone overflowed by a
+       few pixels on footer routes (Wallets, Accounts) and the screen scrolled
+       a sliver of the title row away with nothing left to reveal. */
+    .body:not(:last-child) {
+        flex-basis: 160px;
+        min-height: 160px;
     }
 
     .footer {

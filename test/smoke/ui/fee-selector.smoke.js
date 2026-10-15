@@ -106,7 +106,7 @@ assert.match(
 
 // --- empty state -------------------------------------------------------
 
-assert.match(cmp, /Fee estimate unavailable for this chain\./, 'empty-state copy');
+assert.match(cmp, /Fee estimate unavailable for this network\./, 'empty-state copy');
 
 // --- contextual help (§37 / G122 InfoTip) ------------------------------
 
@@ -124,5 +124,9 @@ assert.match(
 for (const cls of ['wrap', 'label', 'sliderBlock', 'slider', 'sliderTicks', 'sliderTick', 'sliderTickActive', 'sliderReadout', 'customRow', 'customInput', 'customUnit', 'placeholder', 'readoutEdit', 'feeInput']) {
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
+
+// The full-width slider drops the browser's range-input side margin so it
+// ends at the page gutter, not 2px past it.
+assert.match(css, /\.slider \{[^}]*margin-inline: 0;/, 'slider has no side margin');
 
 console.log('fee-selector smoke OK');

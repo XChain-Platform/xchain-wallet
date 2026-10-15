@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -130,7 +130,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         submitMethods: { hw: 'orderActionHw', software: 'orderAction' },
         initialChainId,
         initialFromAddress,
-        noAddressMessage: 'No addresses on any chain yet. Use Receive to generate one first.',
+        noAddressMessage: 'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
@@ -640,7 +640,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -730,7 +730,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
                 />
-                <p className={styles.hint}>
+                <p className={styles.hintLeft}>
                     Both sides of this order settle on the same chain. To get a token on another chain, use Cross-chain order.
                 </p>
 
@@ -745,7 +745,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         iconLabel="Choose source address"
                     />
                 ) : (
-                    <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                    <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
                 )}
 
                 <SideEditor
@@ -797,9 +797,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         <p className={styles.warning}>At least one side must be a token. Coin-for-coin is a regular payment, not an order.</p>
                     </div>
                 ) : null}
-            </FormSection>
 
-            <FormSection title="Expiration">
                 <AddressField
                     label="Receive at (optional)"
                     hint="Address where you receive the get side. Defaults to your source address."
@@ -809,7 +807,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     autoCorrect="off"
                     spellCheck={false}
                 />
+            </FormSection>
 
+            <FormSection title="Timing and fees">
                 <RadioGroup
                     legend="Expiration"
                     name="order-exp"
@@ -830,25 +830,36 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     />
                 ) : null}
 
-                <Button type="button" variant="link" icon={null} onClick={() => setShowAdvanced((v) => !v)}>
+                <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    icon={null}
+                    className={styles.advancedToggle}
+                    aria-expanded={showAdvanced}
+                    onClick={() => setShowAdvanced((v) => !v)}
+                >
                     {showAdvanced ? 'Hide advanced options' : 'Advanced options (lists, memo)'}
+                    <Icon.ChevronDownIcon
+                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                    />
                 </Button>
                 {showAdvanced ? (
                     <>
-                        <p className={styles.successLabel}>Restrict who can match (optional)</p>
-                        <div className={styles.actions}>
-                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                                {allowListIdx ? `Allow-list #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set allow-list'}
-                            </Button>
-                            {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
+                        <div className={styles.choiceGroup}>
+                            <p className={styles.choiceGroupLabel}>Restrict who can match (optional)</p>
+                            <div className={styles.choiceButtons}>
+                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                                    {allowListIdx ? `Allow-list #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set allow-list'}
+                                </Button>
+                                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
+                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                                    {blockListIdx ? `Block-list #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set block-list'}
+                                </Button>
+                                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
+                            </div>
                         </div>
-                        <div className={styles.actions}>
-                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                                {blockListIdx ? `Block-list #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set block-list'}
-                            </Button>
-                            {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
-                        </div>
-                        <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
+                        <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
                         <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
                     </>
                 ) : null}
@@ -862,7 +873,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                             onChange={(e) => setAutopayEnabled(e.target.checked)}
                         />
                         {autopayArm && exposure && Number.isFinite(Number(exposure.total)) ? (
-                            <p className={styles.hint}>
+                            <p className={styles.hintLeft}>
                                 Even if the service that reports matches were fully compromised, auto-pay could send
                                 at most the combined amounts you give across all your orders with auto-pay on.
                             </p>
@@ -876,7 +887,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         ) : null}
                     </>
                 ) : giveIsNative ? (
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         {isWatcherMode
                             ? 'Watcher and hardware wallets cannot auto-pay; you will be notified to pay any match manually.'
                             : 'Hardware wallets cannot auto-pay; you will be notified to pay any match manually.'}

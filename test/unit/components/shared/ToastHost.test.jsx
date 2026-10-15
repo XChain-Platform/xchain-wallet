@@ -174,4 +174,15 @@ describe('ToastHost', () => {
         expect(css).toMatch(/\.toast\s*\{[^}]*border-radius:\s*var\(--xc-card-radius\)/s);
         expect(css).toMatch(/\.dismissBtn\s*\{[^}]*min-width:\s*var\(--xc-control-h-sm\)[^}]*min-height:\s*var\(--xc-control-h-sm\)/s);
     });
+
+    it('lays every tone tint over the opaque raised surface', () => {
+        // The tone tints are 10 to 14 percent alpha; on their own they let the
+        // page text show through a floating toast (Receive at 360 wide).
+        const css = readFileSync('packages/core/src/shared/components/ToastHost.module.css', 'utf8');
+        for (const tone of ['info', 'warning', 'success', 'error']) {
+            const block = css.match(new RegExp(`\\.variant_${tone}\\s*\\{([^}]*)\\}`));
+            expect(block, tone).not.toBeNull();
+            expect(block[1], tone).toMatch(/background:\s*linear-gradient\([^;]*\),\s*var\(--xc-surface-raised\);/);
+        }
+    });
 });

@@ -81,6 +81,6 @@ describe('A through M route render coverage', () => {
 
         addresses.resolve({});
 
-        expect(await screen.findByText('Two chains required')).toBeTruthy();
+        expect(await screen.findByText('Two networks required')).toBeTruthy();
     });
 });

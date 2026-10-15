@@ -454,7 +454,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before opening a dispenser.',
+                        'No addresses on any network yet. Use Receive to generate one before opening a dispenser.',
                     );
                     return;
                 }
@@ -1203,7 +1203,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
-                    : 'Create Dispenser'}
+                    : 'Create dispenser'}
         />
     );
     const wrap = (children) => (
@@ -1294,7 +1294,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -1322,7 +1322,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
@@ -1409,7 +1409,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     // whether the chain will accept it before Create enables.
                     key: 'another-address',
                     label: 'Another address',
-                    sublabel: 'Enter any address on this chain',
+                    sublabel: 'Enter any address on this network',
                     onSelect: () => {
                         setAddressMode('other');
                         setExistingAddressId(null);
@@ -1584,7 +1584,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             label="Dispenser address"
                             icon="addresses"
                             value={outsideAddress}
-                            placeholder="Any address on the active chain"
+                            placeholder="Any address on the active network"
                             onChange={(e) => setOutsideAddress(e.target.value)}
                             error={outsideFormatError || undefined}
                             onIconClick={() => setAddressPickerOpen(true)}
@@ -1763,12 +1763,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             {payWith === 'coin' ? (
                 <Button
-                    variant="ghost"
+                    variant="link"
                     size="sm"
                     icon={null}
+                    className={styles.advancedToggle}
+                    aria-expanded={showAdvanced}
                     onClick={() => setShowAdvanced((v) => !v)}
                 >
-                    {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
+                    {showAdvanced ? 'Advanced options' : 'Advanced options (fiat pricing, oracle)'}
+                    <Icon.ChevronDownIcon
+                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                    />
                 </Button>
             ) : null}
 
@@ -1834,16 +1839,18 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             ) : null}
 
-            <p className={styles.pickerLabel}>Restrict who can buy (optional)</p>
-            <div className={styles.actions}>
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                    {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                </Button>
-                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                    {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                </Button>
-                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+            <div className={styles.choiceGroup}>
+                <p className={styles.choiceGroupLabel}>Restrict who can buy (optional)</p>
+                <div className={styles.choiceButtons}>
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                        {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                    </Button>
+                    {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                        {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                    </Button>
+                    {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                </div>
             </div>
 
             {/* D-161: "Restrict who can buy" is the reading that causes the

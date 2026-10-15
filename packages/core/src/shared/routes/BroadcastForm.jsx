@@ -432,7 +432,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before broadcasting.',
+                        'No addresses on any network yet. Use Receive to generate one before broadcasting.',
                     );
                     return;
                 }

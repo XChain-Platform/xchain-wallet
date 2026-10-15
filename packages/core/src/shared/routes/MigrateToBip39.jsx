@@ -432,7 +432,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                             return (
                                 <div key={row.chainId}>
                                     <dt className={styles.detailsLabel}>
-                                        {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Chain'}
+                                        {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Network'}
                                     </dt>
                                     <dd className={styles.detailsValue}>
                                         {row.legacy ? (
@@ -463,7 +463,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                 ) : null}
                                             </>
                                         ) : (
-                                            <em>No legacy address on this chain.</em>
+                                            <em>No legacy address on this network.</em>
                                         )}
                                     </dd>
                                 </div>

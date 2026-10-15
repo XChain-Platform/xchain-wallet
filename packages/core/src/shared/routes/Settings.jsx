@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -83,7 +83,7 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Watched tokens', 'watch token ticker'),
         row('Pinned tokens', 'pin star favorite reorder'),
         row('Hidden tokens', 'hide unhide concealed'),
-        row('Saved chain filters', 'list preferences reset'),
+        row('Saved network filters', 'list preferences reset'),
         row('Reset display settings', 'defaults clear'),
     ],
     keyboard: [
@@ -124,16 +124,16 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Back up recovery phrase', 'seed mnemonic words reveal'),
         row('Test backup (dry-run restore)', 'verify seed recovery phrase'),
         row('Publish labels on-chain', 'backup metadata contacts blockchain'),
-        row('Check chain for backed-up contacts', 'restore labels address book'),
+        row('Check network for backed-up contacts', 'restore labels address book'),
     ],
     fees: [
         row('Fee strategy', 'fee fees network fee rate priority'),
         row('Custom fee rate', 'fee fees network fee sats per byte', 'Fee strategy'),
         row('Allow fee bump (Replace-by-Fee)', 'fee fees rbf speed up transaction'),
     ],
-    network: [row('Active network', 'mainnet testnet regtest switch chain')],
+    network: [row('Active network', 'mainnet testnet regtest switch network')],
     'network-endpoints': [
-        row('Chain registry refresh', 'networks update registry'),
+        row('Network registry refresh', 'networks update registry'),
         row('Explorer URL', 'endpoint block explorer'),
         row('Encoder URL', 'endpoint transaction encoder'),
         row('Hub URL', 'endpoint node api'),
@@ -159,7 +159,7 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Window (seconds)', 'sign throttle duration rate limit'),
         row('Blocked sites', 'dapp website origin denylist'),
         row('Site block history', 'blocked unblocked audit log'),
-        row('Chains', 'dapp permission networks'),
+        row('Networks', 'dapp permission networks'),
         row('Accounts', 'dapp permission addresses'),
         row('Sign messages', 'dapp permission signature'),
         row('Sign actions', 'dapp permission transaction'),
@@ -187,8 +187,8 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Regtest faucet', 'mint test coins miner'),
         row('Miner URL', 'faucet endpoint'),
         row('Amount', 'faucet mint test coins'),
-        row('Custom chains', 'add network descriptor'),
-        row('Custom chain descriptor JSON', 'add network paste'),
+        row('Custom networks', 'add network descriptor'),
+        row('Custom network descriptor JSON', 'add network paste'),
     ],
     updates: [row('Check for updates', 'new version upgrade latest release')],
     about: [
@@ -367,7 +367,7 @@ export function Settings({
             title: 'Display',
             description: 'Control balance thresholds, number formatting, and pinned or hidden tokens.',
             keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star',
-            searchTerms: 'row affordances show pin hide button unpin list preferences saved chain filters reset',
+            searchTerms: 'row affordances show pin hide button unpin list preferences saved network filters reset',
             kind: 'internal-drill',
             Component: DisplaySection,
             summary: displaySummary(settings),
@@ -430,7 +430,7 @@ export function Settings({
         {
             id: 'fees',
             title: 'Fees',
-            description: 'Choose the fee strategy and fee-bumping default for each chain.',
+            description: 'Choose the fee strategy and fee-bumping default for each network.',
             keywords: 'fees fee strategy rate rbf replace by fee chain custom allow bump defaults',
             kind: 'internal-drill',
             Component: FeesSection,
@@ -442,17 +442,17 @@ export function Settings({
             // Optional-chained: settings is null until the async read lands,
             // and the section list renders during that window.
             description: settings?.developerMode === true
-                ? 'Choose Mainnet, Testnet, or Regtest to control which chains the wallet queries and displays; changing the network reloads the page.'
+                ? 'Choose Mainnet, Testnet, or Regtest to control which networks the wallet queries and displays; changing the network reloads the page.'
                 : settings?.developerMode === false
                     ? (normalizeActiveNetwork(settings.activeNetwork) === 'mainnet'
                         ? 'Mainnet is active. Turn on Developer mode to choose a test network.'
                         : `${activeNetworkLabel(settings.activeNetwork)} is active. Turn on Developer mode to switch networks.`)
-                    : 'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
+                    : 'Choose Mainnet or Testnet to control which networks the wallet queries and displays; changing the network reloads the page.',
             keywords: settings?.developerMode === true
-                ? 'network active mainnet testnet regtest filter chain switch mode dev'
+                ? 'network active mainnet testnet regtest filter network switch mode dev'
                 : settings?.developerMode === false
                     ? 'network active mainnet developer mode'
-                    : 'network active mainnet testnet filter chain switch mode',
+                    : 'network active mainnet testnet filter network switch mode',
             kind: 'panel',
             Component: NetworkSection,
             // The section needs the wallet so the switch can derive
@@ -470,7 +470,7 @@ export function Settings({
         {
             id: 'network-endpoints',
             title: 'Network & endpoints',
-            description: 'Set explorer, encoder, and hub URLs for each chain.',
+            description: 'Set explorer, encoder, and hub URLs for each network.',
             keywords: 'network endpoints explorer encoder hub url chain registry reset default save',
             kind: 'internal-drill',
             Component: NetworkEndpointsSection,
@@ -871,6 +871,9 @@ function desktopUpdaterBridge() {
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+/** How each update-check result reads as an inline message. */
+const UPDATE_CHECK_VARIANT = { checking: 'status', current: 'success', available: 'info', error: 'error' };
+
 /**
  * Check for updates. Runs the same visible check as the app menu item (main's
  * 'check' action) and shows its outcome. Every sentence is a constant; the
@@ -931,13 +934,11 @@ function UpdateCheckPanel() {
     }[state];
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
             <Button variant="ghost" size="sm" onClick={check} disabled={state === 'checking'}>
                 Check for updates
             </Button>
-            <span role="status" aria-live="polite" style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                {message || ''}
-            </span>
+            <StatusMessage variant={UPDATE_CHECK_VARIANT[state] || 'status'}>{message}</StatusMessage>
         </div>
     );
 }
@@ -1027,7 +1028,7 @@ function feesSummary(settings) {
     if (!settings) return '-';
     const fees = settings.fees || {};
     const chainIds = Object.keys(fees);
-    if (chainIds.length === 0) return 'No chains';
+    if (chainIds.length === 0) return 'No networks';
     const customCount = chainIds.filter((id) => fees[id]?.strategy === 'custom').length;
     if (customCount === 0) return 'All defaults';
     if (customCount === chainIds.length) return 'All custom';
@@ -1039,7 +1040,7 @@ function endpointsSummary(settings) {
     const eps = settings.sdkEndpoints || {};
     const customCount = Object.values(eps).filter((e) => e?.custom).length;
     if (customCount === 0) return 'All defaults';
-    return `${customCount} chain${customCount === 1 ? '' : 's'} custom`;
+    return `${customCount} network${customCount === 1 ? '' : 's'} custom`;
 }
 
 function adsSummary(settings) {

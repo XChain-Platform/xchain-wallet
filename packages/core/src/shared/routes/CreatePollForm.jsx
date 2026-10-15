@@ -174,7 +174,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
-                if (!sourceId) { setLoadError('No address on this chain. Use Receive to generate one first.'); return; }
+                if (!sourceId) { setLoadError('No address on this network. Use Receive to generate one first.'); return; }
                 setFromAddressId(sourceId);
                 setLoadError(null);
             })
@@ -619,7 +619,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -793,7 +793,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             </FormSection>
             <FormSection title="Options and rules">
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
                 <span className={styles.fromLabel}>Options</span>
                 {options.map((opt, i) => (
                     <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>

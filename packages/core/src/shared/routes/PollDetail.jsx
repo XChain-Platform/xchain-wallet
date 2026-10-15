@@ -415,7 +415,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress) { setFormError('No address on this chain to vote from.'); return; }
+        if (!fromAddress) { setFormError('No address on this network to vote from.'); return; }
         const voteBalanceComparison = compareDecimalStrings(voteBalance, '0');
         if (voteBalanceComparison !== null && voteBalanceComparison !== 1) {
             setFormError(`This address must hold some ${poll.tick || 'governance token'} to vote.`);
@@ -541,7 +541,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         <dl className={styles.detailsList}>
             {descriptor ? (
                 <>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                 </>
             ) : null}
@@ -776,7 +776,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
-                    {!fromAddress ? <p className={styles.hint}>No address on this chain. Use Receive to generate one, then vote.</p> : null}
+                    {!fromAddress ? <p className={styles.hint}>No address on this network. Use Receive to generate one, then vote.</p> : null}
                 </FormPage>
             ) : (
                 <p className={styles.hint} style={{ marginTop: '0.75rem' }}>Voting is closed for this poll.</p>

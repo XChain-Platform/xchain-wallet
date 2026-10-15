@@ -91,7 +91,7 @@ describe('regression/remaining-control-rows', () => {
             </MessagingContext.Provider>,
         );
 
-        const chain = await screen.findByRole('combobox', { name: 'Token chain' });
+        const chain = await screen.findByRole('combobox', { name: 'Token network' });
         expectFieldsUseSize([
             chain,
             screen.getByRole('textbox', { name: 'Token ticker' }),
