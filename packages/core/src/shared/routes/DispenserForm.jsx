@@ -1639,7 +1639,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </>
             ) : (
                 <StatusMessage variant="error">
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 

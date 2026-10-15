@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
@@ -1355,7 +1356,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 />
             ) : (
                 <StatusMessage variant="error">
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 
@@ -1383,7 +1384,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 <AddressField
                     label="New owner address"
                     icon="contacts"
-                    hint={`The ${chainLabelFor(descriptor) || 'same-chain'} address that will receive ownership.`}
+                    hint={`The ${chainLabelFor(descriptor) || 'same-network'} address that will receive ownership.`}
                     value={transferTo}
                     error={transferToError || undefined}
                     onChange={(e) => {

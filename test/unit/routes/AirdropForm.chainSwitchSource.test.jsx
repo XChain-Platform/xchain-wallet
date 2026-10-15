@@ -113,7 +113,7 @@ function mountAirdrop() {
 }
 
 const fromField = () => screen.findByLabelText('From');
-const strandedAlert = () => screen.queryByText(/No address on this chain/i);
+const strandedAlert = () => screen.queryByText(/No address on this network/i);
 
 afterEach(() => {
     cleanup();

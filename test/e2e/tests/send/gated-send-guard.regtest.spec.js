@@ -328,7 +328,7 @@ test.describe('the PC-26 gated SEND guard', () => {
 
             await gotoPalette(holder, 'Advanced action');
             await selectVenueChain(holder);
-            await holder.getByLabel('Action').selectOption('SEND');
+            await holder.getByLabel('Action', { exact: true }).selectOption('SEND');
 
             // The tick-specific "HAS active gated content" line only renders
             // once `useGatedTickNotice` has a TICK to check (it is debounced

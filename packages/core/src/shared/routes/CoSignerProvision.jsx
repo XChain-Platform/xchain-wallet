@@ -146,9 +146,14 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         };
     }, [walletId, btcChainIds, messaging]);
 
-    // Reset the picked daemon address when the chain changes (the address
-    // belongs to a specific chain).
-    useEffect(() => { setDaemonAddressId(''); }, [chainId]);
+    // The picked daemon address belongs to one chain, so picking another
+    // network clears it. This is done in the handler rather than in an effect
+    // on chainId: an effect runs after the first render with a chain, and a
+    // selection made before that effect flushed was silently wiped.
+    function handleChainChange(next) {
+        setChainId(next);
+        setDaemonAddressId('');
+    }
 
     const chainAddresses = (chainId && addressesByChain?.[chainId]) || [];
     const daemonAddress = chainAddresses.find((a) => a.id === daemonAddressId) || null;
@@ -353,7 +358,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             <ChainPicker
                 label="Network"
                 value={chainId}
-                onChange={setChainId}
+                onChange={handleChainChange}
                 chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                 chainRegistry={chainRegistry}
             />

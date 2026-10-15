@@ -64,6 +64,7 @@ import {
     describeAction as describeActionOnHost,
     getTokenInfo,
 } from '../messaging.js';
+import { signingPathLines } from '../signingPathLines.js';
 import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
 
@@ -816,6 +817,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </div>
             }
         >
+            <div className={styles.body}>
             <ListPage>
                 {descriptor ? (
                     <div className={styles.chainLine}>
@@ -1011,6 +1013,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     ) : null}
                 </FormPage>
             ) : null}
+            </div>
         </Screen>
     );
 }
@@ -1131,7 +1134,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                 <div className={shared.summary}>
                     <p className={shared.summaryLabel}>{t('extension.sign.signingPaths')}</p>
                     <pre className={shared.summaryValue}>
-                        {inner.signingPaths.join('\n')}
+                        {signingPathLines(inner.signingPaths).join('\n')}
                     </pre>
                 </div>
             ) : null;
