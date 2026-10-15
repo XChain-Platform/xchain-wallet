@@ -56,7 +56,7 @@ async function importClaimant(page, claimant) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Import address' }).click();
 
-    const chain = page.getByRole('button', { name: /^Chain:/ });
+    const chain = page.getByRole('button', { name: /^Network:/ });
     await expect(chain).toBeVisible({ timeout: 30_000 });
     if (!((await chain.getAttribute('aria-label')) || '').includes('Bitcoin')) {
         await chain.click();

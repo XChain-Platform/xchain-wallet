@@ -16,6 +16,7 @@ import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
+import { t } from '../../i18n/index.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -648,15 +649,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 <SectionHeader title="Cross-chain swap broadcast" />
                 {txid ? (
                     <>
-                        <p className={styles.successLabel}>Give-chain transaction</p>
+                        <p className={styles.successLabel}>{t('crossChainSwap.success.giveTxLabel')}</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
                     </>
                 ) : null}
-                <p className={styles.hint}>
-                    Your offer is open on the give chain. The swap settles atomically
-                    when a counterparty fills it on the get chain; until then no funds move.
-                </p>
+                <p className={styles.hint}>{t('crossChainSwap.success.hint')}</p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
