@@ -42,7 +42,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /const \{ settings \} = useSettings\(\)/,
+    /const \{ settings(?:, loading: settingsLoading)? \} = useSettings\(\)/,
     'hook called',
 );
 
