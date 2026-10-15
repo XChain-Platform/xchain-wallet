@@ -383,12 +383,6 @@ button.row:hover:not(:disabled) {
     unicode-bidi: isolate;
 }
 
-.error {
-    margin: 0;
-    color: var(--xc-status-error, var(--xc-danger, #DC2626));
-    font-size: var(--xc-text-sm);
-}
-
 /* ───── Genesis + subassets section - read-only metadata block at
    the bottom of the page. Two-column key/value list + chip-style
    subasset list so the bottom of the page has structured info
